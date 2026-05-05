@@ -92,12 +92,21 @@ export async function testMcpConnection(serverUrl: string): Promise<ConnectionTe
     const isCors =
       msg.toLowerCase().includes('failed to fetch') ||
       msg.toLowerCase().includes('networkerror') ||
-      msg.toLowerCase().includes('network request failed')
+      msg.toLowerCase().includes('network request failed') ||
+      msg.toLowerCase().includes('load failed')
+    if (isCors) {
+      return {
+        status: 'error',
+        message: 'Cannot reach MCP server — possible CORS or network issue.',
+        details: [
+          'Ensure the MCP server is running and allows cross-origin requests from this origin.',
+          'The server must return Access-Control-Allow-Origin headers for browser access.',
+        ],
+      }
+    }
     return {
       status: 'error',
-      message: isCors
-        ? 'Network error — possible CORS issue. Ensure the MCP server allows requests from this origin.'
-        : `Error: ${msg}`,
+      message: `Error: ${msg}`,
       details: [],
     }
   }
