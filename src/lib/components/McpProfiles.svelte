@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { mcpProfiles, upsertMcpProfile, removeMcpProfile } from '../stores'
+  import { mcpProfiles, upsertMcpProfile, removeMcpProfile } from '../profileStores'
   import type { McpServerProfile, ConnectionTestResult } from '../types'
   import McpProfileForm from './McpProfileForm.svelte'
   import ConnectionTestResultComponent from './ConnectionTestResult.svelte'
@@ -36,10 +36,8 @@
 
   async function handleTest(profile: McpServerProfile) {
     testResults[profile.id] = { status: 'testing', message: '', details: [] }
-    testResults = { ...testResults }
     const result = await testMcpConnection(profile.url)
     testResults[profile.id] = result
-    testResults = { ...testResults }
   }
 </script>
 

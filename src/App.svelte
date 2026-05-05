@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { currentView, initStores, dbError } from './lib/stores'
+  import { currentView } from './lib/navStore'
+  import { initProfileStores, dbError } from './lib/profileStores'
   import Sidebar from './lib/components/Sidebar.svelte'
   import ModelProfiles from './lib/components/ModelProfiles.svelte'
   import McpProfiles from './lib/components/McpProfiles.svelte'
@@ -8,7 +9,7 @@
   let loading = $state(true)
 
   onMount(async () => {
-    await initStores()
+    await initProfileStores()
     loading = false
   })
 </script>

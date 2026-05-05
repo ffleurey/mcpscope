@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { currentView } from '../stores'
+  import { currentView } from '../navStore'
   import type { NavView } from '../types'
 
   function navigate(view: NavView) {

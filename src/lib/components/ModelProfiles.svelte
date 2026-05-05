@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { modelProfiles, upsertModelProfile, removeModelProfile } from '../stores'
+  import { modelProfiles, upsertModelProfile, removeModelProfile } from '../profileStores'
   import type { ModelProfile, ConnectionTestResult } from '../types'
   import ModelProfileForm from './ModelProfileForm.svelte'
   import ConnectionTestResultComponent from './ConnectionTestResult.svelte'
@@ -36,10 +36,8 @@
 
   async function handleTest(profile: ModelProfile) {
     testResults[profile.id] = { status: 'testing', message: '', details: [] }
-    testResults = { ...testResults }
     const result = await testLmStudioConnection(profile.baseUrl)
     testResults[profile.id] = result
-    testResults = { ...testResults }
   }
 </script>
 
