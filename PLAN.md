@@ -158,6 +158,17 @@ Add the first full model-plus-MCP workflow using zero or one MCP server per chat
 - feed plain text and structured tool results back into the chat loop
 - expose minimal raw tool trace visibility
 
+### Implementation note: MCP session ID
+
+The MCP Streamable HTTP transport is stateful. The `initialize` request returns an `mcp-session-id` response header, and **all subsequent requests in that session must include this header**. This was confirmed against the ha-history MCP server during Increment 1.
+
+For Increment 3, the MCP client layer must:
+
+- capture the session ID from the `initialize` response
+- persist it for the lifetime of the chat session
+- include it on every subsequent MCP request (`tools/list`, `tools/call`, etc.)
+- handle session expiry gracefully (re-initialize if a request returns 404 or session-expired error)
+
 ### After this step we should be able to test
 
 - a chat can remain model-only or use one model profile and one MCP server profile together
