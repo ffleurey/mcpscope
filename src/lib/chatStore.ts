@@ -16,9 +16,15 @@ export const activeMessages = writable<ChatMessage[]>([])
 export const isStreaming = writable<boolean>(false)
 
 export async function initChatStore(): Promise<void> {
-  const sessions = await getAllChatSessions()
-  sessions.sort((a, b) => b.updatedAt - a.updatedAt)
-  chatSessions.set(sessions)
+  try {
+    const sessions = await getAllChatSessions()
+    sessions.sort((a, b) => b.updatedAt - a.updatedAt)
+    chatSessions.set(sessions)
+  } catch (e) {
+    // Non-fatal — app still works, just starts with no chat history
+    // eslint-disable-next-line no-console
+    console.error('Failed to load chat sessions:', e)
+  }
 }
 
 export async function createChat(modelProfile: ModelProfile): Promise<void> {

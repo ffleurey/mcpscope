@@ -11,8 +11,11 @@
   let loading = $state(true)
 
   onMount(async () => {
-    await Promise.all([initProfileStores(), initChatStore()])
-    loading = false
+    try {
+      await Promise.all([initProfileStores(), initChatStore()])
+    } finally {
+      loading = false
+    }
   })
 </script>
 

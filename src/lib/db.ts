@@ -11,22 +11,22 @@ function getDb(): Promise<IDBPDatabase> {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion) {
         if (oldVersion < 1) {
-          if (!db.objectStoreNames.contains('modelProfiles')) {
-            db.createObjectStore('modelProfiles', { keyPath: 'id' })
-          }
-          if (!db.objectStoreNames.contains('mcpProfiles')) {
-            db.createObjectStore('mcpProfiles', { keyPath: 'id' })
-          }
+          db.createObjectStore('modelProfiles', { keyPath: 'id' })
+          db.createObjectStore('mcpProfiles', { keyPath: 'id' })
         }
         if (oldVersion < 2) {
-          if (!db.objectStoreNames.contains('chatSessions')) {
-            db.createObjectStore('chatSessions', { keyPath: 'id' })
-          }
-          if (!db.objectStoreNames.contains('chatMessages')) {
-            const msgStore = db.createObjectStore('chatMessages', { keyPath: 'id' })
-            msgStore.createIndex('by-session', 'sessionId')
-          }
+          db.createObjectStore('chatSessions', { keyPath: 'id' })
+          const msgStore = db.createObjectStore('chatMessages', { keyPath: 'id' })
+          msgStore.createIndex('by-session', 'sessionId')
         }
+      },
+      blocked() {
+        // Another tab has the DB open at an older version — reload to clear it
+        window.location.reload()
+      },
+      blocking() {
+        // This tab is blocking another tab from upgrading — close our connection
+        dbPromise = null
       },
     })
   }
