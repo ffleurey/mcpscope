@@ -10,7 +10,8 @@ interface LmStudioNativeModel {
 }
 
 export interface LmStudioModel {
-  key: string
+  uid: string           // unique per entry: key + ':' + displayName (for {#each})
+  key: string           // model key sent to the API (may repeat across cluster nodes)
   displayName: string
   contextLength: number | null
   isLoaded: boolean
@@ -43,16 +44,18 @@ export async function listModels(baseUrl: string): Promise<LmStudioModel[]> {
 
     if (usedNative) {
       const models: LmStudioNativeModel[] = (data as { models?: LmStudioNativeModel[] })?.models ?? []
-      const seen = new Set<string>()
       return models
         .filter(m => m.type === 'llm')
-        .filter(m => { if (seen.has(m.key)) return false; seen.add(m.key); return true })
-        .map(m => ({
-          key: m.key,
-          displayName: m.display_name ?? m.key,
-          contextLength: m.max_context_length ?? null,
-          isLoaded: Array.isArray(m.loaded_instances) && m.loaded_instances.length > 0,
-        }))
+        .map(m => {
+          const displayName = m.display_name ?? m.key
+          return {
+            uid: `${m.key}:${displayName}`,
+            key: m.key,
+            displayName,
+            contextLength: m.max_context_length ?? null,
+            isLoaded: Array.isArray(m.loaded_instances) && m.loaded_instances.length > 0,
+          }
+        })
     } else {
       const items: { id?: string }[] = Array.isArray((data as { data?: { id?: string }[] })?.data)
         ? (data as { data: { id?: string }[] }).data
@@ -60,7 +63,7 @@ export async function listModels(baseUrl: string): Promise<LmStudioModel[]> {
       return items
         .map(m => m.id ?? '')
         .filter(Boolean)
-        .map(id => ({ key: id, displayName: id, contextLength: null, isLoaded: false }))
+        .map(id => ({ uid: id, key: id, displayName: id, contextLength: null, isLoaded: false }))
     }
   } catch {
     return []

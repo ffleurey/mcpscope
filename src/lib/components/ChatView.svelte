@@ -176,7 +176,7 @@
           {/if}
           {#if availableModels.length > 0}
             <select class="model-select model-select-lm" bind:value={selectedLmModelId} disabled={$isStreaming || modelsLoading}>
-              {#each availableModels as m (m.key)}
+              {#each availableModels as m (m.uid)}
                 <option value={m.key}>{m.displayName}{m.isLoaded ? ' ●' : ''}</option>
               {/each}
             </select>
