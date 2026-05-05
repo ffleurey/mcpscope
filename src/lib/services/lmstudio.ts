@@ -9,6 +9,62 @@ interface LmStudioNativeModel {
   loaded_instances?: unknown[]
 }
 
+export interface LmStudioModel {
+  key: string
+  displayName: string
+  contextLength: number | null
+  isLoaded: boolean
+}
+
+export async function listModels(baseUrl: string): Promise<LmStudioModel[]> {
+  const root = rootUrl(baseUrl)
+  const nativeUrl = `${root}/api/v1/models`
+  const compatUrl = `${root}/v1/models`
+
+  try {
+    let data: unknown = null
+    let usedNative = false
+
+    try {
+      const r = await fetch(nativeUrl, { headers: { Accept: 'application/json' } })
+      if (r.ok) {
+        data = await r.json()
+        usedNative = true
+      }
+    } catch {
+      // native endpoint failed; will try compat below
+    }
+
+    if (!usedNative) {
+      const r = await fetch(compatUrl, { headers: { Accept: 'application/json' } })
+      if (!r.ok) return []
+      data = await r.json()
+    }
+
+    if (usedNative) {
+      const models: LmStudioNativeModel[] = (data as { models?: LmStudioNativeModel[] })?.models ?? []
+      return models
+        .filter(m => m.type === 'llm')
+        .map(m => ({
+          key: m.key,
+          displayName: m.display_name ?? m.key,
+          contextLength: m.max_context_length ?? null,
+          isLoaded: Array.isArray(m.loaded_instances) && m.loaded_instances.length > 0,
+        }))
+    } else {
+      const items: { id?: string }[] = Array.isArray((data as { data?: { id?: string }[] })?.data)
+        ? (data as { data: { id?: string }[] }).data
+        : []
+      return items
+        .map(m => m.id ?? '')
+        .filter(Boolean)
+        .map(id => ({ key: id, displayName: id, contextLength: null, isLoaded: false }))
+    }
+  } catch {
+    return []
+  }
+}
+
 // Derive the LM Studio root URL from the configured OpenAI-compatible base URL.
 // e.g. "http://localhost:1234/v1" → "http://localhost:1234"
 // Also handles bare roots like "http://localhost:1234"

@@ -21,7 +21,7 @@
   function validate(): boolean {
     const e: Record<string, string> = {}
     if (!name.trim()) e.name = 'Name is required'
-    if (!modelId.trim()) e.modelId = 'Model ID is required'
+    // modelId is optional — can be selected per chat
     if (!baseUrl.trim()) {
       e.baseUrl = 'Base URL is required'
     } else {
@@ -64,8 +64,8 @@
   </div>
 
   <div class="field">
-    <label for="mp-model-id">Model ID</label>
-    <input id="mp-model-id" type="text" bind:value={modelId} placeholder="e.g. meta-llama-3.1-8b-instruct" />
+    <label for="mp-model-id">Model ID (optional — can be selected per chat)</label>
+    <input id="mp-model-id" type="text" bind:value={modelId} placeholder="e.g. meta-llama-3.1-8b — leave blank to select in chat" />
     {#if errors.modelId}<span class="field-error">{errors.modelId}</span>{/if}
   </div>
 

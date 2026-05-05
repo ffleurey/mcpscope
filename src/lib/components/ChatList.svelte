@@ -1,11 +1,10 @@
 <script lang="ts">
-  import { chatSessions, activeChatId, createChat, selectChat, deleteChat } from '../chatStore'
+  import { chatSessions, activeChatId, activeMessages, selectChat, deleteChat } from '../chatStore'
   import { modelProfiles } from '../profileStores'
 
-  async function handleNewChat() {
-    const profile = $modelProfiles[0]
-    if (!profile) return
-    await createChat(profile)
+  function handleNewChat() {
+    activeChatId.set(null)
+    activeMessages.set([])
   }
 
   async function handleSelect(id: string) {

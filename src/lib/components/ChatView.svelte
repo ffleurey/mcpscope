@@ -1,13 +1,19 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
-  import { activeMessages, activeChatId, chatSessions, isStreaming, sendMessage } from '../chatStore'
+  import { activeMessages, activeChatId, chatSessions, isStreaming, sendMessage, createChat } from '../chatStore'
   import { modelProfiles } from '../profileStores'
+  import { listModels } from '../services/lmstudio'
+  import type { LmStudioModel } from '../services/lmstudio'
+  import type { ModelProfile } from '../types'
   import ChatMessageBlock from './ChatMessageBlock.svelte'
 
   let transcriptEl = $state<HTMLElement | null>(null)
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let composerText = $state('')
   let selectedModelId = $state<string>('')
+  let availableModels = $state<LmStudioModel[]>([])
+  let selectedLmModelId = $state('')
+  let modelsLoading = $state(false)
 
   // Derive active session from stores
   let session = $derived($chatSessions.find(s => s.id === $activeChatId) ?? null)
@@ -23,7 +29,11 @@
 
   // Model name to display
   let displayModelName = $derived(
-    session?.modelSnapshot?.name ?? $modelProfiles.find(p => p.id === selectedModelId)?.name ?? 'No model selected'
+    session?.modelSnapshot?.modelId
+      ? `${session.modelSnapshot.name} / ${session.modelSnapshot.modelId}`
+      : selectedLmModelId
+        ? `${$modelProfiles.find(p => p.id === selectedModelId)?.name ?? ''} / ${selectedLmModelId}`
+        : 'No model selected'
   )
 
   // Auto-select first model profile if none selected
@@ -31,6 +41,20 @@
     if (!selectedModelId && $modelProfiles.length > 0) {
       selectedModelId = $modelProfiles[0].id
     }
+  })
+
+  // Load available models when profile changes
+  $effect(() => {
+    const profile = $modelProfiles.find(p => p.id === selectedModelId)
+    if (!profile) { availableModels = []; selectedLmModelId = ''; return }
+    modelsLoading = true
+    listModels(profile.baseUrl).then(models => {
+      availableModels = models
+      const preferred = profile.modelId && models.find(m => m.key === profile.modelId)
+      const firstLoaded = models.find(m => m.isLoaded)
+      selectedLmModelId = preferred ? profile.modelId : (firstLoaded?.key ?? models[0]?.key ?? '')
+      modelsLoading = false
+    })
   })
 
   // Scroll to bottom when messages change
@@ -63,10 +87,21 @@
     let profile = session?.modelSnapshot ?? $modelProfiles.find(p => p.id === selectedModelId)
     if (!profile) return
 
+    const effectiveProfile: ModelProfile = session
+      ? profile
+      : { ...profile, modelId: selectedLmModelId }
+
+    if (!effectiveProfile.modelId) return
+
     composerText = ''
     await tick()
     resizeTextarea()
-    await sendMessage(text, profile)
+
+    if (!$activeChatId) {
+      await createChat(effectiveProfile)
+    }
+
+    await sendMessage(text, effectiveProfile)
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -128,16 +163,27 @@
       </button>
     </div>
     <div class="composer-meta">
-      {#if !hasMessages && $modelProfiles.length > 0}
-        <select
-          class="model-select"
-          bind:value={selectedModelId}
-          disabled={$isStreaming}
-        >
-          {#each $modelProfiles as profile (profile.id)}
-            <option value={profile.id}>{profile.name}</option>
-          {/each}
-        </select>
+      {#if !hasMessages}
+        <div class="model-pickers">
+          {#if $modelProfiles.length > 0}
+            <select class="model-select" bind:value={selectedModelId} disabled={$isStreaming}>
+              {#each $modelProfiles as p (p.id)}
+                <option value={p.id}>{p.name}</option>
+              {/each}
+            </select>
+          {/if}
+          {#if availableModels.length > 0}
+            <select class="model-select model-select-lm" bind:value={selectedLmModelId} disabled={$isStreaming || modelsLoading}>
+              {#each availableModels as m (m.key)}
+                <option value={m.key}>{m.displayName}{m.isLoaded ? ' ●' : ''}</option>
+              {/each}
+            </select>
+          {:else if modelsLoading}
+            <span class="model-loading">Loading models…</span>
+          {:else if $modelProfiles.length > 0}
+            <span class="model-loading">No models found</span>
+          {/if}
+        </div>
       {:else}
         <span class="model-label">{displayModelName}</span>
       {/if}
@@ -257,6 +303,17 @@
     align-items: center;
     justify-content: space-between;
     margin-top: 0.4rem;
+  }
+
+  .model-pickers {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .model-loading {
+    font-size: 0.75rem;
+    color: var(--text-muted);
   }
 
   .model-label {
