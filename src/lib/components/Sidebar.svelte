@@ -1,6 +1,7 @@
 <script lang="ts">
   import { currentView } from '../navStore'
   import type { NavView } from '../types'
+  import ChatList from './ChatList.svelte'
 
   function navigate(view: NavView) {
     currentView.set(view)
@@ -38,6 +39,12 @@
       </button>
     </li>
   </ul>
+
+  {#if $currentView === 'chats'}
+    <div class="chat-list-container">
+      <ChatList />
+    </div>
+  {/if}
 </nav>
 
 <style>
@@ -64,6 +71,7 @@
     list-style: none;
     margin: 0;
     padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-subtle);
   }
   .nav-item {
     display: block;
@@ -86,5 +94,11 @@
     color: var(--text);
     background: var(--bg-active);
     font-weight: 500;
+  }
+  .chat-list-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
   }
 </style>

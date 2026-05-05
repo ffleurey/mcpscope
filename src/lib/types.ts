@@ -26,3 +26,30 @@ export interface ConnectionTestResult {
   message: string
   details: string[]
 }
+
+export interface ChatSession {
+  id: string
+  title: string
+  modelProfileId: string
+  modelSnapshot: ModelProfile
+  mcpProfileId: string | null
+  mcpSnapshot: McpServerProfile | null
+  createdAt: number
+  updatedAt: number
+}
+
+export interface ChatMessage {
+  id: string
+  sessionId: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+  status: 'complete' | 'streaming' | 'error'
+  errorMessage?: string
+  usage?: {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+  }
+  trace?: unknown
+}

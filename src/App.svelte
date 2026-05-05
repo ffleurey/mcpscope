@@ -2,14 +2,16 @@
   import { onMount } from 'svelte'
   import { currentView } from './lib/navStore'
   import { initProfileStores, dbError } from './lib/profileStores'
+  import { initChatStore } from './lib/chatStore'
   import Sidebar from './lib/components/Sidebar.svelte'
   import ModelProfiles from './lib/components/ModelProfiles.svelte'
   import McpProfiles from './lib/components/McpProfiles.svelte'
+  import ChatView from './lib/components/ChatView.svelte'
 
   let loading = $state(true)
 
   onMount(async () => {
-    await initProfileStores()
+    await Promise.all([initProfileStores(), initChatStore()])
     loading = false
   })
 </script>
@@ -26,10 +28,7 @@
     {#if loading}
       <div class="loading">Loading…</div>
     {:else if $currentView === 'chats'}
-      <div class="placeholder-view">
-        <h2>Chats</h2>
-        <p>Chat functionality will be available in a future increment.</p>
-      </div>
+      <ChatView />
     {:else if $currentView === 'model-profiles'}
       <ModelProfiles />
     {:else if $currentView === 'mcp-profiles'}
@@ -47,8 +46,10 @@
   }
   .main-content {
     flex: 1;
-    overflow-y: auto;
+    overflow: hidden;
     background: var(--bg);
+    display: flex;
+    flex-direction: column;
   }
   .db-error {
     margin: 1rem 2rem;
@@ -61,19 +62,6 @@
   }
   .loading {
     padding: 2rem;
-    color: var(--text-muted);
-    font-size: 0.9rem;
-  }
-  .placeholder-view {
-    padding: 1.5rem 2rem;
-  }
-  .placeholder-view h2 {
-    margin: 0 0 0.5rem;
-    font-size: 1.15rem;
-    font-weight: 600;
-    color: var(--text);
-  }
-  .placeholder-view p {
     color: var(--text-muted);
     font-size: 0.9rem;
   }

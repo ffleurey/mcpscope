@@ -107,3 +107,92 @@ export async function testLmStudioConnection(baseUrl: string): Promise<Connectio
     }
   }
 }
+
+export interface StreamChunk {
+  content: string
+  done: boolean
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+}
+
+export async function* streamChatCompletion(
+  baseUrl: string,
+  modelId: string,
+  messages: { role: string; content: string }[],
+  temperature: number,
+  abortSignal?: AbortSignal
+): AsyncGenerator<StreamChunk> {
+  const url = `${rootUrl(baseUrl)}/v1/chat/completions`
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: modelId, messages, temperature, stream: true }),
+    signal: abortSignal,
+  })
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '')
+    throw new Error(`LM Studio returned ${response.status} ${response.statusText}${body ? ': ' + body.slice(0, 200) : ''}`)
+  }
+
+  if (!response.body) {
+    throw new Error('Response body is null')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      if (abortSignal?.aborted) return
+
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      const lines = buffer.split('\n')
+      // Keep last (potentially incomplete) line in buffer
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data:')) continue
+
+        const data = trimmed.slice(5).trim()
+
+        if (data === '[DONE]') {
+          yield { content: '', done: true }
+          return
+        }
+
+        try {
+          const parsed = JSON.parse(data)
+          const delta = parsed?.choices?.[0]?.delta?.content
+          if (typeof delta === 'string' && delta.length > 0) {
+            yield { content: delta, done: false }
+          }
+          // Capture usage if present in this chunk
+          if (parsed?.usage) {
+            const u = parsed.usage
+            yield {
+              content: '',
+              done: true,
+              usage: {
+                promptTokens: u.prompt_tokens ?? 0,
+                completionTokens: u.completion_tokens ?? 0,
+                totalTokens: u.total_tokens ?? 0,
+              },
+            }
+            return
+          }
+        } catch {
+          // Malformed chunk — skip
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
