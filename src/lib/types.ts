@@ -51,5 +51,6 @@ export interface ChatMessage {
     completionTokens: number
     totalTokens: number
   }
+  thinking?: string   // accumulated reasoning_content from model
   trace?: unknown
 }

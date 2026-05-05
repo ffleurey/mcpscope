@@ -130,10 +130,22 @@ export async function sendMessage(userContent: string, modelProfile: ModelProfil
         if (chunk.usage) usage = chunk.usage
         break
       }
-      assistantMsg.content += chunk.content
-      activeMessages.update(msgs =>
-        msgs.map(m => (m.id === assistantMsg.id ? { ...m, content: assistantMsg.content } : m))
-      )
+      let changed = false
+      if (chunk.thinking) {
+        assistantMsg.thinking = (assistantMsg.thinking ?? '') + chunk.thinking
+        changed = true
+      }
+      if (chunk.content) {
+        assistantMsg.content += chunk.content
+        changed = true
+      }
+      if (changed) {
+        activeMessages.update(msgs =>
+          msgs.map(m => (m.id === assistantMsg.id
+            ? { ...m, content: assistantMsg.content, thinking: assistantMsg.thinking }
+            : m))
+        )
+      }
     }
 
     // Mark complete and persist

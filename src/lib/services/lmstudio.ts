@@ -171,6 +171,7 @@ export async function testLmStudioConnection(baseUrl: string): Promise<Connectio
 
 export interface StreamChunk {
   content: string
+  thinking: string   // from delta.reasoning_content — empty string if none
   done: boolean
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
 }
@@ -224,21 +225,24 @@ export async function* streamChatCompletion(
         const data = trimmed.slice(5).trim()
 
         if (data === '[DONE]') {
-          yield { content: '', done: true }
+          yield { content: '', thinking: '', done: true }
           return
         }
 
         try {
           const parsed = JSON.parse(data)
-          const delta = parsed?.choices?.[0]?.delta?.content
-          if (typeof delta === 'string' && delta.length > 0) {
-            yield { content: delta, done: false }
+          const delta = parsed?.choices?.[0]?.delta
+          const thinking = typeof delta?.reasoning_content === 'string' ? delta.reasoning_content : ''
+          const content = typeof delta?.content === 'string' ? delta.content : ''
+          if (thinking.length > 0 || content.length > 0) {
+            yield { content, thinking, done: false }
           }
           // Capture usage if present in this chunk
           if (parsed?.usage) {
             const u = parsed.usage
             yield {
               content: '',
+              thinking: '',
               done: true,
               usage: {
                 promptTokens: u.prompt_tokens ?? 0,

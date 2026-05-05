@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import type { ChatMessage } from '../types'
 
   interface Props {
@@ -7,6 +8,30 @@
   }
 
   const { message, modelName = 'Assistant' }: Props = $props()
+
+  let thinkingEl = $state<HTMLElement | null>(null)
+  let thinkingOpen = $state(true)
+
+  let thinkingLineCount = $derived(
+    message.thinking?.split('\n').filter(l => l.trim()).length ?? 0
+  )
+
+  // Auto-collapse when streaming completes
+  $effect(() => {
+    if (message.status === 'complete' && message.thinking) {
+      thinkingOpen = false
+    }
+  })
+
+  // Auto-scroll thinking area to bottom while streaming
+  $effect(() => {
+    message.thinking  // track changes
+    if (thinkingEl && thinkingOpen && message.status === 'streaming') {
+      tick().then(() => {
+        if (thinkingEl) thinkingEl.scrollTop = thinkingEl.scrollHeight
+      })
+    }
+  })
 </script>
 
 <div class="message" class:user={message.role === 'user'} class:assistant={message.role === 'assistant'}>
@@ -24,10 +49,28 @@
         <span class="partial-text">{message.content}</span>
       {/if}
     {:else}
-      {message.content}<span
-        class="cursor"
-        class:visible={message.status === 'streaming' && message.content.length > 0}
-      ></span>
+      {#if message.thinking}
+        <details class="thinking-block" bind:open={thinkingOpen}>
+          <summary class="thinking-summary">
+            {#if message.status === 'streaming' && !message.content}
+              <span class="thinking-label thinking-active">Thinking…</span>
+            {:else}
+              <span class="thinking-label">Thought ({thinkingLineCount} lines)</span>
+            {/if}
+          </summary>
+          <div class="thinking-content" bind:this={thinkingEl}>
+            {message.thinking}
+          </div>
+        </details>
+      {/if}
+      {#if message.content || message.status !== 'streaming'}
+        <div class="response-text">
+          {message.content}<span
+            class="cursor"
+            class:visible={message.status === 'streaming' && message.content.length > 0}
+          ></span>
+        </div>
+      {/if}
     {/if}
   </div>
 </div>
@@ -52,6 +95,66 @@
   }
 
   .message-content {
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+
+  .thinking-block {
+    margin-bottom: 0.6rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .thinking-summary {
+    cursor: pointer;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+    list-style: none;
+    user-select: none;
+    background: var(--bg-panel);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .thinking-summary::-webkit-details-marker { display: none; }
+
+  .thinking-summary::before {
+    content: '▶';
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+
+  details[open] .thinking-summary::before {
+    transform: rotate(90deg);
+  }
+
+  .thinking-label {
+    color: var(--text-muted);
+  }
+
+  .thinking-label.thinking-active {
+    color: var(--color-accent, #4a9eff);
+  }
+
+  .thinking-content {
+    max-height: 12rem;
+    overflow-y: auto;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.82rem;
+    font-style: italic;
+    color: var(--text-muted);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--bg);
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .response-text {
     color: var(--text);
     font-size: 0.9rem;
     line-height: 1.65;
