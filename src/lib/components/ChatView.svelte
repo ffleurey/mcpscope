@@ -36,57 +36,38 @@
         : 'No model selected'
   )
 
-  // Derive profile once so both effects share the same computation
-  let selectedProfile = $derived($modelProfiles.find(p => p.id === selectedModelId) ?? null)
-
-  // Auto-select first model profile if none selected
-  $effect(() => {
-    if (!selectedModelId && $modelProfiles.length > 0) {
-      selectedModelId = $modelProfiles[0].id
-    }
-  })
-
-  // Load available models when selected profile changes.
-  // Uses a cancel flag so stale async resolutions are discarded if the effect re-runs.
-  $effect(() => {
-    const profile = selectedProfile  // tracked dependency
+  async function fetchModelsForProfile(profileId: string) {
+    const profile = $modelProfiles.find(p => p.id === profileId)
     if (!profile) {
       availableModels = []
       selectedLmModelId = ''
-      modelsLoading = false
       return
     }
-
-    let cancelled = false
     modelsLoading = true
+    availableModels = []
+    try {
+      const models = await listModels(profile.baseUrl)
+      availableModels = models
+      const hasPreferred = !!profile.modelId && models.some(m => m.key === profile.modelId)
+      const firstLoaded = models.find(m => m.isLoaded)
+      selectedLmModelId = hasPreferred
+        ? profile.modelId
+        : (firstLoaded?.key ?? models[0]?.key ?? '')
+    } finally {
+      modelsLoading = false
+    }
+  }
 
-    listModels(profile.baseUrl)
-      .then(models => {
-        if (cancelled) return
-        availableModels = models
-        const hasPreferred = !!profile.modelId && models.some(m => m.key === profile.modelId)
-        const firstLoaded = models.find(m => m.isLoaded)
-        selectedLmModelId = hasPreferred
-          ? profile.modelId
-          : (firstLoaded?.key ?? models[0]?.key ?? '')
-        modelsLoading = false
-      })
-      .catch(() => {
-        if (!cancelled) {
-          availableModels = []
-          modelsLoading = false
-        }
-      })
+  async function handleProfileChange() {
+    await fetchModelsForProfile(selectedModelId)
+  }
 
-    // Cleanup: discard this fetch result if effect re-runs before it resolves
-    return () => { cancelled = true }
-  })
-
-  // Scroll to bottom when messages change
-  $effect(() => {
-    // Track message changes
-    $activeMessages
-    tick().then(() => scrollToBottom())
+  onMount(async () => {
+    scrollToBottom()
+    if ($modelProfiles.length > 0) {
+      selectedModelId = $modelProfiles[0].id
+      await fetchModelsForProfile(selectedModelId)
+    }
   })
 
   function scrollToBottom() {
@@ -135,10 +116,6 @@
       handleSend()
     }
   }
-
-  onMount(() => {
-    scrollToBottom()
-  })
 </script>
 
 <div class="chat-view">
@@ -191,7 +168,7 @@
       {#if !hasMessages}
         <div class="model-pickers">
           {#if $modelProfiles.length > 0}
-            <select class="model-select" bind:value={selectedModelId} disabled={$isStreaming}>
+            <select class="model-select" bind:value={selectedModelId} onchange={handleProfileChange} disabled={$isStreaming}>
               {#each $modelProfiles as p (p.id)}
                 <option value={p.id}>{p.name}</option>
               {/each}
