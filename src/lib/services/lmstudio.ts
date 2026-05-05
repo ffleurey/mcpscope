@@ -43,8 +43,10 @@ export async function listModels(baseUrl: string): Promise<LmStudioModel[]> {
 
     if (usedNative) {
       const models: LmStudioNativeModel[] = (data as { models?: LmStudioNativeModel[] })?.models ?? []
+      const seen = new Set<string>()
       return models
         .filter(m => m.type === 'llm')
+        .filter(m => { if (seen.has(m.key)) return false; seen.add(m.key); return true })
         .map(m => ({
           key: m.key,
           displayName: m.display_name ?? m.key,
