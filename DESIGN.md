@@ -527,8 +527,8 @@ The following questions remain worth deciding before or during implementation pl
 2. **Token estimation implementation**
    - for the MVP, should estimated counts start as a simple character-based heuristic, or should we invest earlier in a tokenizer matched more closely to the target models?
 
-3. **Component foundation**
-   - which lightweight Svelte component foundation best fits the subdued visual design with minimal custom CSS?
+3. **Component foundation** *(decided)*
+   - The MVP will use bare Svelte with semantic HTML and CSS custom properties. No component library will be introduced unless a clear need emerges during development.
 
 ## Current Recommendation
 
