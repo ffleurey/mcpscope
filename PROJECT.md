@@ -41,7 +41,7 @@ The application should behave like a traditional single-page chat application, b
 The core design model should be:
 
 - **central configuration** for reusable model profiles and MCP server profiles
-- **chat sessions** that select one model profile and one MCP server profile
+- **chat sessions** that select one model profile and optionally one MCP server profile
 - **local-only persistence** for chats and configuration
 - support for **multiple active chats**, even if only one chat is shown on screen at a time
 
@@ -111,6 +111,7 @@ A model profile should include at least:
 - system prompt
 - temperature
 - LM Studio base URL
+- context window size
 
 ### 3. MCP Tool Servers
 
@@ -119,9 +120,10 @@ The app should support **multiple configured MCP servers**, even if the first co
 **Initial assumptions:**
 
 - The first MCP server runs on `localhost:3001`
-- The MVP uses **one active MCP server per chat**
+- Chats may run model-only or use **one active MCP server per chat**
 - The browser client communicates with MCP servers over a browser-friendly transport
-- **SSE over HTTP** is the current expected transport for the initial implementation
+- **Streamable HTTP** is the current expected transport for the initial implementation
+- The MCP server must be directly browser-accessible, including correct CORS behavior
 
 **Future direction:**
 
@@ -137,7 +139,7 @@ MCP server endpoints should also be configured centrally as reusable profiles.
 For the MVP, each chat selects:
 
 - exactly one model profile
-- exactly one MCP server profile
+- zero or one MCP server profile
 
 ## Domain Scope
 
@@ -294,7 +296,7 @@ Generated HTML is considered **mostly trusted** because it is expected to come f
 ### MCP and Tooling
 
 - Configure and manage multiple MCP server endpoints
-- Allow one active MCP server per chat in the MVP
+- Allow zero or one MCP server per chat in the MVP (MCP is optional; model-only chats are fully supported)
 - Make all tool calls visible in the UI
 - Expose request/response details clearly for testing and debugging
 - Show tool execution progress and failures in a user-friendly way

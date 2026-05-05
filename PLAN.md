@@ -42,7 +42,7 @@ Use these statuses when updating this file:
 
 | Increment | Status | Goal |
 | --- | --- | --- |
-| 1. App shell, configuration, connection testing | Planned | Build the SPA shell and central model/MCP configuration with connectivity checks |
+| 1. App shell, configuration, connection testing | Planned | Build the SPA shell and central model/MCP configuration with real transport and connectivity checks |
 | 2. Basic model-only chat | Planned | Build a single-chat flow with LM Studio and real-time streaming |
 | 3. MCP-enabled chat, plain text | Planned | Add one-MCP-per-chat tool support and minimal raw tool traces |
 | 4. Context monitoring and visualization | Planned | Add context accounting, token tracking, and the context bar |
@@ -64,12 +64,14 @@ Build the application shell and central configuration model that everything else
 - create central configuration screens for:
   - model profiles
   - MCP server profiles
+- include context window size in model profiles
 - support create, edit, and delete for profiles
 - add connection test actions for:
   - LM Studio connectivity
   - model reachability where possible
-  - MCP server connectivity
-  - MCP tool discovery
+  - MCP server connectivity and CORS/browser access validation
+  - MCP initialize and tools discovery over the targeted transport
+- validate the targeted MCP browser transport/client approach early
 
 ### After this step we should be able to test
 
@@ -78,6 +80,8 @@ Build the application shell and central configuration model that everything else
 - a user can create and edit MCP server profiles
 - LM Studio connection success and failure are clearly reported
 - MCP server connection success and failure are clearly reported
+- MCP transport handshake works for the targeted browser flow
+- missing CORS support is surfaced as a setup blocker, not a generic failure
 - invalid ports, unreachable hosts, and misconfiguration produce understandable errors
 
 ### Acceptance gate
@@ -86,6 +90,7 @@ Do not move on until:
 
 - profile management is stable
 - connection tests are useful for debugging
+- the targeted MCP transport/browser approach is validated early enough to avoid later architectural surprises
 - failure states are clear enough that setup issues are easy to diagnose
 
 ## Increment 2: Basic model-only chat
@@ -104,6 +109,7 @@ Build the first working chat loop using LM Studio only, without MCP tool support
 - stream assistant output into the UI in real time
 - show message history in the chat view
 - introduce internal request/response trace capture, even if the full inspection UI comes later
+- keep model-only chats valid even after MCP support is introduced later
 
 ### After this step we should be able to test
 
@@ -122,26 +128,39 @@ Do not move on until:
 - model failures do not break the whole UI
 - the internal data model is clean enough to extend with MCP and traces
 
+### Questions to answer before moving to Increment 3
+
+Two design decisions must be made before starting Increment 3. They can only be answered meaningfully once the basic chat is running:
+
+1. **Background chat execution**
+   Should non-visible active chats continue streaming and updating in the background when the user switches to another chat? The answer has significant architectural implications: background streaming requires managing multiple concurrent connections and concurrent IndexedDB writes. The simplest defensible MVP answer may be to cancel the active request when the user switches away and freeze state, but this should be validated against real usage before committing.
+
+2. **Token estimation approach**
+   What strategy should the context bar use when exact backend usage data is unavailable? The options are a simple character-based heuristic (e.g. characters / 4, labeled "estimated") or a Wasm tokenizer matched more closely to the Qwen3 tokenizer. The right choice depends on how useful the estimated values turn out to be in practice. If rough estimates are good enough to spot oversized components, the heuristic may be sufficient.
+
+Do not start Increment 3 until both questions are answered and the decisions are recorded in this plan.
+
 ## Increment 3: MCP-enabled chat with plain text output
 
 **Status:** Planned
 
 ### Goal
 
-Add the first full model-plus-MCP workflow using one MCP server per chat.
+Add the first full model-plus-MCP workflow using zero or one MCP server per chat.
 
 ### Scope
 
-- allow a chat to select one MCP server profile
+- allow a chat to optionally select one MCP server profile
 - fetch and attach MCP tools for the selected chat runtime
 - support model tool calls
-- route tool calls to the selected MCP server
+- accumulate streamed tool-call data until complete and then route tool calls to the selected MCP server
+- support multiple tool calls in one turn, executed sequentially
 - feed plain text and structured tool results back into the chat loop
 - expose minimal raw tool trace visibility
 
 ### After this step we should be able to test
 
-- a chat can use one model profile and one MCP server profile together
+- a chat can remain model-only or use one model profile and one MCP server profile together
 - the model can discover and call MCP tools
 - the app correctly forwards tool calls and receives results
 - the assistant can continue after tool execution
@@ -170,6 +189,7 @@ Add the main context-engineering feature: context accounting and the visual cont
 ### Scope
 
 - compute client-visible context composition from known request data
+- use the model profile's context window size as the context-bar budget
 - classify measurements as:
   - exact
   - estimated
@@ -177,6 +197,7 @@ Add the main context-engineering feature: context accounting and the visual cont
 - build the color-coded context bar
 - update context information in real time as data becomes available
 - surface token and usage statistics when returned by the backend
+- surface thinking-token or reasoning-token information separately when the backend exposes it
 
 ### After this step we should be able to test
 
@@ -246,6 +267,7 @@ Add experiment management features once the single-chat runtime is stable.
 - show one chat at a time in the main UI
 - persist chats locally
 - persist model and MCP profiles locally
+- use IndexedDB as the main persistence layer
 - support deleting chats
 - support plain-text export
 
@@ -255,7 +277,7 @@ Add experiment management features once the single-chat runtime is stable.
 - preserve each chat's state independently
 - keep chats available after reloading the application
 - delete old chats safely
-- export a chat as plain text
+- export a chat as plain text with messages, timestamps, selected profile names, and concise tool trace summaries
 - run experiments in parallel at a practical level, even though only one chat is shown at a time
 
 ### Acceptance gate
@@ -272,6 +294,8 @@ Do not move on until:
 This sequence is intentionally incremental, but with one important design rule:
 
 - **trace capture and context-accounting plumbing should begin before the full context UI**
+- **the targeted MCP browser transport and CORS model must be validated in Increment 1**
+- **IndexedDB should be used for persistent chat data rather than localStorage**
 
 That means increments 2 and 3 should already capture the data that increment 4 will visualize.
 

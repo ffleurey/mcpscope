@@ -126,6 +126,12 @@ A model profile should contain at least:
 - LM Studio base URL
 - system prompt
 - temperature
+- context window size in tokens
+
+The context window value may be:
+
+- auto-detected from model metadata when available
+- manually entered or overridden when auto-detection is missing or unreliable
 
 Possible future additions:
 
@@ -146,6 +152,36 @@ An MCP server profile should contain at least:
 
 For the MVP, the primary reference profile is the Home Assistant statistics MCP on `localhost:3001`.
 
+### Transport and browser integration
+
+The MVP should target the **current MCP Streamable HTTP transport** for browser-based MCP communication.
+
+Older SSE-based MCP transport should be treated as legacy compatibility, not the primary design target.
+
+Implementation preference:
+
+- prefer the official `@modelcontextprotocol/sdk` if it works cleanly in the browser for the targeted transport
+- if browser support in the SDK is not sufficient, implement a minimal browser MCP client for the needed MVP operations rather than introducing a backend proxy
+
+The MVP should remain aligned with the pure-frontend architecture.
+
+### CORS responsibility
+
+Because the application is a browser SPA, the selected MCP server must support browser access correctly.
+
+That means the MCP server is responsible for:
+
+- returning the required CORS headers
+- handling browser preflight requests where needed
+- allowing the app origin used in development and local deployment
+
+If the MCP server cannot be called directly from the browser, the pure-frontend assumption is broken.
+
+For the MVP, the design assumption is:
+
+- **no local proxy**
+- the MCP server must be browser-accessible directly
+
 ### Chat sessions
 
 Each chat session is a concrete experiment instance.
@@ -153,7 +189,7 @@ Each chat session is a concrete experiment instance.
 A chat session should reference:
 
 - exactly one selected model profile
-- exactly one selected MCP server profile
+- zero or one selected MCP server profile
 - conversation history
 - tool trace history
 - context accounting state
@@ -163,11 +199,9 @@ Each chat should be independently persisted and deletable.
 
 ## Proposed Snapshot Rule
 
-For reproducibility, a chat session should likely store a **snapshot** of the selected model and MCP configuration at the time the chat starts or the first request is sent.
+For reproducibility, a chat session should store a **snapshot** of the selected model and MCP configuration at the time the **first request is sent**.
 
 This avoids ambiguity when central profiles are edited later.
-
-This is the preferred design direction, but should remain an explicit implementation decision until confirmed.
 
 ## UI Structure
 
@@ -212,15 +246,28 @@ If some information is only known after a request completes, the UI should updat
 The intended runtime flow for a normal chat turn is:
 
 1. The user selects or creates a chat.
-2. The chat is associated with one model profile and one MCP server profile.
+2. The chat is associated with one model profile and optionally one MCP server profile.
 3. The user sends a message.
 4. The client builds the outbound model request.
 5. The client updates context accounting from known request components.
 6. The model streams output.
-7. If the model invokes a tool, the client routes the tool call to the selected MCP server.
+7. If the model invokes a tool, the client accumulates streamed tool-call data until the call is complete, then routes the completed tool call to the selected MCP server.
 8. Tool inputs and outputs are shown in collapsible trace UI.
 9. The resulting assistant output is rendered in the chat.
 10. Usage and context information is updated as new exact or estimated values become available.
+
+### Tool execution semantics
+
+Model-only chats remain valid even after MCP support is added.
+
+For MCP-enabled chats in the MVP:
+
+- a chat may use zero or one MCP server profile
+- a model response may contain multiple tool calls in one turn
+- multiple tool calls from one turn should be executed **sequentially in the order received**
+- true parallel tool execution is not required for the MVP
+
+This keeps the execution model simple while still supporting batched tool usage.
 
 ## Context Accounting Design
 
@@ -232,6 +279,8 @@ The app should track the **effective client-visible model context** as accuratel
 
 The context bar should visually represent the known context budget as color-coded segments.
 
+Its total length should be based on the selected chat model profile's configured context window size.
+
 Likely segment categories:
 
 - system prompt
@@ -241,6 +290,19 @@ Likely segment categories:
 - tool results
 - assistant responses
 - other model-visible payloads
+
+The MVP context bar should use the following segment breakdown as its baseline:
+
+| Segment | Description |
+| --- | --- |
+| System prompt | The static system prompt from the model profile |
+| Conversation history | Prior user and assistant turns |
+| Tool descriptions / schemas | The tool definitions sent with the request |
+| Tool call arguments | The arguments sent in each tool call |
+| Tool results | The content returned by each tool |
+| Assistant responses | The current and prior assistant outputs |
+
+Additional segments may be added in later versions. For the MVP, this set covers the known context components for the reference use case.
 
 The context bar should make it easy to spot oversized components quickly.
 
@@ -277,6 +339,8 @@ This is especially relevant for:
 - backend-internal prompt construction
 - model/provider behavior not exposed through the API
 
+If LM Studio or the model backend exposes "thinking" or reasoning-token usage explicitly, the app should surface that as its own category rather than collapsing it into unknown usage.
+
 ### Source of truth
 
 The primary source of truth for the context view should be:
@@ -284,6 +348,7 @@ The primary source of truth for the context view should be:
 - the exact payload the client sends to LM Studio
 - the exact tool definitions and tool results seen by the client
 - returned usage metadata when available
+- the chat model profile's configured context window size
 
 The app should not claim visibility into context elements it does not actually observe.
 
@@ -300,6 +365,13 @@ For each tool interaction, the UI should show:
 - error state if relevant
 
 The MVP should present tool inputs and outputs in **collapsible boxes** to keep the chat readable while still making the data easy to inspect.
+
+Connection testing and tool discovery should use the real MCP protocol path for the targeted transport:
+
+- initialize
+- tools/list
+
+That means Increment 1 includes a minimal but real MCP client layer rather than a simple HTTP ping.
 
 ## Artifact Support
 
@@ -332,6 +404,10 @@ Those future features should fit the same core separation:
 
 Persistence is local only.
 
+The primary storage technology for chats, traces, and context data should be **IndexedDB**.
+
+`localStorage` may still be used for very small UI preferences if useful, but it should not be the primary storage layer for chat data.
+
 The app should persist:
 
 - model profiles
@@ -345,6 +421,17 @@ The app should support:
 
 - deleting old chats
 - exporting a chat as plain text
+
+Deleting a chat should remove its associated local traces, snapshots, and context accounting data as part of the same operation.
+
+For the MVP, plain-text export should include:
+
+- timestamps
+- user and assistant messages
+- selected model and MCP profile names
+- a concise tool trace summary
+
+It does not need to include full raw JSON payloads by default.
 
 Cloud sync and shared multi-user state are out of scope.
 
@@ -382,6 +469,16 @@ The UI should:
 - preserve as much local chat state as possible
 - allow retry flows without losing the whole conversation
 
+### Retry semantics
+
+For the MVP, retry should mean rerunning the last failed turn from the last committed chat state before that turn began.
+
+This implies:
+
+- the failed attempt remains visible in traces as a failed attempt
+- retry does not silently mutate prior successful turns
+- retries should use the same per-chat snapshot configuration captured for that run
+
 ## Multiple Active Chats
 
 The MVP should support more than one active chat session, even though only one is displayed at a time.
@@ -404,6 +501,10 @@ Selection criteria should favor:
 - compatibility with Svelte + TypeScript + Vite
 - easy styling/customization
 
+The specific component foundation should be chosen in Increment 1.
+
+If no lightweight library is clearly better than native Svelte plus semantic HTML, prefer the simpler option rather than forcing a component library decision.
+
 ## Non-Goals for the MVP
 
 The design does not currently target:
@@ -420,27 +521,21 @@ The design does not currently target:
 
 The following questions remain worth deciding before or during implementation planning:
 
-1. **Profile snapshot behavior**
-   - should chats freeze a snapshot of selected profiles on creation, on first send, or always reference the latest central profile?
-
-2. **Background chat execution**
+1. **Background chat execution**
    - should non-visible active chats continue streaming and updating normally in the background?
 
-3. **Delete semantics**
-   - should deleting a chat remove all associated traces and context accounting data as well?
+2. **Token estimation implementation**
+   - for the MVP, should estimated counts start as a simple character-based heuristic, or should we invest earlier in a tokenizer matched more closely to the target models?
 
-4. **Token estimation implementation**
-   - which tokenizer or estimation strategy should be used when exact backend usage is unavailable?
-
-5. **Context bar granularity**
-   - how fine-grained should segment breakdowns be in the MVP versus later versions?
+3. **Component foundation**
+   - which lightweight Svelte component foundation best fits the subdued visual design with minimal custom CSS?
 
 ## Current Recommendation
 
 The cleanest MVP implementation path is:
 
 - central profile management
-- per-chat selection of one model and one MCP server
+- per-chat selection of one model and optional one MCP server
 - local snapshot-oriented chat records
 - streaming chat UI
 - collapsible tool traces
