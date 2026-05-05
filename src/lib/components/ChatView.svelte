@@ -36,6 +36,9 @@
         : 'No model selected'
   )
 
+  // Derive profile once so both effects share the same computation
+  let selectedProfile = $derived($modelProfiles.find(p => p.id === selectedModelId) ?? null)
+
   // Auto-select first model profile if none selected
   $effect(() => {
     if (!selectedModelId && $modelProfiles.length > 0) {
@@ -43,18 +46,40 @@
     }
   })
 
-  // Load available models when profile changes
+  // Load available models when selected profile changes.
+  // Uses a cancel flag so stale async resolutions are discarded if the effect re-runs.
   $effect(() => {
-    const profile = $modelProfiles.find(p => p.id === selectedModelId)
-    if (!profile) { availableModels = []; selectedLmModelId = ''; return }
-    modelsLoading = true
-    listModels(profile.baseUrl).then(models => {
-      availableModels = models
-      const preferred = profile.modelId && models.find(m => m.key === profile.modelId)
-      const firstLoaded = models.find(m => m.isLoaded)
-      selectedLmModelId = preferred ? profile.modelId : (firstLoaded?.key ?? models[0]?.key ?? '')
+    const profile = selectedProfile  // tracked dependency
+    if (!profile) {
+      availableModels = []
+      selectedLmModelId = ''
       modelsLoading = false
-    })
+      return
+    }
+
+    let cancelled = false
+    modelsLoading = true
+
+    listModels(profile.baseUrl)
+      .then(models => {
+        if (cancelled) return
+        availableModels = models
+        const hasPreferred = !!profile.modelId && models.some(m => m.key === profile.modelId)
+        const firstLoaded = models.find(m => m.isLoaded)
+        selectedLmModelId = hasPreferred
+          ? profile.modelId
+          : (firstLoaded?.key ?? models[0]?.key ?? '')
+        modelsLoading = false
+      })
+      .catch(() => {
+        if (!cancelled) {
+          availableModels = []
+          modelsLoading = false
+        }
+      })
+
+    // Cleanup: discard this fetch result if effect re-runs before it resolves
+    return () => { cancelled = true }
   })
 
   // Scroll to bottom when messages change
