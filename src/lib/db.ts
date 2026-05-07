@@ -1,8 +1,8 @@
 import { openDB, type IDBPDatabase } from 'idb'
-import type { ModelProfile, McpServerProfile, ChatSession, ChatMessage } from './types'
+import type { LmStudioConnection, ModelConfig, McpServerProfile, ChatSession, ChatMessage } from './types'
 
 const DB_NAME = 'ai-client-app'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 let dbPromise: Promise<IDBPDatabase> | null = null
 
@@ -10,14 +10,17 @@ function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion) {
-        if (oldVersion < 1) {
-          db.createObjectStore('modelProfiles', { keyPath: 'id' })
+        if (oldVersion < 3) {
+          // Tear down everything and build fresh
+          const stores = Array.from(db.objectStoreNames)
+          for (const s of stores) db.deleteObjectStore(s)
+
+          db.createObjectStore('lmConnections', { keyPath: 'id' })
+          db.createObjectStore('modelConfigs', { keyPath: 'id' })
           db.createObjectStore('mcpProfiles', { keyPath: 'id' })
-        }
-        if (oldVersion < 2) {
           db.createObjectStore('chatSessions', { keyPath: 'id' })
-          const msgStore = db.createObjectStore('chatMessages', { keyPath: 'id' })
-          msgStore.createIndex('by-session', 'sessionId')
+          const msgs = db.createObjectStore('chatMessages', { keyPath: 'id' })
+          msgs.createIndex('by-session', 'sessionId')
         }
       },
       blocked() {
@@ -33,20 +36,36 @@ function getDb(): Promise<IDBPDatabase> {
   return dbPromise
 }
 
-// ModelProfile CRUD
-export async function getAllModelProfiles(): Promise<ModelProfile[]> {
+// LmStudioConnection CRUD
+export async function getAllConnections(): Promise<LmStudioConnection[]> {
   const db = await getDb()
-  return db.getAll('modelProfiles')
+  return db.getAll('lmConnections')
 }
 
-export async function saveModelProfile(profile: ModelProfile): Promise<void> {
+export async function saveConnection(conn: LmStudioConnection): Promise<void> {
   const db = await getDb()
-  await db.put('modelProfiles', profile)
+  await db.put('lmConnections', conn)
 }
 
-export async function deleteModelProfile(id: string): Promise<void> {
+export async function deleteConnection(id: string): Promise<void> {
   const db = await getDb()
-  await db.delete('modelProfiles', id)
+  await db.delete('lmConnections', id)
+}
+
+// ModelConfig CRUD
+export async function getAllModelConfigs(): Promise<ModelConfig[]> {
+  const db = await getDb()
+  return db.getAll('modelConfigs')
+}
+
+export async function saveModelConfig(config: ModelConfig): Promise<void> {
+  const db = await getDb()
+  await db.put('modelConfigs', config)
+}
+
+export async function deleteModelConfig(id: string): Promise<void> {
+  const db = await getDb()
+  await db.delete('modelConfigs', id)
 }
 
 // McpServerProfile CRUD

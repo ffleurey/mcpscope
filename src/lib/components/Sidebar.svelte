@@ -23,10 +23,19 @@
     <li>
       <button
         class="nav-item"
-        class:active={$currentView === 'model-profiles'}
-        onclick={() => navigate('model-profiles')}
+        class:active={$currentView === 'model-configs'}
+        onclick={() => navigate('model-configs')}
       >
-        Model Profiles
+        Model Configs
+      </button>
+    </li>
+    <li>
+      <button
+        class="nav-item"
+        class:active={$currentView === 'connections'}
+        onclick={() => navigate('connections')}
+      >
+        Connections
       </button>
     </li>
     <li>
@@ -35,7 +44,7 @@
         class:active={$currentView === 'mcp-profiles'}
         onclick={() => navigate('mcp-profiles')}
       >
-        MCP Profiles
+        MCP Servers
       </button>
     </li>
   </ul>

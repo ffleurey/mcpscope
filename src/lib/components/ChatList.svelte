@@ -1,6 +1,6 @@
 <script lang="ts">
   import { chatSessions, activeChatId, activeMessages, selectChat, deleteChat } from '../chatStore'
-  import { modelProfiles } from '../profileStores'
+  import { modelConfigs } from '../connectionStore'
 
   function handleNewChat() {
     activeChatId.set(null)
@@ -19,8 +19,8 @@
 
 <div class="chat-list">
   <div class="chat-list-header">
-    {#if $modelProfiles.length === 0}
-      <span class="no-profiles">Create a model profile first</span>
+    {#if $modelConfigs.length === 0}
+      <span class="no-profiles">Create a model config first</span>
     {:else}
       <button class="btn btn-sm new-chat-btn" onclick={handleNewChat}>+ New Chat</button>
     {/if}

@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { mcpProfiles, upsertMcpProfile, removeMcpProfile } from '../connectionStore'
-  import type { McpServerProfile, ConnectionTestResult } from '../types'
-  import McpProfileForm from './McpProfileForm.svelte'
+  import { lmConnections, upsertConnection, removeConnection } from '../connectionStore'
+  import type { LmStudioConnection, ConnectionTestResult } from '../types'
+  import LmConnectionForm from './LmConnectionForm.svelte'
   import ConnectionTestResultComponent from './ConnectionTestResult.svelte'
-  import { testMcpConnection } from '../services/mcp'
+  import { testLmStudioConnection } from '../services/lmstudio'
 
   let editingId = $state<string | null>(null)
   let showNew = $state(false)
@@ -15,9 +15,9 @@
   function startEdit(id: string) { editingId = id; showNew = false }
   function cancelEdit() { editingId = null }
 
-  async function handleSave(profile: McpServerProfile) {
+  async function handleSave(conn: LmStudioConnection) {
     try {
-      await upsertMcpProfile(profile)
+      await upsertConnection(conn)
       showNew = false
       editingId = null
     } catch (e) {
@@ -27,25 +27,25 @@
 
   async function handleDelete(id: string) {
     try {
-      await removeMcpProfile(id)
+      await removeConnection(id)
       if (editingId === id) editingId = null
     } catch (e) {
       saveError = e instanceof Error ? e.message : String(e)
     }
   }
 
-  async function handleTest(profile: McpServerProfile) {
-    testResults[profile.id] = { status: 'testing', message: '', details: [] }
-    const result = await testMcpConnection(profile.url)
-    testResults[profile.id] = result
+  async function handleTest(conn: LmStudioConnection) {
+    testResults[conn.id] = { status: 'testing', message: '', details: [] }
+    const result = await testLmStudioConnection(conn.baseUrl, conn.apiKey)
+    testResults[conn.id] = result
   }
 </script>
 
 <div class="view">
   <div class="view-header">
-    <h2>MCP Server Profiles</h2>
+    <h2>LM Studio Connections</h2>
     {#if !showNew}
-      <button class="btn btn-primary" onclick={startNew}>New Profile</button>
+      <button class="btn btn-primary" onclick={startNew}>+ New Connection</button>
     {/if}
   </div>
 
@@ -54,36 +54,36 @@
   {/if}
 
   {#if showNew}
-    <McpProfileForm onSave={handleSave} onCancel={cancelNew} />
+    <LmConnectionForm onSave={handleSave} onCancel={cancelNew} />
   {/if}
 
-  {#if $mcpProfiles.length === 0 && !showNew}
-    <p class="empty-state">No MCP server profiles yet. Create one to get started.</p>
+  {#if $lmConnections.length === 0 && !showNew}
+    <p class="empty-state">No connections yet. Add one to get started.</p>
   {/if}
 
-  {#each $mcpProfiles as profile (profile.id)}
-    {#if editingId === profile.id}
-      <McpProfileForm profile={profile} onSave={handleSave} onCancel={cancelEdit} />
+  {#each $lmConnections as conn (conn.id)}
+    {#if editingId === conn.id}
+      <LmConnectionForm connection={conn} onSave={handleSave} onCancel={cancelEdit} />
     {:else}
       <div class="profile-card">
         <div class="card-header">
-          <span class="card-name">{profile.name}</span>
+          <span class="card-name">{conn.name}</span>
           <div class="card-actions">
-            <button class="btn btn-sm" onclick={() => handleTest(profile)}>Test Connection</button>
-            <button class="btn btn-sm" onclick={() => startEdit(profile.id)}>Edit</button>
-            <button class="btn btn-sm btn-danger" onclick={() => handleDelete(profile.id)}>Delete</button>
+            <button class="btn btn-sm" onclick={() => handleTest(conn)}>Test Connection</button>
+            <button class="btn btn-sm" onclick={() => startEdit(conn.id)}>Edit</button>
+            <button class="btn btn-sm btn-danger" onclick={() => handleDelete(conn.id)}>Delete</button>
           </div>
         </div>
         <dl class="card-details">
           <div class="detail-row">
-            <dt>URL</dt><dd><code>{profile.url}</code></dd>
+            <dt>Base URL</dt><dd><code>{conn.baseUrl}</code></dd>
           </div>
           <div class="detail-row">
-            <dt>Transport</dt><dd>{profile.transport}</dd>
+            <dt>API Key</dt><dd>{conn.apiKey ? '••••••••' : 'none'}</dd>
           </div>
         </dl>
-        {#if testResults[profile.id]}
-          <ConnectionTestResultComponent result={testResults[profile.id]} />
+        {#if testResults[conn.id]}
+          <ConnectionTestResultComponent result={testResults[conn.id]} />
         {/if}
       </div>
     {/if}

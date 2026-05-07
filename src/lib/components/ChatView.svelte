@@ -1,19 +1,14 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
   import { activeMessages, activeChatId, chatSessions, isStreaming, sendMessage, createChat } from '../chatStore'
-  import { modelProfiles } from '../profileStores'
-  import { listModels } from '../services/lmstudio'
-  import type { LmStudioModel } from '../services/lmstudio'
-  import type { ModelProfile } from '../types'
+  import { modelConfigs } from '../connectionStore'
+  import type { ModelConfig } from '../types'
   import ChatMessageBlock from './ChatMessageBlock.svelte'
 
   let transcriptEl = $state<HTMLElement | null>(null)
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let composerText = $state('')
-  let selectedModelId = $state<string>('')
-  let availableModels = $state<LmStudioModel[]>([])
-  let selectedLmModelId = $state('')
-  let modelsLoading = $state(false)
+  let selectedConfigId = $state<string>('')
 
   // Derive active session from stores
   let session = $derived($chatSessions.find(s => s.id === $activeChatId) ?? null)
@@ -27,46 +22,16 @@
     $activeMessages[$activeMessages.length - 1].content === ''
   )
 
-  // Model name to display
   let displayModelName = $derived(
-    session?.modelSnapshot?.modelId
-      ? `${session.modelSnapshot.name} / ${session.modelSnapshot.modelId}`
-      : selectedLmModelId
-        ? `${$modelProfiles.find(p => p.id === selectedModelId)?.name ?? ''} / ${selectedLmModelId}`
-        : 'No model selected'
+    session?.modelConfigSnapshot?.name
+      ?? $modelConfigs.find(c => c.id === selectedConfigId)?.name
+      ?? 'No model selected'
   )
 
-  async function fetchModelsForProfile(profileId: string) {
-    const profile = $modelProfiles.find(p => p.id === profileId)
-    if (!profile) {
-      availableModels = []
-      selectedLmModelId = ''
-      return
-    }
-    modelsLoading = true
-    availableModels = []
-    try {
-      const models = await listModels(profile.baseUrl, profile.apiKey)
-      availableModels = models
-      const hasPreferred = !!profile.modelId && models.some(m => m.key === profile.modelId)
-      const firstLoaded = models.find(m => m.isLoaded)
-      selectedLmModelId = hasPreferred
-        ? profile.modelId
-        : (firstLoaded?.key ?? models[0]?.key ?? '')
-    } finally {
-      modelsLoading = false
-    }
-  }
-
-  async function handleProfileChange() {
-    await fetchModelsForProfile(selectedModelId)
-  }
-
-  onMount(async () => {
+  onMount(() => {
     scrollToBottom()
-    if ($modelProfiles.length > 0) {
-      selectedModelId = $modelProfiles[0].id
-      await fetchModelsForProfile(selectedModelId)
+    if ($modelConfigs.length > 0) {
+      selectedConfigId = $modelConfigs[0].id
     }
   })
 
@@ -90,24 +55,21 @@
     const text = composerText.trim()
     if (!text || $isStreaming) return
 
-    let profile = session?.modelSnapshot ?? $modelProfiles.find(p => p.id === selectedModelId)
-    if (!profile) return
+    const effectiveConfig: ModelConfig | undefined = session
+      ? session.modelConfigSnapshot
+      : $modelConfigs.find(c => c.id === selectedConfigId)
 
-    const effectiveProfile: ModelProfile = session
-      ? profile
-      : { ...profile, modelId: selectedLmModelId }
-
-    if (!effectiveProfile.modelId) return
+    if (!effectiveConfig) return
 
     composerText = ''
     await tick()
     resizeTextarea()
 
     if (!$activeChatId) {
-      await createChat(effectiveProfile)
+      await createChat(effectiveConfig)
     }
 
-    await sendMessage(text, effectiveProfile)
+    await sendMessage(text, effectiveConfig)
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -135,7 +97,7 @@
       {#each $activeMessages as msg (msg.id)}
         <ChatMessageBlock
           message={msg}
-          modelName={session?.modelSnapshot?.name ?? 'Assistant'}
+          modelName={session?.modelConfigSnapshot?.name ?? 'Assistant'}
         />
       {/each}
       {#if isThinking}
@@ -167,23 +129,14 @@
     <div class="composer-meta">
       {#if !hasMessages}
         <div class="model-pickers">
-          {#if $modelProfiles.length > 0}
-            <select class="model-select" bind:value={selectedModelId} onchange={handleProfileChange} disabled={$isStreaming}>
-              {#each $modelProfiles as p (p.id)}
-                <option value={p.id}>{p.name}</option>
+          {#if $modelConfigs.length > 0}
+            <select class="model-select" bind:value={selectedConfigId} disabled={$isStreaming}>
+              {#each $modelConfigs as c (c.id)}
+                <option value={c.id}>{c.name}</option>
               {/each}
             </select>
-          {/if}
-          {#if availableModels.length > 0}
-            <select class="model-select model-select-lm" bind:value={selectedLmModelId} disabled={$isStreaming || modelsLoading}>
-              {#each availableModels as m (m.uid)}
-                <option value={m.key}>{m.displayName}{m.isLoaded ? ' ●' : ''}</option>
-              {/each}
-            </select>
-          {:else if modelsLoading}
-            <span class="model-loading">Loading models…</span>
-          {:else if $modelProfiles.length > 0}
-            <span class="model-loading">No models found</span>
+          {:else}
+            <span class="model-loading">No model configs — create one first</span>
           {/if}
         </div>
       {:else}
@@ -323,8 +276,7 @@
     color: var(--text-muted);
   }
 
-  .model-select {
-    background: var(--bg-input);
+  .model-select {    background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text);

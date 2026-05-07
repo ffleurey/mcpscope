@@ -1,9 +1,18 @@
-export interface ModelProfile {
+export interface LmStudioConnection {
   id: string
   name: string
-  modelId: string
   baseUrl: string
   apiKey?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface ModelConfig {
+  id: string
+  name: string
+  connectionId: string
+  modelKey: string
+  modelDisplayName: string
   systemPrompt: string
   temperature: number
   contextWindowSize: number | null
@@ -20,7 +29,7 @@ export interface McpServerProfile {
   updatedAt: number
 }
 
-export type NavView = 'chats' | 'model-profiles' | 'mcp-profiles'
+export type NavView = 'chats' | 'connections' | 'model-configs' | 'mcp-profiles'
 
 export interface ConnectionTestResult {
   status: 'idle' | 'testing' | 'success' | 'error'
@@ -31,8 +40,8 @@ export interface ConnectionTestResult {
 export interface ChatSession {
   id: string
   title: string
-  modelProfileId: string
-  modelSnapshot: ModelProfile
+  modelConfigId: string
+  modelConfigSnapshot: ModelConfig
   mcpProfileId: string | null
   mcpSnapshot: McpServerProfile | null
   createdAt: number
@@ -52,6 +61,6 @@ export interface ChatMessage {
     completionTokens: number
     totalTokens: number
   }
-  thinking?: string   // accumulated reasoning_content from model
+  thinking?: string
   trace?: unknown
 }

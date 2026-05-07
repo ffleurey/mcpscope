@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { currentView } from './lib/navStore'
-  import { initProfileStores, dbError } from './lib/profileStores'
+  import { initConnectionStore, dbError } from './lib/connectionStore'
   import { initChatStore } from './lib/chatStore'
   import Sidebar from './lib/components/Sidebar.svelte'
-  import ModelProfiles from './lib/components/ModelProfiles.svelte'
+  import LmConnections from './lib/components/LmConnections.svelte'
+  import ModelConfigs from './lib/components/ModelConfigs.svelte'
   import McpProfiles from './lib/components/McpProfiles.svelte'
   import ChatView from './lib/components/ChatView.svelte'
 
@@ -12,7 +13,7 @@
 
   onMount(async () => {
     try {
-      await Promise.all([initProfileStores(), initChatStore()])
+      await Promise.all([initConnectionStore(), initChatStore()])
     } finally {
       loading = false
     }
@@ -32,8 +33,10 @@
       <div class="loading">Loading…</div>
     {:else if $currentView === 'chats'}
       <ChatView />
-    {:else if $currentView === 'model-profiles'}
-      <ModelProfiles />
+    {:else if $currentView === 'model-configs'}
+      <ModelConfigs />
+    {:else if $currentView === 'connections'}
+      <LmConnections />
     {:else if $currentView === 'mcp-profiles'}
       <McpProfiles />
     {/if}

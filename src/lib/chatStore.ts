@@ -1,6 +1,6 @@
 // Chat store: active chat sessions, messages, streaming state.
 import { writable, get } from 'svelte/store'
-import type { ChatSession, ChatMessage, ModelProfile } from './types'
+import type { ChatSession, ChatMessage, ModelConfig } from './types'
 import {
   getAllChatSessions,
   saveChatSession,
@@ -9,6 +9,7 @@ import {
   saveChatMessage,
 } from './db'
 import { streamChatCompletion } from './services/lmstudio'
+import { lmConnections } from './connectionStore'
 
 export const chatSessions = writable<ChatSession[]>([])
 export const activeChatId = writable<string | null>(null)
@@ -27,13 +28,13 @@ export async function initChatStore(): Promise<void> {
   }
 }
 
-export async function createChat(modelProfile: ModelProfile): Promise<void> {
+export async function createChat(modelConfig: ModelConfig): Promise<void> {
   const now = Date.now()
   const session: ChatSession = {
     id: crypto.randomUUID(),
     title: 'New chat',
-    modelProfileId: modelProfile.id,
-    modelSnapshot: modelProfile,
+    modelConfigId: modelConfig.id,
+    modelConfigSnapshot: modelConfig,
     mcpProfileId: null,
     mcpSnapshot: null,
     createdAt: now,
@@ -61,7 +62,7 @@ export async function deleteChat(id: string): Promise<void> {
   }
 }
 
-export async function sendMessage(userContent: string, modelProfile: ModelProfile): Promise<void> {
+export async function sendMessage(userContent: string, modelConfig: ModelConfig): Promise<void> {
   const sessionId = get(activeChatId)
   if (!sessionId) return
 
@@ -69,14 +70,18 @@ export async function sendMessage(userContent: string, modelProfile: ModelProfil
   let session = sessions.find(s => s.id === sessionId)
   if (!session) return
 
-  // On first message: snapshot model and set title
+  // Look up the connection for API calls
+  const connection = get(lmConnections).find(c => c.id === modelConfig.connectionId)
+  if (!connection) return
+
+  // On first message: snapshot model config and set title
   const isFirst = (await getMessagesForSession(sessionId)).length === 0
   if (isFirst) {
     session = {
       ...session,
       title: userContent.slice(0, 60),
-      modelSnapshot: modelProfile,
-      modelProfileId: modelProfile.id,
+      modelConfigSnapshot: modelConfig,
+      modelConfigId: modelConfig.id,
       updatedAt: Date.now(),
     }
     await saveChatSession(session)
@@ -100,7 +105,7 @@ export async function sendMessage(userContent: string, modelProfile: ModelProfil
   // Build message history for the API
   const history = get(activeMessages).map(m => ({ role: m.role, content: m.content }))
   const messages = [
-    ...(modelProfile.systemPrompt ? [{ role: 'system', content: modelProfile.systemPrompt }] : []),
+    ...(modelConfig.systemPrompt ? [{ role: 'system', content: modelConfig.systemPrompt }] : []),
     ...history,
   ]
 
@@ -117,11 +122,11 @@ export async function sendMessage(userContent: string, modelProfile: ModelProfil
 
   try {
     const stream = streamChatCompletion(
-      modelProfile.baseUrl,
-      modelProfile.modelId,
+      connection.baseUrl,
+      modelConfig.modelKey,
       messages,
-      modelProfile.temperature,
-      modelProfile.apiKey
+      modelConfig.temperature,
+      connection.apiKey
     )
 
     let usage: ChatMessage['usage'] | undefined
