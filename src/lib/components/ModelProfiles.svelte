@@ -36,7 +36,7 @@
 
   async function handleTest(profile: ModelProfile) {
     testResults[profile.id] = { status: 'testing', message: '', details: [] }
-    const result = await testLmStudioConnection(profile.baseUrl)
+    const result = await testLmStudioConnection(profile.baseUrl, profile.apiKey)
     testResults[profile.id] = result
   }
 </script>

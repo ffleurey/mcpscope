@@ -12,6 +12,8 @@
   let name = $state(profile?.name ?? '')
   let modelId = $state(profile?.modelId ?? '')
   let baseUrl = $state(profile?.baseUrl ?? 'http://localhost:1234/v1')
+  let apiKey = $state(profile?.apiKey ?? '')
+  let showApiKey = $state(false)
   let systemPrompt = $state(profile?.systemPrompt ?? '')
   let temperature = $state(profile?.temperature ?? 0.7)
   let contextWindowSize = $state<string>(profile?.contextWindowSize != null ? String(profile.contextWindowSize) : '')
@@ -45,6 +47,7 @@
       name: name.trim(),
       modelId: modelId.trim(),
       baseUrl: baseUrl.trim(),
+      apiKey: apiKey.trim() || undefined,
       systemPrompt: systemPrompt.trim(),
       temperature,
       contextWindowSize: contextWindowSize !== '' ? Number(contextWindowSize) : null,
@@ -73,6 +76,22 @@
     <label for="mp-base-url">Base URL</label>
     <input id="mp-base-url" type="text" bind:value={baseUrl} placeholder="http://localhost:1234/v1" />
     {#if errors.baseUrl}<span class="field-error">{errors.baseUrl}</span>{/if}
+  </div>
+
+  <div class="field">
+    <label for="mp-api-key">API Key <span class="field-hint">(optional — for HTTPS endpoints)</span></label>
+    <div class="api-key-row">
+      <input
+        id="mp-api-key"
+        type={showApiKey ? 'text' : 'password'}
+        bind:value={apiKey}
+        placeholder="Bearer token — leave blank for local servers"
+        autocomplete="off"
+      />
+      <button type="button" class="btn btn-sm toggle-key" onclick={() => { showApiKey = !showApiKey }}>
+        {showApiKey ? 'Hide' : 'Show'}
+      </button>
+    </div>
   </div>
 
   <div class="field">
@@ -122,6 +141,21 @@
   }
   .sub-field {
     flex: 1;
+  }
+  .field-hint {
+    font-weight: 400;
+    opacity: 0.7;
+  }
+  .api-key-row {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .api-key-row input {
+    flex: 1;
+  }
+  .toggle-key {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
   label {
     display: block;

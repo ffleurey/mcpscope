@@ -46,7 +46,7 @@
     modelsLoading = true
     availableModels = []
     try {
-      const models = await listModels(profile.baseUrl)
+      const models = await listModels(profile.baseUrl, profile.apiKey)
       availableModels = models
       const hasPreferred = !!profile.modelId && models.some(m => m.key === profile.modelId)
       const firstLoaded = models.find(m => m.isLoaded)

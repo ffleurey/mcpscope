@@ -3,6 +3,7 @@ export interface ModelProfile {
   name: string
   modelId: string
   baseUrl: string
+  apiKey?: string
   systemPrompt: string
   temperature: number
   contextWindowSize: number | null

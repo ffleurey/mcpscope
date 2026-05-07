@@ -120,7 +120,8 @@ export async function sendMessage(userContent: string, modelProfile: ModelProfil
       modelProfile.baseUrl,
       modelProfile.modelId,
       messages,
-      modelProfile.temperature
+      modelProfile.temperature,
+      modelProfile.apiKey
     )
 
     let usage: ChatMessage['usage'] | undefined

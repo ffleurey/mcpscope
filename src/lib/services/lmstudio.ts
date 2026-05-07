@@ -17,7 +17,11 @@ export interface LmStudioModel {
   isLoaded: boolean
 }
 
-export async function listModels(baseUrl: string): Promise<LmStudioModel[]> {
+function authHeaders(apiKey?: string): Record<string, string> {
+  return apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
+}
+
+export async function listModels(baseUrl: string, apiKey?: string): Promise<LmStudioModel[]> {
   const root = rootUrl(baseUrl)
   const nativeUrl = `${root}/api/v1/models`
   const compatUrl = `${root}/v1/models`
@@ -27,7 +31,7 @@ export async function listModels(baseUrl: string): Promise<LmStudioModel[]> {
     let usedNative = false
 
     try {
-      const r = await fetch(nativeUrl, { headers: { Accept: 'application/json' } })
+      const r = await fetch(nativeUrl, { headers: { Accept: 'application/json', ...authHeaders(apiKey) } })
       if (r.ok) {
         data = await r.json()
         usedNative = true
@@ -37,7 +41,7 @@ export async function listModels(baseUrl: string): Promise<LmStudioModel[]> {
     }
 
     if (!usedNative) {
-      const r = await fetch(compatUrl, { headers: { Accept: 'application/json' } })
+      const r = await fetch(compatUrl, { headers: { Accept: 'application/json', ...authHeaders(apiKey) } })
       if (!r.ok) return []
       data = await r.json()
     }
@@ -78,7 +82,7 @@ function rootUrl(baseUrl: string): string {
   return clean.endsWith('/v1') ? clean.slice(0, -3) : clean
 }
 
-export async function testLmStudioConnection(baseUrl: string): Promise<ConnectionTestResult> {
+export async function testLmStudioConnection(baseUrl: string, apiKey?: string): Promise<ConnectionTestResult> {
   // Prefer the native /api/v1/models endpoint (LM Studio 0.4+): richer data including
   // max_context_length. Fall back to the OpenAI-compatible /v1/models endpoint.
   const root = rootUrl(baseUrl)
@@ -91,7 +95,7 @@ export async function testLmStudioConnection(baseUrl: string): Promise<Connectio
     let usedNative = false
 
     try {
-      const r = await fetch(nativeUrl, { headers: { Accept: 'application/json' } })
+      const r = await fetch(nativeUrl, { headers: { Accept: 'application/json', ...authHeaders(apiKey) } })
       if (r.ok) {
         data = await r.json()
         usedNative = true
@@ -101,7 +105,7 @@ export async function testLmStudioConnection(baseUrl: string): Promise<Connectio
     }
 
     if (!usedNative) {
-      const r = await fetch(compatUrl, { headers: { Accept: 'application/json' } })
+      const r = await fetch(compatUrl, { headers: { Accept: 'application/json', ...authHeaders(apiKey) } })
       if (!r.ok) {
         let body = ''
         try { body = await r.text() } catch {}
@@ -181,13 +185,14 @@ export async function* streamChatCompletion(
   modelId: string,
   messages: { role: string; content: string }[],
   temperature: number,
+  apiKey?: string,
   abortSignal?: AbortSignal
 ): AsyncGenerator<StreamChunk> {
   const url = `${rootUrl(baseUrl)}/v1/chat/completions`
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(apiKey) },
     body: JSON.stringify({ model: modelId, messages, temperature, stream: true }),
     signal: abortSignal,
   })
