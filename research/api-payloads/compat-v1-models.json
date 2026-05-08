@@ -1,0 +1,30 @@
+{
+    "data": [
+        {
+            "id": "google/gemma-4-e4b",
+            "object": "model",
+            "owned_by": "organization_owner"
+        },
+        {
+            "id": "qwen3.6-35b-a3b-apex",
+            "object": "model",
+            "owned_by": "organization_owner"
+        },
+        {
+            "id": "unsloth/qwen3.6-35b-a3b",
+            "object": "model",
+            "owned_by": "organization_owner"
+        },
+        {
+            "id": "qwen/qwen3.6-35b-a3b",
+            "object": "model",
+            "owned_by": "organization_owner"
+        },
+        {
+            "id": "text-embedding-nomic-embed-text-v1.5",
+            "object": "model",
+            "owned_by": "organization_owner"
+        }
+    ],
+    "object": "list"
+}

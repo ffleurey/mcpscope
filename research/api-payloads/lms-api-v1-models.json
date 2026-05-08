@@ -1,0 +1,122 @@
+{
+    "models": [
+        {
+            "type": "llm",
+            "publisher": "google",
+            "key": "google/gemma-4-e4b",
+            "display_name": "Gemma 4 E4B",
+            "architecture": "gemma4",
+            "quantization": {
+                "name": "Q8_0",
+                "bits_per_weight": 8
+            },
+            "size_bytes": 9022887056,
+            "params_string": "7.5B",
+            "loaded_instances": [],
+            "max_context_length": 131072,
+            "format": "gguf",
+            "capabilities": {
+                "vision": true,
+                "trained_for_tool_use": true,
+                "reasoning": {
+                    "allowed_options": [
+                        "off",
+                        "on"
+                    ],
+                    "default": "on"
+                }
+            },
+            "description": null,
+            "variants": [
+                "google/gemma-4-e4b@q8_0"
+            ],
+            "selected_variant": "google/gemma-4-e4b@q8_0"
+        },
+        {
+            "type": "llm",
+            "publisher": "mudler",
+            "key": "qwen3.6-35b-a3b-apex",
+            "display_name": "Qwen3.6 35B A3B APEX I Compact",
+            "architecture": "qwen35moe",
+            "quantization": null,
+            "size_bytes": 17293089472,
+            "params_string": "35B-A3B",
+            "loaded_instances": [],
+            "max_context_length": 262144,
+            "format": "gguf",
+            "capabilities": {
+                "vision": false,
+                "trained_for_tool_use": true
+            },
+            "description": null
+        },
+        {
+            "type": "llm",
+            "publisher": "unsloth",
+            "key": "unsloth/qwen3.6-35b-a3b",
+            "display_name": "Qwen3.6 35B A3B UD",
+            "architecture": "qwen35moe",
+            "quantization": {
+                "name": "IQ3_S",
+                "bits_per_weight": 3
+            },
+            "size_bytes": 15463028416,
+            "params_string": "35B-A3B",
+            "loaded_instances": [],
+            "max_context_length": 262144,
+            "format": "gguf",
+            "capabilities": {
+                "vision": true,
+                "trained_for_tool_use": true
+            },
+            "description": null
+        },
+        {
+            "type": "llm",
+            "publisher": "qwen",
+            "key": "qwen/qwen3.6-35b-a3b",
+            "display_name": "Qwen3.6 35B A3B",
+            "architecture": "qwen35moe",
+            "quantization": {
+                "name": "Q4_K_M",
+                "bits_per_weight": 4
+            },
+            "size_bytes": 22069768080,
+            "params_string": "35B-A3B",
+            "loaded_instances": [],
+            "max_context_length": 262144,
+            "format": "gguf",
+            "capabilities": {
+                "vision": true,
+                "trained_for_tool_use": true,
+                "reasoning": {
+                    "allowed_options": [
+                        "off",
+                        "on"
+                    ],
+                    "default": "on"
+                }
+            },
+            "description": null,
+            "variants": [
+                "qwen/qwen3.6-35b-a3b@q4_k_m"
+            ],
+            "selected_variant": "qwen/qwen3.6-35b-a3b@q4_k_m"
+        },
+        {
+            "type": "embedding",
+            "publisher": "nomic-ai",
+            "key": "text-embedding-nomic-embed-text-v1.5",
+            "display_name": "Nomic Embed Text v1.5",
+            "quantization": {
+                "name": "Q4_K_M",
+                "bits_per_weight": 4
+            },
+            "size_bytes": 84106624,
+            "params_string": null,
+            "loaded_instances": [],
+            "max_context_length": 2048,
+            "format": "gguf"
+        }
+    ]
+}
