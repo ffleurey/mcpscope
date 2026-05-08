@@ -126,7 +126,9 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
       modelConfig.modelKey,
       messages,
       modelConfig.temperature,
-      connection.apiKey
+      connection.apiKey,
+      undefined,
+      modelConfig.reasoning
     )
 
     let usage: ChatMessage['usage'] | undefined

@@ -20,41 +20,55 @@
   let temperature = $state(modelConfig?.temperature ?? 0.7)
   let systemPrompt = $state(modelConfig?.systemPrompt ?? '')
   let contextWindowSize = $state<string>(modelConfig?.contextWindowSize != null ? String(modelConfig.contextWindowSize) : '')
+  let reasoning = $state<'on' | 'off' | undefined>(modelConfig?.reasoning)
 
   let availableModels = $state<LmStudioModel[]>([])
   let modelsLoading = $state(false)
   let modelsError = $state<string | null>(null)
+  let selectedModelMeta = $state<LmStudioModel | null>(null)
 
   let errors = $state<Record<string, string>>({})
 
+  function applyModelSelection(m: LmStudioModel) {
+    modelKey = m.key
+    modelDisplayName = m.displayName
+    selectedModelMeta = m
+    // Auto-fill context window from loaded instance (the real operational limit)
+    const ctx = m.loadedContextLength ?? m.maxContextLength
+    if (ctx !== null && contextWindowSize === '') {
+      contextWindowSize = String(ctx)
+    }
+    // Auto-set reasoning default if model supports it
+    if (m.supportsReasoning && reasoning === undefined) {
+      reasoning = m.defaultReasoningOn ? 'on' : 'off'
+    } else if (!m.supportsReasoning) {
+      reasoning = undefined
+    }
+  }
+
   async function fetchModels(connId: string) {
-    if (!connId) { availableModels = []; return }
+    if (!connId) { availableModels = []; selectedModelMeta = null; return }
     const conn = $lmConnections.find(c => c.id === connId)
-    if (!conn) { availableModels = []; return }
+    if (!conn) { availableModels = []; selectedModelMeta = null; return }
     modelsLoading = true
     modelsError = null
     availableModels = []
     modelKey = ''
     modelDisplayName = ''
+    selectedModelMeta = null
     try {
       const models = await listModels(conn.baseUrl, conn.apiKey)
       availableModels = models
       if (modelConfig?.connectionId === connId && modelConfig.modelKey) {
         const existing = models.find(m => m.key === modelConfig.modelKey)
         if (existing) {
-          modelKey = existing.key
-          modelDisplayName = existing.displayName
+          applyModelSelection(existing)
         } else if (models.length > 0) {
-          modelKey = models[0].key
-          modelDisplayName = models[0].displayName
+          applyModelSelection(models[0])
         }
       } else {
-        const loaded = models.find(m => m.isLoaded)
-        const first = loaded ?? models[0]
-        if (first) {
-          modelKey = first.key
-          modelDisplayName = first.displayName
-        }
+        const first = models.find(m => m.isLoaded) ?? models[0]
+        if (first) applyModelSelection(first)
       }
     } catch (e) {
       modelsError = e instanceof Error ? e.message : String(e)
@@ -64,12 +78,26 @@
   }
 
   function handleConnectionChange() {
+    contextWindowSize = ''
+    reasoning = undefined
     fetchModels(connectionId)
   }
 
   function handleModelChange() {
     const m = availableModels.find(x => x.key === modelKey)
-    modelDisplayName = m?.displayName ?? modelKey
+    if (m) {
+      modelDisplayName = m.displayName
+      selectedModelMeta = m
+      // Update context window hint from newly selected model
+      const ctx = m.loadedContextLength ?? m.maxContextLength
+      if (ctx !== null) contextWindowSize = String(ctx)
+      // Update reasoning capability
+      if (m.supportsReasoning) {
+        reasoning = reasoning ?? (m.defaultReasoningOn ? 'on' : 'off')
+      } else {
+        reasoning = undefined
+      }
+    }
   }
 
   onMount(() => {
@@ -106,6 +134,7 @@
       systemPrompt: systemPrompt.trim(),
       temperature,
       contextWindowSize: contextWindowSize !== '' ? Number(contextWindowSize) : null,
+      reasoning: selectedModelMeta?.supportsReasoning ? reasoning : undefined,
       createdAt: modelConfig?.createdAt ?? now,
       updatedAt: now,
     })
@@ -162,9 +191,29 @@
     <div class="sub-field">
       <label for="mc-ctx">Context Window (tokens)</label>
       <input id="mc-ctx" type="number" step="1" min="1" bind:value={contextWindowSize} placeholder="optional" />
+      {#if selectedModelMeta}
+        <span class="field-hint">
+          {#if selectedModelMeta.loadedContextLength}
+            Loaded: {selectedModelMeta.loadedContextLength.toLocaleString()} · Max: {(selectedModelMeta.maxContextLength ?? 0).toLocaleString()}
+          {:else if selectedModelMeta.maxContextLength}
+            Max: {selectedModelMeta.maxContextLength.toLocaleString()} (not loaded)
+          {/if}
+        </span>
+      {/if}
       {#if errors.contextWindowSize}<span class="field-error">{errors.contextWindowSize}</span>{/if}
     </div>
   </div>
+
+  {#if selectedModelMeta?.supportsReasoning}
+  <div class="field">
+    <label for="mc-reasoning">Reasoning</label>
+    <select id="mc-reasoning" bind:value={reasoning}>
+      <option value="on">On</option>
+      <option value="off">Off</option>
+    </select>
+    <span class="field-hint">This model supports extended reasoning (chain-of-thought).</span>
+  </div>
+  {/if}
 
   <div class="field">
     <label for="mc-system-prompt">System Prompt</label>
@@ -230,6 +279,12 @@
     font-size: 0.82rem;
     color: var(--text-muted);
     margin: 0.25rem 0 0;
+  }
+  .field-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
   }
   .error-hint {
     font-size: 0.82rem;

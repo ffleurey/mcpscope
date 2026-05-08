@@ -16,6 +16,7 @@ export interface ModelConfig {
   systemPrompt: string
   temperature: number
   contextWindowSize: number | null
+  reasoning?: 'on' | 'off'   // only applicable if model supports reasoning
   createdAt: number
   updatedAt: number
 }

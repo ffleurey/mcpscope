@@ -6,15 +6,36 @@ interface LmStudioNativeModel {
   key: string
   display_name?: string
   max_context_length?: number
-  loaded_instances?: unknown[]
+  loaded_instances?: {
+    id: string
+    config: {
+      context_length: number
+      eval_batch_size?: number
+      parallel?: number
+      flash_attention?: boolean
+      offload_kv_cache_to_gpu?: boolean
+    }
+    remaining_ttl_seconds?: number
+  }[]
+  capabilities?: {
+    vision?: boolean
+    trained_for_tool_use?: boolean
+    reasoning?: {
+      allowed_options?: string[]
+      default?: string
+    }
+  }
 }
 
 export interface LmStudioModel {
-  uid: string           // unique per entry: key + ':' + displayName (for {#each})
-  key: string           // model key sent to the API (may repeat across cluster nodes)
+  uid: string                       // unique per entry: key + ':' + displayName (for {#each})
+  key: string                       // model key sent to the API (may repeat across cluster nodes)
   displayName: string
-  contextLength: number | null
+  maxContextLength: number | null   // model's architectural maximum
+  loadedContextLength: number | null  // actual context when loaded (may be much smaller)
   isLoaded: boolean
+  supportsReasoning: boolean
+  defaultReasoningOn: boolean
 }
 
 function authHeaders(apiKey?: string): Record<string, string> {
@@ -52,12 +73,18 @@ export async function listModels(baseUrl: string, apiKey?: string): Promise<LmSt
         .filter(m => m.type === 'llm')
         .map(m => {
           const displayName = m.display_name ?? m.key
+          const loadedInstance = m.loaded_instances?.[0]
+          const reasoningOptions = m.capabilities?.reasoning?.allowed_options ?? []
+          const supportsReasoning = reasoningOptions.includes('on') && reasoningOptions.includes('off')
           return {
             uid: `${m.key}:${displayName}`,
             key: m.key,
             displayName,
-            contextLength: m.max_context_length ?? null,
+            maxContextLength: m.max_context_length ?? null,
+            loadedContextLength: loadedInstance?.config.context_length ?? null,
             isLoaded: Array.isArray(m.loaded_instances) && m.loaded_instances.length > 0,
+            supportsReasoning,
+            defaultReasoningOn: m.capabilities?.reasoning?.default === 'on',
           }
         })
     } else {
@@ -67,7 +94,16 @@ export async function listModels(baseUrl: string, apiKey?: string): Promise<LmSt
       return items
         .map(m => m.id ?? '')
         .filter(Boolean)
-        .map(id => ({ uid: id, key: id, displayName: id, contextLength: null, isLoaded: false }))
+        .map(id => ({
+          uid: id,
+          key: id,
+          displayName: id,
+          maxContextLength: null,
+          loadedContextLength: null,
+          isLoaded: false,
+          supportsReasoning: false,
+          defaultReasoningOn: false,
+        }))
     }
   } catch {
     return []
@@ -129,9 +165,14 @@ export async function testLmStudioConnection(baseUrl: string, apiKey?: string): 
         details.push('No LLMs found. Load a model in LM Studio first.')
       } else {
         const modelLines = llms.map(m => {
-          const ctx = m.max_context_length ? ` (${(m.max_context_length / 1000).toFixed(0)}k ctx)` : ''
+          const loadedInst = m.loaded_instances?.[0]
+          const ctxDisplay = loadedInst
+            ? ` (${(loadedInst.config.context_length / 1000).toFixed(0)}k loaded)`
+            : m.max_context_length
+              ? ` (${(m.max_context_length / 1000).toFixed(0)}k max)`
+              : ''
           const active = loaded.some(l => l.key === m.key) ? ' [loaded]' : ''
-          return `${m.key}${ctx}${active}`
+          return `${m.key}${ctxDisplay}${active}`
         })
         details.push(`LLMs: ${modelLines.join(', ')}`)
       }
@@ -186,14 +227,26 @@ export async function* streamChatCompletion(
   messages: { role: string; content: string }[],
   temperature: number,
   apiKey?: string,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  reasoning?: 'on' | 'off'
 ): AsyncGenerator<StreamChunk> {
   const url = `${rootUrl(baseUrl)}/v1/chat/completions`
+
+  const body: Record<string, unknown> = {
+    model: modelId,
+    messages,
+    temperature,
+    stream: true,
+    stream_options: { include_usage: true },
+  }
+  if (reasoning !== undefined) {
+    body.reasoning = { effort: reasoning === 'on' ? 'high' : 'off' }
+  }
 
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders(apiKey) },
-    body: JSON.stringify({ model: modelId, messages, temperature, stream: true }),
+    body: JSON.stringify(body),
     signal: abortSignal,
   })
 
