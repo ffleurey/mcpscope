@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { lmConnections } from '../connectionStore'
-  import { listModels } from '../services/lmstudio'
+  import { listModels, loadModel } from '../services/lmstudio'
   import type { LmStudioModel } from '../services/lmstudio'
   import type { ModelConfig } from '../types'
 
@@ -19,7 +19,6 @@
   let modelDisplayName = $state(modelConfig?.modelDisplayName ?? '')
   let temperature = $state(modelConfig?.temperature ?? 0.7)
   let systemPrompt = $state(modelConfig?.systemPrompt ?? '')
-  let contextWindowSize = $state<string>(modelConfig?.contextWindowSize != null ? String(modelConfig.contextWindowSize) : '')
   let reasoning = $state<'on' | 'off' | undefined>(modelConfig?.reasoning)
 
   let availableModels = $state<LmStudioModel[]>([])
@@ -33,11 +32,6 @@
     modelKey = m.key
     modelDisplayName = m.displayName
     selectedModelMeta = m
-    // Auto-fill context window from loaded instance (the real operational limit)
-    const ctx = m.loadedContextLength ?? m.maxContextLength
-    if (ctx !== null && contextWindowSize === '') {
-      contextWindowSize = String(ctx)
-    }
     // Auto-set reasoning default if model supports it
     if (m.supportsReasoning && reasoning === undefined) {
       reasoning = m.defaultReasoningOn ? 'on' : 'off'
@@ -78,7 +72,6 @@
   }
 
   function handleConnectionChange() {
-    contextWindowSize = ''
     reasoning = undefined
     fetchModels(connectionId)
   }
@@ -88,10 +81,6 @@
     if (m) {
       modelDisplayName = m.displayName
       selectedModelMeta = m
-      // Update context window hint from newly selected model
-      const ctx = m.loadedContextLength ?? m.maxContextLength
-      if (ctx !== null) contextWindowSize = String(ctx)
-      // Update reasoning capability
       if (m.supportsReasoning) {
         reasoning = reasoning ?? (m.defaultReasoningOn ? 'on' : 'off')
       } else {
@@ -107,6 +96,24 @@
     if (connectionId) fetchModels(connectionId)
   })
 
+  let modelLoading = $state(false)
+  let modelLoadError = $state<string | null>(null)
+
+  async function handleLoadModel() {
+    const conn = $lmConnections.find(c => c.id === connectionId)
+    if (!conn || !modelKey) return
+    modelLoading = true
+    modelLoadError = null
+    try {
+      await loadModel(conn.baseUrl, modelKey, conn.apiKey)
+      await fetchModels(connectionId)
+    } catch (e) {
+      modelLoadError = e instanceof Error ? e.message : String(e)
+    } finally {
+      modelLoading = false
+    }
+  }
+
   function validate(): boolean {
     const e: Record<string, string> = {}
     if (!name.trim()) e.name = 'Name is required'
@@ -114,9 +121,6 @@
     if (!modelKey) e.modelKey = 'Model is required'
     if (isNaN(temperature) || temperature < 0 || temperature > 2) {
       e.temperature = 'Temperature must be between 0.0 and 2.0'
-    }
-    if (contextWindowSize !== '' && (isNaN(Number(contextWindowSize)) || Number(contextWindowSize) <= 0)) {
-      e.contextWindowSize = 'Must be a positive integer or left blank'
     }
     errors = e
     return Object.keys(e).length === 0
@@ -133,7 +137,6 @@
       modelDisplayName,
       systemPrompt: systemPrompt.trim(),
       temperature,
-      contextWindowSize: contextWindowSize !== '' ? Number(contextWindowSize) : null,
       reasoning: selectedModelMeta?.supportsReasoning ? reasoning : undefined,
       createdAt: modelConfig?.createdAt ?? now,
       updatedAt: now,
@@ -173,35 +176,38 @@
     {:else if availableModels.length === 0 && connectionId}
       <p class="loading-hint">No models found on this connection.</p>
     {:else if availableModels.length > 0}
-      <select id="mc-model" bind:value={modelKey} onchange={handleModelChange}>
-        {#each availableModels as m (m.uid)}
-          <option value={m.key}>{m.displayName}{m.isLoaded ? ' ●' : ''}</option>
-        {/each}
-      </select>
+      <div class="model-select-row">
+        <select id="mc-model" bind:value={modelKey} onchange={handleModelChange}>
+          {#each availableModels as m (m.uid)}
+            <option value={m.key}>{m.displayName}{m.isLoaded ? ' ●' : ''}</option>
+          {/each}
+        </select>
+        {#if selectedModelMeta && !selectedModelMeta.isLoaded}
+          <button type="button" class="btn btn-sm" onclick={handleLoadModel} disabled={modelLoading}>
+            {modelLoading ? 'Loading…' : 'Load'}
+          </button>
+        {/if}
+      </div>
+      {#if selectedModelMeta}
+        <span class="field-hint">
+          {#if selectedModelMeta.isLoaded && selectedModelMeta.loadedContextLength}
+            ● Loaded · Context: {selectedModelMeta.loadedContextLength.toLocaleString()} tokens (max {(selectedModelMeta.maxContextLength ?? 0).toLocaleString()})
+          {:else if selectedModelMeta.maxContextLength}
+            ○ Not loaded · Max context: {selectedModelMeta.maxContextLength.toLocaleString()} tokens
+          {:else}
+            ○ Not loaded
+          {/if}
+        </span>
+      {/if}
+      {#if modelLoadError}<span class="field-error">{modelLoadError}</span>{/if}
     {/if}
     {#if errors.modelKey}<span class="field-error">{errors.modelKey}</span>{/if}
   </div>
 
-  <div class="field field-row">
-    <div class="sub-field">
-      <label for="mc-temperature">Temperature</label>
-      <input id="mc-temperature" type="number" step="0.1" min="0" max="2" bind:value={temperature} />
-      {#if errors.temperature}<span class="field-error">{errors.temperature}</span>{/if}
-    </div>
-    <div class="sub-field">
-      <label for="mc-ctx">Context Window (tokens)</label>
-      <input id="mc-ctx" type="number" step="1" min="1" bind:value={contextWindowSize} placeholder="optional" />
-      {#if selectedModelMeta}
-        <span class="field-hint">
-          {#if selectedModelMeta.loadedContextLength}
-            Loaded: {selectedModelMeta.loadedContextLength.toLocaleString()} · Max: {(selectedModelMeta.maxContextLength ?? 0).toLocaleString()}
-          {:else if selectedModelMeta.maxContextLength}
-            Max: {selectedModelMeta.maxContextLength.toLocaleString()} (not loaded)
-          {/if}
-        </span>
-      {/if}
-      {#if errors.contextWindowSize}<span class="field-error">{errors.contextWindowSize}</span>{/if}
-    </div>
+  <div class="field">
+    <label for="mc-temperature">Temperature</label>
+    <input id="mc-temperature" type="number" step="0.1" min="0" max="2" bind:value={temperature} />
+    {#if errors.temperature}<span class="field-error">{errors.temperature}</span>{/if}
   </div>
 
   {#if selectedModelMeta?.supportsReasoning}
@@ -241,11 +247,6 @@
     color: var(--text);
   }
   .field { margin-bottom: 0.9rem; }
-  .field-row {
-    display: flex;
-    gap: 1rem;
-  }
-  .sub-field { flex: 1; }
   label {
     display: block;
     font-size: 0.82rem;
@@ -275,8 +276,13 @@
     font-size: 0.78rem;
     margin-top: 0.25rem;
   }
-  .loading-hint, .no-connections {
-    font-size: 0.82rem;
+  .model-select-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .model-select-row select { flex: 1; }
+  .loading-hint, .no-connections {    font-size: 0.82rem;
     color: var(--text-muted);
     margin: 0.25rem 0 0;
   }

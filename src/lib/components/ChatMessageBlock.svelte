@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte'
   import type { ChatMessage } from '../types'
+  import JsonDialog from './JsonDialog.svelte'
 
   interface Props {
     message: ChatMessage
@@ -11,6 +12,7 @@
 
   let thinkingEl = $state<HTMLElement | null>(null)
   let thinkingOpen = $state(true)
+  let showRaw = $state(false)
 
   let thinkingLineCount = $derived(
     message.thinking?.split('\n').filter(l => l.trim()).length ?? 0
@@ -32,6 +34,8 @@
       })
     }
   })
+
+  function fmt(n: number) { return n.toLocaleString() }
 </script>
 
 <div class="message" class:user={message.role === 'user'} class:assistant={message.role === 'assistant'}>
@@ -71,9 +75,28 @@
           ></span>
         </div>
       {/if}
+      {#if message.status === 'complete' && message.usage}
+        {@const u = message.usage}
+        <div class="stats-bar">
+          <span>Prompt: {fmt(u.promptTokens)}</span>
+          <span class="sep">·</span>
+          <span>Generated: {fmt(u.completionTokens)}{u.reasoningTokens ? ` (reasoning: ${fmt(u.reasoningTokens)})` : ''}</span>
+          <span class="sep">·</span>
+          <span>Context used: {fmt(u.promptTokens + u.completionTokens)}</span>
+          <button class="raw-btn" onclick={() => { showRaw = true }}>⋯ raw</button>
+        </div>
+      {/if}
     {/if}
   </div>
 </div>
+
+{#if showRaw}
+  <JsonDialog
+    title="Token usage"
+    data={message.usage}
+    onClose={() => { showRaw = false }}
+  />
+{/if}
 
 <style>
   .message {
@@ -161,6 +184,29 @@
     white-space: pre-wrap;
     word-break: break-word;
   }
+
+  .stats-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    flex-wrap: wrap;
+  }
+  .sep { opacity: 0.4; }
+  .raw-btn {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: 3px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 0 0.35rem;
+    line-height: 1.6;
+    margin-left: 0.2rem;
+  }
+  .raw-btn:hover { border-color: var(--border); color: var(--text); }
 
   .error-text {
     color: var(--color-error);

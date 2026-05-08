@@ -15,8 +15,7 @@ export interface ModelConfig {
   modelDisplayName: string
   systemPrompt: string
   temperature: number
-  contextWindowSize: number | null
-  reasoning?: 'on' | 'off'   // only applicable if model supports reasoning
+  reasoning?: 'on' | 'off'
   createdAt: number
   updatedAt: number
 }
@@ -61,6 +60,7 @@ export interface ChatMessage {
     promptTokens: number
     completionTokens: number
     totalTokens: number
+    reasoningTokens?: number
   }
   thinking?: string
   trace?: unknown

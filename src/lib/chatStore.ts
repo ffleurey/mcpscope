@@ -135,7 +135,14 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
 
     for await (const chunk of stream) {
       if (chunk.done) {
-        if (chunk.usage) usage = chunk.usage
+        if (chunk.usage) {
+          usage = {
+            promptTokens: chunk.usage.promptTokens,
+            completionTokens: chunk.usage.completionTokens,
+            totalTokens: chunk.usage.totalTokens,
+            reasoningTokens: chunk.usage.reasoningTokens,
+          }
+        }
         break
       }
       let changed = false

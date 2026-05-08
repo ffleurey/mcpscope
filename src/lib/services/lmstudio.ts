@@ -216,9 +216,9 @@ export async function testLmStudioConnection(baseUrl: string, apiKey?: string): 
 
 export interface StreamChunk {
   content: string
-  thinking: string   // from delta.reasoning_content — empty string if none
+  thinking: string
   done: boolean
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number; reasoningTokens?: number }
 }
 
 export async function* streamChatCompletion(
@@ -306,6 +306,7 @@ export async function* streamChatCompletion(
                 promptTokens: u.prompt_tokens ?? 0,
                 completionTokens: u.completion_tokens ?? 0,
                 totalTokens: u.total_tokens ?? 0,
+                reasoningTokens: u.completion_tokens_details?.reasoning_tokens ?? undefined,
               },
             }
             return
@@ -317,5 +318,43 @@ export async function* streamChatCompletion(
     }
   } finally {
     reader.releaseLock()
+  }
+}
+
+export interface ModelLoadResult {
+  instanceId: string
+  status: string
+  loadTimeSeconds?: number
+}
+
+export async function loadModel(baseUrl: string, modelKey: string, apiKey?: string): Promise<ModelLoadResult> {
+  const url = `${rootUrl(baseUrl)}/api/v1/models/load`
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(apiKey) },
+    body: JSON.stringify({ model: modelKey }),
+  })
+  if (!r.ok) {
+    const body = await r.text().catch(() => '')
+    throw new Error(`Load failed (${r.status}): ${body.slice(0, 200)}`)
+  }
+  const data = await r.json()
+  return {
+    instanceId: data.instance_id ?? modelKey,
+    status: data.status ?? 'loaded',
+    loadTimeSeconds: data.load_time_seconds,
+  }
+}
+
+export async function unloadModel(baseUrl: string, instanceId: string, apiKey?: string): Promise<void> {
+  const url = `${rootUrl(baseUrl)}/api/v1/models/unload`
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(apiKey) },
+    body: JSON.stringify({ instance_id: instanceId }),
+  })
+  if (!r.ok) {
+    const body = await r.text().catch(() => '')
+    throw new Error(`Unload failed (${r.status}): ${body.slice(0, 200)}`)
   }
 }
