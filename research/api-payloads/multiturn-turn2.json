@@ -1,0 +1,29 @@
+{
+  "id": "chatcmpl-phs5bti5jw1xec94sbf24",
+  "object": "chat.completion",
+  "created": 1778226884,
+  "model": "qwen3.6-35b-a3b-apex",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "\n\nworld",
+        "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:** The user says \"Now reply with only the word: world\".\n2.  **Identify Constraint:** The constraint is explicit and strict: \"reply with only the word: world\". This means I must output exactly \"world\" and nothing else (no extra text, no punctuation unless specified, but typically just the word itself).\n3.  **Check Previous Context:** The previous turn was similar (\"Reply with only the word: hello\"), and I complied correctly. This is a continuation of the same pattern.\n4.  **Formulate Response:** The response must be exactly \"world\".\n5.  **Final Output Generation:** Output \"world\".✅\n",
+        "tool_calls": []
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 36,
+    "completion_tokens": 156,
+    "total_tokens": 192,
+    "completion_tokens_details": {
+      "reasoning_tokens": 152
+    }
+  },
+  "stats": {},
+  "system_fingerprint": "qwen3.6-35b-a3b-apex"
+}

@@ -1,0 +1,29 @@
+{
+  "id": "chatcmpl-w81s3s6puvpsmilwosc1",
+  "object": "chat.completion",
+  "created": 1778226881,
+  "model": "qwen3.6-35b-a3b-apex",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "\n\nhello",
+        "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:** The user says \"Reply with only the word: hello\"\n2.  **Identify Constraint:** The constraint is explicit and strict: \"only the word: hello\". This means no extra text, no greetings, no explanations, just the exact word \"hello\".\n3.  **Formulate Response:** I need to output exactly \"hello\" (case-sensitive as requested, though typically lowercase is fine).\n4.  **Verify Constraint:** Does the response contain only the word \"hello\"? Yes. No additional characters or words.\n5.  **Output Generation:** Output \"hello\".✅\n",
+        "tool_calls": []
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 17,
+    "completion_tokens": 143,
+    "total_tokens": 160,
+    "completion_tokens_details": {
+      "reasoning_tokens": 139
+    }
+  },
+  "stats": {},
+  "system_fingerprint": "qwen3.6-35b-a3b-apex"
+}

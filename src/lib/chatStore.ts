@@ -132,6 +132,7 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
     )
 
     let usage: ChatMessage['usage'] | undefined
+    let rawUsage: unknown
 
     for await (const chunk of stream) {
       if (chunk.done) {
@@ -142,6 +143,7 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
             totalTokens: chunk.usage.totalTokens,
             reasoningTokens: chunk.usage.reasoningTokens,
           }
+          rawUsage = chunk.rawUsage
         }
         break
       }
@@ -166,9 +168,10 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
     // Mark complete and persist
     assistantMsg.status = 'complete'
     if (usage) assistantMsg.usage = usage
+    if (rawUsage) assistantMsg.trace = rawUsage
     await saveChatMessage(assistantMsg)
     activeMessages.update(msgs =>
-      msgs.map(m => (m.id === assistantMsg.id ? { ...m, status: 'complete', usage } : m))
+      msgs.map(m => (m.id === assistantMsg.id ? { ...m, status: 'complete', usage, trace: rawUsage } : m))
     )
 
     // Update session timestamp

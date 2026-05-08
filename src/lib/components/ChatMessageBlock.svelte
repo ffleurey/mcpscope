@@ -78,12 +78,12 @@
       {#if message.status === 'complete' && message.usage}
         {@const u = message.usage}
         <div class="stats-bar">
-          <span>Prompt: {fmt(u.promptTokens)}</span>
+          <span title="Tokens in the prompt sent to the model (accumulated conversation history)">History: {fmt(u.promptTokens)}</span>
           <span class="sep">·</span>
           <span>Generated: {fmt(u.completionTokens)}{u.reasoningTokens ? ` (reasoning: ${fmt(u.reasoningTokens)})` : ''}</span>
-          <span class="sep">·</span>
-          <span>Context used: {fmt(u.promptTokens + u.completionTokens)}</span>
-          <button class="raw-btn" onclick={() => { showRaw = true }}>⋯ raw</button>
+          {#if message.trace}
+            <button class="raw-btn" onclick={() => { showRaw = true }}>⋯ raw</button>
+          {/if}
         </div>
       {/if}
     {/if}
@@ -92,8 +92,8 @@
 
 {#if showRaw}
   <JsonDialog
-    title="Token usage"
-    data={message.usage}
+    title="Raw API usage — {message.role} message"
+    data={message.trace}
     onClose={() => { showRaw = false }}
   />
 {/if}

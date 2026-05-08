@@ -85,7 +85,7 @@
 
   function openDetails(config: ModelConfig) {
     const m = liveModel(config)
-    detailsData = m ?? { note: 'Model status not yet fetched. Click Refresh.' }
+    detailsData = m?.raw ?? { note: 'Model status not yet fetched. Click Refresh.' }
     detailsTitle = `Model Details — ${config.modelDisplayName}`
     showDetails = true
   }

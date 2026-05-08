@@ -1,11 +1,17 @@
 import type { ConnectionTestResult } from '../types'
 
 // LM Studio 0.4+ native model shape from /api/v1/models
-interface LmStudioNativeModel {
+export interface LmStudioNativeModel {
   type: string
   key: string
   display_name?: string
+  publisher?: string
+  architecture?: string
+  quantization?: { name?: string; bits_per_weight?: number }
+  size_bytes?: number
+  params_string?: string
   max_context_length?: number
+  format?: string
   loaded_instances?: {
     id: string
     config: {
@@ -25,17 +31,20 @@ interface LmStudioNativeModel {
       default?: string
     }
   }
+  variants?: string[]
+  selected_variant?: string
 }
 
 export interface LmStudioModel {
-  uid: string                       // unique per entry: key + ':' + displayName (for {#each})
-  key: string                       // model key sent to the API (may repeat across cluster nodes)
+  uid: string                         // unique per entry: key + ':' + displayName (for {#each})
+  key: string                         // model key sent to the API (may repeat across cluster nodes)
   displayName: string
-  maxContextLength: number | null   // model's architectural maximum
+  maxContextLength: number | null     // model's architectural maximum
   loadedContextLength: number | null  // actual context when loaded (may be much smaller)
   isLoaded: boolean
   supportsReasoning: boolean
   defaultReasoningOn: boolean
+  raw: LmStudioNativeModel            // full native API response for this model
 }
 
 function authHeaders(apiKey?: string): Record<string, string> {
@@ -85,6 +94,7 @@ export async function listModels(baseUrl: string, apiKey?: string): Promise<LmSt
             isLoaded: Array.isArray(m.loaded_instances) && m.loaded_instances.length > 0,
             supportsReasoning,
             defaultReasoningOn: m.capabilities?.reasoning?.default === 'on',
+            raw: m,
           }
         })
     } else {
@@ -103,6 +113,7 @@ export async function listModels(baseUrl: string, apiKey?: string): Promise<LmSt
           isLoaded: false,
           supportsReasoning: false,
           defaultReasoningOn: false,
+          raw: { type: 'llm', key: id } as LmStudioNativeModel,
         }))
     }
   } catch {
@@ -219,6 +230,7 @@ export interface StreamChunk {
   thinking: string
   done: boolean
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number; reasoningTokens?: number }
+  rawUsage?: unknown   // raw usage object from the API, preserved for trace storage
 }
 
 export async function* streamChatCompletion(
@@ -308,6 +320,7 @@ export async function* streamChatCompletion(
                 totalTokens: u.total_tokens ?? 0,
                 reasoningTokens: u.completion_tokens_details?.reasoning_tokens ?? undefined,
               },
+              rawUsage: u,
             }
             return
           }
