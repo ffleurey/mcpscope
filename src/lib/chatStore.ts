@@ -258,25 +258,27 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
     let toolRound = 0
     let finishedNormally = false
 
-    // The running history used for API calls — we extend it with tool messages each round
-    const buildApiMessages = () => {
-      const systemMessages = [
-        ...(modelConfig.systemPrompt ? [{ role: 'system' as const, content: modelConfig.systemPrompt }] : []),
-        ...(session!.mcpInstructions ? [{ role: 'system' as const, content: `[MCP Server Instructions]\n${session!.mcpInstructions}` }] : []),
+    // Build the initial API message history from completed past exchanges only.
+    // We deliberately exclude the live streaming assistantMsg — the API messages
+    // array is extended explicitly with tool_calls + tool results each round.
+    type ApiMessage = { role: string; content: string | null; reasoning_content?: string; tool_calls?: unknown; tool_call_id?: string }
+    const buildBaseApiMessages = (): ApiMessage[] => {
+      const system: ApiMessage[] = [
+        ...(modelConfig.systemPrompt ? [{ role: 'system', content: modelConfig.systemPrompt }] : []),
+        ...(session!.mcpInstructions ? [{ role: 'system', content: `[MCP Server Instructions]\n${session!.mcpInstructions}` }] : []),
       ]
-      const history = get(activeMessages)
-        .filter(m => m.status !== 'aborted')
+      const history: ApiMessage[] = get(activeMessages)
+        .filter(m => m.status !== 'aborted' && m.id !== assistantMsg.id && m.id !== userMsg.id)
         .flatMap(m => {
-          const parts: Array<{ role: string; content: string; reasoning_content?: string; tool_calls?: unknown; tool_call_id?: string }> = []
+          const parts: ApiMessage[] = []
           if (m.role === 'user') {
             parts.push({ role: 'user', content: m.content })
           } else if (m.role === 'assistant') {
-            const base: { role: string; content: string; reasoning_content?: string; tool_calls?: unknown } = {
+            const base: ApiMessage = {
               role: 'assistant',
-              content: m.content,
+              content: m.content || null,  // null when assistant only made tool_calls
             }
             if (m.thinkingInContext && m.thinking) base.reasoning_content = m.thinking
-            // Include tool_calls if present (required by OpenAI format before tool results)
             if (m.toolCalls && m.toolCalls.length > 0) {
               base.tool_calls = m.toolCalls.map(tc => ({
                 id: tc.id,
@@ -285,26 +287,24 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
               }))
             }
             parts.push(base)
-            // Append tool result messages immediately after the assistant message that called them
             if (m.toolCalls && m.toolCalls.length > 0) {
               for (const tc of m.toolCalls) {
                 if (tc.status === 'done' || tc.status === 'error') {
-                  parts.push({
-                    role: 'tool',
-                    content: tc.result ?? (tc.isError ? 'Tool call failed' : ''),
-                    tool_call_id: tc.id,
-                  })
+                  parts.push({ role: 'tool', content: tc.result ?? '', tool_call_id: tc.id })
                 }
               }
             }
           }
           return parts
         })
-      return [...systemMessages, ...history]
+      // Append the current user message at the end
+      return [...system, ...history, { role: 'user', content: userContent }]
     }
 
+    // apiMessages is extended each tool round with assistant tool_calls + tool results
+    let apiMessages: ApiMessage[] = buildBaseApiMessages()
+
     while (toolRound <= MAX_TOOL_ROUNDS) {
-      const apiMessages = buildApiMessages()
       const stream = streamChatCompletion(
         connection.baseUrl,
         modelConfig.modelKey,
@@ -368,7 +368,7 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
         const toolCallBlocks: ToolCallBlock[] = toolCallsFromStream.map(tc => ({
           id: tc.id,
           name: tc.name,
-          argumentsJson: tc.arguments,
+          argumentsJson: tc.argumentsJson,  // correct field name from StreamedToolCall
           status: 'pending' as const,
         }))
         assistantMsg.toolCalls = toolCallBlocks
@@ -389,7 +389,6 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
           block.status = 'running'
           block.startedAt = Date.now()
 
-          // Update status to running in UI
           activeMessages.update(msgs =>
             msgs.map(m => m.id === assistantMsg.id
               ? { ...m, toolCalls: [...toolCallBlocks] }
@@ -416,7 +415,6 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
             block.isError = true
           }
 
-          // Update UI after each tool
           activeMessages.update(msgs =>
             msgs.map(m => m.id === assistantMsg.id
               ? { ...m, toolCalls: [...toolCallBlocks] }
@@ -424,12 +422,36 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
           )
         }
 
-        // Save the assistant message with tool calls before the next round
+        // Save assistant message with tool calls before the next round
         assistantMsg.toolCalls = toolCallBlocks
         await saveChatMessage(assistantMsg)
 
-        // Tool calls done — loop again for the model to respond
-        continue
+        // Extend apiMessages with: assistant tool_calls + tool results for next round
+        apiMessages = [
+          ...apiMessages,
+          {
+            role: 'assistant',
+            content: assistantMsg.content || null,
+            tool_calls: toolCallsFromStream.map(tc => ({
+              id: tc.id,
+              type: 'function',
+              function: { name: tc.name, arguments: tc.argumentsJson },
+            })),
+          },
+          ...toolCallBlocks.map(b => ({
+            role: 'tool' as const,
+            content: b.result ?? '',
+            tool_call_id: b.id,
+          })),
+        ]
+
+        // Reset streaming state for next round
+        assistantMsg.content = ''
+        assistantMsg.thinking = undefined
+        assistantMsg.streamingStartedAt = undefined
+        assistantMsg.streamingCompletedAt = undefined
+
+        continue  // next LLM call
       }
 
       // If we hit the tool round limit, warn the user

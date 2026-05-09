@@ -294,7 +294,8 @@ export interface LmToolParam {
 export async function* streamChatCompletion(
   baseUrl: string,
   modelId: string,
-  messages: { role: string; content: string; tool_calls?: unknown; tool_call_id?: string }[],
+  // Allow null content — needed for assistant messages that only contain tool_calls
+  messages: { role: string; content: string | null; tool_calls?: unknown; tool_call_id?: string; reasoning_content?: string }[],
   temperature: number,
   apiKey?: string,
   abortSignal?: AbortSignal,
