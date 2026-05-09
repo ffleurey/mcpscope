@@ -486,6 +486,9 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
             reasoningTokens: usage.reasoningTokens ?? 0,
             toolCallIds: toolCallsFromStream.map(tc => tc.id),
           })
+          // Eagerly push to the message in the store so the context bar updates live
+          // as each round completes (ContextBar handles streaming messages with toolRounds)
+          assistantMsg.toolRounds = [...toolRounds]
         }
 
         // Capture reasoning from this round before clearing — stored on each block for traceability
@@ -519,10 +522,10 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
           )
         }
 
-        // Show tool calls immediately (thinking cleared, tool calls shown)
+        // Show tool calls immediately (thinking cleared, tool calls shown, toolRounds updated for bar)
         activeMessages.update(msgs =>
           msgs.map(m => m.id === assistantMsg.id
-            ? { ...m, toolCalls: assistantMsg.toolCalls, content: assistantMsg.content, thinking: undefined }
+            ? { ...m, toolCalls: assistantMsg.toolCalls, content: assistantMsg.content, thinking: undefined, toolRounds: assistantMsg.toolRounds }
             : m)
         )
 

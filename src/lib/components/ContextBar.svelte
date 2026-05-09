@@ -74,7 +74,40 @@
       const msg = messages[i]
       // Aborted messages are not in the LLM context — skip them entirely
       if (msg.status === 'aborted') continue
-      if (msg.status === 'streaming' || msg.status === 'error') continue
+      if (msg.status === 'error') continue
+
+      // For streaming messages with partial tool round data: show completed rounds live
+      // so the user can see the bar grow as each tool call round completes.
+      if (msg.status === 'streaming') {
+        if (!msg.toolRounds || msg.toolRounds.length < 2) continue
+        const partialRounds = msg.toolRounds
+        // User segment: computable from round[0].promptTokens even during streaming
+        const partialUserTokens = Math.max(1,
+          partialRounds[0].promptTokens - (systemPromptTokens ?? 0) - (toolDefinitionsTokens ?? 0)
+        )
+        segs.push({ type: 'user', tokens: partialUserTokens, msgId: msg.id + '-u' })
+        // Show completed intermediate rounds (need both r and r+1 to compute delta)
+        for (let r = 0; r < partialRounds.length - 1; r++) {
+          const round = partialRounds[r]
+          const nextRound = partialRounds[r + 1]
+          const delta = Math.max(0, nextRound.promptTokens - round.promptTokens)
+          const roundToolCalls = (msg.toolCalls ?? []).filter(tc => round.toolCallIds.includes(tc.id))
+          if (roundToolCalls.length === 0) {
+            if (delta > 0) segs.push({ type: 'tool-call', tokens: delta, msgId: `${msg.id}-tc-r${r}` })
+          } else {
+            const totalArgLen = roundToolCalls.reduce((s, tc) => s + (tc.argumentsJson?.length ?? 0), 0)
+            const totalResLen = roundToolCalls.reduce((s, tc) => s + (tc.result?.length ?? 0), 0)
+            const totalLen = (totalArgLen + totalResLen) || 1
+            for (const tc of roundToolCalls) {
+              const tcTokens = Math.max(1, Math.round(delta * (tc.argumentsJson?.length ?? 0) / totalLen))
+              const trTokens = Math.max(1, Math.round(delta * (tc.result?.length ?? 0) / totalLen))
+              segs.push({ type: 'tool-call', tokens: tcTokens, msgId: `${msg.id}-stc-${tc.id}` })
+              segs.push({ type: 'tool-response', tokens: trTokens, msgId: `${msg.id}-str-${tc.id}` })
+            }
+          }
+        }
+        continue
+      }
 
       if (msg.role === 'user') {
         if (msg.tokens && msg.tokens > 0) {
@@ -124,13 +157,13 @@
           for (let r = 0; r < rounds.length - 1; r++) {
             const round = rounds[r]
             const nextRound = rounds[r + 1]
-            // Intermediate reasoning IS in context (echoed back via reasoning_content).
-            // The delta from next round's prompt therefore includes reasoning tokens;
-            // subtract them to isolate the tool-call + tool-response overhead.
-            if (round.reasoningTokens > 0) {
-              segs.push({ type: 'reasoning', tokens: round.reasoningTokens, msgId: `${msg.id}-r-${r}` })
-            }
-            const tcTrDelta = Math.max(0, nextRound.promptTokens - round.promptTokens - round.reasoningTokens)
+            // Raw delta = exact tokens added to context in round r (tool call message + tool result).
+            // We do NOT subtract round.reasoningTokens here: LM Studio does not count echoed
+            // reasoning_content in promptTokens, so the delta already excludes it. Subtracting
+            // it would cause negative values that get clamped to zero, losing tool overhead tokens.
+            // Not showing a reasoning segment for intermediate rounds either — we can't confirm
+            // intermediate reasoning is actually in the LLM's active context window.
+            const tcTrDelta = Math.max(0, nextRound.promptTokens - round.promptTokens)
             const roundToolCalls = (msg.toolCalls ?? []).filter(tc => round.toolCallIds.includes(tc.id))
 
             if (roundToolCalls.length === 0) {
