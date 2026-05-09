@@ -76,36 +76,55 @@
       if (msg.status === 'aborted') continue
       if (msg.status === 'error') continue
 
-      // For streaming messages with partial tool round data: show completed rounds live
-      // so the user can see the bar grow as each tool call round completes.
+      // For streaming messages: show bar grow in real time as thinking and tool rounds complete.
+      // Cases handled:
+      //   rounds=0 + thinking  → orange estimate only (first thinking phase, no round data yet)
+      //   rounds=1 + no think  → user + tc/tr[0] delta pending (tool executing between rounds)
+      //   rounds=1 + thinking  → user + orange (model re-thinking after first tool call)
+      //   rounds≥2 + thinking  → user + completed deltas + orange (multi-round, mid-think)
+      //   rounds≥2 + no think  → user + completed deltas (tool executing or final response)
       if (msg.status === 'streaming') {
-        if (!msg.toolRounds || msg.toolRounds.length < 2) continue
-        const partialRounds = msg.toolRounds
-        // User segment: computable from round[0].promptTokens even during streaming
-        const partialUserTokens = Math.max(1,
-          partialRounds[0].promptTokens - (systemPromptTokens ?? 0) - (toolDefinitionsTokens ?? 0)
-        )
-        segs.push({ type: 'user', tokens: partialUserTokens, msgId: msg.id + '-u' })
-        // Show completed intermediate rounds (need both r and r+1 to compute delta)
-        for (let r = 0; r < partialRounds.length - 1; r++) {
-          const round = partialRounds[r]
-          const nextRound = partialRounds[r + 1]
-          const delta = Math.max(0, nextRound.promptTokens - round.promptTokens)
-          const roundToolCalls = (msg.toolCalls ?? []).filter(tc => round.toolCallIds.includes(tc.id))
-          if (roundToolCalls.length === 0) {
-            if (delta > 0) segs.push({ type: 'tool-call', tokens: delta, msgId: `${msg.id}-tc-r${r}` })
-          } else {
-            const totalArgLen = roundToolCalls.reduce((s, tc) => s + (tc.argumentsJson?.length ?? 0), 0)
-            const totalResLen = roundToolCalls.reduce((s, tc) => s + (tc.result?.length ?? 0), 0)
-            const totalLen = (totalArgLen + totalResLen) || 1
-            for (const tc of roundToolCalls) {
-              const tcTokens = Math.max(1, Math.round(delta * (tc.argumentsJson?.length ?? 0) / totalLen))
-              const trTokens = Math.max(1, Math.round(delta * (tc.result?.length ?? 0) / totalLen))
-              segs.push({ type: 'tool-call', tokens: tcTokens, msgId: `${msg.id}-stc-${tc.id}` })
-              segs.push({ type: 'tool-response', tokens: trTokens, msgId: `${msg.id}-str-${tc.id}` })
+        const rounds = msg.toolRounds ?? []
+        const hasThinking = !!(msg.thinking && msg.thinking.length > 0)
+
+        // Nothing to display yet (model just started, no thinking, no round data)
+        if (rounds.length === 0 && !hasThinking) continue
+
+        if (rounds.length > 0) {
+          // User segment: computable from round[0].promptTokens
+          const partialUserTokens = Math.max(1,
+            rounds[0].promptTokens - (systemPromptTokens ?? 0) - (toolDefinitionsTokens ?? 0)
+          )
+          segs.push({ type: 'user', tokens: partialUserTokens, msgId: msg.id + '-u' })
+
+          // Show completed intermediate rounds (need both r and r+1 to compute delta)
+          for (let r = 0; r < rounds.length - 1; r++) {
+            const round = rounds[r]
+            const nextRound = rounds[r + 1]
+            const delta = Math.max(0, nextRound.promptTokens - round.promptTokens)
+            const roundToolCalls = (msg.toolCalls ?? []).filter(tc => round.toolCallIds.includes(tc.id))
+            if (roundToolCalls.length === 0) {
+              if (delta > 0) segs.push({ type: 'tool-call', tokens: delta, msgId: `${msg.id}-tc-r${r}` })
+            } else {
+              const totalArgLen = roundToolCalls.reduce((s, tc) => s + (tc.argumentsJson?.length ?? 0), 0)
+              const totalResLen = roundToolCalls.reduce((s, tc) => s + (tc.result?.length ?? 0), 0)
+              const totalLen = (totalArgLen + totalResLen) || 1
+              for (const tc of roundToolCalls) {
+                const tcTokens = Math.max(1, Math.round(delta * (tc.argumentsJson?.length ?? 0) / totalLen))
+                const trTokens = Math.max(1, Math.round(delta * (tc.result?.length ?? 0) / totalLen))
+                segs.push({ type: 'tool-call', tokens: tcTokens, msgId: `${msg.id}-stc-${tc.id}` })
+                segs.push({ type: 'tool-response', tokens: trTokens, msgId: `${msg.id}-str-${tc.id}` })
+              }
             }
           }
         }
+
+        // Append growing reasoning estimate for any in-progress thinking phase
+        if (hasThinking) {
+          const estimatedTokens = Math.max(1, Math.ceil(msg.thinking!.length / 3.5))
+          segs.push({ type: 'reasoning', tokens: estimatedTokens, msgId: msg.id + '-live-r' })
+        }
+
         continue
       }
 
