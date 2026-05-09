@@ -1,63 +1,83 @@
 # Context Statistics — Specification
 
-## Purpose
-
-This document specifies:
-1. What to capture at chat initialization (session-level snapshot)
-2. What the API returns after each response (raw statistics)
-3. How to display context usage clearly
-4. What the "raw details" view should contain
+**Status:** Draft — guides implementation of context stats, per-message statistics, and context bar
 
 ---
 
-## 1. Session-level snapshot (chat initialization)
+## Design decisions and limitations
 
-### Problem
+**One chat = one experiment.**  
+The model parameters (temperature, reasoning mode, system prompt, loaded context length) are captured once at session start and treated as fixed for the lifetime of that chat. If the user changes a ModelConfig or reloads a model mid-conversation, those changes do not affect ongoing sessions. This is a deliberate simplification — it makes statistics coherent and sessions reproducible. Future work may make sessions more dynamic if needed.
 
-`ChatSession` currently stores `modelConfigSnapshot: ModelConfig`, which captures the user-defined parameters (temperature, reasoning, system prompt, model key). But it does **not** capture the live model state at the time the chat was started — specifically the **actual loaded context length**, which is a runtime value set by LM Studio at model load time.
+---
 
-This matters because:
-- The user may change a ModelConfig after the chat was started — we want to know what was in effect
-- Context window size is not a user-set parameter; it's determined by how LM Studio loaded the model
-- We need the context length denominator for the `XXX / YYYY` display
+## 1. Session-level snapshot (captured at chat start)
 
-### What to capture at first message
+### What to capture
 
-At the moment the first user message is sent (when we know the chat is actually starting), we should:
+At the moment the first user message is sent, we snapshot everything that defines the conditions of this conversation.
 
-**Already captured (in `modelConfigSnapshot`):**
-- `modelKey` — which model was used
-- `modelDisplayName` — human-readable name
+**Model configuration (already in `modelConfigSnapshot`):**
+- `modelKey` — model used
+- `modelDisplayName` — human name
 - `connectionId` — which server
-- `temperature` — actual temperature used
+- `temperature` — actual temperature
 - `reasoning` — on/off if applicable
-- `systemPrompt` — system prompt in effect
+- `systemPrompt` — system prompt text
 
-**Missing — must be added to `ChatSession`:**
-- `loadedContextLength: number | null` — from `loaded_instances[0].config.context_length` via `/api/v1/models`
+**Live model state (NOT currently captured — must be added):**
+- `loadedContextLength: number | null` — from `loaded_instances[0].config.context_length` via `/api/v1/models`. This is the hard limit for context window. Note: may differ greatly from `max_context_length` (architectural maximum).
+- `systemPromptTokens: number | null` — see below.
 
-This single value must be fetched from the native API at first-message time and stored on the session. It should never be updated after that — it's a record of what was active when the conversation began.
+### Measuring system prompt tokens
 
-**How to fetch it:** call `listModels(baseUrl, apiKey)` and find the model matching `modelConfig.modelKey`, then read `loadedContextLength`. If the model is not loaded at that point (unlikely if you're chatting), store `null`.
+The API does not break down `prompt_tokens` by message. But we can probe it:
 
-### ChatSession type change needed
+At session start (before the first user message), send a cheap API call with only the system prompt:
+```json
+{
+  "model": "...",
+  "messages": [{ "role": "system", "content": "...system prompt here..." }],
+  "max_tokens": 1,
+  "stream": false
+}
+```
+→ `prompt_tokens` in the response = number of tokens in the system prompt.
+
+If there is no system prompt, `systemPromptTokens = 0`.
+
+This single-token call is cheap and gives us the denominator needed to decompose all subsequent per-turn token counts.
+
+### Updated `ChatSession` type
 
 ```typescript
 export interface ChatSession {
-  // ... existing fields ...
-  loadedContextLength: number | null   // ADD: from loaded_instances at first message time
+  id: string
+  title: string
+  modelConfigId: string
+  modelConfigSnapshot: ModelConfig     // parameters as of first message
+  mcpProfileId: string | null
+  mcpSnapshot: McpServerProfile | null
+  createdAt: number
+  updatedAt: number
+  // Context snapshot — captured at first message, never updated after
+  loadedContextLength: number | null   // ADD: from native API at session start
+  systemPromptTokens: number | null    // ADD: from probe call, or 0 if no system prompt
 }
 ```
 
 ---
 
-## 2. Per-response statistics (raw data from the API)
+## 2. Per-response data: what the API gives us
 
-### What the API actually returns
+### Data sources
 
-**Via OpenAI-compatible streaming** (`/v1/chat/completions` with `stream_options.include_usage: true`):
+There is **one** source of per-response statistics: the OpenAI-compatible `/v1/chat/completions` endpoint.
 
-The usage chunk (last event before `[DONE]`):
+The native `/api/v1/` endpoint provides no post-completion data (404 on all probed endpoints: `/api/v1/stats`, `/api/v1/completions`).
+
+### Fields in the usage chunk (streaming, with `stream_options.include_usage: true`)
+
 ```json
 {
   "id": "chatcmpl-o8hjtriprmltj2asuxiboo",
@@ -77,141 +97,245 @@ The usage chunk (last event before `[DONE]`):
 }
 ```
 
-The finish chunk (just before usage):
+The finish chunk (just before usage) provides `finish_reason`:
 ```json
-{
-  "choices": [{ "delta": {}, "logprobs": null, "finish_reason": "stop" }]
-}
+{ "choices": [{ "delta": {}, "finish_reason": "stop" }] }
 ```
 
-**Via native API** (`/api/v1/`):
-- There is **no** post-completion endpoint — no `/api/v1/stats`, no `/api/v1/completions`
-- The native API only gives model list + load/unload
-- All per-response statistics come exclusively from the OpenAI-compat endpoint
+`created` is the request start time (Unix seconds, 1-second precision). Not reliable for timing — we must use wall-clock time measured in the streaming loop.
+
+`stats: {}` is always empty in LM Studio — no additional data.
 
 ### What each field means
 
 | Field | Meaning |
 |---|---|
-| `prompt_tokens` | Tokens the model processed as input: system prompt + full conversation history + current user message. **Grows monotonically across turns** |
-| `completion_tokens` | Total tokens generated by the model this turn. **Includes reasoning tokens** |
-| `completion_tokens_details.reasoning_tokens` | Subset of completion_tokens used for chain-of-thought. These are **NOT forwarded** to subsequent turns (only `content` is kept in history) |
+| `prompt_tokens` | All input tokens this request: system prompt + all prior turns' content (not reasoning) + current user message |
+| `completion_tokens` | Everything generated: reasoning tokens + response content tokens |
+| `completion_tokens_details.reasoning_tokens` | Chain-of-thought tokens, NOT forwarded to subsequent turns |
 | `total_tokens` | `prompt_tokens + completion_tokens` |
-| `id` | Unique completion identifier |
-| `system_fingerprint` | Set to the model key by LM Studio (not a hash like OpenAI) |
-| `stats: {}` | Always empty in LM Studio — no additional data here |
-
-### What "context window pressure" actually is
-
-`prompt_tokens` at turn N = the accumulated conversation as the model sees it.
-
-This is the right number to compare against `loadedContextLength`:
-- It grows turn by turn as the conversation accumulates
-- It **does not** include reasoning tokens from prior turns (they're never in the history sent to the API)
-- When `prompt_tokens / loadedContextLength` approaches 1.0, the model will start truncating old messages
-
-`completion_tokens` tells you how much the model generated (including reasoning), but this does **not** directly contribute to the next turn's context pressure — only the `content` part does.
+| `created` | Request start (Unix seconds, same value on all chunks) |
+| `finish_reason` | `"stop"` = normal, `"length"` = max_tokens hit |
+| `system_fingerprint` | Set to the model key by LM Studio |
 
 ---
 
-## 3. Display specification
+## 3. Accumulated (derived) metrics
 
-### Per-message stats bar (after each completed assistant response)
+These are calculated client-side and stored on `ChatMessage`. They cannot be read directly from the API.
 
-Primary display — the most useful numbers:
+### Token decomposition per turn
+
+Let N = turn index (1-based).  
+Let PT(N) = `prompt_tokens`, CT(N) = `completion_tokens`, RT(N) = `reasoning_tokens`.  
+Let CONT(N) = `content_tokens` = CT(N) - RT(N).
+
+**Derivation:**
 
 ```
-Context: 218 / 16,384  (1.3%)  ·  Generated: 206  ·  Reasoning: 190
+CONT(N) = CT(N) - RT(N)                              // content added to next turn's prompt
+
+user_1_tokens  = PT(1) - systemPromptTokens          // from session snapshot
+user_N_tokens  = PT(N) - PT(N-1) - CONT(N-1)        // for N ≥ 2
 ```
 
-Where:
-- `218` = `prompt_tokens + completion_tokens` = `total_tokens` — total tokens consumed by this turn end-to-end
-- `16,384` = `session.loadedContextLength` — context limit from when chat started
-- `1.3%` = `total_tokens / loadedContextLength × 100`
-- `206` = `completion_tokens` — how much the model output (pure generation cost)
-- `190` = `reasoning_tokens` (shown only when > 0)
+This works because the prompt at turn N = system + u1 + a1_content + u2 + a2_content + … + u(N-1) + a(N-1)_content + uN. The delta from turn N-1 to N adds: `a(N-1)_content + uN`.
 
-**If `loadedContextLength` is null** (couldn't fetch at session start):
+### Response speed
+
 ```
-Total: 218 tokens  ·  Generated: 206  ·  Reasoning: 190
+tokensPerSecond = completionTokens / streamingDurationSeconds
 ```
 
-**Rationale for using `total_tokens` (not just `prompt_tokens`) for the X in X/Y:**
-- `total_tokens` = full cost of this turn: what went in + what came out
-- For the context bar, `prompt_tokens` of the NEXT turn will approximately equal this `total_tokens` (minus reasoning tokens that aren't forwarded)
-- This gives the user a sense of how much the context grew after this turn
-- The percentage gives an intuitive "how full is my context?" reading
+Where `streamingDurationSeconds` is measured as wall-clock time from first byte received to last byte (the `[DONE]` marker). This includes both reasoning and content generation phases.
 
-**Note:** The denominator is `loadedContextLength` (the actual limit, e.g. 16,384), NOT `max_context_length` (the model's architectural max, e.g. 131,072). These can differ by 8×.
+### Cumulative context fill
 
-### Raw details dialog
+```
+cumulativeTokens(N) = total_tokens(N)  // = PT(N) + CT(N)
+```
 
-When the user clicks **⋯ raw**, show a JSON view containing the actual data received from the API — not our processed fields. This should include the completion metadata alongside the usage:
+After each turn, `total_tokens` is the total context consumed including the just-generated response. This is the `X` in the `X / loadedContextLength` display. It grows each turn (by user_N + CT(N)).
 
-```json
-{
-  "completion_id": "chatcmpl-o8hjtriprmltj2asuxiboo",
-  "model": "qwen3.6-35b-a3b-apex",
-  "system_fingerprint": "qwen3.6-35b-a3b-apex",
-  "created": 1778306695,
-  "finish_reason": "stop",
-  "usage": {
-    "prompt_tokens": 12,
-    "completion_tokens": 206,
-    "total_tokens": 218,
-    "completion_tokens_details": {
-      "reasoning_tokens": 190
-    }
+---
+
+## 4. Per-message stored data
+
+### Token segments (for context bar)
+
+Each message stores a list of segments representing its contribution to the context window.
+
+```typescript
+export type SegmentType =
+  | 'system-prompt'       // system prompt (first message only, from probe)
+  | 'user'                // user message text
+  | 'reasoning'           // chain-of-thought output
+  | 'content'             // response content
+  // Future MCP segments:
+  | 'tool-definitions'    // tool schemas sent in system context
+  | 'tool-call'           // individual tool invocation
+  | 'tool-response'       // tool result returned
+
+export interface TokenSegment {
+  type: SegmentType
+  tokens: number
+}
+```
+
+**Segments per turn:**
+
+Turn 1 (first user message):
+```
+[{ type: 'system-prompt', tokens: systemPromptTokens }]  // from session probe
+[{ type: 'user',          tokens: user_1_tokens }]        // PT(1) - systemPromptTokens
+[{ type: 'reasoning',     tokens: RT(1) }]
+[{ type: 'content',       tokens: CONT(1) }]
+```
+
+Turn N (N ≥ 2):
+```
+[{ type: 'user',      tokens: user_N_tokens }]   // PT(N) - PT(N-1) - CONT(N-1)
+[{ type: 'reasoning', tokens: RT(N) }]
+[{ type: 'content',   tokens: CONT(N) }]
+```
+
+Future MCP turns will add `tool-definitions`, `tool-call`, `tool-response` segments.
+
+### Updated `ChatMessage` type
+
+```typescript
+export interface ChatMessage {
+  id: string
+  sessionId: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+  status: 'complete' | 'streaming' | 'error'
+  errorMessage?: string
+  thinking?: string
+
+  // Token accounting — only on completed assistant messages
+  usage?: {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+    reasoningTokens?: number
+  }
+  segments?: TokenSegment[]      // ADD: breakdown for context bar
+  streamingDurationMs?: number   // ADD: wall-clock duration of streaming
+  tokensPerSecond?: number       // ADD: completionTokens / (durationMs/1000)
+
+  // Raw API response metadata — for the "details" dialog
+  trace?: {
+    completionId: string
+    model: string
+    systemFingerprint: string
+    created: number
+    finishReason: string
+    rawUsage: unknown            // the usage object as returned by the API, verbatim
   }
 }
 ```
 
-This is genuinely "raw" — the fields come directly from the API response, with no transformation. Currently we only store the `usage` sub-object in `message.trace`. We need to also capture `id`, `model`, `system_fingerprint`, `created`, and `finish_reason` from the finish chunk.
-
 ---
 
-## 4. Implementation changes needed
+## 5. Stats bar display (after each assistant message)
 
-### A. Store `loadedContextLength` on ChatSession
-
-1. Add `loadedContextLength: number | null` to `ChatSession` type
-2. In `chatStore.sendMessage` (at first-message time, when we already call `listModels` or can call it):
-   - Call `listModels(baseUrl, apiKey)`, find the matching model, read `loadedContextLength`
-   - Store it on the session record and in the DB
-3. In `ChatMessageBlock`, read it from the session snapshot passed as a prop
-
-### B. Capture richer raw trace in StreamChunk
-
-Capture from the streaming response:
-- From the **finish chunk**: `finish_reason`, completion `id`, `model`, `system_fingerprint`, `created`
-- From the **usage chunk**: the full `usage` object as-is
-
-Store a combined trace object in `ChatMessage.trace`:
-```typescript
-{
-  completionId: string
-  model: string
-  systemFingerprint: string
-  created: number
-  finishReason: string
-  usage: { prompt_tokens, completion_tokens, total_tokens, completion_tokens_details }
-}
+Primary line (always shown when usage is available):
+```
+Context: 218 / 16,384 (1.3%)  ·  Round: +124 tokens  ·  42 tok/s
 ```
 
-### C. Update stats bar display
+Where:
+- `218` = `total_tokens(N)` — full context size after this turn
+- `16,384` = `session.loadedContextLength`
+- `1.3%` = percentage
+- `+124` = user_N_tokens + CT(N) = tokens added this round (prompt delta + completion)
+- `42 tok/s` = `completionTokens / streamingDurationSeconds`
 
-Show: `Context: total / limit  (pct%)  ·  Generated: N  ·  Reasoning: N`
+Secondary line (when reasoning is present):
+```
+Generated: 16 content + 190 reasoning
+```
 
-### D. Session snapshot completeness
+If `loadedContextLength` is unknown:
+```
+Total: 218 tokens  ·  Round: +124 tokens  ·  42 tok/s
+```
 
-Ensure `modelConfigSnapshot` on `ChatSession` is taken at first-message time (already done), not at session creation time. This way it captures the parameters as they were when the conversation actually started.
+**⋯ raw** button opens `JsonDialog` with `message.trace` — the raw API metadata object (completion_id, model, finish_reason, and unmodified usage JSON). This is genuinely different from the processed display: it shows what the API actually sent, field names and all.
 
 ---
 
-## 5. Open questions
+## 6. Context bar visualization
 
-1. **Should we show `prompt_tokens` separately in the stats bar?** It's the actual context pressure metric. But showing all of: context, generated, reasoning, prompt may be too many numbers. The `total_tokens / limit` display is a reasonable proxy.
+### Position and layout
 
-2. **What if `loadedContextLength` changes mid-conversation?** (User manually reloads the model with different settings.) The snapshot is taken at first message — after that it's fixed. This is intentional: the snapshot records the actual conditions at start.
+A horizontal bar spanning the full width of the chat, placed **just above the input box**. Always visible when a model config is active. Height: approximately 12px.
 
-3. **Should we add a per-session context bar** (visual progress bar showing how full the context is)? This could replace or complement the per-message stats. Would need `session.loadedContextLength` and the latest `total_tokens` from the most recent message.
+### What it represents
+
+The total width = `session.loadedContextLength` tokens.  
+The bar fills left to right as the conversation accumulates context.  
+Each filled segment corresponds to a `TokenSegment` from a message.
+
+### Segment colors
+
+| Segment type | Color | Description |
+|---|---|---|
+| `system-prompt` | Dark slate (#475569) | System prompt, static from session start |
+| `user` | Steel blue (#3b82f6) | User messages |
+| `reasoning` | Amber (#f59e0b) | Model chain-of-thought |
+| `content` | Emerald (#10b981) | Model response content |
+| `tool-definitions` | Purple (#8b5cf6) | MCP tool schemas (future) |
+| `tool-call` | Orange (#f97316) | Tool invocations (future) |
+| `tool-response` | Light orange (#fb923c) | Tool results (future) |
+
+Unfilled portion: dark background, no color.
+
+### Segment ordering in the bar
+
+Segments are laid out in conversation order:
+
+```
+[system-prompt][user_1][reasoning_1][content_1][user_2][reasoning_2][content_2]…
+```
+
+The "system-prompt" segment is fixed at the left. Each subsequent turn appends its segments.
+
+### Interaction
+
+- Hovering over a segment shows a tooltip: segment type, token count, turn number
+- No click interaction in the initial implementation
+
+### When `loadedContextLength` is unknown
+
+Show the bar without a fixed width — just the filled segments as relative widths, no "empty" portion shown. Or show only the stats text and hide the bar.
+
+---
+
+## 7. Implementation plan (without MCP)
+
+### Phase 1 — Data capture (prerequisite for everything else)
+
+1. **Session probe call**: At first-message time, call the API with only the system prompt to get `systemPromptTokens`. If no system prompt, skip. Store on `ChatSession`.
+2. **Load `loadedContextLength`**: Fetch from native API at session start, store on `ChatSession`.
+3. **Streaming timing**: Record `streamingStartedAt = Date.now()` when first byte arrives, `streamingCompletedAt` when `[DONE]` is received.
+4. **Capture full trace**: Store `completionId`, `model`, `systemFingerprint`, `created`, `finishReason` from finish chunk alongside raw usage.
+5. **Compute segments**: In `chatStore.sendMessage`, after each response, derive `TokenSegment[]` using the derivation formulas above. Store on the message.
+
+### Phase 2 — Stats bar (per-message)
+
+Replace current stats bar with:
+```
+Context: X / Y (Z%)  ·  Round: +N tokens  ·  T tok/s
+[Generated: C content + R reasoning]  [⋯ raw]
+```
+
+### Phase 3 — Context bar (session-level)
+
+Render the bar above the input box. Read all `activeMessages`, flatten their `segments` arrays in order, and render as colored strips proportional to token count relative to `loadedContextLength`.
+
+### Phase 4 — MCP extension (future)
+
+When MCP tool calls are added, extend `SegmentType` with tool-related types. Tool definition tokens (from the system context + tool schemas) will be captured in `systemPromptTokens` or as a separate `toolDefinitionsTokens` on the session. Per-tool-call segments will be added to each message's `segments` array.
