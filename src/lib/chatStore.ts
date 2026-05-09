@@ -8,7 +8,7 @@ import {
   getMessagesForSession,
   saveChatMessage,
 } from './db'
-import { streamChatCompletion, probeSystemPromptTokens, listModels, type LmToolParam } from './services/lmstudio'
+import { streamChatCompletion, probeSystemPromptTokens, listModels, type LmToolParam, type StreamedToolCall } from './services/lmstudio'
 import { lmConnections, mcpProfiles } from './connectionStore'
 import { McpClientHandle } from './services/mcpClient'
 
@@ -426,7 +426,7 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
       let traceData: MessageTrace | undefined
       let firstTokenReceived = false
       let contextExhausted = false
-      let toolCallsFromStream: import('./services/lmstudio').StreamedToolCall[] | undefined
+      let toolCallsFromStream: StreamedToolCall[] | undefined
 
       for await (const chunk of stream) {
         if (chunk.done) {
