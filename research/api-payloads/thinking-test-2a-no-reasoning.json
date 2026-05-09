@@ -1,0 +1,29 @@
+{
+    "id": "chatcmpl-527na0l927ue8zkv1li8g",
+    "object": "chat.completion",
+    "created": 1778310744,
+    "model": "zai-org/glm-4.7-flash",
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": "banana",
+                "reasoning_content": "1.  **Analyze the user's request:** The user wants me to say the word \"banana\" exactly as requested.\n\n2.  **Identify the core task:** The task is simple repetition. The user previously asked for \"apple\", and I provided it. Now they want \"banana\".\n\n3.  **Check for constraints:**\n    *   \"Say exactly the word\": This means no punctuation, no extra text, no emojis, just the word itself.\n    *   \"banana\": The target word.\n\n4.  **Formulate the output:** The output should be \"banana\".\n\n5.  **Final verification:** Does \"banana\" meet the criteria? Yes.",
+                "tool_calls": []
+            },
+            "logprobs": null,
+            "finish_reason": "stop"
+        }
+    ],
+    "usage": {
+        "prompt_tokens": 22,
+        "completion_tokens": 142,
+        "total_tokens": 164,
+        "completion_tokens_details": {
+            "reasoning_tokens": 139
+        }
+    },
+    "stats": {},
+    "system_fingerprint": "zai-org/glm-4.7-flash"
+}

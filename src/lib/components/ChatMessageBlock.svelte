@@ -2,13 +2,15 @@
   import { tick } from 'svelte'
   import type { ChatMessage } from '../types'
   import JsonDialog from './JsonDialog.svelte'
+  import ToolCallBlock from './ToolCallBlock.svelte'
 
   interface Props {
     message: ChatMessage
     modelName?: string
+    loadedContextLength?: number | null
   }
 
-  const { message, modelName = 'Assistant' }: Props = $props()
+  const { message, modelName = 'Assistant', loadedContextLength = null }: Props = $props()
 
   let thinkingEl = $state<HTMLElement | null>(null)
   let thinkingOpen = $state(true)
@@ -36,6 +38,22 @@
   })
 
   function fmt(n: number) { return n.toLocaleString() }
+
+  // Persistent context at this turn: prompt + content (reasoning excluded unless thinkingInContext)
+  let contextUsed = $derived.by(() => {
+    const u = message.usage
+    if (!u) return 0
+    const contentTokens = Math.max(0, (u.completionTokens ?? 0) - (u.reasoningTokens ?? 0))
+    const reasoningInCtx = message.thinkingInContext ? (u.reasoningTokens ?? 0) : 0
+    return u.promptTokens + contentTokens + reasoningInCtx
+  })
+  let contextPct = $derived(
+    loadedContextLength && loadedContextLength > 0
+      ? Math.round((contextUsed / loadedContextLength) * 100)
+      : null
+  )
+
+  let toolCallCount = $derived(message.toolCalls?.length ?? 0)
 </script>
 
 <div class="message" class:user={message.role === 'user'} class:assistant={message.role === 'assistant'}>
@@ -67,6 +85,15 @@
           </div>
         </details>
       {/if}
+
+      {#if message.toolCalls && message.toolCalls.length > 0}
+        <div class="tool-calls-section">
+          {#each message.toolCalls as tc (tc.id)}
+            <ToolCallBlock toolCall={tc} />
+          {/each}
+        </div>
+      {/if}
+
       {#if message.content || message.status !== 'streaming'}
         <div class="response-text">
           {message.content}<span
@@ -78,9 +105,18 @@
       {#if message.status === 'complete' && message.usage}
         {@const u = message.usage}
         <div class="stats-bar">
-          <span title="Tokens in the prompt sent to the model (accumulated conversation history)">History: {fmt(u.promptTokens)}</span>
-          <span class="sep">·</span>
-          <span>Generated: {fmt(u.completionTokens)}{u.reasoningTokens ? ` (reasoning: ${fmt(u.reasoningTokens)})` : ''}</span>
+          {#if loadedContextLength}
+            <span class="ctx-primary" title="Tokens used in context / total model context window">
+              Context: {fmt(contextUsed)}/{fmt(loadedContextLength)}
+              {#if contextPct !== null}<span class="ctx-pct">({contextPct}%)</span>{/if}
+            </span>
+            <span class="sep">·</span>
+          {/if}
+          <span title="Tokens generated in this response">Generated: {fmt(u.completionTokens)}{u.reasoningTokens ? ` (reasoning: ${fmt(u.reasoningTokens)})` : ''}</span>
+          {#if toolCallCount > 0}
+            <span class="sep">·</span>
+            <span title="Tool calls made in this turn">{toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}</span>
+          {/if}
           {#if message.trace}
             <button class="raw-btn" onclick={() => { showRaw = true }}>⋯ raw</button>
           {/if}
@@ -92,7 +128,7 @@
 
 {#if showRaw}
   <JsonDialog
-    title="Raw API usage — {message.role} message"
+    title="Raw API response — turn {message.role}"
     data={message.trace}
     onClose={() => { showRaw = false }}
   />
@@ -177,6 +213,10 @@
     border-top: 1px solid var(--border-subtle);
   }
 
+  .tool-calls-section {
+    margin-bottom: 0.5rem;
+  }
+
   .response-text {
     color: var(--text);
     font-size: 0.9rem;
@@ -194,6 +234,8 @@
     color: var(--text-muted);
     flex-wrap: wrap;
   }
+  .ctx-primary { color: var(--text); font-weight: 500; }
+  .ctx-pct { color: var(--text-muted); font-weight: normal; }
   .sep { opacity: 0.4; }
   .raw-btn {
     background: none;
@@ -238,3 +280,4 @@
     50% { opacity: 0; }
   }
 </style>
+

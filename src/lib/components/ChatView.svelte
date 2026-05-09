@@ -1,14 +1,20 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
-  import { activeMessages, activeChatId, chatSessions, isStreaming, sendMessage, createChat } from '../chatStore'
-  import { modelConfigs } from '../connectionStore'
+  import { activeMessages, activeChatId, chatSessions, isStreaming, sendMessage, createChat, abortStreaming, restoredComposerText } from '../chatStore'
+  import { modelConfigs, mcpProfiles } from '../connectionStore'
   import type { ModelConfig } from '../types'
   import ChatMessageBlock from './ChatMessageBlock.svelte'
+  import ContextBar from './ContextBar.svelte'
+  import AbortedExchange from './AbortedExchange.svelte'
+
+  // True when the session has hit the context limit
+  let isExhausted = $derived(session?.isContextExhausted === true)
 
   let transcriptEl = $state<HTMLElement | null>(null)
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let composerText = $state('')
   let selectedConfigId = $state<string>('')
+  let selectedMcpProfileId = $state<string>('')  // '' = no MCP
 
   // Derive active session from stores
   let session = $derived($chatSessions.find(s => s.id === $activeChatId) ?? null)
@@ -35,6 +41,19 @@
     }
   })
 
+  // When an abort restores the user's text, populate the composer and focus it
+  $effect(() => {
+    const text = $restoredComposerText
+    if (text !== null) {
+      composerText = text
+      restoredComposerText.set(null)
+      tick().then(() => {
+        resizeTextarea()
+        textareaEl?.focus()
+      })
+    }
+  })
+
   function scrollToBottom() {
     if (transcriptEl) {
       transcriptEl.scrollTop = transcriptEl.scrollHeight
@@ -53,7 +72,7 @@
 
   async function handleSend() {
     const text = composerText.trim()
-    if (!text || $isStreaming) return
+    if (!text || $isStreaming || isExhausted) return
 
     const effectiveConfig: ModelConfig | undefined = session
       ? session.modelConfigSnapshot
@@ -66,7 +85,7 @@
     resizeTextarea()
 
     if (!$activeChatId) {
-      await createChat(effectiveConfig)
+      await createChat(effectiveConfig, selectedMcpProfileId || null)
     }
 
     await sendMessage(text, effectiveConfig)
@@ -94,11 +113,20 @@
         <span>Start a conversation…</span>
       </div>
     {:else}
-      {#each $activeMessages as msg (msg.id)}
-        <ChatMessageBlock
-          message={msg}
-          modelName={session?.modelConfigSnapshot?.name ?? 'Assistant'}
-        />
+      {#each $activeMessages as msg, i (msg.id)}
+        {#if msg.status === 'aborted' && msg.role === 'user'}
+          {@const next = $activeMessages[i + 1]}
+          {@const abortedAssistant = next?.status === 'aborted' && next.role === 'assistant' ? next : null}
+          <AbortedExchange userMsg={msg} assistantMsg={abortedAssistant} />
+        {:else if msg.status === 'aborted' && msg.role === 'assistant'}
+          <!-- rendered by the user AbortedExchange block above — skip -->
+        {:else}
+          <ChatMessageBlock
+            message={msg}
+            modelName={session?.modelConfigSnapshot?.name ?? 'Assistant'}
+            loadedContextLength={session?.loadedContextLength ?? null}
+          />
+        {/if}
       {/each}
       {#if isThinking}
         <div class="thinking">Thinking…</div>
@@ -106,25 +134,47 @@
     {/if}
   </div>
 
+  <!-- Context bar (above composer, below transcript) -->
+  {#if hasMessages}
+    <ContextBar
+      messages={$activeMessages}
+      loadedContextLength={session?.loadedContextLength ?? null}
+      systemPromptTokens={session?.systemPromptTokens ?? null}
+      toolDefinitionsTokens={session?.toolDefinitionsTokens ?? null}
+    />
+  {/if}
+
+  <!-- Context exhausted banner -->
+  {#if isExhausted}
+    <div class="exhausted-banner">
+      ⚠️ Context window full — this chat cannot continue. Start a new chat to keep experimenting.
+    </div>
+  {/if}
+
   <!-- Composer -->
   <div class="composer">
     <div class="composer-input-row">
       <textarea
         bind:this={textareaEl}
         bind:value={composerText}
-        placeholder="Message… (Ctrl+Enter to send)"
+        placeholder={isExhausted ? 'Context window full — start a new chat' : 'Message… (Ctrl+Enter to send)'}
         rows="2"
-        disabled={$isStreaming}
+        disabled={$isStreaming || isExhausted}
         oninput={resizeTextarea}
         onkeydown={handleKeydown}
       ></textarea>
       <button
         class="btn btn-primary send-btn"
         onclick={handleSend}
-        disabled={$isStreaming || !composerText.trim()}
+        disabled={$isStreaming || isExhausted || !composerText.trim()}
       >
         Send
       </button>
+      {#if $isStreaming}
+        <button class="btn btn-stop stop-btn" onclick={abortStreaming} title="Stop generation">
+          ■ Stop
+        </button>
+      {/if}
     </div>
     <div class="composer-meta">
       {#if !hasMessages}
@@ -138,6 +188,12 @@
           {:else}
             <span class="model-loading">No model configs — create one first</span>
           {/if}
+          <select class="model-select mcp-select" bind:value={selectedMcpProfileId} disabled={$isStreaming}>
+            <option value="">No MCP</option>
+            {#each $mcpProfiles as p (p.id)}
+              <option value={p.id}>{p.name}</option>
+            {/each}
+          </select>
         </div>
       {:else}
         <span class="model-label">{displayModelName}</span>
@@ -253,6 +309,20 @@
     cursor: not-allowed;
   }
 
+  .stop-btn {
+    flex-shrink: 0;
+    align-self: flex-end;
+    background: color-mix(in srgb, var(--danger, #c0392b) 85%, transparent);
+    border-color: var(--danger, #c0392b);
+    color: #fff;
+    font-size: 0.8rem;
+    padding: 0.4rem 0.75rem;
+  }
+
+  .stop-btn:hover {
+    background: var(--danger, #c0392b);
+  }
+
   .composer-meta {
     display: flex;
     align-items: center;
@@ -295,5 +365,15 @@
     font-size: 0.7rem;
     color: var(--text-muted);
     opacity: 0.6;
+  }
+
+  .exhausted-banner {
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--danger, #c0392b) 12%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--danger, #c0392b) 40%, transparent);
+    color: var(--text);
+    font-size: 0.8rem;
+    padding: 0.5rem 1.25rem;
+    text-align: center;
   }
 </style>

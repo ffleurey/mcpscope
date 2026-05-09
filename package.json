@@ -27,6 +27,8 @@
     "vite": "^8.0.10"
   },
   "dependencies": {
-    "idb": "^8.0.3"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "idb": "^8.0.3",
+    "zod": "^4.4.3"
   }
 }

@@ -225,22 +225,81 @@ export async function testLmStudioConnection(baseUrl: string, apiKey?: string): 
   }
 }
 
+// Probe the token count of a system prompt by sending a minimal completion request.
+// Returns the number of tokens in the system prompt, or null on failure.
+// If systemPrompt is empty, returns 0 immediately.
+export async function probeSystemPromptTokens(
+  baseUrl: string,
+  modelKey: string,
+  systemPrompt: string,
+  apiKey?: string
+): Promise<number | null> {
+  if (!systemPrompt.trim()) return 0
+  const url = `${rootUrl(baseUrl)}/v1/chat/completions`
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(apiKey) },
+      body: JSON.stringify({
+        model: modelKey,
+        messages: [{ role: 'system', content: systemPrompt }],
+        max_tokens: 1,
+        stream: false,
+      }),
+    })
+    if (!r.ok) return null
+    const data = await r.json()
+    return data?.usage?.prompt_tokens ?? null
+  } catch {
+    return null
+  }
+}
+
+export interface StreamTraceData {
+  completionId: string
+  model: string
+  systemFingerprint: string
+  created: number      // Unix seconds (1s precision, same on all chunks)
+  finishReason: string
+}
+
+// A completed tool call as streamed from the model (arguments accumulate over many chunks)
+export interface StreamedToolCall {
+  id: string
+  name: string
+  argumentsJson: string  // complete JSON string when done streaming
+}
+
 export interface StreamChunk {
   content: string
   thinking: string
   done: boolean
   usage?: { promptTokens: number; completionTokens: number; totalTokens: number; reasoningTokens?: number }
-  rawUsage?: unknown   // raw usage object from the API, preserved for trace storage
+  rawUsage?: unknown       // usage object verbatim from API
+  traceData?: StreamTraceData  // completion metadata from finish + usage chunks
+  finishReason?: string    // forwarded on the done chunk; 'length' = context exhausted, 'tool_calls' = tool use
+  toolCalls?: StreamedToolCall[]  // present on done chunk when finishReason === 'tool_calls'
+}
+
+// Tool definition formatted for the OpenAI-compatible tools[] array
+export interface LmToolParam {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: Record<string, unknown>
+  }
 }
 
 export async function* streamChatCompletion(
   baseUrl: string,
   modelId: string,
-  messages: { role: string; content: string }[],
+  messages: { role: string; content: string; tool_calls?: unknown; tool_call_id?: string }[],
   temperature: number,
   apiKey?: string,
   abortSignal?: AbortSignal,
-  reasoning?: 'on' | 'off'
+  reasoning?: 'on' | 'off',
+  tools?: LmToolParam[]
 ): AsyncGenerator<StreamChunk> {
   const url = `${rootUrl(baseUrl)}/v1/chat/completions`
 
@@ -253,6 +312,9 @@ export async function* streamChatCompletion(
   }
   if (reasoning !== undefined) {
     body.reasoning = { effort: reasoning === 'on' ? 'high' : 'off' }
+  }
+  if (tools && tools.length > 0) {
+    body.tools = tools
   }
 
   const response = await fetch(url, {
@@ -275,6 +337,14 @@ export async function* streamChatCompletion(
   const decoder = new TextDecoder()
   let buffer = ''
 
+  // Accumulated trace data across chunks
+  let traceData: StreamTraceData | null = null
+  let pendingFinishReason: string | null = null
+
+  // Accumulate tool_calls across chunks.
+  // Each index maps to a partially-built tool call; id+name only arrive in first chunk for that index.
+  const pendingToolCalls: Map<number, { id: string; name: string; argsAccumulator: string }> = new Map()
+
   try {
     while (true) {
       if (abortSignal?.aborted) return
@@ -285,7 +355,6 @@ export async function* streamChatCompletion(
       buffer += decoder.decode(value, { stream: true })
 
       const lines = buffer.split('\n')
-      // Keep last (potentially incomplete) line in buffer
       buffer = lines.pop() ?? ''
 
       for (const line of lines) {
@@ -295,25 +364,85 @@ export async function* streamChatCompletion(
         const data = trimmed.slice(5).trim()
 
         if (data === '[DONE]') {
-          yield { content: '', thinking: '', done: true }
+          // Build completed tool calls from accumulated data
+          const toolCalls: StreamedToolCall[] = pendingToolCalls.size > 0
+            ? [...pendingToolCalls.entries()]
+                .sort(([a], [b]) => a - b)
+                .map(([, tc]) => ({ id: tc.id, name: tc.name, argumentsJson: tc.argsAccumulator }))
+            : undefined as unknown as StreamedToolCall[]
+
+          yield {
+            content: '',
+            thinking: '',
+            done: true,
+            finishReason: pendingFinishReason ?? 'stop',
+            ...(toolCalls?.length ? { toolCalls } : {}),
+          }
           return
         }
 
         try {
           const parsed = JSON.parse(data)
-          const delta = parsed?.choices?.[0]?.delta
+
+          // Capture completion metadata from any chunk that has it
+          if (parsed?.id && !traceData) {
+            traceData = {
+              completionId: parsed.id,
+              model: parsed.model ?? '',
+              systemFingerprint: parsed.system_fingerprint ?? '',
+              created: parsed.created ?? 0,
+              finishReason: '',  // filled in from finish chunk
+            }
+          }
+
+          const choices = parsed?.choices ?? []
+          const delta = choices[0]?.delta
+          const finishReason = choices[0]?.finish_reason
+
+          if (finishReason && finishReason !== 'null') {
+            pendingFinishReason = finishReason
+            if (traceData) traceData = { ...traceData, finishReason }
+          }
+
           const thinking = typeof delta?.reasoning_content === 'string' ? delta.reasoning_content : ''
           const content = typeof delta?.content === 'string' ? delta.content : ''
           if (thinking.length > 0 || content.length > 0) {
             yield { content, thinking, done: false }
           }
-          // Capture usage if present in this chunk
+
+          // Accumulate tool_calls deltas.
+          // First chunk for each index carries id + function.name; subsequent carry function.arguments fragments.
+          if (Array.isArray(delta?.tool_calls)) {
+            for (const tc of delta.tool_calls) {
+              const idx: number = tc.index ?? 0
+              if (!pendingToolCalls.has(idx)) {
+                pendingToolCalls.set(idx, { id: tc.id ?? '', name: tc.function?.name ?? '', argsAccumulator: '' })
+              }
+              const entry = pendingToolCalls.get(idx)!
+              if (tc.id && !entry.id) entry.id = tc.id
+              if (tc.function?.name && !entry.name) entry.name = tc.function.name
+              if (typeof tc.function?.arguments === 'string') {
+                entry.argsAccumulator += tc.function.arguments
+              }
+            }
+          }
+
+          // Capture usage chunk (last data event before [DONE])
           if (parsed?.usage) {
             const u = parsed.usage
+            const resolvedFinishReason = pendingFinishReason ?? 'stop'
+            const toolCalls: StreamedToolCall[] = pendingToolCalls.size > 0
+              ? [...pendingToolCalls.entries()]
+                  .sort(([a], [b]) => a - b)
+                  .map(([, tc]) => ({ id: tc.id, name: tc.name, argumentsJson: tc.argsAccumulator }))
+              : undefined as unknown as StreamedToolCall[]
+
             yield {
               content: '',
               thinking: '',
               done: true,
+              finishReason: resolvedFinishReason,
+              ...(toolCalls?.length ? { toolCalls } : {}),
               usage: {
                 promptTokens: u.prompt_tokens ?? 0,
                 completionTokens: u.completion_tokens ?? 0,
@@ -321,6 +450,13 @@ export async function* streamChatCompletion(
                 reasoningTokens: u.completion_tokens_details?.reasoning_tokens ?? undefined,
               },
               rawUsage: u,
+              traceData: traceData ?? {
+                completionId: parsed.id ?? '',
+                model: parsed.model ?? '',
+                systemFingerprint: parsed.system_fingerprint ?? '',
+                created: parsed.created ?? 0,
+                finishReason: resolvedFinishReason,
+              },
             }
             return
           }

@@ -1,0 +1,29 @@
+{
+    "id": "chatcmpl-10xtg73e9rzo4t5bldw4az8",
+    "object": "chat.completion",
+    "created": 1778310752,
+    "model": "zai-org/glm-4.7-flash",
+    "choices": [
+        {
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": "banana",
+                "reasoning_content": "1.  **Analyze the user's request:** The user wants me to say the word \"banana\".\n2.  **Identify the constraint:** The user previously asked for \"apple\" and I provided just that word. The pattern is to output *only* the requested word, without any conversational filler or punctuation (unless implied, but usually just the word is best for \"exactly the word\").\n3.  **Formulate the response:** The word is \"banana\".\n4.  **Final Output:** banana.",
+                "tool_calls": []
+            },
+            "logprobs": null,
+            "finish_reason": "stop"
+        }
+    ],
+    "usage": {
+        "prompt_tokens": 64,
+        "completion_tokens": 110,
+        "total_tokens": 174,
+        "completion_tokens_details": {
+            "reasoning_tokens": 107
+        }
+    },
+    "stats": {},
+    "system_fingerprint": "zai-org/glm-4.7-flash"
+}
