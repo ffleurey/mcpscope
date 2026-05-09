@@ -124,7 +124,13 @@
           for (let r = 0; r < rounds.length - 1; r++) {
             const round = rounds[r]
             const nextRound = rounds[r + 1]
-            const tcTrDelta = Math.max(0, nextRound.promptTokens - round.promptTokens)
+            // Intermediate reasoning IS in context (echoed back via reasoning_content).
+            // The delta from next round's prompt therefore includes reasoning tokens;
+            // subtract them to isolate the tool-call + tool-response overhead.
+            if (round.reasoningTokens > 0) {
+              segs.push({ type: 'reasoning', tokens: round.reasoningTokens, msgId: `${msg.id}-r-${r}` })
+            }
+            const tcTrDelta = Math.max(0, nextRound.promptTokens - round.promptTokens - round.reasoningTokens)
             const roundToolCalls = (msg.toolCalls ?? []).filter(tc => round.toolCallIds.includes(tc.id))
 
             if (roundToolCalls.length === 0) {

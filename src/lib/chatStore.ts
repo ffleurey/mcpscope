@@ -357,9 +357,13 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
               for (const round of m.toolRounds) {
                 if (round.toolCallIds.length > 0) {
                   const roundTcs = m.toolCalls.filter(tc => round.toolCallIds.includes(tc.id))
+                  // Reconstruct reasoning_content from thinkingBefore (stored on the first
+                  // tool call of the round — all calls in a round share the same thinking)
+                  const roundThinking = roundTcs[0]?.thinkingBefore
                   parts.push({
                     role: 'assistant',
                     content: null,
+                    ...(roundThinking ? { reasoning_content: roundThinking } : {}),
                     tool_calls: roundTcs.map(tc => ({
                       id: tc.id,
                       type: 'function',
@@ -556,14 +560,15 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
         await saveChatMessage(assistantMsg)
 
         // Extend apiMessages with: assistant tool_calls + tool results for next round.
-        // We do NOT include reasoning_content — standard practice is to let the model
-        // re-reason from the tool results; echoing thinking back inflates prompt tokens
-        // and makes token attribution inaccurate.
+        // We include reasoning_content so the model retains its chain-of-thought across
+        // tool rounds — the thinking that led to each tool call is essential context for
+        // interpreting the result. Token attribution is handled accurately via ToolRound deltas.
         apiMessages = [
           ...apiMessages,
           {
             role: 'assistant',
             content: assistantMsg.content || null,
+            ...(roundThinking ? { reasoning_content: roundThinking } : {}),
             tool_calls: toolCallsFromStream.map(tc => ({
               id: tc.id,
               type: 'function',
