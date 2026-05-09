@@ -96,17 +96,26 @@ export async function deleteChat(id: string): Promise<void> {
 
 // Compute how many tokens belong to the user message in this turn.
 // Back-filled onto the user ChatMessage when the assistant response arrives.
+// toolDefinitionsTokens: when MCP is active, these are included in every
+//   LLM call's prompt but shown as a separate segment in the context bar —
+//   subtract them to avoid double-counting.
 function computeUserTokens(
   promptTokens: number,
   prevAssistantUsage: ChatMessage['usage'] | undefined,
   prevThinkingInContext: boolean,
   sessionSystemPromptTokens: number | null,
-  isFirstTurn: boolean
+  isFirstTurn: boolean,
+  toolDefinitionsTokens?: number | null
 ): number {
+  const toolDefs = toolDefinitionsTokens ?? 0
   if (isFirstTurn) {
-    return Math.max(0, promptTokens - (sessionSystemPromptTokens ?? 0))
+    // First turn: promptTokens = system + toolDefs + user_text + tool_overhead_from_rounds.
+    // Subtract system and toolDefs to get (user_text + tool_overhead).
+    return Math.max(0, promptTokens - (sessionSystemPromptTokens ?? 0) - toolDefs)
   }
   if (!prevAssistantUsage) return 0
+  // Non-first turns: toolDefs appear in both current and prev prompts so they cancel
+  // out in the difference — do NOT subtract separately.
   const prevContentTokens = (prevAssistantUsage.completionTokens ?? 0) - (prevAssistantUsage.reasoningTokens ?? 0)
   const prevReasoningInContext = prevThinkingInContext ? (prevAssistantUsage.reasoningTokens ?? 0) : 0
   return Math.max(
@@ -364,66 +373,75 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
       if (toolCallsFromStream && toolCallsFromStream.length > 0 && toolRound < MAX_TOOL_ROUNDS) {
         toolRound++
 
-        // Convert streamed tool calls to ToolCallBlock[] with status: pending
-        const toolCallBlocks: ToolCallBlock[] = toolCallsFromStream.map(tc => ({
+        // Capture reasoning from this round before clearing — stored on each block for traceability
+        const roundThinking = assistantMsg.thinking ?? undefined
+
+        // Convert streamed tool calls to ToolCallBlock[] with status: pending.
+        // thinkingBefore preserves the model reasoning that led to this tool call.
+        let roundBlocks: ToolCallBlock[] = toolCallsFromStream.map(tc => ({
           id: tc.id,
           name: tc.name,
-          argumentsJson: tc.argumentsJson,  // correct field name from StreamedToolCall
+          argumentsJson: tc.argumentsJson,
           status: 'pending' as const,
+          thinkingBefore: roundThinking,
         }))
-        assistantMsg.toolCalls = toolCallBlocks
+
+        // Accumulate across rounds (don't replace — multi-round calls all visible)
+        const prevToolCalls = assistantMsg.toolCalls ?? []
+        assistantMsg.toolCalls = [...prevToolCalls, ...roundBlocks]
+        assistantMsg.thinking = undefined  // cleared; round thinking is in thinkingBefore
         assistantMsg.usage = usage
         assistantMsg.trace = traceData
 
-        // Update UI with tool calls visible
-        activeMessages.update(msgs =>
-          msgs.map(m => m.id === assistantMsg.id
-            ? { ...m, toolCalls: toolCallBlocks, content: assistantMsg.content, thinking: assistantMsg.thinking }
-            : m)
-        )
-
-        // Execute each tool call via MCP
-        const mcpHandle = mcpHandles.get(sessionId)
-        for (let i = 0; i < toolCallBlocks.length; i++) {
-          const block = toolCallBlocks[i]
-          block.status = 'running'
-          block.startedAt = Date.now()
-
+        // Helper: replace one item in roundBlocks immutably (Svelte 5 needs new references)
+        const updateBlock = (idx: number, patch: Partial<ToolCallBlock>) => {
+          roundBlocks = roundBlocks.map((b, j) => j === idx ? { ...b, ...patch } : b)
+          assistantMsg.toolCalls = [...prevToolCalls, ...roundBlocks]
           activeMessages.update(msgs =>
             msgs.map(m => m.id === assistantMsg.id
-              ? { ...m, toolCalls: [...toolCallBlocks] }
-              : m)
-          )
-
-          try {
-            let args: Record<string, unknown> = {}
-            try { args = JSON.parse(block.argumentsJson || '{}') } catch { /* use empty */ }
-
-            const result = mcpHandle
-              ? await mcpHandle.callTool(block.name, args)
-              : { content: `[MCP not initialized for tool: ${block.name}]`, isError: true, rawResult: null, durationMs: 0 }
-
-            block.status = result.isError ? 'error' : 'done'
-            block.completedAt = Date.now()
-            block.result = result.content
-            block.isError = result.isError
-            block.mcpRaw = result.rawResult
-          } catch (toolErr) {
-            block.status = 'error'
-            block.completedAt = Date.now()
-            block.result = toolErr instanceof Error ? toolErr.message : String(toolErr)
-            block.isError = true
-          }
-
-          activeMessages.update(msgs =>
-            msgs.map(m => m.id === assistantMsg.id
-              ? { ...m, toolCalls: [...toolCallBlocks] }
+              ? { ...m, toolCalls: assistantMsg.toolCalls, thinking: undefined }
               : m)
           )
         }
 
-        // Save assistant message with tool calls before the next round
-        assistantMsg.toolCalls = toolCallBlocks
+        // Show tool calls immediately (thinking cleared, tool calls shown)
+        activeMessages.update(msgs =>
+          msgs.map(m => m.id === assistantMsg.id
+            ? { ...m, toolCalls: assistantMsg.toolCalls, content: assistantMsg.content, thinking: undefined }
+            : m)
+        )
+
+        // Execute each tool call via MCP with immutable status updates
+        const mcpHandle = mcpHandles.get(sessionId)
+        for (let i = 0; i < roundBlocks.length; i++) {
+          updateBlock(i, { status: 'running', startedAt: Date.now() })
+
+          try {
+            let args: Record<string, unknown> = {}
+            try { args = JSON.parse(roundBlocks[i].argumentsJson || '{}') } catch { /* use empty */ }
+
+            const result = mcpHandle
+              ? await mcpHandle.callTool(roundBlocks[i].name, args)
+              : { content: `[MCP not initialized for tool: ${roundBlocks[i].name}]`, isError: true, rawResult: null, durationMs: 0 }
+
+            updateBlock(i, {
+              status: result.isError ? 'error' : 'done',
+              completedAt: Date.now(),
+              result: result.content,
+              isError: result.isError,
+              mcpRaw: result.rawResult,
+            })
+          } catch (toolErr) {
+            updateBlock(i, {
+              status: 'error',
+              completedAt: Date.now(),
+              result: toolErr instanceof Error ? toolErr.message : String(toolErr),
+              isError: true,
+            })
+          }
+        }
+
+        // Save assistant message with accumulated tool calls before the next round
         await saveChatMessage(assistantMsg)
 
         // Extend apiMessages with: assistant tool_calls + tool results for next round
@@ -438,16 +456,15 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
               function: { name: tc.name, arguments: tc.argumentsJson },
             })),
           },
-          ...toolCallBlocks.map(b => ({
+          ...roundBlocks.map(b => ({
             role: 'tool' as const,
             content: b.result ?? '',
             tool_call_id: b.id,
           })),
         ]
 
-        // Reset streaming state for next round
+        // Reset streaming fields for next round (thinking already cleared above)
         assistantMsg.content = ''
-        assistantMsg.thinking = undefined
         assistantMsg.streamingStartedAt = undefined
         assistantMsg.streamingCompletedAt = undefined
 
@@ -466,7 +483,8 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
           prevAssistantUsage,
           prevAssistant?.thinkingInContext ?? false,
           session.systemPromptTokens,
-          isFirstTurn
+          isFirstTurn,
+          session.toolDefinitionsTokens
         )
         userMsg.tokens = userTokens
         await saveChatMessage(userMsg)

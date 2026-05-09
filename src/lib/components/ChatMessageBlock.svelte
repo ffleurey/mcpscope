@@ -71,6 +71,14 @@
         <span class="partial-text">{message.content}</span>
       {/if}
     {:else}
+      {#if message.toolCalls && message.toolCalls.length > 0}
+        <div class="tool-calls-section">
+          {#each message.toolCalls as tc (tc.id)}
+            <ToolCallBlock toolCall={tc} />
+          {/each}
+        </div>
+      {/if}
+
       {#if message.thinking}
         <details class="thinking-block" bind:open={thinkingOpen}>
           <summary class="thinking-summary">
@@ -84,14 +92,6 @@
             {message.thinking}
           </div>
         </details>
-      {/if}
-
-      {#if message.toolCalls && message.toolCalls.length > 0}
-        <div class="tool-calls-section">
-          {#each message.toolCalls as tc (tc.id)}
-            <ToolCallBlock toolCall={tc} />
-          {/each}
-        </div>
       {/if}
 
       {#if message.content || message.status !== 'streaming'}

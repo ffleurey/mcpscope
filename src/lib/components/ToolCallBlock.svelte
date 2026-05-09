@@ -10,6 +10,7 @@
 
   let open = $state(false)
   let showRaw = $state(false)
+  let thinkingOpen = $state(false)
 
   let statusLabel = $derived.by(() => {
     switch (toolCall.status) {
@@ -31,7 +32,20 @@
     try { return JSON.parse(toolCall.argumentsJson || '{}') }
     catch { return toolCall.argumentsJson }
   })
+
+  let thinkingLineCount = $derived(
+    toolCall.thinkingBefore?.split('\n').filter(l => l.trim()).length ?? 0
+  )
 </script>
+
+{#if toolCall.thinkingBefore}
+  <details class="pre-thinking" bind:open={thinkingOpen}>
+    <summary class="pre-thinking-summary">
+      <span class="thinking-label">Thought ({thinkingLineCount} lines)</span>
+    </summary>
+    <div class="pre-thinking-content">{toolCall.thinkingBefore}</div>
+  </details>
+{/if}
 
 <details class="tool-block" bind:open>
   <summary class="tool-summary">
@@ -69,10 +83,61 @@
 {/if}
 
 <style>
+  /* Thinking block shown before the tool call (reasoning that led to it) */
+  .pre-thinking {
+    margin-bottom: 0.2rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .pre-thinking-summary {
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.72rem;
+    list-style: none;
+    user-select: none;
+    background: var(--bg-panel);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .pre-thinking-summary::-webkit-details-marker { display: none; }
+
+  .pre-thinking-summary::before {
+    content: '▶';
+    font-size: 0.55rem;
+    color: var(--text-muted);
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+
+  details[open] .pre-thinking-summary::before {
+    transform: rotate(90deg);
+  }
+
+  .thinking-label { color: var(--text-muted); }
+
+  .pre-thinking-content {
+    max-height: 10rem;
+    overflow-y: auto;
+    padding: 0.4rem 0.65rem;
+    font-size: 0.78rem;
+    font-style: italic;
+    color: var(--text-muted);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--bg);
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  /* Tool call block */
   .tool-block {
     border: 1px solid var(--border-subtle);
     border-radius: 4px;
-    margin: 0.4rem 0;
+    margin-bottom: 0.4rem;
     overflow: hidden;
   }
 

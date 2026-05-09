@@ -60,6 +60,7 @@ export interface ToolCallBlock {
   result?: string        // tool result text (joined if multiple content items)
   isError?: boolean      // true if tool returned isError: true
   mcpRaw?: unknown       // raw MCP tools/call response for ⋯ raw dialog
+  thinkingBefore?: string  // model reasoning that led to this tool call (for traceability)
 }
 
 // ---- Context bar segment types ----
