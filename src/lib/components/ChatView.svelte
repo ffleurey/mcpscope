@@ -76,7 +76,7 @@
 
   async function handleSend() {
     const text = composerText.trim()
-    if (!text || $isStreaming || isExhausted) return
+    if (!text || $isStreaming || isExhausted || isInitializing) return
 
     const effectiveConfig: ModelConfig | undefined = session
       ? session.modelConfigSnapshot
