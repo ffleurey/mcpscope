@@ -7,9 +7,6 @@
   import ContextBar from './ContextBar.svelte'
   import AbortedExchange from './AbortedExchange.svelte'
 
-  // True when the session has hit the context limit
-  let isExhausted = $derived(session?.isContextExhausted === true)
-
   let transcriptEl = $state<HTMLElement | null>(null)
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let composerText = $state('')
@@ -19,6 +16,9 @@
   // Derive active session from stores
   let session = $derived($chatSessions.find(s => s.id === $activeChatId) ?? null)
   let hasMessages = $derived($activeMessages.length > 0)
+
+  // True when the session has hit the context limit
+  let isExhausted = $derived(session?.isContextExhausted === true)
 
   // Thinking indicator: streaming but no assistant content yet
   let isThinking = $derived(
