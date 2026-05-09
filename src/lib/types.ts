@@ -163,11 +163,6 @@ export interface ChatMessage {
   // Tool calls made by this assistant message (only present if the model called tools)
   toolCalls?: ToolCallBlock[]
 
-  // Estimated token counts for tool-related content in this message
-  // (back-calculated from promptTokens delta across tool rounds)
-  toolCallTokens?: number       // tokens used by tool_calls[] in the assistant message
-  toolResponseTokens?: number   // tokens used by tool result messages
-
   toolRounds?: ToolRound[]   // one entry per LLM call; populated for tool-calling turns
 }
 

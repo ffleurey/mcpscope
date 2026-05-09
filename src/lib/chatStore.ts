@@ -160,15 +160,13 @@ function rebuildContextSegments(session: ChatSession, messages: ChatMessage[]): 
           segs.push({ type: 'reasoning', tokens: msg.usage.reasoningTokens, msgId: `${msg.id}-r` })
         }
         // Tool calls for legacy messages (no toolRounds tracking)
+        // Token counts are estimated from character lengths — these messages predate
+        // accurate per-round tracking.
         if (msg.toolCalls && msg.toolCalls.length > 0) {
           for (const tc of msg.toolCalls) {
-            const callTokens = msg.toolCallTokens
-              ? Math.round(msg.toolCallTokens / msg.toolCalls.length)
-              : Math.max(10, Math.ceil((tc.argumentsJson?.length ?? 0) / 4))
+            const callTokens = Math.max(10, Math.ceil((tc.argumentsJson?.length ?? 0) / 4))
             segs.push({ type: 'tool-call', tokens: callTokens, msgId: `${msg.id}-tc-${tc.id}` })
-            const responseTokens = msg.toolResponseTokens
-              ? Math.round(msg.toolResponseTokens / msg.toolCalls.length)
-              : Math.max(10, Math.ceil((tc.result?.length ?? 0) / 4))
+            const responseTokens = Math.max(10, Math.ceil((tc.result?.length ?? 0) / 4))
             segs.push({ type: 'tool-response', tokens: responseTokens, msgId: `${msg.id}-tr-${tc.id}` })
           }
         }
