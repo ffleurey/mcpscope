@@ -678,6 +678,7 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
                 thinkingInContext: false,
                 errorMessage: assistantMsg.errorMessage,
                 toolCalls: assistantMsg.toolCalls,
+                toolRounds: assistantMsg.toolRounds,
                 streamingStartedAt: assistantMsg.streamingStartedAt,
                 streamingCompletedAt: assistantMsg.streamingCompletedAt,
               }
