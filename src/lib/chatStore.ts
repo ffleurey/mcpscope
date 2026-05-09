@@ -1,6 +1,6 @@
 // Chat store: active chat sessions, messages, streaming state.
 import { writable, get } from 'svelte/store'
-import type { ChatSession, ChatMessage, ModelConfig, MessageTrace, ToolCallBlock, McpToolDefinition } from './types'
+import type { ChatSession, ChatMessage, ModelConfig, MessageTrace, ToolCallBlock, McpToolDefinition, ToolRound } from './types'
 import {
   getAllChatSessions,
   saveChatSession,
@@ -332,6 +332,7 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
     // Round 1 prompt = system + toolDefs + user, which is what we want for accurate
     // user-text token attribution. Subsequent rounds add tc/tr overhead on top.
     let firstRoundPromptTokens: number | null = null
+    const toolRounds: ToolRound[] = []
 
     // Build the initial API message history from completed past exchanges only.
     // We deliberately exclude the live streaming assistantMsg — the API messages
@@ -349,24 +350,53 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
           if (m.role === 'user') {
             parts.push({ role: 'user', content: m.content })
           } else if (m.role === 'assistant') {
-            const base: ApiMessage = {
-              role: 'assistant',
-              content: m.content || null,  // null when assistant only made tool_calls
-            }
-            if (m.thinkingInContext && m.thinking) base.reasoning_content = m.thinking
-            if (m.toolCalls && m.toolCalls.length > 0) {
-              base.tool_calls = m.toolCalls.map(tc => ({
-                id: tc.id,
-                type: 'function',
-                function: { name: tc.name, arguments: tc.argumentsJson },
-              }))
-            }
-            parts.push(base)
-            if (m.toolCalls && m.toolCalls.length > 0) {
-              for (const tc of m.toolCalls) {
-                if (tc.status === 'done' || tc.status === 'error') {
-                  parts.push({ role: 'tool', content: tc.result ?? '', tool_call_id: tc.id })
+            if (m.toolRounds && m.toolRounds.length > 0 && m.toolCalls) {
+              // Multi-round tool calls: reconstruct each round as separate assistant+tool interleaved messages.
+              // This is the correct OpenAI API format: each round is one assistant tool_calls message
+              // followed by one tool result message per tool called in that round.
+              for (const round of m.toolRounds) {
+                if (round.toolCallIds.length > 0) {
+                  const roundTcs = m.toolCalls.filter(tc => round.toolCallIds.includes(tc.id))
+                  parts.push({
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: roundTcs.map(tc => ({
+                      id: tc.id,
+                      type: 'function',
+                      function: { name: tc.name, arguments: tc.argumentsJson },
+                    })),
+                  })
+                  for (const tc of roundTcs) {
+                    parts.push({ role: 'tool', content: tc.result ?? '', tool_call_id: tc.id })
+                  }
+                } else {
+                  // Final round: regular assistant response
+                  const finalMsg: ApiMessage = { role: 'assistant', content: m.content || null }
+                  if (m.thinkingInContext && m.thinking) finalMsg.reasoning_content = m.thinking
+                  parts.push(finalMsg)
                 }
+              }
+            } else {
+              // Simple response (no tool calls) or legacy messages without toolRounds
+              const base: ApiMessage = {
+                role: 'assistant',
+                content: m.content || null,
+              }
+              if (m.thinkingInContext && m.thinking) base.reasoning_content = m.thinking
+              if (m.toolCalls && m.toolCalls.length > 0) {
+                base.tool_calls = m.toolCalls.map(tc => ({
+                  id: tc.id,
+                  type: 'function',
+                  function: { name: tc.name, arguments: tc.argumentsJson },
+                }))
+                parts.push(base)
+                for (const tc of m.toolCalls) {
+                  if (tc.status === 'done' || tc.status === 'error') {
+                    parts.push({ role: 'tool', content: tc.result ?? '', tool_call_id: tc.id })
+                  }
+                }
+              } else {
+                parts.push(base)
               }
             }
           }
@@ -442,6 +472,16 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
         // Capture round 1's prompt tokens before any tool overhead is added
         if (firstRoundPromptTokens === null && usage) {
           firstRoundPromptTokens = usage.promptTokens
+        }
+
+        // Record per-round token data for this LLM call
+        if (usage) {
+          toolRounds.push({
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            reasoningTokens: usage.reasoningTokens ?? 0,
+            toolCallIds: toolCallsFromStream.map(tc => tc.id),
+          })
         }
 
         // Capture reasoning from this round before clearing — stored on each block for traceability
@@ -552,23 +592,45 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
 
       // Back-fill user message tokens
       if (usage) {
-        // For first-turn tool-call sessions, firstRoundPromptTokens is the prompt
-        // from round 1 — before any tool overhead (tc/tr) was added.
-        // This gives us an accurate user text count:
-        //   user_text_tokens ≈ round1Prompt - system - toolDefs
-        // For all other cases (no tool calls, or non-first turns) fall back to
-        // the standard formula using the final round's promptTokens.
-        const promptForUserCalc = (isFirstTurn && firstRoundPromptTokens !== null)
-          ? firstRoundPromptTokens
-          : usage.promptTokens
-        const userTokens = computeUserTokens(
-          promptForUserCalc,
-          prevAssistantUsage,
-          prevAssistant?.thinkingInContext ?? false,
-          session.systemPromptTokens,
-          isFirstTurn,
-          session.toolDefinitionsTokens
-        )
+        // For tool-calling turns, use toolRounds[0].promptTokens as an accurate baseline.
+        // Round 0's prompt = system + toolDefs + user_text (no tool overhead yet).
+        // For simple turns (no tool rounds) fall through to the existing formula.
+        let userTokens: number
+        if (toolRounds.length > 0 && usage) {
+          const round0Prompt = toolRounds[0].promptTokens
+          if (isFirstTurn) {
+            // First turn: round0 = system + toolDefs + user
+            userTokens = Math.max(1, round0Prompt - (session.systemPromptTokens ?? 0) - (session.toolDefinitionsTokens ?? 0))
+          } else if (prevAssistantUsage) {
+            // Non-first turn: round0 = prevContext + toolDefs + user
+            // prevContext ≈ prevFinalUsage.totalTokens (prev total = prev prompt + prev completion)
+            // toolDefs appear in both, but prevFinalUsage already counts them; the diff gives user tokens
+            // More accurately: prevFinalUsage.totalTokens = prevPrompt + prevCompletion
+            // round0Prompt = prevPrompt + prevCompletion + user (toolDefs cancel)
+            userTokens = Math.max(1, round0Prompt - prevAssistantUsage.totalTokens)
+          } else {
+            userTokens = computeUserTokens(
+              round0Prompt,
+              prevAssistantUsage,
+              prevAssistant?.thinkingInContext ?? false,
+              session.systemPromptTokens,
+              isFirstTurn,
+              session.toolDefinitionsTokens
+            )
+          }
+        } else {
+          const promptForUserCalc = (isFirstTurn && firstRoundPromptTokens !== null)
+            ? firstRoundPromptTokens
+            : usage!.promptTokens
+          userTokens = computeUserTokens(
+            promptForUserCalc,
+            prevAssistantUsage,
+            prevAssistant?.thinkingInContext ?? false,
+            session.systemPromptTokens,
+            isFirstTurn,
+            session.toolDefinitionsTokens
+          )
+        }
         userMsg.tokens = userTokens
         await saveChatMessage(userMsg)
         activeMessages.update(msgs =>
@@ -584,6 +646,17 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
       assistantMsg.usage = usage
       assistantMsg.trace = traceData
       assistantMsg.streamingCompletedAt = assistantMsg.streamingCompletedAt ?? Date.now()
+
+      // Capture final round token data and attach all rounds to the message
+      if (usage && toolRounds.length > 0) {
+        toolRounds.push({
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+          reasoningTokens: usage.reasoningTokens ?? 0,
+          toolCallIds: [],
+        })
+        assistantMsg.toolRounds = toolRounds
+      }
 
       await saveChatMessage(assistantMsg)
       activeMessages.update(msgs =>

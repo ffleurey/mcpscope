@@ -86,7 +86,9 @@
           let toolOverhead = 0
           if (seenCompletedAssistant) {
             const nextAssistant = assistantByIndex[i + 1]
-            if (nextAssistant?.toolCalls && nextAssistant.toolCalls.length > 0) {
+            // If next assistant has toolRounds, user tokens were computed accurately in chatStore
+            // (using toolRounds[0].promptTokens baseline) — no look-ahead subtraction needed.
+            if (!nextAssistant?.toolRounds && nextAssistant?.toolCalls && nextAssistant.toolCalls.length > 0) {
               if (nextAssistant.toolCallTokens) {
                 toolOverhead += nextAssistant.toolCallTokens
               } else {
@@ -109,34 +111,71 @@
       } else if (msg.role === 'assistant' && msg.usage) {
         seenCompletedAssistant = true
         const u = msg.usage
-        const contentTokens = Math.max(0, u.completionTokens - (u.reasoningTokens ?? 0))
 
-        // Show reasoning if: this is the most recent turn (always show what was just generated)
-        // OR the turn has thinkingInContext=true (user chose to forward reasoning to next turn)
-        const isLastTurn = msg.id === lastAssistantId
-        if ((isLastTurn || msg.thinkingInContext) && u.reasoningTokens) {
-          segs.push({ type: 'reasoning', tokens: u.reasoningTokens, msgId: msg.id + '-r' })
-        }
+        if (msg.toolRounds && msg.toolRounds.length > 0) {
+          // Accurate per-round breakdown using prompt-token deltas between consecutive rounds.
+          // Round[r+1].promptTokens - round[r].promptTokens = exact token cost of round r's
+          // tool_calls + tool_results messages added to the context.
+          // Intermediate reasoning is NOT in context (stripped before each next-round call),
+          // so no reasoning segments for non-final rounds.
+          const rounds = msg.toolRounds
+          const finalRound = rounds[rounds.length - 1]
 
-        // Tool calls made in this turn
-        if (msg.toolCalls && msg.toolCalls.length > 0) {
-          for (const tc of msg.toolCalls) {
-            // Use exact tokens if available, otherwise estimate from JSON length
-            const callTokens = msg.toolCallTokens
-              ? Math.round(msg.toolCallTokens / msg.toolCalls.length)
-              : Math.max(10, Math.ceil((tc.argumentsJson?.length ?? 0) / 4))
-            segs.push({ type: 'tool-call', tokens: callTokens, msgId: msg.id + '-tc-' + tc.id })
+          for (let r = 0; r < rounds.length - 1; r++) {
+            const round = rounds[r]
+            const nextRound = rounds[r + 1]
+            const tcTrDelta = Math.max(0, nextRound.promptTokens - round.promptTokens)
+            const roundToolCalls = (msg.toolCalls ?? []).filter(tc => round.toolCallIds.includes(tc.id))
 
-            // Tool response immediately follows the call in context
-            const responseTokens = msg.toolResponseTokens
-              ? Math.round(msg.toolResponseTokens / msg.toolCalls.length)
-              : Math.max(10, Math.ceil((tc.result?.length ?? 0) / 4))
-            segs.push({ type: 'tool-response', tokens: responseTokens, msgId: msg.id + '-tr-' + tc.id })
+            if (roundToolCalls.length === 0) {
+              if (tcTrDelta > 0) {
+                segs.push({ type: 'tool-call', tokens: tcTrDelta, msgId: `${msg.id}-tc-r${r}` })
+              }
+            } else {
+              // Split the delta between tool-call and tool-response segments using string-length ratios.
+              // The combined total (tcTrDelta) is accurate; the tc/tr split is estimated.
+              const totalArgLen = roundToolCalls.reduce((s, tc) => s + (tc.argumentsJson?.length ?? 0), 0)
+              const totalResLen = roundToolCalls.reduce((s, tc) => s + (tc.result?.length ?? 0), 0)
+              const totalLen = (totalArgLen + totalResLen) || 1
+              for (const tc of roundToolCalls) {
+                const tcTokens = Math.max(1, Math.round(tcTrDelta * (tc.argumentsJson?.length ?? 0) / totalLen))
+                const trTokens = Math.max(1, Math.round(tcTrDelta * (tc.result?.length ?? 0) / totalLen))
+                segs.push({ type: 'tool-call', tokens: tcTokens, msgId: `${msg.id}-tc-${tc.id}` })
+                segs.push({ type: 'tool-response', tokens: trTokens, msgId: `${msg.id}-tr-${tc.id}` })
+              }
+            }
           }
-        }
 
-        if (contentTokens > 0) {
-          segs.push({ type: 'content', tokens: contentTokens, msgId: msg.id + '-c' })
+          // Final round: reasoning (always shown — just generated) + content
+          if (finalRound.reasoningTokens > 0) {
+            segs.push({ type: 'reasoning', tokens: finalRound.reasoningTokens, msgId: msg.id + '-r' })
+          }
+          const contentTokens = Math.max(0, finalRound.completionTokens - finalRound.reasoningTokens)
+          if (contentTokens > 0) {
+            segs.push({ type: 'content', tokens: contentTokens, msgId: msg.id + '-c' })
+          }
+        } else {
+          // Simple response (no tool rounds) or legacy messages without toolRounds
+          const contentTokens = Math.max(0, u.completionTokens - (u.reasoningTokens ?? 0))
+          const isLastTurn = msg.id === lastAssistantId
+          if ((isLastTurn || msg.thinkingInContext) && u.reasoningTokens) {
+            segs.push({ type: 'reasoning', tokens: u.reasoningTokens, msgId: msg.id + '-r' })
+          }
+          if (msg.toolCalls && msg.toolCalls.length > 0) {
+            for (const tc of msg.toolCalls) {
+              const callTokens = msg.toolCallTokens
+                ? Math.round(msg.toolCallTokens / msg.toolCalls.length)
+                : Math.max(10, Math.ceil((tc.argumentsJson?.length ?? 0) / 4))
+              segs.push({ type: 'tool-call', tokens: callTokens, msgId: msg.id + '-tc-' + tc.id })
+              const responseTokens = msg.toolResponseTokens
+                ? Math.round(msg.toolResponseTokens / msg.toolCalls.length)
+                : Math.max(10, Math.ceil((tc.result?.length ?? 0) / 4))
+              segs.push({ type: 'tool-response', tokens: responseTokens, msgId: msg.id + '-tr-' + tc.id })
+            }
+          }
+          if (contentTokens > 0) {
+            segs.push({ type: 'content', tokens: contentTokens, msgId: msg.id + '-c' })
+          }
         }
       }
     }

@@ -63,6 +63,16 @@ export interface ToolCallBlock {
   thinkingBefore?: string  // model reasoning that led to this tool call (for traceability)
 }
 
+// Per-LLM-call token accounting for tool-calling turns.
+// One entry per round in the tool call loop (including the final response round).
+// toolCallIds is empty for the final round (no tool calls made).
+export interface ToolRound {
+  promptTokens: number      // API promptTokens for this LLM call
+  completionTokens: number  // API completionTokens (includes reasoningTokens)
+  reasoningTokens: number   // API reasoningTokens for this round (0 if none)
+  toolCallIds: string[]     // ToolCallBlock IDs generated in this round (empty = final round)
+}
+
 // ---- Context bar segment types ----
 
 export type SegmentType =
@@ -154,5 +164,7 @@ export interface ChatMessage {
   // (back-calculated from promptTokens delta across tool rounds)
   toolCallTokens?: number       // tokens used by tool_calls[] in the assistant message
   toolResponseTokens?: number   // tokens used by tool result messages
+
+  toolRounds?: ToolRound[]   // one entry per LLM call; populated for tool-calling turns
 }
 
