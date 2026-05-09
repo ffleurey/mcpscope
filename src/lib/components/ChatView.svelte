@@ -152,8 +152,6 @@
     <ContextBar
       messages={$activeMessages}
       loadedContextLength={session?.loadedContextLength ?? null}
-      systemPromptTokens={session?.systemPromptTokens ?? null}
-      toolDefinitionsTokens={session?.toolDefinitionsTokens ?? null}
     />
   {/if}
 

@@ -1,6 +1,6 @@
 // Chat store: active chat sessions, messages, streaming state.
 import { writable, get } from 'svelte/store'
-import type { ChatSession, ChatMessage, ModelConfig, MessageTrace, ToolCallBlock, McpToolDefinition, ToolRound } from './types'
+import type { ChatSession, ChatMessage, ModelConfig, MessageTrace, ToolCallBlock, McpToolDefinition, ToolRound, ContextSegment } from './types'
 import {
   getAllChatSessions,
   saveChatSession,
@@ -16,6 +16,12 @@ export const chatSessions = writable<ChatSession[]>([])
 export const activeChatId = writable<string | null>(null)
 export const activeMessages = writable<ChatMessage[]>([])
 export const isStreaming = writable<boolean>(false)
+
+// The authoritative context bar segments for the active session.
+// Computed and maintained by chatStore (which owns what's in the API context window).
+// ContextBar is a pure renderer — it reads this store and adds only the live
+// thinking estimate on top (character-count estimate while tokens stream in).
+export const activeContextSegments = writable<ContextSegment[]>([])
 
 // One-shot signal: when set to a non-null string, ChatView restores it to the composer
 export const restoredComposerText = writable<string | null>(null)
@@ -37,6 +43,144 @@ const chatInitPromises = new Map<string, Promise<void>>()
 
 // Max tool call rounds per user turn before we stop and report
 const MAX_TOOL_ROUNDS = 5
+
+// Compute the authoritative list of context bar segments from the current session state
+// and messages. This is the single source of truth for what's in the API context window.
+//
+// Design principle: chatStore builds the apiMessages array and knows exactly what it sent
+// (and what it stripped). Rather than having ContextBar reverse-engineer this from usage stats,
+// chatStore calls rebuildContextSegments() after every meaningful state change and exposes
+// the result via activeContextSegments. ContextBar is then a pure renderer.
+//
+// The only thing NOT covered here is the live thinking estimate (growing orange bar while
+// the model is streaming reasoning tokens). That's added by ContextBar on top because it
+// requires character-count estimation before the final token count arrives from the API.
+function rebuildContextSegments(session: ChatSession, messages: ChatMessage[]): ContextSegment[] {
+  const segs: ContextSegment[] = []
+
+  // Fixed elements: always present in every API call
+  if (session.systemPromptTokens && session.systemPromptTokens > 0) {
+    segs.push({ type: 'system-prompt', tokens: session.systemPromptTokens, msgId: 'system' })
+  }
+  if (session.toolDefinitionsTokens && session.toolDefinitionsTokens > 0) {
+    segs.push({ type: 'tool-definitions', tokens: session.toolDefinitionsTokens, msgId: 'tool-defs' })
+  }
+
+  const visible = messages.filter(m => m.status !== 'aborted' && m.status !== 'error')
+  const streamingMsg = visible.find(m => m.status === 'streaming') ?? null
+
+  // Reasoning visibility policy (see REASONING STRIPPING POLICY in buildBaseApiMessages):
+  // Only the last COMPLETED assistant turn shows its reasoning in the bar (it was just
+  // generated and is still in the live context). All historical turns have reasoning stripped.
+  // While streaming, no completed turn is "last" — old orange bars disappear.
+  const lastCompletedAssistantId = streamingMsg
+    ? null
+    : visible.filter(m => m.role === 'assistant' && m.status === 'complete').at(-1)?.id ?? null
+
+  // Helper: split a combined tc+tr prompt delta into per-tool-call segments.
+  // The total (tcTrDelta) is accurate (derived from API promptToken deltas after subtracting
+  // reasoning). The tc/tr split within that total is estimated using string-length ratios —
+  // a local tokenizer would be needed for exact split, but the combined total is exact.
+  const pushTcTr = (tcTrDelta: number, msg: ChatMessage, round: ToolRound, r: number, prefix = '') => {
+    if (tcTrDelta <= 0) return
+    const roundTcs = (msg.toolCalls ?? []).filter(tc => round.toolCallIds.includes(tc.id))
+    if (roundTcs.length === 0) {
+      segs.push({ type: 'tool-call', tokens: tcTrDelta, msgId: `${msg.id}-${prefix}tc-r${r}` })
+    } else {
+      const totalArgLen = roundTcs.reduce((s, tc) => s + (tc.argumentsJson?.length ?? 0), 0)
+      const totalResLen = roundTcs.reduce((s, tc) => s + (tc.result?.length ?? 0), 0)
+      const totalLen = (totalArgLen + totalResLen) || 1
+      for (const tc of roundTcs) {
+        segs.push({ type: 'tool-call', tokens: Math.max(1, Math.round(tcTrDelta * (tc.argumentsJson?.length ?? 0) / totalLen)), msgId: `${msg.id}-${prefix}tc-${tc.id}` })
+        segs.push({ type: 'tool-response', tokens: Math.max(1, Math.round(tcTrDelta * (tc.result?.length ?? 0) / totalLen)), msgId: `${msg.id}-${prefix}tr-${tc.id}` })
+      }
+    }
+  }
+
+  for (const msg of visible) {
+    if (msg.status === 'streaming') {
+      // Streaming message: add segments for all COMPLETED intermediate rounds.
+      // The live thinking estimate (growing orange) is added by ContextBar on top.
+      const rounds = msg.toolRounds ?? []
+      if (rounds.length === 0) continue  // nothing accurate yet — skip until round 0 completes
+
+      // User segment: exact, derived from rounds[0].promptTokens minus all preceding segments.
+      // This telescopes correctly for any number of prior turns.
+      const prevTotal = segs.reduce((s, g) => s + g.tokens, 0)
+      segs.push({ type: 'user', tokens: Math.max(1, rounds[0].promptTokens - prevTotal), msgId: `${msg.id}-u` })
+
+      // Completed intermediate rounds (r and r+1 both known → delta is exact)
+      for (let r = 0; r < rounds.length - 1; r++) {
+        const round = rounds[r]
+        const nextRound = rounds[r + 1]
+        const rawDelta = Math.max(0, nextRound.promptTokens - round.promptTokens)
+        // Streaming msg is always the current turn → always show intermediate reasoning as orange
+        if (round.reasoningTokens > 0) {
+          segs.push({ type: 'reasoning', tokens: round.reasoningTokens, msgId: `${msg.id}-ir${r}` })
+        }
+        pushTcTr(Math.max(0, rawDelta - round.reasoningTokens), msg, round, r, 's')
+      }
+      continue
+    }
+
+    if (msg.role === 'user') {
+      if (msg.tokens && msg.tokens > 0) {
+        segs.push({ type: 'user', tokens: msg.tokens, msgId: msg.id })
+      }
+    } else if (msg.role === 'assistant' && msg.usage) {
+      const isLastTurn = msg.id === lastCompletedAssistantId
+
+      if (msg.toolRounds && msg.toolRounds.length > 0) {
+        const rounds = msg.toolRounds
+        const finalRound = rounds[rounds.length - 1]
+
+        for (let r = 0; r < rounds.length - 1; r++) {
+          const round = rounds[r]
+          const nextRound = rounds[r + 1]
+          const rawDelta = Math.max(0, nextRound.promptTokens - round.promptTokens)
+          // Historical turns: intermediate reasoning stripped → show only for isLastTurn
+          if (isLastTurn && round.reasoningTokens > 0) {
+            segs.push({ type: 'reasoning', tokens: round.reasoningTokens, msgId: `${msg.id}-ir${r}` })
+          }
+          pushTcTr(Math.max(0, rawDelta - round.reasoningTokens), msg, round, r)
+        }
+
+        // Final round reasoning: only for last turn or explicit thinkingInContext opt-in
+        if ((isLastTurn || msg.thinkingInContext) && finalRound.reasoningTokens > 0) {
+          segs.push({ type: 'reasoning', tokens: finalRound.reasoningTokens, msgId: `${msg.id}-r` })
+        }
+        const contentTokens = Math.max(0, finalRound.completionTokens - finalRound.reasoningTokens)
+        if (contentTokens > 0) {
+          segs.push({ type: 'content', tokens: contentTokens, msgId: `${msg.id}-c` })
+        }
+      } else {
+        // Simple response (no tool rounds) or legacy messages
+        const contentTokens = Math.max(0, msg.usage.completionTokens - (msg.usage.reasoningTokens ?? 0))
+        if ((isLastTurn || msg.thinkingInContext) && msg.usage.reasoningTokens) {
+          segs.push({ type: 'reasoning', tokens: msg.usage.reasoningTokens, msgId: `${msg.id}-r` })
+        }
+        // Tool calls for legacy messages (no toolRounds tracking)
+        if (msg.toolCalls && msg.toolCalls.length > 0) {
+          for (const tc of msg.toolCalls) {
+            const callTokens = msg.toolCallTokens
+              ? Math.round(msg.toolCallTokens / msg.toolCalls.length)
+              : Math.max(10, Math.ceil((tc.argumentsJson?.length ?? 0) / 4))
+            segs.push({ type: 'tool-call', tokens: callTokens, msgId: `${msg.id}-tc-${tc.id}` })
+            const responseTokens = msg.toolResponseTokens
+              ? Math.round(msg.toolResponseTokens / msg.toolCalls.length)
+              : Math.max(10, Math.ceil((tc.result?.length ?? 0) / 4))
+            segs.push({ type: 'tool-response', tokens: responseTokens, msgId: `${msg.id}-tr-${tc.id}` })
+          }
+        }
+        if (contentTokens > 0) {
+          segs.push({ type: 'content', tokens: contentTokens, msgId: `${msg.id}-c` })
+        }
+      }
+    }
+  }
+
+  return segs
+}
 
 export async function initChatStore(): Promise<void> {
   try {
@@ -165,6 +309,10 @@ async function initializeChatSession(sessionId: string, modelConfig: ModelConfig
     }
     await saveChatSession(session)
     chatSessions.update(list => list.map(s => s.id === sessionId ? session! : s))
+    // Rebuild context segments now that systemPromptTokens and toolDefinitionsTokens are known
+    if (get(activeChatId) === sessionId) {
+      activeContextSegments.set(rebuildContextSegments(session!, get(activeMessages)))
+    }
   } catch (e) {
     chatSessions.update(list =>
       list.map(s => s.id === sessionId ? { ...s, chatInitStatus: 'error' as const } : s)
@@ -178,6 +326,11 @@ export async function selectChat(id: string): Promise<void> {
   const msgs = await getMessagesForSession(id)
   msgs.sort((a, b) => a.timestamp - b.timestamp)
   activeMessages.set(msgs)
+  // Rebuild segments from the loaded messages so the bar is accurate immediately
+  const session = get(chatSessions).find(s => s.id === id)
+  if (session) {
+    activeContextSegments.set(rebuildContextSegments(session, msgs))
+  }
 }
 
 export async function deleteChat(id: string): Promise<void> {
@@ -192,6 +345,7 @@ export async function deleteChat(id: string): Promise<void> {
   if (get(activeChatId) === id) {
     activeChatId.set(null)
     activeMessages.set([])
+    activeContextSegments.set([])
   }
 }
 
@@ -320,6 +474,16 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
     streamingCompletedAt: undefined,
   }
   activeMessages.update(msgs => [...msgs, assistantMsg])
+
+  // Convenience: rebuild and publish context segments from current session + messages.
+  // Called after every meaningful state change so the bar stays accurate without ContextBar
+  // having to know anything about the context management policy.
+  const refreshSegments = () => {
+    const currentSession = get(chatSessions).find(s => s.id === sessionId)
+    if (currentSession) {
+      activeContextSegments.set(rebuildContextSegments(currentSession, get(activeMessages)))
+    }
+  }
 
   try {
     // --- Tool execution loop ---
@@ -534,6 +698,8 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
             ? { ...m, toolCalls: assistantMsg.toolCalls, content: assistantMsg.content, thinking: undefined, toolRounds: assistantMsg.toolRounds }
             : m)
         )
+        // User segment and completed intermediate rounds are now computable — refresh bar
+        refreshSegments()
 
         // Execute each tool call via MCP with immutable status updates
         const mcpHandle = mcpHandles.get(sessionId)
@@ -567,6 +733,7 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
 
         // Save assistant message with accumulated tool calls before the next round
         await saveChatMessage(assistantMsg)
+        refreshSegments()  // tool results are now in the message — tc/tr split becomes accurate
 
         // Extend apiMessages with: assistant tool_calls + tool results for next round.
         // We include reasoning_content so the model retains its chain-of-thought across
@@ -663,6 +830,7 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
         activeMessages.update(msgs =>
           msgs.map(m => m.id === userMsg.id ? { ...m, tokens: userTokens } : m)
         )
+        refreshSegments()  // user segment now has its accurate token count
       }
 
       // Mark assistant message complete
@@ -704,6 +872,8 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
             : m
         )
       )
+      // Turn is complete — final segment list (reasoning for last turn, content, etc.)
+      refreshSegments()
 
       finishedNormally = true
 

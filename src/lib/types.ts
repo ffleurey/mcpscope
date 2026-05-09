@@ -84,9 +84,12 @@ export type SegmentType =
   | 'tool-call'          // MCP tool invocation (assistant tool_calls message)
   | 'tool-response'      // MCP tool result (role: "tool" message)
 
-export interface TokenSegment {
+// A single segment in the context bar — one entry per logical "chunk" in the API context.
+// Built by chatStore (which owns what's in the context) and read by ContextBar (pure renderer).
+export interface ContextSegment {
   type: SegmentType
   tokens: number
+  msgId: string  // unique key for Svelte rendering
 }
 
 // Raw API response metadata captured per completion
