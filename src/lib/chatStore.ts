@@ -328,6 +328,10 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
     // On 'stop' (or any other finish_reason), we're done.
     let toolRound = 0
     let finishedNormally = false
+    // Prompt tokens from round 1 (before any tool call overhead is added).
+    // Round 1 prompt = system + toolDefs + user, which is what we want for accurate
+    // user-text token attribution. Subsequent rounds add tc/tr overhead on top.
+    let firstRoundPromptTokens: number | null = null
 
     // Build the initial API message history from completed past exchanges only.
     // We deliberately exclude the live streaming assistantMsg — the API messages
@@ -435,6 +439,11 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
       if (toolCallsFromStream && toolCallsFromStream.length > 0 && toolRound < MAX_TOOL_ROUNDS) {
         toolRound++
 
+        // Capture round 1's prompt tokens before any tool overhead is added
+        if (firstRoundPromptTokens === null && usage) {
+          firstRoundPromptTokens = usage.promptTokens
+        }
+
         // Capture reasoning from this round before clearing — stored on each block for traceability
         const roundThinking = assistantMsg.thinking ?? undefined
 
@@ -507,13 +516,14 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
         await saveChatMessage(assistantMsg)
 
         // Extend apiMessages with: assistant tool_calls + tool results for next round.
-        // Include reasoning_content so the model retains its chain-of-thought between rounds.
+        // We do NOT include reasoning_content — standard practice is to let the model
+        // re-reason from the tool results; echoing thinking back inflates prompt tokens
+        // and makes token attribution inaccurate.
         apiMessages = [
           ...apiMessages,
           {
             role: 'assistant',
             content: assistantMsg.content || null,
-            reasoning_content: roundThinking || undefined,
             tool_calls: toolCallsFromStream.map(tc => ({
               id: tc.id,
               type: 'function',
@@ -542,8 +552,17 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
 
       // Back-fill user message tokens
       if (usage) {
+        // For first-turn tool-call sessions, firstRoundPromptTokens is the prompt
+        // from round 1 — before any tool overhead (tc/tr) was added.
+        // This gives us an accurate user text count:
+        //   user_text_tokens ≈ round1Prompt - system - toolDefs
+        // For all other cases (no tool calls, or non-first turns) fall back to
+        // the standard formula using the final round's promptTokens.
+        const promptForUserCalc = (isFirstTurn && firstRoundPromptTokens !== null)
+          ? firstRoundPromptTokens
+          : usage.promptTokens
         const userTokens = computeUserTokens(
-          usage.promptTokens,
+          promptForUserCalc,
           prevAssistantUsage,
           prevAssistant?.thinkingInContext ?? false,
           session.systemPromptTokens,

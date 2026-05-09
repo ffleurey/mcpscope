@@ -59,11 +59,16 @@
 
     // Build an index of assistant messages by their position so user turns can
     // look ahead to the following assistant message (to avoid double-counting
-    // tool call overhead that was already baked into userMsg.tokens).
+    // tool call overhead that was already baked into userMsg.tokens for non-first turns).
     const assistantByIndex: Record<number, ChatMessage> = {}
     for (let i = 0; i < messages.length; i++) {
       if (messages[i].role === 'assistant') assistantByIndex[i] = messages[i]
     }
+
+    // Track which user message is the first turn — for first turns, userMsg.tokens is
+    // computed from round-1 promptTokens and is already accurate (user text only, no
+    // tool overhead). Look-ahead subtraction must NOT be applied for first turns.
+    let seenCompletedAssistant = false
 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i]
@@ -73,25 +78,28 @@
 
       if (msg.role === 'user') {
         if (msg.tokens && msg.tokens > 0) {
-          // Find the immediately following assistant message
-          const nextAssistant = assistantByIndex[i + 1]
+          // For non-first turns: userMsg.tokens may include tool call overhead from the
+          // CURRENT turn that was fed back into the LLM prompt. Subtract estimated overhead
+          // so the user segment and separate tool-call/tool-response segments don't double-count.
+          // For first turns: userMsg.tokens was computed from round-1 promptTokens (accurate),
+          // so NO subtraction is needed — applying it would make the segment negative.
           let toolOverhead = 0
-          if (nextAssistant?.toolCalls && nextAssistant.toolCalls.length > 0) {
-            // userMsg.tokens = user_text + tool_overhead (tool calls + responses that
-            // were fed back into the prompt). Subtract the estimated overhead so the
-            // 'user' segment and the tool-call/tool-response segments don't double-count.
-            if (nextAssistant.toolCallTokens) {
-              toolOverhead += nextAssistant.toolCallTokens
-            } else {
-              for (const tc of nextAssistant.toolCalls) {
-                toolOverhead += Math.max(10, Math.ceil((tc.argumentsJson?.length ?? 0) / 4))
+          if (seenCompletedAssistant) {
+            const nextAssistant = assistantByIndex[i + 1]
+            if (nextAssistant?.toolCalls && nextAssistant.toolCalls.length > 0) {
+              if (nextAssistant.toolCallTokens) {
+                toolOverhead += nextAssistant.toolCallTokens
+              } else {
+                for (const tc of nextAssistant.toolCalls) {
+                  toolOverhead += Math.max(10, Math.ceil((tc.argumentsJson?.length ?? 0) / 4))
+                }
               }
-            }
-            if (nextAssistant.toolResponseTokens) {
-              toolOverhead += nextAssistant.toolResponseTokens
-            } else {
-              for (const tc of nextAssistant.toolCalls) {
-                toolOverhead += Math.max(10, Math.ceil((tc.result?.length ?? 0) / 4))
+              if (nextAssistant.toolResponseTokens) {
+                toolOverhead += nextAssistant.toolResponseTokens
+              } else {
+                for (const tc of nextAssistant.toolCalls) {
+                  toolOverhead += Math.max(10, Math.ceil((tc.result?.length ?? 0) / 4))
+                }
               }
             }
           }
@@ -99,6 +107,7 @@
           segs.push({ type: 'user', tokens: userTokens, msgId: msg.id })
         }
       } else if (msg.role === 'assistant' && msg.usage) {
+        seenCompletedAssistant = true
         const u = msg.usage
         const contentTokens = Math.max(0, u.completionTokens - (u.reasoningTokens ?? 0))
 
