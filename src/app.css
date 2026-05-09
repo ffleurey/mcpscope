@@ -17,13 +17,13 @@
   --color-accent: #60a5fa;
 
   /* Context bar segment colors — one variable per token type */
-  --token-system-prompt:    #475569;  /* dark slate  — system prompt */
-  --token-user:             #3b82f6;  /* blue        — user messages */
-  --token-reasoning:        #f59e0b;  /* amber       — model chain-of-thought */
-  --token-content:          #10b981;  /* emerald     — model response content */
-  --token-tool-definitions: #8b5cf6;  /* purple      — MCP tool schemas (future) */
-  --token-tool-call:        #f97316;  /* orange      — MCP tool invocations (future) */
-  --token-tool-response:    #fb923c;  /* light orange — MCP tool results (future) */
+  --token-system-prompt:    #dc2626;  /* red          — system prompt */
+  --token-user:             #16a34a;  /* dark green   — user messages */
+  --token-reasoning:        #fb923c;  /* light orange — model chain-of-thought */
+  --token-content:          #86efac;  /* light green  — model response content */
+  --token-tool-definitions: #7c3aed;  /* purple       — MCP tool schemas */
+  --token-tool-call:        #1d4ed8;  /* dark blue    — MCP tool invocations */
+  --token-tool-response:    #60a5fa;  /* light blue   — MCP tool results */
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, 'Cascadia Code', Consolas, monospace;

@@ -255,6 +255,47 @@ export async function probeSystemPromptTokens(
   }
 }
 
+// Probe the accurate token count for tool definitions by sending a minimal request
+// that includes the tools[] array. Returns the number of tokens the tools add on top
+// of the system prompt, or null if the probe fails.
+export async function probeToolDefinitionsTokens(
+  baseUrl: string,
+  modelKey: string,
+  systemPrompt: string,
+  tools: LmToolParam[],
+  systemPromptTokens: number | null,
+  apiKey?: string
+): Promise<number | null> {
+  if (tools.length === 0) return 0
+  const url = `${rootUrl(baseUrl)}/v1/chat/completions`
+  try {
+    const body: Record<string, unknown> = {
+      model: modelKey,
+      messages: [
+        ...(systemPrompt.trim() ? [{ role: 'system', content: systemPrompt }] : []),
+        { role: 'user', content: 'hi' },
+      ],
+      tools: tools.map(t => ({ type: 'function', function: t.function })),
+      max_tokens: 1,
+      stream: false,
+    }
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(apiKey) },
+      body: JSON.stringify(body),
+    })
+    if (!r.ok) return null
+    const data = await r.json()
+    const total: number | undefined = data?.usage?.prompt_tokens
+    if (total == null) return null
+    // Subtract system prompt and the single user message (~1 token for "hi")
+    const systemCost = systemPromptTokens ?? 0
+    return Math.max(0, total - systemCost - 2)
+  } catch {
+    return null
+  }
+}
+
 export interface StreamTraceData {
   completionId: string
   model: string

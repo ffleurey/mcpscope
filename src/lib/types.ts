@@ -100,16 +100,18 @@ export interface ChatSession {
   mcpSnapshot: McpServerProfile | null
   createdAt: number
   updatedAt: number
-  // Context snapshot — captured at first message, never updated after
+  // Context snapshot — captured at chat creation (or at first message for older sessions)
   loadedContextLength: number | null   // from native API loaded_instances[0].config.context_length
   systemPromptTokens: number | null    // from probe API call; 0 if no system prompt; null if probe failed
+  // Initialization status — 'pending' until background init runs, then 'ready' or 'error'
+  chatInitStatus?: 'pending' | 'initializing' | 'ready' | 'error'
   // Set to true when the context window is full and no further messages can be sent
   isContextExhausted?: boolean
-  // MCP session state — initialized at first message, persists for session lifetime
+  // MCP session state — initialized at chat creation, persists for session lifetime
   mcpSessionId?: string                // Mcp-Session-Id header from initialize response
   mcpTools?: McpToolDefinition[]       // tools fetched at session init
   mcpInstructions?: string             // server instructions from initialize response
-  toolDefinitionsTokens?: number       // estimated token cost of the tools[] schemas
+  toolDefinitionsTokens?: number       // accurate token cost of the tools[] schemas (from probe API call)
 }
 
 export interface ChatMessage {

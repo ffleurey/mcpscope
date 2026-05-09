@@ -28,6 +28,10 @@
     $activeMessages[$activeMessages.length - 1].content === ''
   )
 
+  // Initialization status of the current session
+  let initStatus = $derived(session?.chatInitStatus ?? 'ready')
+  let isInitializing = $derived(initStatus === 'pending' || initStatus === 'initializing')
+
   let displayModelName = $derived(
     session?.modelConfigSnapshot?.name
       ?? $modelConfigs.find(c => c.id === selectedConfigId)?.name
@@ -110,7 +114,16 @@
   <div class="transcript" bind:this={transcriptEl}>
     {#if $activeMessages.length === 0}
       <div class="empty-transcript">
-        <span>Start a conversation…</span>
+        {#if isInitializing}
+          <span class="init-status">
+            <span class="init-spinner"></span>
+            {initStatus === 'initializing' ? 'Connecting to model and tools…' : 'Preparing…'}
+          </span>
+        {:else if initStatus === 'error'}
+          <span class="init-error">⚠ Initialization had errors — some features may be unavailable</span>
+        {:else}
+          <span>Start a conversation…</span>
+        {/if}
       </div>
     {:else}
       {#each $activeMessages as msg, i (msg.id)}
@@ -157,16 +170,16 @@
       <textarea
         bind:this={textareaEl}
         bind:value={composerText}
-        placeholder={isExhausted ? 'Context window full — start a new chat' : 'Message… (Ctrl+Enter to send)'}
+        placeholder={isExhausted ? 'Context window full — start a new chat' : isInitializing ? 'Initializing…' : 'Message… (Ctrl+Enter to send)'}
         rows="2"
-        disabled={$isStreaming || isExhausted}
+        disabled={$isStreaming || isExhausted || isInitializing}
         oninput={resizeTextarea}
         onkeydown={handleKeydown}
       ></textarea>
       <button
         class="btn btn-primary send-btn"
         onclick={handleSend}
-        disabled={$isStreaming || isExhausted || !composerText.trim()}
+        disabled={$isStreaming || isExhausted || isInitializing || !composerText.trim()}
       >
         Send
       </button>
@@ -375,5 +388,31 @@
     font-size: 0.8rem;
     padding: 0.5rem 1.25rem;
     text-align: center;
+  }
+
+  .init-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  .init-error {
+    color: var(--color-warning);
+    font-size: 0.85rem;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .init-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
   }
 </style>

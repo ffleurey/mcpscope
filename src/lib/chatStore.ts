@@ -8,7 +8,7 @@ import {
   getMessagesForSession,
   saveChatMessage,
 } from './db'
-import { streamChatCompletion, probeSystemPromptTokens, listModels, type LmToolParam } from './services/lmstudio'
+import { streamChatCompletion, probeSystemPromptTokens, probeToolDefinitionsTokens, listModels, type LmToolParam } from './services/lmstudio'
 import { lmConnections, mcpProfiles } from './connectionStore'
 import { McpClientHandle } from './services/mcpClient'
 
@@ -65,11 +65,115 @@ export async function createChat(modelConfig: ModelConfig, mcpProfileId: string 
     updatedAt: now,
     loadedContextLength: null,
     systemPromptTokens: null,
+    chatInitStatus: 'pending',
   }
   await saveChatSession(session)
   chatSessions.update(list => [session, ...list])
   activeChatId.set(session.id)
   activeMessages.set([])
+
+  // Initialize in background — fetches context length, probes system prompt tokens,
+  // and connects to MCP (if configured). User can see progress via chatInitStatus.
+  initializeChatSession(session.id, modelConfig).catch(e => {
+    // eslint-disable-next-line no-console
+    console.error('Background chat init failed:', e)
+  })
+}
+
+// Run all initialization tasks for a chat session. Called from createChat() in the
+// background so the chat opens instantly. Also called from sendMessage() as a
+// fallback for sessions loaded from DB that were never fully initialized.
+async function initializeChatSession(sessionId: string, modelConfig: ModelConfig): Promise<void> {
+  const sessions = get(chatSessions)
+  let session = sessions.find(s => s.id === sessionId)
+  if (!session) return
+
+  const connection = get(lmConnections).find(c => c.id === modelConfig.connectionId)
+  if (!connection) return
+
+  // Mark as initializing so the UI can show a spinner
+  session = { ...session, chatInitStatus: 'initializing' }
+  chatSessions.update(list => list.map(s => s.id === sessionId ? session! : s))
+
+  try {
+    // 1. Fetch loaded context length from native API
+    let loadedContextLength: number | null = null
+    try {
+      const models = await listModels(connection.baseUrl, connection.apiKey)
+      const liveModel = models.find(m => m.key === modelConfig.modelKey)
+      loadedContextLength = liveModel?.loadedContextLength ?? null
+    } catch { /* non-fatal */ }
+
+    // 2. Probe accurate system prompt token count
+    const systemPromptTokens = await probeSystemPromptTokens(
+      connection.baseUrl,
+      modelConfig.modelKey,
+      modelConfig.systemPrompt,
+      connection.apiKey
+    )
+
+    // 3. Initialize MCP session if a profile is configured
+    let mcpSessionUpdate: Partial<ChatSession> = {}
+    if (session.mcpProfileId && !session.mcpSessionId) {
+      const profile = get(mcpProfiles).find(p => p.id === session!.mcpProfileId)
+      if (profile) {
+        try {
+          let handle = mcpHandles.get(sessionId)
+          if (!handle) {
+            handle = new McpClientHandle(profile.url)
+            mcpHandles.set(sessionId, handle)
+          }
+          const info = await handle.initialize()
+
+          // Build LmToolParam array (same format used when calling the LLM)
+          const lmTools: LmToolParam[] = info.tools.map(t => ({
+            type: 'function',
+            function: { name: t.name, description: t.description, parameters: t.inputSchema },
+          }))
+
+          // 4. Probe the exact token cost of the tool definitions via API
+          const toolDefinitionsTokens = await probeToolDefinitionsTokens(
+            connection.baseUrl,
+            modelConfig.modelKey,
+            modelConfig.systemPrompt,
+            lmTools,
+            systemPromptTokens,
+            connection.apiKey
+          ) ?? Math.ceil(JSON.stringify(lmTools).length / 4)  // fallback: estimate
+
+          mcpSessionUpdate = {
+            mcpSessionId: info.sessionId,
+            mcpTools: info.tools,
+            mcpInstructions: info.instructions,
+            toolDefinitionsTokens,
+          }
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error('MCP init failed:', e)
+        }
+      }
+    }
+
+    // Re-fetch session in case it changed while we were initializing
+    const currentSessions = get(chatSessions)
+    session = currentSessions.find(s => s.id === sessionId) ?? session!
+
+    session = {
+      ...session,
+      loadedContextLength,
+      systemPromptTokens,
+      chatInitStatus: 'ready',
+      ...mcpSessionUpdate,
+    }
+    await saveChatSession(session)
+    chatSessions.update(list => list.map(s => s.id === sessionId ? session! : s))
+  } catch (e) {
+    // Mark as error so the UI can show a warning
+    chatSessions.update(list =>
+      list.map(s => s.id === sessionId ? { ...s, chatInitStatus: 'error' as const } : s)
+    )
+    throw e
+  }
 }
 
 export async function selectChat(id: string): Promise<void> {
@@ -136,61 +240,19 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
   const connection = get(lmConnections).find(c => c.id === modelConfig.connectionId)
   if (!connection) return
 
-  // On first message: snapshot model config, set title, and capture context metadata
+  // On first message: set title and snapshot model config.
+  // Initialization (context length, system prompt probe, MCP) is done eagerly in
+  // createChat() as a background task. As a fallback, re-run it here for sessions
+  // that were loaded from DB before the feature existed.
   const existingMessages = await getMessagesForSession(sessionId)
   const isFirstTurn = existingMessages.length === 0
 
   if (isFirstTurn) {
-    // Fetch the real loaded context length from the native API
-    let loadedContextLength: number | null = null
-    try {
-      const models = await listModels(connection.baseUrl, connection.apiKey)
-      const liveModel = models.find(m => m.key === modelConfig.modelKey)
-      loadedContextLength = liveModel?.loadedContextLength ?? null
-    } catch {
-      // Non-fatal — context bar won't show percentage but chat still works
-    }
-
-    // Probe system prompt token count
-    const systemPromptTokens = await probeSystemPromptTokens(
-      connection.baseUrl,
-      modelConfig.modelKey,
-      modelConfig.systemPrompt,
-      connection.apiKey
-    )
-
-    // Initialize MCP session if a profile is configured
-    let mcpSessionUpdate: Partial<ChatSession> = {}
-    if (session.mcpProfileId && !session.mcpSessionId) {
-      const profile = get(mcpProfiles).find(p => p.id === session!.mcpProfileId)
-      if (profile) {
-        try {
-          let handle = mcpHandles.get(sessionId)
-          if (!handle) {
-            handle = new McpClientHandle(profile.url)
-            mcpHandles.set(sessionId, handle)
-          }
-          const info = await handle.initialize()
-
-          // Estimate token cost of tools[] schemas
-          const toolsJson = JSON.stringify(info.tools.map(t => ({
-            type: 'function',
-            function: { name: t.name, description: t.description, parameters: t.inputSchema }
-          })))
-          const toolDefinitionsTokens = Math.ceil(toolsJson.length / 4)
-
-          mcpSessionUpdate = {
-            mcpSessionId: info.sessionId,
-            mcpTools: info.tools,
-            mcpInstructions: info.instructions,
-            toolDefinitionsTokens,
-          }
-        } catch (e) {
-          // Non-fatal — chat works without MCP, log to console
-          // eslint-disable-next-line no-console
-          console.error('MCP init failed:', e)
-        }
-      }
+    // Fallback init for sessions that haven't been initialized yet
+    if (!session.chatInitStatus || session.chatInitStatus === 'pending') {
+      await initializeChatSession(sessionId, modelConfig)
+      // Re-fetch session after init
+      session = get(chatSessions).find(s => s.id === sessionId) ?? session
     }
 
     session = {
@@ -198,10 +260,7 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
       title: userContent.slice(0, 60),
       modelConfigSnapshot: modelConfig,
       modelConfigId: modelConfig.id,
-      loadedContextLength,
-      systemPromptTokens,
       updatedAt: Date.now(),
-      ...mcpSessionUpdate,
     }
     await saveChatSession(session)
     chatSessions.update(list => list.map(s => (s.id === sessionId ? session! : s)))
@@ -444,12 +503,14 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
         // Save assistant message with accumulated tool calls before the next round
         await saveChatMessage(assistantMsg)
 
-        // Extend apiMessages with: assistant tool_calls + tool results for next round
+        // Extend apiMessages with: assistant tool_calls + tool results for next round.
+        // Include reasoning_content so the model retains its chain-of-thought between rounds.
         apiMessages = [
           ...apiMessages,
           {
             role: 'assistant',
             content: assistantMsg.content || null,
+            reasoning_content: roundThinking || undefined,
             tool_calls: toolCallsFromStream.map(tc => ({
               id: tc.id,
               type: 'function',
