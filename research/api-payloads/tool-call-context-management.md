@@ -806,7 +806,60 @@ def strip_reasoning_from_history(messages: list[Message]) -> list[Message]:
 
 ---
 
-### Annotated Bibliography
+## Section 6: Implemented Reasoning Stripping Policy (This App)
+
+This section documents the decisions made during implementation and explains the rationale.
+
+### 6.1 The Core Problem
+
+When a reasoning model calls tools in a multi-round turn, it generates `reasoning_content` (thinking tokens) before each tool call. This intermediate reasoning can be thousands of tokens per round. The question is: what to include in the API context for subsequent user turns?
+
+### 6.2 Decided Policy
+
+**Within a live tool-calling turn** (model is still working):
+- ALL `reasoning_content` IS kept between rounds — the model needs its chain-of-thought to interpret tool results correctly
+- Each intermediate `assistant` message includes `reasoning_content: roundThinking`
+
+**For historical turns** (turn is complete, user starts a new message):
+- ALL `reasoning_content` is stripped — both intermediate reasoning AND final response reasoning
+- The model only needs: tool call content + tool results + final answer to reconstruct history
+- Optional exception: if `thinkingInContext = true` on an assistant message, the **final** reasoning block is kept
+
+**Rationale:**
+1. The model does not need "why I decided to call this tool last turn" to answer a new question
+2. The tool call + result already tell that story implicitly
+3. Keeping intermediate reasoning from historical turns adds no task accuracy (no evidence to the contrary found in literature — see Gaps & Uncertainties §6)
+4. Significant token savings: 3 rounds × 2000 reasoning tokens each = 6000 tokens per historical turn
+
+### 6.3 Implementation
+
+**`chatStore.ts` — `buildBaseApiMessages()`:**
+- Reconstructs history for each API call
+- Intermediate rounds: `reasoning_content` field omitted entirely
+- Final round: `reasoning_content` omitted unless `thinkingInContext = true`
+
+**`chatStore.ts` — live `apiMessages` extension (within-turn loop):**
+- Each intermediate assistant message INCLUDES `reasoning_content: roundThinking`
+- This is intentional and must NOT be changed — the model needs it mid-task
+
+### 6.4 Context Bar Implications
+
+Because `reasoning_content` is sent in the live turn's API calls but stripped from historical reconstruction, prompt token deltas between rounds contain reasoning tokens:
+
+```
+rawDelta = round[r+1].promptTokens - round[r].promptTokens
+         = reasoning_r + tool_call_r + tool_result_r
+```
+
+The bar splits this as:
+- **Current turn** (`isLastTurn`): show `round.reasoningTokens` as orange, then `rawDelta - round.reasoningTokens` as tool-call/tool-response
+- **Historical turns**: show only `rawDelta - round.reasoningTokens` as tool-call/tool-response (reasoning was stripped, not in current context)
+
+**Known uncertainty**: Whether LM Studio/Qwen3.6 actually includes `reasoning_content` in `promptTokens` is empirically assumed from the observation that tc/tr bars appeared much larger than the actual tool content. If the delta subtraction produces consistent zero tc/tr segments, the assumption is wrong and we revert to raw delta.
+
+---
+
+
 
 | Source | URL | Coverage |
 |--------|-----|----------|

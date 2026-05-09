@@ -103,21 +103,27 @@
           const partialUserTokens = Math.max(1, rounds[0].promptTokens - currentSegsTotal)
           segs.push({ type: 'user', tokens: partialUserTokens, msgId: msg.id + '-u' })
 
-          // Show completed intermediate rounds (need both r and r+1 to compute delta)
+          // Show completed intermediate rounds (need both r and r+1 to compute delta).
+          // Streaming message is always the current turn so always show reasoning as orange.
           for (let r = 0; r < rounds.length - 1; r++) {
             const round = rounds[r]
             const nextRound = rounds[r + 1]
-            const delta = Math.max(0, nextRound.promptTokens - round.promptTokens)
+            const rawDelta = Math.max(0, nextRound.promptTokens - round.promptTokens)
+            // Show intermediate reasoning as orange (this is the current turn, it's in context)
+            if (round.reasoningTokens > 0) {
+              segs.push({ type: 'reasoning', tokens: round.reasoningTokens, msgId: `${msg.id}-ir${r}` })
+            }
+            const tcTrDelta = Math.max(0, rawDelta - round.reasoningTokens)
             const roundToolCalls = (msg.toolCalls ?? []).filter(tc => round.toolCallIds.includes(tc.id))
             if (roundToolCalls.length === 0) {
-              if (delta > 0) segs.push({ type: 'tool-call', tokens: delta, msgId: `${msg.id}-tc-r${r}` })
+              if (tcTrDelta > 0) segs.push({ type: 'tool-call', tokens: tcTrDelta, msgId: `${msg.id}-tc-r${r}` })
             } else {
               const totalArgLen = roundToolCalls.reduce((s, tc) => s + (tc.argumentsJson?.length ?? 0), 0)
               const totalResLen = roundToolCalls.reduce((s, tc) => s + (tc.result?.length ?? 0), 0)
               const totalLen = (totalArgLen + totalResLen) || 1
               for (const tc of roundToolCalls) {
-                const tcTokens = Math.max(1, Math.round(delta * (tc.argumentsJson?.length ?? 0) / totalLen))
-                const trTokens = Math.max(1, Math.round(delta * (tc.result?.length ?? 0) / totalLen))
+                const tcTokens = Math.max(1, Math.round(tcTrDelta * (tc.argumentsJson?.length ?? 0) / totalLen))
+                const trTokens = Math.max(1, Math.round(tcTrDelta * (tc.result?.length ?? 0) / totalLen))
                 segs.push({ type: 'tool-call', tokens: tcTokens, msgId: `${msg.id}-stc-${tc.id}` })
                 segs.push({ type: 'tool-response', tokens: trTokens, msgId: `${msg.id}-str-${tc.id}` })
               }
@@ -172,23 +178,32 @@
 
         if (msg.toolRounds && msg.toolRounds.length > 0) {
           // Accurate per-round breakdown using prompt-token deltas between consecutive rounds.
-          // Round[r+1].promptTokens - round[r].promptTokens = exact token cost of round r's
-          // tool_calls + tool_results messages added to the context.
-          // Intermediate reasoning is NOT in context (stripped before each next-round call),
-          // so no reasoning segments for non-final rounds.
+          // Round[r+1].promptTokens - round[r].promptTokens = exact tokens added to context
+          // in round r's tool_calls + tool_results messages.
+          //
+          // REASONING IN DELTA: within a live turn we send reasoning_content between rounds.
+          // If the API counts it in promptTokens (empirically observed: tc/tr bars appear
+          // much larger than the actual tool content), then rawDelta = reasoning + tc + tr.
+          // We subtract round.reasoningTokens to recover the true tc/tr cost, and show the
+          // reasoning as a separate orange segment — but only for the current (isLast) turn
+          // since historical turns no longer include reasoning in their reconstruction.
           const rounds = msg.toolRounds
           const finalRound = rounds[rounds.length - 1]
+          const isLastTurn = msg.id === lastAssistantId
 
           for (let r = 0; r < rounds.length - 1; r++) {
             const round = rounds[r]
             const nextRound = rounds[r + 1]
-            // Raw delta = exact tokens added to context in round r (tool call message + tool result).
-            // We do NOT subtract round.reasoningTokens here: LM Studio does not count echoed
-            // reasoning_content in promptTokens, so the delta already excludes it. Subtracting
-            // it would cause negative values that get clamped to zero, losing tool overhead tokens.
-            // Not showing a reasoning segment for intermediate rounds either — we can't confirm
-            // intermediate reasoning is actually in the LLM's active context window.
-            const tcTrDelta = Math.max(0, nextRound.promptTokens - round.promptTokens)
+            const rawDelta = Math.max(0, nextRound.promptTokens - round.promptTokens)
+
+            // Intermediate reasoning: show as orange only for isLast turn (it was in the
+            // live API context for that turn). For historical turns it was stripped from
+            // buildBaseApiMessages, so it is not in the current context window.
+            if (isLastTurn && round.reasoningTokens > 0) {
+              segs.push({ type: 'reasoning', tokens: round.reasoningTokens, msgId: `${msg.id}-ir${r}` })
+            }
+            // Subtract intermediate reasoning from the delta to get the true tc/tr cost.
+            const tcTrDelta = Math.max(0, rawDelta - round.reasoningTokens)
             const roundToolCalls = (msg.toolCalls ?? []).filter(tc => round.toolCallIds.includes(tc.id))
 
             if (roundToolCalls.length === 0) {
@@ -214,7 +229,6 @@
           // just generated and is still "present") or if thinkingInContext explicitly
           // keeps reasoning in the API context. For older turns the reasoning was stripped
           // before the next API call so it must NOT appear in the bar.
-          const isLastTurn = msg.id === lastAssistantId
           if ((isLastTurn || msg.thinkingInContext) && finalRound.reasoningTokens > 0) {
             segs.push({ type: 'reasoning', tokens: finalRound.reasoningTokens, msgId: msg.id + '-r' })
           }

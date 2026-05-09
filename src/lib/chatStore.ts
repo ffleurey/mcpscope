@@ -354,16 +354,22 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
               // Multi-round tool calls: reconstruct each round as separate assistant+tool interleaved messages.
               // This is the correct OpenAI API format: each round is one assistant tool_calls message
               // followed by one tool result message per tool called in that round.
+              //
+              // REASONING STRIPPING POLICY:
+              // Within a live turn we send reasoning_content between rounds so the model retains
+              // its chain-of-thought across tool calls. But once the final answer is given, that
+              // reasoning has no value for subsequent user turns — the model only needs to know
+              // what tools were called and what they returned. Stripping it also saves significant
+              // tokens (intermediate reasoning can be thousands of tokens per round).
               for (const round of m.toolRounds) {
                 if (round.toolCallIds.length > 0) {
                   const roundTcs = m.toolCalls.filter(tc => round.toolCallIds.includes(tc.id))
-                  // Reconstruct reasoning_content from thinkingBefore (stored on the first
-                  // tool call of the round — all calls in a round share the same thinking)
-                  const roundThinking = roundTcs[0]?.thinkingBefore
                   parts.push({
                     role: 'assistant',
                     content: null,
-                    ...(roundThinking ? { reasoning_content: roundThinking } : {}),
+                    // reasoning_content intentionally omitted for historical turns.
+                    // The model does not need "why I called this tool last turn" to answer
+                    // the next question — the tool call + result already tell that story.
                     tool_calls: roundTcs.map(tc => ({
                       id: tc.id,
                       type: 'function',
@@ -610,17 +616,24 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
             // First turn: round0 = system + toolDefs + user
             userTokens = Math.max(1, round0Prompt - (session.systemPromptTokens ?? 0) - (session.toolDefinitionsTokens ?? 0))
           } else if (prevAssistantUsage) {
-            // Non-first turn: use the same formula as computeUserTokens() which correctly
-            // accounts for reasoning being stripped from the previous turn's completion.
-            // round0Prompt = prevFinalPrompt + prevContent + user
-            //   (prevFinalReasoning is stripped before sending the next turn)
-            // Simple subtraction (round0Prompt - prevTotalTokens) underestimates by Rf_prev.
+            // Non-first turn: round0 = prevFinalPrompt + prevContent + user
+            // (prevFinalReasoning Rf is stripped before sending the next turn)
+            //
+            // Additionally, intermediate reasoning from prevAssistant's tool rounds was
+            // sent as reasoning_content in the LIVE apiMessages but is now stripped from
+            // buildBaseApiMessages for historical reconstruction. If the API counted that
+            // reasoning in prevAssistantUsage.promptTokens, round0Prompt is smaller than
+            // prevPromptTokens by exactly Σ(intermediate reasoning). Adding it back corrects
+            // the discrepancy.
             const prevContent = (prevAssistantUsage.completionTokens ?? 0) - (prevAssistantUsage.reasoningTokens ?? 0)
             const prevReasoningInCtx = (prevAssistant?.thinkingInContext ?? false)
               ? (prevAssistantUsage.reasoningTokens ?? 0)
               : 0
+            const prevIntermediateReasoning = (prevAssistant?.toolRounds ?? [])
+              .filter(r => r.toolCallIds.length > 0)
+              .reduce((s, r) => s + r.reasoningTokens, 0)
             userTokens = Math.max(1,
-              round0Prompt - prevAssistantUsage.promptTokens - prevContent - prevReasoningInCtx
+              round0Prompt - prevAssistantUsage.promptTokens - prevContent - prevReasoningInCtx + prevIntermediateReasoning
             )
           } else {
             userTokens = computeUserTokens(
