@@ -610,12 +610,18 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
             // First turn: round0 = system + toolDefs + user
             userTokens = Math.max(1, round0Prompt - (session.systemPromptTokens ?? 0) - (session.toolDefinitionsTokens ?? 0))
           } else if (prevAssistantUsage) {
-            // Non-first turn: round0 = prevContext + toolDefs + user
-            // prevContext ≈ prevFinalUsage.totalTokens (prev total = prev prompt + prev completion)
-            // toolDefs appear in both, but prevFinalUsage already counts them; the diff gives user tokens
-            // More accurately: prevFinalUsage.totalTokens = prevPrompt + prevCompletion
-            // round0Prompt = prevPrompt + prevCompletion + user (toolDefs cancel)
-            userTokens = Math.max(1, round0Prompt - prevAssistantUsage.totalTokens)
+            // Non-first turn: use the same formula as computeUserTokens() which correctly
+            // accounts for reasoning being stripped from the previous turn's completion.
+            // round0Prompt = prevFinalPrompt + prevContent + user
+            //   (prevFinalReasoning is stripped before sending the next turn)
+            // Simple subtraction (round0Prompt - prevTotalTokens) underestimates by Rf_prev.
+            const prevContent = (prevAssistantUsage.completionTokens ?? 0) - (prevAssistantUsage.reasoningTokens ?? 0)
+            const prevReasoningInCtx = (prevAssistant?.thinkingInContext ?? false)
+              ? (prevAssistantUsage.reasoningTokens ?? 0)
+              : 0
+            userTokens = Math.max(1,
+              round0Prompt - prevAssistantUsage.promptTokens - prevContent - prevReasoningInCtx
+            )
           } else {
             userTokens = computeUserTokens(
               round0Prompt,

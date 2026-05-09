@@ -39,10 +39,12 @@
   let allSegments = $derived.by((): BarSegment[] => {
     const segs: BarSegment[] = []
 
-    // Find the last completed assistant message — its reasoning is always shown
-    // because it was just generated (still "in" the generation context window).
-    // Older turns' reasoning is only shown if thinkingInContext is true.
-    const lastAssistantId = [...messages]
+    // While a streaming response is in progress the previous completed turn's reasoning
+    // is NOT in the current API context (it was stripped before sending). Only the
+    // actively-generating message contributes live orange via the streaming handler.
+    // When idle, the last completed turn's reasoning IS shown (it was just generated).
+    const hasStreamingMessage = messages.some(m => m.status === 'streaming')
+    const lastAssistantId = hasStreamingMessage ? null : [...messages]
       .reverse()
       .find(m => m.role === 'assistant' && m.status === 'complete' && m.usage)
       ?.id ?? null
@@ -91,10 +93,14 @@
         if (rounds.length === 0 && !hasThinking) continue
 
         if (rounds.length > 0) {
-          // User segment: computable from round[0].promptTokens
-          const partialUserTokens = Math.max(1,
-            rounds[0].promptTokens - (systemPromptTokens ?? 0) - (toolDefinitionsTokens ?? 0)
-          )
+          // User segment: compute by subtracting everything already accounted for in segs.
+          // segs at this point = S + TD + all previous completed turns (without their
+          // stripped reasoning). rounds[0].promptTokens = that same accumulated context + U_current.
+          // This telescopes correctly for any number of prior turns regardless of whether
+          // they had tool rounds. Using currentSegsTotal is far more robust than hardcoding
+          // "- S - TD" which only works for first-turn messages.
+          const currentSegsTotal = segs.reduce((s, g) => s + g.tokens, 0)
+          const partialUserTokens = Math.max(1, rounds[0].promptTokens - currentSegsTotal)
           segs.push({ type: 'user', tokens: partialUserTokens, msgId: msg.id + '-u' })
 
           // Show completed intermediate rounds (need both r and r+1 to compute delta)
@@ -204,8 +210,12 @@
             }
           }
 
-          // Final round: reasoning (always shown — just generated) + content
-          if (finalRound.reasoningTokens > 0) {
+          // Final round: reasoning is only shown if this is the last turn (reasoning was
+          // just generated and is still "present") or if thinkingInContext explicitly
+          // keeps reasoning in the API context. For older turns the reasoning was stripped
+          // before the next API call so it must NOT appear in the bar.
+          const isLastTurn = msg.id === lastAssistantId
+          if ((isLastTurn || msg.thinkingInContext) && finalRound.reasoningTokens > 0) {
             segs.push({ type: 'reasoning', tokens: finalRound.reasoningTokens, msgId: msg.id + '-r' })
           }
           const contentTokens = Math.max(0, finalRound.completionTokens - finalRound.reasoningTokens)
