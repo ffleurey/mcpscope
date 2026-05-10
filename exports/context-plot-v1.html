@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Context Plot: can you give me the highest and lower temperature outdoor fo</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+body{font-family:monospace;background:#1a1a2e;color:#eee;padding:20px}
+h1{color:#a78bfa}h2{color:#60a5fa;margin-top:28px}
+.box{background:#16213e;border-radius:8px;padding:18px;margin:18px 0}
+.find{background:#0f3460;border-radius:8px;padding:16px;margin:14px 0}
+.f{margin:8px 0}.ok{color:#34d399}.bad{color:#f87171}.warn{color:#fbbf24}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #334;padding:5px 9px;text-align:right;font-size:12px}
+th{background:#1e3a5f;color:#93c5fd}tr:nth-child(even){background:#1a2a3a}
+.cap{color:#64748b;font-style:italic}.ep{color:#f87171}.en{color:#34d399}
+</style>
+</head>
+<body>
+<h1>📊 Context Analysis — can you give me the highest and lower temperature outdoor fo</h1>
+<p>Export v1 | 32 messages | 38 LLM API calls | Context limit: 16384 | Actual cap observed: 9879</p>
+
+<div class="find">
+<h2>Key Findings</h2>
+<div class="f warn">Real (non-capped) data points: 38 of 38 total rounds</div>
+<div class="f bad">Max estimation error on real points: 3978 tokens ⚠</div>
+<div class="f bad">Context filled: turn 1 contains the first capped round</div>
+<div class="f warn">base estimate (system+tool-defs): 3939 tokens | actual round-0: 3374 tokens | error: 565</div>
+</div>
+
+<div class="box"><canvas id="chart" height="100"></canvas></div>
+
+<div class="box">
+<h2>All Rounds</h2>
+<table>
+<tr><th>Round</th><th>Our Estimate</th><th>Actual PT</th><th>Error</th><th>Note</th></tr>
+<tr class=""><td>T1_R0</td><td>3940</td><td>3374</td><td class="ep">+566</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T1_R1</td><td>4235</td><td>3669</td><td class="ep">+566</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T1_R2</td><td>5021</td><td>4455</td><td class="ep">+566</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T1_R3</td><td>10445</td><td>9879</td><td class="ep">+566</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T1_R4</td><td>10445</td><td>9879</td><td class="ep">+566</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T1_R5</td><td>10445</td><td>9879</td><td class="ep">+566</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T2</td><td>9921</td><td>9879</td><td class="">+42</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T3</td><td>10052</td><td>9879</td><td class="ep">+173</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T4_R0</td><td>10080</td><td>9879</td><td class="ep">+201</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T4_R1</td><td>10080</td><td>9879</td><td class="ep">+201</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T5_R0</td><td>10297</td><td>9879</td><td class="ep">+418</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T5_R1</td><td>10297</td><td>9879</td><td class="ep">+418</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T5_R2</td><td>10297</td><td>9879</td><td class="ep">+418</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T5_R3</td><td>10297</td><td>9879</td><td class="ep">+418</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T5_R4</td><td>10297</td><td>9879</td><td class="ep">+418</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T5_R5</td><td>10297</td><td>9878</td><td class="ep">+419</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T6</td><td>10882</td><td>9879</td><td class="ep">+1003</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T7_R0</td><td>10914</td><td>9879</td><td class="ep">+1035</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T7_R1</td><td>10914</td><td>9879</td><td class="ep">+1035</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T7_R2</td><td>10914</td><td>9879</td><td class="ep">+1035</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T8_R0</td><td>11030</td><td>9879</td><td class="ep">+1151</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T8_R1</td><td>11030</td><td>9879</td><td class="ep">+1151</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T9_R0</td><td>11215</td><td>9879</td><td class="ep">+1336</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T9_R1</td><td>11215</td><td>9879</td><td class="ep">+1336</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T10_R0</td><td>11412</td><td>9879</td><td class="ep">+1533</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T10_R1</td><td>11412</td><td>9879</td><td class="ep">+1533</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T10_R2</td><td>11412</td><td>9879</td><td class="ep">+1533</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T11_R0</td><td>11721</td><td>9879</td><td class="ep">+1842</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T11_R1</td><td>11721</td><td>9879</td><td class="ep">+1842</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T12_R0</td><td>12140</td><td>9879</td><td class="ep">+2261</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T12_R1</td><td>12140</td><td>9879</td><td class="ep">+2261</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T13_R0</td><td>12528</td><td>9879</td><td class="ep">+2649</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T13_R1</td><td>12528</td><td>9879</td><td class="ep">+2649</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T14</td><td>13019</td><td>9879</td><td class="ep">+3140</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T15</td><td>13799</td><td>9879</td><td class="ep">+3920</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T16_R0</td><td>13857</td><td>9879</td><td class="ep">+3978</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T16_R1</td><td>13857</td><td>9879</td><td class="ep">+3978</td><td><span class="ok">real</span></td></tr>
+<tr class=""><td>T16_R2</td><td>13857</td><td>9879</td><td class="ep">+3978</td><td><span class="ok">real</span></td></tr>
+</table>
+</div>
+
+<script>
+new Chart(document.getElementById('chart').getContext('2d'),{
+  type:'line',
+  data:{
+    labels:["T1_R0","T1_R1","T1_R2","T1_R3","T1_R4","T1_R5","T2","T3","T4_R0","T4_R1","T5_R0","T5_R1","T5_R2","T5_R3","T5_R4","T5_R5","T6","T7_R0","T7_R1","T7_R2","T8_R0","T8_R1","T9_R0","T9_R1","T10_R0","T10_R1","T10_R2","T11_R0","T11_R1","T12_R0","T12_R1","T13_R0","T13_R1","T14","T15","T16_R0","T16_R1","T16_R2"],
+    datasets:[
+      {label:'Actual promptTokens (API)',data:[3374,3669,4455,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9878,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879,9879],borderColor:'#34d399',pointRadius:3,borderWidth:2},
+      {label:'Our segment sum (bar estimate)',data:[3940,4235,5021,10445,10445,10445,9921,10052,10080,10080,10297,10297,10297,10297,10297,10297,10882,10914,10914,10914,11030,11030,11215,11215,11412,11412,11412,11721,11721,12140,12140,12528,12528,13019,13799,13857,13857,13857],borderColor:'#f87171',borderDash:[5,3],pointRadius:3,borderWidth:2},
+      {label:'Observed cap (9879)',data:new Array(38).fill(9879),borderColor:'#fbbf24',borderDash:[8,5],borderWidth:1,pointRadius:0},
+      {label:'Loaded ctx (16384)',data:new Array(38).fill(16384),borderColor:'#475569',borderDash:[3,3],borderWidth:1,pointRadius:0},
+    ]
+  },
+  options:{
+    responsive:true,
+    plugins:{
+      title:{display:true,text:'Context: Our Estimate vs API Ground Truth',color:'#a78bfa',font:{size:15}},
+      legend:{labels:{color:'#ccc'}},
+      tooltip:{callbacks:{footer:items=>{const i=items[0].dataIndex;return [false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false][i]?'⚠ Capped — comparison unreliable':'✓ Real data'}}}
+    },
+    scales:{x:{ticks:{color:'#888',maxRotation:90},grid:{color:'#334'}},y:{ticks:{color:'#888'},grid:{color:'#334'}}}
+  }
+});
+</script>
+</body>
+</html>

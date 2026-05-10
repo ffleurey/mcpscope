@@ -1,0 +1,1625 @@
+{
+  "exportedAt": "2026-05-10T07:09:08.014Z",
+  "session": {
+    "id": "fb9e64e7-6334-435f-b62b-f4855a0234fd",
+    "title": "can you give me the highest and lower temperature outdoor fo",
+    "modelConfigSnapshot": {
+      "id": "7f23eb26-2ec9-443e-be31-e48975794dda",
+      "name": "Qwen3.6 HA Data Scientist",
+      "connectionId": "52abba27-b945-4dcf-93db-f8d1e1bfd0df",
+      "modelKey": "qwen3.6-35b-a3b-apex",
+      "modelDisplayName": "Qwen3.6 35B A3B APEX I Compact",
+      "systemPrompt": "You are a Home Assistant Data Scientist. Use your MCP tools to fetch entity history and answer data queries accurately.\n\nInstructions:\n\n    Fetch: Identify the required entities and timeframes from the prompt, then use your tools to retrieve the data.\n    Analyze: Calculate the correct statistics to answer the prompt.\n    Respond: Provide a concise, factual answer. You must include a brief technical breakdown of your methodology.\n\nRequired Output Format:\n[Direct, concise answer stating the result]\n\nData Summary:\n\n    Source: [Entity IDs and exact timeframe]\n    Method: [Specific statistical operations applied]\n\nMaintain an objective, analytical tone. Do not invent data.",
+      "temperature": 0.7,
+      "createdAt": 1778185194811,
+      "updatedAt": 1778351778390
+    },
+    "mcpSnapshot": {
+      "id": "7b0557ed-886d-48a1-95b0-d5a70ba1643b",
+      "name": "Oslo HA",
+      "url": "http://localhost:3001/mcp",
+      "transport": "streamable-http",
+      "createdAt": 1778323591426,
+      "updatedAt": 1778323591426
+    },
+    "loadedContextLength": 16384,
+    "systemPromptTokens": 149,
+    "toolDefinitionsTokens": 3790,
+    "chatInitStatus": "ready",
+    "mcpTools": [
+      {
+        "name": "ha_history_get_current_time",
+        "description": "Returns the current date and time from the Home Assistant server (Oslo).\nCall this before making any time-based query when the user uses a relative or named time\nexpression: \"last month\", \"this winter\", \"yesterday\", \"last year\", \"in april\", \"recently\".\nDo not rely on your training data to infer the current date — it will often be wrong.\nSkip only if an absolute ISO date range has already been stated in this conversation."
+      },
+      {
+        "name": "ha_history_list_entities",
+        "description": "Lists Oslo sensors that have historical data available.\nEach result includes the entity_id, friendly name, room/area, unit, and sensor type.\nCall this to find the correct entity_id before querying any sensor you don't already know.\nSkip only if the entity_id was already resolved earlier in this conversation.\nAlso use for explicit sensor discovery or when a previous call returned an ambiguous match.\nBinary sensors (motion, doors, presence) require domain=\"binary_sensor\" — they have no\nstatistics so they won't appear in a plain search without specifying that domain."
+      },
+      {
+        "name": "ha_history_get_sensor_stats",
+        "description": "Computes statistics for a Oslo sensor measuring instantaneous values:\ntemperature, humidity, CO₂, pressure, illuminance, or power draw in Watts.\nUse for: \"What was the lowest temperature last night?\", \"Average humidity in April?\",\n\"Warmest day last summer?\", \"How many days above 25°C?\", \"Which days had frost?\",\n\"At what time of day is it usually hottest?\", \"Which day of the week is most humid?\"\nDo NOT use for energy consumption (kWh) → use ha_history_get_consumption.\nDo NOT use for event counting → use ha_history_detect_sessions."
+      },
+      {
+        "name": "ha_history_get_consumption",
+        "description": "Calculates how much energy, water, gas, or other resource was consumed or produced\nin Oslo over a time period.\nUse for: \"How much electricity did the car charger use in February?\",\n\"Total electricity last month?\", \"Solar production last week?\",\n\"Daily energy usage last week\", \"Compare grid import this April vs last April\",\n\"Which days used more than 10 kWh?\"\nAlways returns consumption (the change over the period), never raw meter readings.\nDo NOT use for instantaneous sensors (temperature, power in Watts) → use ha_history_get_sensor_stats."
+      },
+      {
+        "name": "ha_history_detect_sessions",
+        "description": "Detects and counts discrete events or activity sessions from Oslo sensor history.\nUse for: \"How many times was the car charged in February?\",\n\"How many times did the washing machine run last week?\",\n\"How many times was the front door opened?\",\n\"Was there any motion in the garage overnight?\",\n\"What was the longest charging session last month?\",\n\"What time did the last person go to bed each night this week?\" (use group_by=\"day\")\nFor numeric sensors (power in W): uses long-term hourly statistics — full date range.\nFor binary sensors (motion, door): uses state history — limited to ~10 days.\nReturns: event count, total duration, compact session list, or daily summary (with group_by=\"day\")."
+      }
+    ]
+  },
+  "contextSegments": [
+    {
+      "type": "system-prompt",
+      "tokens": 149,
+      "msgId": "system"
+    },
+    {
+      "type": "tool-definitions",
+      "tokens": 3790,
+      "msgId": "tool-defs"
+    },
+    {
+      "type": "user",
+      "tokens": 1,
+      "msgId": "66f01b9f-e791-43dc-bd4b-646f0606a459"
+    },
+    {
+      "type": "tool-call",
+      "tokens": 1,
+      "msgId": "46535554-d25f-49ca-813e-8451c03e75b1-tc-587251986"
+    },
+    {
+      "type": "tool-response",
+      "tokens": 45,
+      "msgId": "46535554-d25f-49ca-813e-8451c03e75b1-tr-587251986"
+    },
+    {
+      "type": "tool-call",
+      "tokens": 10,
+      "msgId": "46535554-d25f-49ca-813e-8451c03e75b1-tc-854155175"
+    },
+    {
+      "type": "tool-response",
+      "tokens": 150,
+      "msgId": "46535554-d25f-49ca-813e-8451c03e75b1-tr-854155175"
+    },
+    {
+      "type": "tool-call",
+      "tokens": 72,
+      "msgId": "46535554-d25f-49ca-813e-8451c03e75b1-tc-566746675"
+    },
+    {
+      "type": "tool-response",
+      "tokens": 91,
+      "msgId": "46535554-d25f-49ca-813e-8451c03e75b1-tr-566746675"
+    },
+    {
+      "type": "tool-call",
+      "tokens": 72,
+      "msgId": "46535554-d25f-49ca-813e-8451c03e75b1-tc-322405029"
+    },
+    {
+      "type": "tool-response",
+      "tokens": 91,
+      "msgId": "46535554-d25f-49ca-813e-8451c03e75b1-tr-322405029"
+    },
+    {
+      "type": "tool-call",
+      "tokens": 40,
+      "msgId": "46535554-d25f-49ca-813e-8451c03e75b1-tc-631154061"
+    },
+    {
+      "type": "tool-response",
+      "tokens": 5303,
+      "msgId": "46535554-d25f-49ca-813e-8451c03e75b1-tr-631154061"
+    },
+    {
+      "type": "content",
+      "tokens": 106,
+      "msgId": "46535554-d25f-49ca-813e-8451c03e75b1-c"
+    },
+    {
+      "type": "content",
+      "tokens": 131,
+      "msgId": "25e3bc79-c694-4797-8bca-d0ca850122c3-c"
+    },
+    {
+      "type": "content",
+      "tokens": 27,
+      "msgId": "a0bdec02-23ae-44db-a320-050f709fbd01-c"
+    },
+    {
+      "type": "user",
+      "tokens": 1,
+      "msgId": "db99bcfc-592c-4b5c-b9e3-e44830f2bcf9"
+    },
+    {
+      "type": "content",
+      "tokens": 216,
+      "msgId": "368cf42e-410c-4f8f-a6b0-2fca3362bdde-c"
+    },
+    {
+      "type": "user",
+      "tokens": 1,
+      "msgId": "e80eaf71-57e2-4d4b-9caf-bd15ef2ff288"
+    },
+    {
+      "type": "content",
+      "tokens": 585,
+      "msgId": "5ddb5a87-b5b4-47f8-a082-86fa312b786f-c"
+    },
+    {
+      "type": "content",
+      "tokens": 31,
+      "msgId": "6bd463bb-ebf1-41c5-825c-1290e577bf4c-c"
+    },
+    {
+      "type": "user",
+      "tokens": 1,
+      "msgId": "502da935-4178-4539-b12f-a5ffcce42598"
+    },
+    {
+      "type": "content",
+      "tokens": 115,
+      "msgId": "cba6a276-6866-456e-8bae-001304275fe0-c"
+    },
+    {
+      "type": "user",
+      "tokens": 1,
+      "msgId": "cf5b9f3f-0a87-43cf-b861-c473f4befeb0"
+    },
+    {
+      "type": "content",
+      "tokens": 184,
+      "msgId": "3a01ba61-983d-405f-be6b-ec499961399f-c"
+    },
+    {
+      "type": "user",
+      "tokens": 1,
+      "msgId": "c7475696-f7b4-4e37-8e3e-bac740d099db"
+    },
+    {
+      "type": "content",
+      "tokens": 196,
+      "msgId": "1fa28027-50df-4a8f-91a8-7d5a336d7b22-c"
+    },
+    {
+      "type": "user",
+      "tokens": 1,
+      "msgId": "c967b356-e3a2-4847-85df-32a934adff17"
+    },
+    {
+      "type": "content",
+      "tokens": 308,
+      "msgId": "131abff0-32e3-4c1d-8028-82113692120c-c"
+    },
+    {
+      "type": "user",
+      "tokens": 1,
+      "msgId": "23c68ca0-44ea-4094-b1a4-f8ef8142c804"
+    },
+    {
+      "type": "content",
+      "tokens": 418,
+      "msgId": "b3264ec4-c54c-4a78-9295-ff39090aea7f-c"
+    },
+    {
+      "type": "user",
+      "tokens": 1,
+      "msgId": "364ba653-c16e-484d-94fc-4cd0b7dae1f9"
+    },
+    {
+      "type": "content",
+      "tokens": 387,
+      "msgId": "41832d02-405f-4dd6-87b8-de2c2f52f12f-c"
+    },
+    {
+      "type": "user",
+      "tokens": 1,
+      "msgId": "a072918c-9b5f-41af-8a5e-77605f968dd2"
+    },
+    {
+      "type": "content",
+      "tokens": 491,
+      "msgId": "b6240802-33cf-4e68-8b7f-fbbc14e80a66-c"
+    },
+    {
+      "type": "content",
+      "tokens": 780,
+      "msgId": "af9b8c02-54b1-4b67-9cc9-3873d839620f-c"
+    },
+    {
+      "type": "content",
+      "tokens": 57,
+      "msgId": "6c47b78f-b039-434a-b6b2-c902742b1696-c"
+    },
+    {
+      "type": "user",
+      "tokens": 1,
+      "msgId": "caee264c-302d-4671-aed8-5d803e9e45c3"
+    },
+    {
+      "type": "reasoning",
+      "tokens": 1764,
+      "msgId": "0215bdb6-42a6-4731-9a12-180a4ac771f2-ir0"
+    },
+    {
+      "type": "reasoning",
+      "tokens": 131,
+      "msgId": "0215bdb6-42a6-4731-9a12-180a4ac771f2-ir1"
+    },
+    {
+      "type": "reasoning",
+      "tokens": 1189,
+      "msgId": "0215bdb6-42a6-4731-9a12-180a4ac771f2-r"
+    },
+    {
+      "type": "content",
+      "tokens": 659,
+      "msgId": "0215bdb6-42a6-4731-9a12-180a4ac771f2-c"
+    }
+  ],
+  "contextSegmentsTotal": 17600,
+  "messages": [
+    {
+      "id": "66f01b9f-e791-43dc-bd4b-646f0606a459",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778362272516,
+      "contentLength": 106,
+      "tokens": 1,
+      "thinkingLength": 0
+    },
+    {
+      "id": "46535554-d25f-49ca-813e-8451c03e75b1",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778362272520,
+      "contentLength": 2,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 874,
+        "totalTokens": 10753,
+        "reasoningTokens": 768
+      },
+      "toolRounds": [
+        {
+          "promptTokens": 3374,
+          "completionTokens": 140,
+          "reasoningTokens": 90,
+          "toolCallIds": [
+            "587251986",
+            "854155175"
+          ]
+        },
+        {
+          "promptTokens": 3669,
+          "completionTokens": 645,
+          "reasoningTokens": 459,
+          "toolCallIds": [
+            "566746675",
+            "322405029"
+          ]
+        },
+        {
+          "promptTokens": 4455,
+          "completionTokens": 199,
+          "reasoningTokens": 81,
+          "toolCallIds": [
+            "631154061"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 468,
+          "reasoningTokens": 448,
+          "toolCallIds": [
+            "535661595"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 112,
+          "reasoningTokens": 80,
+          "toolCallIds": [
+            "213014701"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 874,
+          "reasoningTokens": 768,
+          "toolCallIds": []
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "587251986",
+          "name": "ha_history_get_current_time",
+          "status": "done",
+          "argumentsLength": 2,
+          "resultLength": 143,
+          "thinkingBeforeLength": 427,
+          "durationMs": 20
+        },
+        {
+          "id": "854155175",
+          "name": "ha_history_list_entities",
+          "status": "done",
+          "argumentsLength": 32,
+          "resultLength": 481,
+          "thinkingBeforeLength": 427,
+          "durationMs": 15
+        },
+        {
+          "id": "566746675",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 115,
+          "resultLength": 144,
+          "thinkingBeforeLength": 1786,
+          "durationMs": 246
+        },
+        {
+          "id": "322405029",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 115,
+          "resultLength": 145,
+          "thinkingBeforeLength": 1786,
+          "durationMs": 149
+        },
+        {
+          "id": "631154061",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 154,
+          "resultLength": 20407,
+          "thinkingBeforeLength": 368,
+          "durationMs": 308
+        },
+        {
+          "id": "535661595",
+          "name": "ha_history_get_current_time",
+          "status": "done",
+          "argumentsLength": 2,
+          "resultLength": 143,
+          "thinkingBeforeLength": 1746,
+          "durationMs": 14
+        },
+        {
+          "id": "213014701",
+          "name": "ha_history_list_entities",
+          "status": "done",
+          "argumentsLength": 32,
+          "resultLength": 481,
+          "thinkingBeforeLength": 205,
+          "durationMs": 13
+        }
+      ],
+      "thinkingInContext": false,
+      "thinkingLength": 3203,
+      "trace": {
+        "completionId": "chatcmpl-lkpxxqtnpnblhl476r0iir",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778362319,
+        "finishReason": "tool_calls",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 874,
+          "total_tokens": 10753,
+          "completion_tokens_details": {
+            "reasoning_tokens": 768
+          }
+        }
+      }
+    },
+    {
+      "id": "f7e5e608-3102-49cf-ab88-d0a6b2dacfe0",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778362375030,
+      "contentLength": 29,
+      "tokens": 0,
+      "thinkingLength": 0
+    },
+    {
+      "id": "25e3bc79-c694-4797-8bca-d0ca850122c3",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778362375046,
+      "contentLength": 396,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 1794,
+        "totalTokens": 11673,
+        "reasoningTokens": 1663
+      },
+      "thinkingInContext": false,
+      "thinkingLength": 6390,
+      "trace": {
+        "completionId": "chatcmpl-ahikjvgb0fucrbz3iccpfh",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778362375,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 1794,
+          "total_tokens": 11673,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1663
+          }
+        }
+      }
+    },
+    {
+      "id": "17aa4dad-8d5e-4fd5-a157-7a3e18df8266",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778362425037,
+      "contentLength": 8,
+      "tokens": 0,
+      "thinkingLength": 0
+    },
+    {
+      "id": "a0bdec02-23ae-44db-a320-050f709fbd01",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778362425053,
+      "contentLength": 125,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 97,
+        "totalTokens": 9976,
+        "reasoningTokens": 70
+      },
+      "thinkingInContext": false,
+      "thinkingLength": 383,
+      "trace": {
+        "completionId": "chatcmpl-2934q6k01vka91znrxcylk",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778362427,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 97,
+          "total_tokens": 9976,
+          "completion_tokens_details": {
+            "reasoning_tokens": 70
+          }
+        }
+      }
+    },
+    {
+      "id": "db99bcfc-592c-4b5c-b9e3-e44830f2bcf9",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778362515829,
+      "contentLength": 39,
+      "tokens": 1,
+      "thinkingLength": 0
+    },
+    {
+      "id": "368cf42e-410c-4f8f-a6b0-2fca3362bdde",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778362515845,
+      "contentLength": 755,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 477,
+        "totalTokens": 10356,
+        "reasoningTokens": 261
+      },
+      "toolRounds": [
+        {
+          "promptTokens": 9879,
+          "completionTokens": 123,
+          "reasoningTokens": 81,
+          "toolCallIds": [
+            "657515397"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 477,
+          "reasoningTokens": 261,
+          "toolCallIds": []
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "657515397",
+          "name": "ha_history_list_entities",
+          "status": "done",
+          "argumentsLength": 42,
+          "resultLength": 2007,
+          "thinkingBeforeLength": 399,
+          "durationMs": 23
+        }
+      ],
+      "thinkingInContext": false,
+      "thinkingLength": 981,
+      "trace": {
+        "completionId": "chatcmpl-whv60rfmf1ffhweptf4l16",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778362527,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 477,
+          "total_tokens": 10356,
+          "completion_tokens_details": {
+            "reasoning_tokens": 261
+          }
+        }
+      }
+    },
+    {
+      "id": "e80eaf71-57e2-4d4b-9caf-bd15ef2ff288",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778362580580,
+      "contentLength": 28,
+      "tokens": 1,
+      "thinkingLength": 0
+    },
+    {
+      "id": "5ddb5a87-b5b4-47f8-a082-86fa312b786f",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778362580598,
+      "contentLength": 1808,
+      "usage": {
+        "promptTokens": 9878,
+        "completionTokens": 919,
+        "totalTokens": 10797,
+        "reasoningTokens": 334
+      },
+      "toolRounds": [
+        {
+          "promptTokens": 9879,
+          "completionTokens": 3577,
+          "reasoningTokens": 3022,
+          "toolCallIds": [
+            "811767523",
+            "183260614",
+            "816144130",
+            "930318590",
+            "690354687",
+            "518624939"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 770,
+          "reasoningTokens": 213,
+          "toolCallIds": [
+            "676394450",
+            "395416096",
+            "690383634",
+            "539712393",
+            "124800548",
+            "128232550"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 831,
+          "reasoningTokens": 237,
+          "toolCallIds": [
+            "548485090",
+            "298864782",
+            "994744771",
+            "441254948",
+            "935781204",
+            "390326044"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 165,
+          "reasoningTokens": 67,
+          "toolCallIds": [
+            "227433370"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 399,
+          "reasoningTokens": 301,
+          "toolCallIds": [
+            "314719902"
+          ]
+        },
+        {
+          "promptTokens": 9878,
+          "completionTokens": 919,
+          "reasoningTokens": 334,
+          "toolCallIds": []
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "811767523",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 115,
+          "resultLength": 145,
+          "thinkingBeforeLength": 9919,
+          "durationMs": 233
+        },
+        {
+          "id": "183260614",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 117,
+          "resultLength": 141,
+          "thinkingBeforeLength": 9919,
+          "durationMs": 157
+        },
+        {
+          "id": "816144130",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 115,
+          "resultLength": 214,
+          "thinkingBeforeLength": 9919,
+          "durationMs": 168
+        },
+        {
+          "id": "930318590",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 115,
+          "resultLength": 145,
+          "thinkingBeforeLength": 9919,
+          "durationMs": 14
+        },
+        {
+          "id": "690354687",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 115,
+          "resultLength": 143,
+          "thinkingBeforeLength": 9919,
+          "durationMs": 198
+        },
+        {
+          "id": "518624939",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 113,
+          "resultLength": 139,
+          "thinkingBeforeLength": 9919,
+          "durationMs": 160
+        },
+        {
+          "id": "676394450",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 115,
+          "resultLength": 145,
+          "thinkingBeforeLength": 793,
+          "durationMs": 288
+        },
+        {
+          "id": "395416096",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 117,
+          "resultLength": 141,
+          "thinkingBeforeLength": 793,
+          "durationMs": 184
+        },
+        {
+          "id": "690383634",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 115,
+          "resultLength": 144,
+          "thinkingBeforeLength": 793,
+          "durationMs": 15
+        },
+        {
+          "id": "539712393",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 115,
+          "resultLength": 143,
+          "thinkingBeforeLength": 793,
+          "durationMs": 187
+        },
+        {
+          "id": "124800548",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 113,
+          "resultLength": 139,
+          "thinkingBeforeLength": 793,
+          "durationMs": 161
+        },
+        {
+          "id": "128232550",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 119,
+          "resultLength": 154,
+          "thinkingBeforeLength": 793,
+          "durationMs": 157
+        },
+        {
+          "id": "548485090",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 119,
+          "resultLength": 151,
+          "thinkingBeforeLength": 715,
+          "durationMs": 176
+        },
+        {
+          "id": "298864782",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 122,
+          "resultLength": 249,
+          "thinkingBeforeLength": 715,
+          "durationMs": 109
+        },
+        {
+          "id": "994744771",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 122,
+          "resultLength": 249,
+          "thinkingBeforeLength": 715,
+          "durationMs": 109
+        },
+        {
+          "id": "441254948",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 122,
+          "resultLength": 249,
+          "thinkingBeforeLength": 715,
+          "durationMs": 105
+        },
+        {
+          "id": "935781204",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 122,
+          "resultLength": 249,
+          "thinkingBeforeLength": 715,
+          "durationMs": 103
+        },
+        {
+          "id": "390326044",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 128,
+          "resultLength": 261,
+          "thinkingBeforeLength": 715,
+          "durationMs": 103
+        },
+        {
+          "id": "227433370",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 119,
+          "resultLength": 151,
+          "thinkingBeforeLength": 260,
+          "durationMs": 158
+        },
+        {
+          "id": "314719902",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 119,
+          "resultLength": 154,
+          "thinkingBeforeLength": 749,
+          "durationMs": 216
+        }
+      ],
+      "thinkingInContext": false,
+      "thinkingLength": 870,
+      "trace": {
+        "completionId": "chatcmpl-p4rfei061uxslxnhezg",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778362735,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9878,
+          "completion_tokens": 919,
+          "total_tokens": 10797,
+          "completion_tokens_details": {
+            "reasoning_tokens": 334
+          }
+        }
+      }
+    },
+    {
+      "id": "fc0a5e9d-48a8-4042-a9ed-cc4c295d0328",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778362811407,
+      "contentLength": 6,
+      "tokens": 0,
+      "thinkingLength": 0
+    },
+    {
+      "id": "6bd463bb-ebf1-41c5-825c-1290e577bf4c",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778362811425,
+      "contentLength": 150,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 117,
+        "totalTokens": 9996,
+        "reasoningTokens": 86
+      },
+      "thinkingInContext": false,
+      "thinkingLength": 392,
+      "trace": {
+        "completionId": "chatcmpl-5tm7oqkocy8b4h13lucbys",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778362812,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 117,
+          "total_tokens": 9996,
+          "completion_tokens_details": {
+            "reasoning_tokens": 86
+          }
+        }
+      }
+    },
+    {
+      "id": "502da935-4178-4539-b12f-a5ffcce42598",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778362911168,
+      "contentLength": 47,
+      "tokens": 1,
+      "thinkingLength": 0
+    },
+    {
+      "id": "cba6a276-6866-456e-8bae-001304275fe0",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778362911184,
+      "contentLength": 373,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 183,
+        "totalTokens": 10062,
+        "reasoningTokens": 68
+      },
+      "toolRounds": [
+        {
+          "promptTokens": 9879,
+          "completionTokens": 274,
+          "reasoningTokens": 244,
+          "toolCallIds": [
+            "508831700"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 454,
+          "reasoningTokens": 362,
+          "toolCallIds": [
+            "528371116"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 183,
+          "reasoningTokens": 68,
+          "toolCallIds": []
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "508831700",
+          "name": "ha_history_list_entities",
+          "status": "done",
+          "argumentsLength": 16,
+          "resultLength": 967,
+          "thinkingBeforeLength": 785,
+          "durationMs": 16
+        },
+        {
+          "id": "528371116",
+          "name": "ha_history_detect_sessions",
+          "status": "done",
+          "argumentsLength": 108,
+          "resultLength": 353,
+          "thinkingBeforeLength": 1405,
+          "durationMs": 123
+        }
+      ],
+      "thinkingInContext": false,
+      "thinkingLength": 215,
+      "trace": {
+        "completionId": "chatcmpl-dnx47us384432jsejg2f41",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778362946,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 183,
+          "total_tokens": 10062,
+          "completion_tokens_details": {
+            "reasoning_tokens": 68
+          }
+        }
+      }
+    },
+    {
+      "id": "cf5b9f3f-0a87-43cf-b861-c473f4befeb0",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778362997462,
+      "contentLength": 72,
+      "tokens": 1,
+      "thinkingLength": 0
+    },
+    {
+      "id": "3a01ba61-983d-405f-be6b-ec499961399f",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778362997480,
+      "contentLength": 648,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 300,
+        "totalTokens": 10179,
+        "reasoningTokens": 116
+      },
+      "toolRounds": [
+        {
+          "promptTokens": 9879,
+          "completionTokens": 2357,
+          "reasoningTokens": 2286,
+          "toolCallIds": [
+            "141353675"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 300,
+          "reasoningTokens": 116,
+          "toolCallIds": []
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "141353675",
+          "name": "ha_history_detect_sessions",
+          "status": "done",
+          "argumentsLength": 84,
+          "resultLength": 343,
+          "thinkingBeforeLength": 6854,
+          "durationMs": 420
+        }
+      ],
+      "thinkingInContext": false,
+      "thinkingLength": 376,
+      "trace": {
+        "completionId": "chatcmpl-rbrmv8yk5k8ewmr82o1fv",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778363050,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 300,
+          "total_tokens": 10179,
+          "completion_tokens_details": {
+            "reasoning_tokens": 116
+          }
+        }
+      }
+    },
+    {
+      "id": "c7475696-f7b4-4e37-8e3e-bac740d099db",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778363155494,
+      "contentLength": 187,
+      "tokens": 1,
+      "thinkingLength": 0
+    },
+    {
+      "id": "1fa28027-50df-4a8f-91a8-7d5a336d7b22",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778363155504,
+      "contentLength": 759,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 334,
+        "totalTokens": 10213,
+        "reasoningTokens": 138
+      },
+      "toolRounds": [
+        {
+          "promptTokens": 9879,
+          "completionTokens": 639,
+          "reasoningTokens": 537,
+          "toolCallIds": [
+            "313354116"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 334,
+          "reasoningTokens": 138,
+          "toolCallIds": []
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "313354116",
+          "name": "ha_history_get_consumption",
+          "status": "done",
+          "argumentsLength": 125,
+          "resultLength": 169,
+          "thinkingBeforeLength": 1836,
+          "durationMs": 114
+        }
+      ],
+      "thinkingInContext": false,
+      "thinkingLength": 620,
+      "trace": {
+        "completionId": "chatcmpl-iakol1jxura1g6c3eh9c9",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778363179,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 334,
+          "total_tokens": 10213,
+          "completion_tokens_details": {
+            "reasoning_tokens": 138
+          }
+        }
+      }
+    },
+    {
+      "id": "c967b356-e3a2-4847-85df-32a934adff17",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778363247801,
+      "contentLength": 68,
+      "tokens": 1,
+      "thinkingLength": 0
+    },
+    {
+      "id": "131abff0-32e3-4c1d-8028-82113692120c",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778363247811,
+      "contentLength": 834,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 755,
+        "totalTokens": 10634,
+        "reasoningTokens": 447
+      },
+      "toolRounds": [
+        {
+          "promptTokens": 9879,
+          "completionTokens": 1283,
+          "reasoningTokens": 1263,
+          "toolCallIds": [
+            "845048768"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 198,
+          "reasoningTokens": 122,
+          "toolCallIds": [
+            "347222504"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 755,
+          "reasoningTokens": 447,
+          "toolCallIds": []
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "845048768",
+          "name": "ha_history_get_current_time",
+          "status": "done",
+          "argumentsLength": 2,
+          "resultLength": 143,
+          "thinkingBeforeLength": 4650,
+          "durationMs": 22
+        },
+        {
+          "id": "347222504",
+          "name": "ha_history_detect_sessions",
+          "status": "done",
+          "argumentsLength": 97,
+          "resultLength": 528,
+          "thinkingBeforeLength": 390,
+          "durationMs": 136
+        }
+      ],
+      "thinkingInContext": false,
+      "thinkingLength": 1768,
+      "trace": {
+        "completionId": "chatcmpl-8w842h3kwttwh6vkbqxih",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778363296,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 755,
+          "total_tokens": 10634,
+          "completion_tokens_details": {
+            "reasoning_tokens": 447
+          }
+        }
+      }
+    },
+    {
+      "id": "23c68ca0-44ea-4094-b1a4-f8ef8142c804",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778363349326,
+      "contentLength": 82,
+      "tokens": 1,
+      "thinkingLength": 0
+    },
+    {
+      "id": "b3264ec4-c54c-4a78-9295-ff39090aea7f",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778363349343,
+      "contentLength": 1279,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 648,
+        "totalTokens": 10527,
+        "reasoningTokens": 230
+      },
+      "toolRounds": [
+        {
+          "promptTokens": 9879,
+          "completionTokens": 1186,
+          "reasoningTokens": 784,
+          "toolCallIds": [
+            "698057298",
+            "931183219",
+            "732195265",
+            "690064415"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 648,
+          "reasoningTokens": 230,
+          "toolCallIds": []
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "698057298",
+          "name": "ha_history_get_consumption",
+          "status": "done",
+          "argumentsLength": 125,
+          "resultLength": 169,
+          "thinkingBeforeLength": 2241,
+          "durationMs": 113
+        },
+        {
+          "id": "931183219",
+          "name": "ha_history_get_consumption",
+          "status": "done",
+          "argumentsLength": 125,
+          "resultLength": 170,
+          "thinkingBeforeLength": 2241,
+          "durationMs": 110
+        },
+        {
+          "id": "732195265",
+          "name": "ha_history_get_consumption",
+          "status": "done",
+          "argumentsLength": 125,
+          "resultLength": 169,
+          "thinkingBeforeLength": 2241,
+          "durationMs": 107
+        },
+        {
+          "id": "690064415",
+          "name": "ha_history_get_consumption",
+          "status": "done",
+          "argumentsLength": 125,
+          "resultLength": 169,
+          "thinkingBeforeLength": 2241,
+          "durationMs": 14
+        }
+      ],
+      "thinkingInContext": false,
+      "thinkingLength": 707,
+      "trace": {
+        "completionId": "chatcmpl-cd0z5troiwd8zzhjhrk8kw",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778363382,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 648,
+          "total_tokens": 10527,
+          "completion_tokens_details": {
+            "reasoning_tokens": 230
+          }
+        }
+      }
+    },
+    {
+      "id": "364ba653-c16e-484d-94fc-4cd0b7dae1f9",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778363453660,
+      "contentLength": 86,
+      "tokens": 1,
+      "thinkingLength": 0
+    },
+    {
+      "id": "41832d02-405f-4dd6-87b8-de2c2f52f12f",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778363453667,
+      "contentLength": 1579,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 645,
+        "totalTokens": 10524,
+        "reasoningTokens": 258
+      },
+      "toolRounds": [
+        {
+          "promptTokens": 9879,
+          "completionTokens": 344,
+          "reasoningTokens": 302,
+          "toolCallIds": [
+            "132806701"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 645,
+          "reasoningTokens": 258,
+          "toolCallIds": []
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "132806701",
+          "name": "ha_history_list_entities",
+          "status": "done",
+          "argumentsLength": 36,
+          "resultLength": 1238,
+          "thinkingBeforeLength": 1294,
+          "durationMs": 18
+        }
+      ],
+      "thinkingInContext": false,
+      "thinkingLength": 1114,
+      "trace": {
+        "completionId": "chatcmpl-a2avz1g2vik2fo685m29of",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778363472,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 645,
+          "total_tokens": 10524,
+          "completion_tokens_details": {
+            "reasoning_tokens": 258
+          }
+        }
+      }
+    },
+    {
+      "id": "a072918c-9b5f-41af-8a5e-77605f968dd2",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778363532392,
+      "contentLength": 60,
+      "tokens": 1,
+      "thinkingLength": 0
+    },
+    {
+      "id": "b6240802-33cf-4e68-8b7f-fbbc14e80a66",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778363532408,
+      "contentLength": 1738,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 995,
+        "totalTokens": 10874,
+        "reasoningTokens": 504
+      },
+      "toolRounds": [
+        {
+          "promptTokens": 9879,
+          "completionTokens": 1160,
+          "reasoningTokens": 603,
+          "toolCallIds": [
+            "999413108",
+            "697130663",
+            "684000044",
+            "307289503",
+            "121440678",
+            "795703432"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 995,
+          "reasoningTokens": 504,
+          "toolCallIds": []
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "999413108",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 111,
+          "resultLength": 119,
+          "thinkingBeforeLength": 2094,
+          "durationMs": 159
+        },
+        {
+          "id": "697130663",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 111,
+          "resultLength": 136,
+          "thinkingBeforeLength": 2094,
+          "durationMs": 158
+        },
+        {
+          "id": "684000044",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 120,
+          "resultLength": 147,
+          "thinkingBeforeLength": 2094,
+          "durationMs": 163
+        },
+        {
+          "id": "307289503",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 122,
+          "resultLength": 151,
+          "thinkingBeforeLength": 2094,
+          "durationMs": 152
+        },
+        {
+          "id": "121440678",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 132,
+          "resultLength": 269,
+          "thinkingBeforeLength": 2094,
+          "durationMs": 109
+        },
+        {
+          "id": "795703432",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 108,
+          "resultLength": 138,
+          "thinkingBeforeLength": 2094,
+          "durationMs": 150
+        }
+      ],
+      "thinkingInContext": false,
+      "thinkingLength": 2021,
+      "trace": {
+        "completionId": "chatcmpl-1u2qy3sfdo4wfl5xkm85rm",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778363565,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 995,
+          "total_tokens": 10874,
+          "completion_tokens_details": {
+            "reasoning_tokens": 504
+          }
+        }
+      }
+    },
+    {
+      "id": "6a2fbe95-c01d-47b4-bb5d-59a141e02e07",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778363778010,
+      "contentLength": 93,
+      "tokens": 0,
+      "thinkingLength": 0
+    },
+    {
+      "id": "af9b8c02-54b1-4b67-9cc9-3873d839620f",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778363778027,
+      "contentLength": 2561,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 1764,
+        "totalTokens": 11643,
+        "reasoningTokens": 984
+      },
+      "thinkingInContext": false,
+      "thinkingLength": 3128,
+      "trace": {
+        "completionId": "chatcmpl-zv23zr79fug9ccw92tga9",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778363779,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 1764,
+          "total_tokens": 11643,
+          "completion_tokens_details": {
+            "reasoning_tokens": 984
+          }
+        }
+      }
+    },
+    {
+      "id": "09714245-1f00-472b-bdea-cd4b3ce7918b",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778363842068,
+      "contentLength": 13,
+      "tokens": 0,
+      "thinkingLength": 0
+    },
+    {
+      "id": "6c47b78f-b039-434a-b6b2-c902742b1696",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778363842084,
+      "contentLength": 280,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 142,
+        "totalTokens": 10021,
+        "reasoningTokens": 85
+      },
+      "thinkingInContext": false,
+      "thinkingLength": 420,
+      "trace": {
+        "completionId": "chatcmpl-2ybnjb60zghh3az16i4nxh",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778363843,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 142,
+          "total_tokens": 10021,
+          "completion_tokens_details": {
+            "reasoning_tokens": 85
+          }
+        }
+      }
+    },
+    {
+      "id": "caee264c-302d-4671-aed8-5d803e9e45c3",
+      "role": "user",
+      "status": "complete",
+      "timestamp": 1778364089530,
+      "contentLength": 79,
+      "tokens": 1,
+      "thinkingLength": 0
+    },
+    {
+      "id": "0215bdb6-42a6-4731-9a12-180a4ac771f2",
+      "role": "assistant",
+      "status": "complete",
+      "timestamp": 1778364089538,
+      "contentLength": 1441,
+      "usage": {
+        "promptTokens": 9879,
+        "completionTokens": 1848,
+        "totalTokens": 11727,
+        "reasoningTokens": 1189
+      },
+      "toolRounds": [
+        {
+          "promptTokens": 9879,
+          "completionTokens": 1807,
+          "reasoningTokens": 1764,
+          "toolCallIds": [
+            "144871383"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 238,
+          "reasoningTokens": 131,
+          "toolCallIds": [
+            "393388430"
+          ]
+        },
+        {
+          "promptTokens": 9879,
+          "completionTokens": 1848,
+          "reasoningTokens": 1189,
+          "toolCallIds": []
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "144871383",
+          "name": "ha_history_list_entities",
+          "status": "done",
+          "argumentsLength": 37,
+          "resultLength": 2143,
+          "thinkingBeforeLength": 6509,
+          "durationMs": 28
+        },
+        {
+          "id": "393388430",
+          "name": "ha_history_get_sensor_stats",
+          "status": "done",
+          "argumentsLength": 133,
+          "resultLength": 812,
+          "thinkingBeforeLength": 384,
+          "durationMs": 176
+        }
+      ],
+      "thinkingInContext": false,
+      "thinkingLength": 3279,
+      "trace": {
+        "completionId": "chatcmpl-aslzh4ikgl9e16yta7467h",
+        "model": "qwen3.6-35b-a3b-apex",
+        "systemFingerprint": "qwen3.6-35b-a3b-apex",
+        "created": 1778364150,
+        "finishReason": "stop",
+        "rawUsage": {
+          "prompt_tokens": 9879,
+          "completion_tokens": 1848,
+          "total_tokens": 11727,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1189
+          }
+        }
+      }
+    }
+  ]
+}

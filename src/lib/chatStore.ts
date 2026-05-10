@@ -195,6 +195,73 @@ export async function initChatStore(): Promise<void> {
 // Export the active chat as a JSON diagnostic dump — session metadata, all messages
 // with their full token accounting fields, and the current context segments.
 // Useful for diagnosing context bar discrepancies without needing a test harness.
+// Reconstruct the API messages array that would have been sent at the start of a given
+// assistant turn (i.e., at round 0 before any tool calls). This mirrors the logic of
+// buildBaseApiMessages() inside sendMessage() so we can verify reasoning stripping and
+// compute how many tokens each component contributes.
+function reconstructApiMessagesForTurn(
+  allMessages: ChatMessage[],
+  assistantMsgId: string,
+  session: ChatSession,
+): { role: string; content: string | null; reasoning_content?: string; tool_calls?: unknown; tool_call_id?: string; _note?: string }[] {
+  const modelConfig = session.modelConfigSnapshot
+  const system = [
+    ...(modelConfig.systemPrompt ? [{ role: 'system', content: modelConfig.systemPrompt }] : []),
+    ...(session.mcpInstructions ? [{ role: 'system', content: `[MCP Server Instructions]\n${session.mcpInstructions}`, _note: 'mcpInstructions' }] : []),
+  ]
+
+  // Find the assistant message and the user message immediately before it
+  const idx = allMessages.findIndex(m => m.id === assistantMsgId)
+  if (idx < 0) return system
+
+  const userMsg = idx > 0 ? allMessages[idx - 1] : null
+  const history = allMessages.slice(0, idx > 0 ? idx - 1 : idx)  // everything before the user message
+
+  const historyMessages = history
+    .filter(m => m.status !== 'aborted' && m.status !== 'error')
+    .flatMap(m => {
+      if (m.role === 'user') {
+        return [{ role: 'user', content: m.content }]
+      }
+      if (m.role === 'assistant') {
+        if (m.toolRounds && m.toolRounds.length > 0 && m.toolCalls) {
+          // Reconstruct each round as assistant+tool messages (reasoning stripped for history)
+          return m.toolRounds.flatMap(round => {
+            if (round.toolCallIds.length > 0) {
+              const roundTcs = m.toolCalls!.filter(tc => round.toolCallIds.includes(tc.id))
+              return [
+                {
+                  role: 'assistant',
+                  content: null,
+                  tool_calls: roundTcs.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: tc.argumentsJson } })),
+                  _note: `round reasoning stripped (was ${round.reasoningTokens} tokens)`,
+                },
+                ...roundTcs.map(tc => ({ role: 'tool', content: tc.result ?? '', tool_call_id: tc.id })),
+              ]
+            } else {
+              // Final round
+              const msg: { role: string; content: string | null; reasoning_content?: string; _note?: string } = { role: 'assistant', content: m.content || null }
+              if (m.thinkingInContext && m.thinking) { msg.reasoning_content = m.thinking; msg._note = 'thinkingInContext=true, reasoning forwarded' }
+              else msg._note = `final reasoning stripped (was ${m.usage?.reasoningTokens ?? 0} tokens)`
+              return [msg]
+            }
+          })
+        } else {
+          const msg: { role: string; content: string | null; reasoning_content?: string; _note?: string } = { role: 'assistant', content: m.content || null }
+          if (m.thinkingInContext && m.thinking) msg.reasoning_content = m.thinking
+          return [msg]
+        }
+      }
+      return []
+    })
+
+  return [
+    ...system,
+    ...historyMessages,
+    ...(userMsg ? [{ role: 'user', content: userMsg.content }] : []),
+  ]
+}
+
 export function exportActiveChat(): void {
   const sessionId = get(activeChatId)
   const session = get(chatSessions).find(s => s.id === sessionId)
@@ -205,44 +272,86 @@ export function exportActiveChat(): void {
 
   const dump = {
     exportedAt: new Date().toISOString(),
+    version: 2,
     session: {
       id: session.id,
       title: session.title,
-      modelConfigSnapshot: session.modelConfigSnapshot,
-      mcpSnapshot: session.mcpSnapshot,
+      modelConfig: session.modelConfigSnapshot,
+      systemPrompt: session.modelConfigSnapshot.systemPrompt ?? null,
+      mcpInstructions: session.mcpInstructions ?? null,
       loadedContextLength: session.loadedContextLength,
-      systemPromptTokens: session.systemPromptTokens,
-      toolDefinitionsTokens: session.toolDefinitionsTokens,
+      tokenEstimates: {
+        systemPrompt: session.systemPromptTokens,
+        toolDefinitions: session.toolDefinitionsTokens,
+      },
       chatInitStatus: session.chatInitStatus,
       isContextExhausted: session.isContextExhausted,
-      mcpTools: session.mcpTools?.map(t => ({ name: t.name, description: t.description })),
+      // Full tool schemas so we can independently count their tokens
+      mcpTools: session.mcpTools ?? [],
     },
     contextSegments: segments,
     contextSegmentsTotal: segments.reduce((s, seg) => s + seg.tokens, 0),
-    messages: messages.map(m => ({
-      id: m.id,
-      role: m.role,
-      status: m.status,
-      timestamp: m.timestamp,
-      contentLength: m.content.length,
-      // Token accounting
-      tokens: m.tokens,
-      usage: m.usage,
-      // Tool call tracing
-      toolRounds: m.toolRounds,
-      toolCalls: m.toolCalls?.map(tc => ({
-        id: tc.id,
-        name: tc.name,
-        status: tc.status,
-        argumentsLength: tc.argumentsJson?.length ?? 0,
-        resultLength: tc.result?.length ?? 0,
-        thinkingBeforeLength: tc.thinkingBefore?.length ?? 0,
-        durationMs: tc.startedAt && tc.completedAt ? tc.completedAt - tc.startedAt : null,
-      })),
-      thinkingInContext: m.thinkingInContext,
-      thinkingLength: m.thinking?.length ?? 0,
-      trace: m.trace,
-    })),
+    messages: messages.map(m => {
+      const base = {
+        id: m.id,
+        role: m.role,
+        status: m.status,
+        timestamp: m.timestamp,
+        content: m.content,
+        contentLength: m.content.length,
+        // For user messages: token count back-filled from API delta
+        tokens: m.tokens,
+        estimatedTokens: Math.ceil(m.content.length / 4),
+      }
+
+      if (m.role === 'assistant') {
+        // Annotate each tool round with derived metrics
+        const annotatedRounds = (m.toolRounds ?? []).map((round, i, arr) => {
+          const prev = i > 0 ? arr[i - 1] : null
+          const deltaFromPrev = prev ? round.promptTokens - prev.promptTokens : null
+          const tcTrDelta = deltaFromPrev !== null ? Math.max(0, deltaFromPrev - (prev?.reasoningTokens ?? 0)) : null
+          return {
+            ...round,
+            deltaFromPrev,
+            tcTrDelta,  // actual tc+tr token cost of the PREVIOUS round (after subtracting its reasoning)
+            isCapped: round.promptTokens >= (session.loadedContextLength ?? 999999) - 500,
+          }
+        })
+
+        // Reconstruct what the API received at round 0 of this turn
+        const apiPayload = reconstructApiMessagesForTurn(messages, m.id, session)
+
+        return {
+          ...base,
+          thinking: m.thinking ?? null,
+          thinkingLength: m.thinking?.length ?? 0,
+          thinkingInContext: m.thinkingInContext ?? false,
+          usage: m.usage,
+          toolRounds: annotatedRounds,
+          toolCalls: (m.toolCalls ?? []).map(tc => ({
+            id: tc.id,
+            name: tc.name,
+            status: tc.status,
+            argumentsJson: tc.argumentsJson,
+            argumentsLength: tc.argumentsJson?.length ?? 0,
+            argumentsEstimatedTokens: Math.ceil((tc.argumentsJson?.length ?? 0) / 4),
+            result: tc.result ?? null,
+            resultLength: tc.result?.length ?? 0,
+            resultEstimatedTokens: Math.ceil((tc.result?.length ?? 0) / 4),
+            thinkingBefore: tc.thinkingBefore ?? null,
+            thinkingBeforeLength: tc.thinkingBefore?.length ?? 0,
+            durationMs: tc.startedAt && tc.completedAt ? tc.completedAt - tc.startedAt : null,
+            isError: tc.isError ?? false,
+          })),
+          // The reconstructed API payload for round 0 (what was sent before any tool calls)
+          apiPayloadAtRound0: apiPayload,
+          apiPayloadMessageCount: apiPayload.length,
+          trace: m.trace,
+        }
+      }
+
+      return base
+    }),
   }
 
   const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' })
