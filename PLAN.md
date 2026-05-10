@@ -42,16 +42,16 @@ Use these statuses when updating this file:
 
 | Increment | Status | Goal |
 | --- | --- | --- |
-| 1. App shell, configuration, connection testing | Planned | Build the SPA shell and central model/MCP configuration with real transport and connectivity checks |
-| 2. Basic model-only chat | Planned | Build a single-chat flow with LM Studio and real-time streaming |
-| 3. MCP-enabled chat, plain text | Planned | Add one-MCP-per-chat tool support and minimal raw tool traces |
-| 4. Context monitoring and visualization | Planned | Add context accounting, token tracking, and the context bar |
-| 5. Chat formatting and tool inspection UI | Planned | Improve readability and add collapsible inspection surfaces |
-| 6. Multi-chat, local persistence, export | Planned | Add multiple chats, local persistence, delete, and plain-text export |
+| 1. App shell, configuration, connection testing | Accepted | Build the SPA shell and central model/MCP configuration with real transport and connectivity checks |
+| 2. Basic model-only chat | Accepted | Build a single-chat flow with LM Studio and real-time streaming |
+| 3. MCP-enabled chat, plain text | Accepted | Add one-MCP-per-chat tool support and minimal raw tool traces |
+| 4. Context monitoring and visualization | Accepted | Add context accounting, token tracking, and the context bar |
+| 5. Chat formatting and tool inspection UI | Accepted | Improve readability and add collapsible inspection surfaces |
+| 6. Multi-chat, local persistence, export | In progress | Add multiple chats, local persistence, delete, and plain-text export |
 
 ## Increment 1: App shell, configuration, connection testing
 
-**Status:** Planned
+**Status:** Accepted
 
 ### Goal
 
@@ -95,7 +95,7 @@ Do not move on until:
 
 ## Increment 2: Basic model-only chat
 
-**Status:** Planned
+**Status:** Accepted
 
 ### Goal
 
@@ -138,11 +138,19 @@ Two design decisions must be made before starting Increment 3. They can only be 
 2. **Token estimation approach**
    What strategy should the context bar use when exact backend usage data is unavailable? The options are a simple character-based heuristic (e.g. characters / 4, labeled "estimated") or a Wasm tokenizer matched more closely to the Qwen3 tokenizer. The right choice depends on how useful the estimated values turn out to be in practice. If rough estimates are good enough to spot oversized components, the heuristic may be sufficient.
 
+### Questions answered after Increment 2
+
+1. **Background chat execution**
+   Answered: A single active stream is maintained. Switching chats aborts the current stream and freezes that chat's state. This keeps the implementation simple and avoids concurrent write complexity with IndexedDB. Acceptable for the evaluation use case.
+
+2. **Token estimation approach**
+   Answered: Do not introduce a Wasm tokenizer. Instead, back-calculate user message tokens from LM Studio's `promptTokens` deltas wherever possible, and use a simple char/4 approximation only as a temporary or fallback estimate. See Increment 4 for the full accounting architecture.
+
 Do not start Increment 3 until both questions are answered and the decisions are recorded in this plan.
 
 ## Increment 3: MCP-enabled chat with plain text output
 
-**Status:** Planned
+**Status:** Accepted
 
 ### Goal
 
@@ -191,7 +199,7 @@ Do not move on until:
 
 ## Increment 4: Context monitoring and visualization
 
-**Status:** Planned
+**Status:** Accepted
 
 ### Goal
 
@@ -234,7 +242,7 @@ Do not move on until:
 
 ## Increment 5: Chat formatting and tool inspection UI
 
-**Status:** Planned
+**Status:** Accepted
 
 ### Goal
 
@@ -266,7 +274,7 @@ Do not move on until:
 
 ## Increment 6: Multi-chat, local persistence, export
 
-**Status:** Planned
+**Status:** In progress
 
 ### Goal
 

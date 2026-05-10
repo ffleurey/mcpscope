@@ -212,15 +212,19 @@ This should help the user quickly see when, for example:
 
 ### Measurement model
 
-The UI should clearly distinguish between:
+The app attaches token counts directly to the data structures that represent context elements. The context bar is derived from those counts with no additional logic — there is no separate token-counting pass.
 
-- **exact** measurements derived from known request payloads or returned usage data
-- **estimated** measurements derived from local token counting or approximations
-- **unknown / unavailable** portions that cannot be inspected precisely
+Every token count has a clear provenance:
 
-This is especially important for model "thinking" or hidden reasoning, which may not be exposed by the API even if the model uses it internally.
+- **System prompt and tool definitions** — probed via dedicated API calls at session start (exact)
+- **User messages** — back-calculated from consecutive `promptTokens` values (exact for simple turns; char/4 for turns following tool-calling turns, consistent with the bar-total correction)
+- **Tool calls, tool results, and assistant content for tool-calling turns** — covered as a single `historicalPayloadTokens` value derived from the next turn's first `promptTokens` minus the prior turn's first `promptTokens` minus the next user message's approximate size (exact bar total by construction)
+- **Assistant content (simple turns)** — `completionTokens - reasoningTokens` from usage (exact)
+- **Reasoning/thinking** — `reasoningTokens` from usage when available; char/3.5 estimate during live streaming only
 
-The application should avoid pretending that hidden reasoning is fully observable if it is not.
+No permanent character-count estimates remain in the system. All estimates are replaced by API-derived exact values as data becomes available. The only structural approximations (not errors) are the visual split of tc+tr within a round, and user messages after tool-calling turns — neither accumulates error over a session.
+
+The application clearly surfaces reasoning/thinking separately when LM Studio exposes it. Reasoning is stripped from historical turns (it is only needed across tool-call sub-rounds within a live turn) and does not accumulate in the context history.
 
 ### Intended flow
 

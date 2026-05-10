@@ -275,82 +275,97 @@ Context accounting is a core feature of the app.
 
 The app should track the **effective client-visible model context** as accurately as possible from the data it controls or receives.
 
+### Architectural principle
+
+The app sends every token to LM Studio — it is fully in control of what is in the context. There is no need to guess or re-derive context composition. The correct approach is to attach token counts directly to the data structures that represent context elements, and derive the context bar from those attached counts with no additional logic.
+
+The single source of truth is `rebuildContextSegments()` in `chatStore.ts`. This function reads directly from the `messages[]` array in the store and produces the `activeContextSegments` list that `ContextBar.svelte` renders. The context bar is a pure renderer — it contains no token-counting logic.
+
+`rebuildContextSegments()` is called whenever the store changes: at session load, after each API call that returns token data, and during live streaming.
+
 ### Context bar
 
-The context bar should visually represent the known context budget as color-coded segments.
+The context bar visually represents the known context budget as color-coded segments.
 
-Its total length should be based on the selected chat model profile's configured context window size.
+Its total length is based on the selected chat model profile's configured context window size.
 
-Likely segment categories:
+Segment categories:
 
-- system prompt
-- conversation history
-- tool descriptions / tool schemas
-- tool call arguments
-- tool results
-- assistant responses
-- other model-visible payloads
+- system prompt (`sys`)
+- tool definitions (`tool-definitions`)
+- user message (`user`)
+- assistant response (`assistant`)
+- reasoning / thinking (`thinking`)
+- tool calls (`tool-call`)
+- tool results (`tool-result`)
 
-The MVP context bar should use the following segment breakdown as its baseline:
+### Token provenance
 
-| Segment | Description |
-| --- | --- |
-| System prompt | The static system prompt from the model profile |
-| Conversation history | Prior user and assistant turns |
-| Tool descriptions / schemas | The tool definitions sent with the request |
-| Tool call arguments | The arguments sent in each tool call |
-| Tool results | The content returned by each tool |
-| Assistant responses | The current and prior assistant outputs |
+Every token count has a clear provenance. The accounting uses API-derived data as far as possible, with estimates only as temporary values until the actual data arrives.
 
-Additional segments may be added in later versions. For the MVP, this set covers the known context components for the reference use case.
+| Segment | How measured | When exact |
+| --- | --- | --- |
+| System prompt | API probe at session start (`probeSystemPromptTokens`) | Immediately |
+| Tool definitions | API probe at session start (`probeToolDefinitionsTokens`) | Immediately |
+| User messages (simple turns) | Back-calculated from `promptTokens` delta: `PT[current] - PT[previous] - systemPromptTokens - toolDefinitionsTokens - all prior message tokens` | When current PT is returned |
+| User messages (after tool-calling turn) | `char/4` approximation (consistent with `historicalPayloadTokens` definition so bar total remains exact) | Approximate only |
+| Assistant response (simple turn) | `completionTokens - reasoningTokens` from usage | When completion returns |
+| Reasoning / thinking (simple turn) | `reasoningTokens` from usage | When completion returns |
+| Tool calls + results + assistant content (tool-calling turn) | Covered by `historicalPayloadTokens`; split proportionally within for display | When next turn's PT arrives |
+| `historicalPayloadTokens` (tool-calling turn total) | `nextTurnFirstPT - prevRound0PT - char4(nextUserContent)` | When next turn starts |
+| Live streaming thinking | `char / 3.5` estimate | Replaced when completion returns |
 
-The context bar should make it easy to spot oversized components quickly.
+### Reasoning stripping policy
 
-### Measurement classes
+The model requires reasoning to be available across tool-call rounds within a single turn (it uses its intermediate chain of thought when deciding the next tool call). After the final answer is produced, reasoning is no longer needed in the context and would waste tokens.
 
-Every token or context metric should be classified as one of:
+Policy:
 
-- **exact**
-- **estimated**
-- **unknown**
+- **Within a live turn** (tool rounds in progress): reasoning is kept and sent as `reasoning_content` to the next tool-call sub-turn
+- **Historical turns** (all turns except the current live one): all reasoning is stripped when building `buildBaseApiMessages()`. This applies to both intermediate reasoning between tool rounds and the reasoning attached to the final answer
 
-#### Exact
+The context bar reflects this: reasoning appears for the most recent completed turn (it was in context when that turn was produced), then disappears when the next message is sent.
 
-Derived from:
+### Tool-calling turns and `historicalPayloadTokens`
 
-- known request payloads
-- returned usage data
-- deterministic client-side measurements where trusted
+For turns that involve tool calls, the live per-round PT deltas give a slightly higher cost than the historical reconstruction, because:
 
-#### Estimated
+- The live prompt includes thinking-block delimiter tokens that are NOT present in the historical reconstruction (which strips all `reasoning_content`)
+- `completionTokens - reasoningTokens` from LM Studio includes format/delimiter overhead tokens not stored in `content`
 
-Derived from:
+Rather than trying to correct these individual values, we derive the total historical cost of the entire tool-calling turn from the next turn's `promptTokens`:
 
-- local token approximation
-- heuristics based on known payload structure
+```
+historicalPayloadTokens = nextTurnFirstPT - prevRound0PT - char4(nextUserContent)
+```
 
-#### Unknown
+This makes the bar total match LM Studio's `promptTokens` exactly for the next turn. The tc+tr segments are then split proportionally for display, but their total is exact.
 
-Used when the app cannot reliably inspect or infer the data.
+### Intentional approximations (not errors)
 
-This is especially relevant for:
+These are by-construction approximations that cannot be made exact without additional API calls:
 
-- hidden reasoning
-- backend-internal prompt construction
-- model/provider behavior not exposed through the API
+1. **tc+tr visual split within a round** — the total is exact, but dividing it between tool-call and tool-result tokens uses length ratios (display only, total is accurate)
+2. **User messages after a tool-calling turn** — `char/4`, because the `historicalPayloadTokens` definition absorbs the full cost of the prior turn; the next turn's bar total is still exact by construction
+3. **Legacy messages without `toolRounds`** — historical messages loaded from DB before this accounting was implemented; irrecoverable, char/4 used
 
-If LM Studio or the model backend exposes "thinking" or reasoning-token usage explicitly, the app should surface that as its own category rather than collapsing it into unknown usage.
+### No permanent estimates
+
+The original design allowed for permanent char-based estimates at several points. These have been eliminated. The only char-based values that remain are:
+
+- The `char/3.5` estimate used during live thinking streaming — replaced by actual `reasoningTokens` when the completion returns
+- The `char/4` for user messages after tool-calling turns — a structural approximation, not an accumulating error, because the bar total is corrected by `historicalPayloadTokens`
 
 ### Source of truth
 
-The primary source of truth for the context view should be:
+The primary source of truth for the context view is:
 
-- the exact payload the client sends to LM Studio
-- the exact tool definitions and tool results seen by the client
-- returned usage metadata when available
-- the chat model profile's configured context window size
+- the exact payload the client sends to LM Studio (we build it, we know its contents)
+- API usage data returned by LM Studio (`promptTokens`, `completionTokens`, `reasoningTokens`)
+- session-level probes for system prompt and tool definition token counts
+- `historicalPayloadTokens` derived from consecutive PT values
 
-The app should not claim visibility into context elements it does not actually observe.
+The app does not claim visibility into context elements it does not observe. Where approximations are necessary they are clearly bounded and do not accumulate over a session.
 
 ## Tool Trace Design
 
@@ -519,16 +534,16 @@ The design does not currently target:
 
 ## Open Questions
 
-The following questions remain worth deciding before or during implementation planning:
+The following questions were raised during design and have been answered:
 
-1. **Background chat execution**
-   - should non-visible active chats continue streaming and updating normally in the background?
+1. **Background chat execution** *(answered)*
+   Non-visible active chats do not continue streaming in the background. When the user switches away, the active request is aborted and that chat's state is frozen. This keeps the implementation simple and avoids concurrent write issues.
 
-2. **Token estimation implementation**
-   - for the MVP, should estimated counts start as a simple character-based heuristic, or should we invest earlier in a tokenizer matched more closely to the target models?
+2. **Token estimation implementation** *(answered)*
+   No Wasm tokenizer. Token counts are back-calculated from LM Studio's `promptTokens` deltas wherever possible. Character-based approximations (`char/4`) are used only where API data is structurally unavailable, and are never permanent accumulating errors. See the Context Accounting Design section for the full approach.
 
-3. **Component foundation** *(decided)*
-   - The MVP will use bare Svelte with semantic HTML and CSS custom properties. No component library will be introduced unless a clear need emerges during development.
+3. **Component foundation** *(answered)*
+   Bare Svelte with semantic HTML and CSS custom properties. No component library introduced.
 
 ## Current Recommendation
 

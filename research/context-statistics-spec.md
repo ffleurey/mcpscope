@@ -1,6 +1,6 @@
 # Context Statistics — Specification
 
-**Status:** Draft — guides implementation of context stats, per-message statistics, and context bar
+**Status:** Superseded — this document guided the design of Increment 4 but has been overtaken by the actual implementation. For the current architecture, see the "Context Accounting Design" section in `DESIGN.md`. Key divergences: tokens are attached directly to message data structures (not computed separately); `historicalPayloadTokens` replaces per-segment PT-delta arithmetic for tool-calling turns; all permanent estimates have been eliminated.
 
 ---
 

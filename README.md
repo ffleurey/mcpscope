@@ -1,47 +1,55 @@
-# Svelte + TS + Vite
+# AI Client App
 
-This template should help get you started developing with Svelte and TypeScript in Vite.
+A local-first AI chat SPA for evaluating MCP-based workflows with local language models.
 
-## Recommended IDE Setup
+## What it is
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+A developer tool for running and inspecting LLM + MCP tool sessions locally. The core value is **context transparency**: the app tracks exactly what is in the model's context window at every turn, segment by segment, with precise token counts derived directly from API data.
 
-## Need an official Svelte framework?
+Built with: Svelte 5 · TypeScript · Vite · IndexedDB
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+## What it connects to
 
-## Technical considerations
+- **LM Studio** — local LLM runtime (OpenAI-compatible API, streaming, extended thinking support)
+- **MCP servers** — tool servers over Streamable HTTP transport (e.g. Home Assistant statistics)
 
-**Why use this over SvelteKit?**
+## Key features
 
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
+- Real-time streaming chat with reasoning/thinking support
+- Multi-round tool call execution with full trace visibility
+- **Context bar** — color-coded segment-by-segment view of exactly what is in the model's context window, updated live during each turn
+- Per-message token statistics (prompt, completion, reasoning tokens, generation speed)
+- Configurable model profiles (system prompt, temperature, reasoning mode)
+- Multiple MCP server profiles, optional per chat
+- Full diagnostic export (JSON dump of chat with all token data for offline analysis)
+- Local-only persistence via IndexedDB, no backend required
 
-This template contains as little as possible to get started with Vite + TypeScript + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
+## Context accounting principles
 
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
+The app tracks every token with a clear provenance:
 
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
+- **System prompt and tool definitions** — probed via API at session start (exact)
+- **User messages** — back-calculated from API `promptTokens` deltas (exact for simple turns; char/4 estimate for turns following tool-calling turns)
+- **Tool calls and results (tc+tr)** — computed from per-round `promptTokens` deltas; when the next turn arrives, corrected to the exact historical cost using LM Studio's feedback
+- **Assistant content** — from API `completionTokens - reasoningTokens` (exact for simple turns)
+- **Reasoning/thinking** — shown while in context; stripped from historical turns
+- No permanent character-count estimates remain once API data is available
 
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
+## Setup
 
-**Why include `.vscode/extensions.json`?**
-
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
-
-**Why enable `allowJs` in the TS template?**
-
-While `allowJs: false` would indeed prevent the use of `.js` files in the project, it does not prevent the use of JavaScript syntax in `.svelte` files. In addition, it would force `checkJs: false`, bringing the worst of both worlds: not being able to guarantee the entire codebase is TypeScript, and also having worse typechecking for the existing JavaScript. In addition, there are valid use cases in which a mixed codebase may be relevant.
-
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/rixo/svelte-hmr#svelte-hmr).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```ts
-// store.ts
-// An extremely simple external store
-import { writable } from 'svelte/store'
-export default writable(0)
 ```
+npm install
+npm run dev
+```
+
+Configure LM Studio connections and model profiles in the sidebar settings. Optionally add MCP server profiles to enable tool use.
+
+## Diagnostics
+
+The chat export button (in the chat header) dumps the full session as JSON including all token breakdowns per message and tool round. The `exports/` folder contains scripts to analyse exported files:
+
+```
+node exports/analyze.js exports/your-export.json
+node exports/plot.js exports/your-export.json  # generates an HTML chart
+```
+
