@@ -8,7 +8,7 @@ import {
   getMessagesForSession,
   saveChatMessage,
 } from './db'
-import { streamChatCompletion, probeSystemPromptTokens, listModels, type LmToolParam, type StreamedToolCall } from './services/lmstudio'
+import { streamChatCompletion, probeSystemPromptTokens, probeToolDefinitionsTokens, listModels, type LmToolParam, type StreamedToolCall } from './services/lmstudio'
 import { lmConnections, mcpProfiles } from './connectionStore'
 import { McpClientHandle } from './services/mcpClient'
 
@@ -78,9 +78,16 @@ function rebuildContextSegments(session: ChatSession, messages: ChatMessage[]): 
     : visible.filter(m => m.role === 'assistant' && m.status === 'complete').at(-1)?.id ?? null
 
   // Helper: split a combined tc+tr prompt delta into per-tool-call segments.
-  // The total (tcTrDelta) is accurate (derived from API promptToken deltas after subtracting
-  // reasoning). The tc/tr split within that total is estimated using string-length ratios —
-  // a local tokenizer would be needed for exact split, but the combined total is exact.
+  //
+  // ACCURACY NOTE:
+  // The tcTrDelta total IS EXACT — it is derived from API promptToken deltas after
+  // subtracting reasoning tokens (which are also exact from the API). So the bar's
+  // total tc+tr height for any round is accurate.
+  //
+  // The split of that total across individual tool calls within a round uses string-length
+  // ratios (argumentsJson / result). This is a VISUAL SPLIT ONLY — it affects how the
+  // bar is colored per call but not the total. Getting per-call exact counts would
+  // require a separate probe API call per tool call, which is not worth the cost.
   const pushTcTr = (tcTrDelta: number, msg: ChatMessage, round: ToolRound, r: number, prefix = '') => {
     if (tcTrDelta <= 0) return
     const roundTcs = (msg.toolCalls ?? []).filter(tc => round.toolCallIds.includes(tc.id))
@@ -159,9 +166,11 @@ function rebuildContextSegments(session: ChatSession, messages: ChatMessage[]): 
         if ((isLastTurn || msg.thinkingInContext) && msg.usage.reasoningTokens) {
           segs.push({ type: 'reasoning', tokens: msg.usage.reasoningTokens, msgId: `${msg.id}-r` })
         }
-        // Tool calls for legacy messages (no toolRounds tracking)
-        // Token counts are estimated from character lengths — these messages predate
-        // accurate per-round tracking.
+        // Tool calls for legacy messages (messages that predate toolRounds tracking).
+        // These messages don't have per-round promptToken data so we fall back to
+        // character-length estimates. This is the ONLY place estimates are used for
+        // completed messages — it only affects messages created before this tracking
+        // was introduced and cannot be corrected retroactively.
         if (msg.toolCalls && msg.toolCalls.length > 0) {
           for (const tc of msg.toolCalls) {
             const callTokens = Math.max(10, Math.ceil((tc.argumentsJson?.length ?? 0) / 4))
@@ -403,7 +412,8 @@ export async function createChat(modelConfig: ModelConfig, mcpProfileId: string 
 // Run all initialization tasks for a chat session. Called from createChat() in the
 // background so the chat opens instantly. Also called (or awaited) from sendMessage()
 // as a fallback for sessions loaded from DB that were never fully initialized.
-// Runs listModels + systemPrompt probe + MCP init all in parallel to minimize latency.
+// Runs listModels + systemPrompt probe + MCP init all in parallel to minimize latency,
+// then probes tool definitions tokens (requires both systemPromptTokens and tools, so sequential).
 async function initializeChatSession(sessionId: string, modelConfig: ModelConfig): Promise<void> {
   let session = get(chatSessions).find(s => s.id === sessionId)
   if (!session) return
@@ -416,7 +426,7 @@ async function initializeChatSession(sessionId: string, modelConfig: ModelConfig
   chatSessions.update(list => list.map(s => s.id === sessionId ? session! : s))
 
   try {
-    // Run context-length fetch, system-prompt probe, and MCP init all in parallel
+    // Phase 1: run context-length fetch, system-prompt probe, and MCP init all in parallel
     const [loadedContextLength, systemPromptTokens, mcpResult] = await Promise.all([
       // 1. Fetch loaded context length from native API
       listModels(connection.baseUrl, connection.apiKey)
@@ -445,20 +455,10 @@ async function initializeChatSession(sessionId: string, modelConfig: ModelConfig
             mcpHandles.set(sessionId, handle)
           }
           const info = await handle.initialize()
-
-          // Estimate tool definition token cost from JSON length.
-          // JSON schemas tokenize at ~3 chars/token (denser than prose due to braces/quotes).
-          const toolsJson = JSON.stringify(info.tools.map(t => ({
-            type: 'function',
-            function: { name: t.name, description: t.description, parameters: t.inputSchema }
-          })))
-          const toolDefinitionsTokens = Math.ceil(toolsJson.length / 3)
-
           return {
             mcpSessionId: info.sessionId,
             mcpTools: info.tools,
             mcpInstructions: info.instructions,
-            toolDefinitionsTokens,
           }
         } catch (e) {
           console.error('MCP init failed:', e) // eslint-disable-line no-console
@@ -466,6 +466,22 @@ async function initializeChatSession(sessionId: string, modelConfig: ModelConfig
         }
       })(),
     ])
+
+    // Phase 2: probe tool definition token cost now that we have both systemPromptTokens
+    // and the tools list. This must be sequential (needs phase 1 results).
+    // probeToolDefinitionsTokens makes one minimal API call with the tools array and measures
+    // the exact token cost — no estimates, no character-count approximations.
+    const mcpTools = (mcpResult as Partial<ChatSession>).mcpTools
+    const toolDefinitionsTokens = mcpTools && mcpTools.length > 0
+      ? await probeToolDefinitionsTokens(
+          connection.baseUrl,
+          modelConfig.modelKey,
+          modelConfig.systemPrompt,
+          mcpTools.map(t => ({ type: 'function' as const, function: { name: t.name, description: t.description, parameters: t.inputSchema } })),
+          systemPromptTokens,
+          connection.apiKey
+        ).catch(() => null as number | null)
+      : 0
 
     // Re-fetch session in case it was modified while we were initializing
     session = get(chatSessions).find(s => s.id === sessionId) ?? session!
@@ -475,6 +491,7 @@ async function initializeChatSession(sessionId: string, modelConfig: ModelConfig
       systemPromptTokens,
       chatInitStatus: 'ready',
       ...mcpResult,
+      toolDefinitionsTokens: toolDefinitionsTokens ?? null,
     }
     await saveChatSession(session)
     chatSessions.update(list => list.map(s => s.id === sessionId ? session! : s))
