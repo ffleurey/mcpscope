@@ -514,9 +514,9 @@ async function initializeChatSession(sessionId: string, modelConfig: ModelConfig
       systemPromptTokens,
       chatInitStatus: 'ready',
       ...mcpResult,
-      toolDefinitionsTokens: toolDefinitionsTokens ?? null,
+      toolDefinitionsTokens: toolDefinitionsTokens ?? undefined,
     }
-    await saveChatSession(session)
+    await saveChatSession(session!)
     chatSessions.update(list => list.map(s => s.id === sessionId ? session! : s))
     // Rebuild context segments now that systemPromptTokens and toolDefinitionsTokens are known
     if (get(activeChatId) === sessionId) {
