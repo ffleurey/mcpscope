@@ -139,31 +139,49 @@ function rebuildContextSegments(session: ChatSession, messages: ChatMessage[]): 
 
       if (msg.toolRounds && msg.toolRounds.length > 0) {
         const rounds = msg.toolRounds
-        const finalRound = rounds[rounds.length - 1]
+
+        // Compute the live tc+tr total from PT deltas (used as proportional weights for the
+        // visual split, and as the estimate when historicalPayloadTokens is not yet known).
+        const liveTcTrValues: number[] = []
+        let liveTcTrSum = 0
+        for (let r = 0; r < rounds.length - 1; r++) {
+          const raw = Math.max(0, rounds[r + 1].promptTokens - rounds[r].promptTokens - rounds[r].reasoningTokens)
+          liveTcTrValues.push(raw)
+          liveTcTrSum += raw
+        }
+
+        // When historicalPayloadTokens is set, it is the EXACT cost of (tc+tr + final content)
+        // in the historical context — derived from the next turn's promptTokens via LM Studio
+        // feedback. Without it we use the live tc+tr sum (slight overcount from format overhead).
+        const finalContentEst = Math.max(0, Math.ceil((msg.content?.length ?? 0) / 4))
+        let effectiveTcTrTotal: number
+        let tcTrScale: number
+        if (msg.historicalPayloadTokens !== undefined) {
+          const correctedTcTr = Math.max(0, msg.historicalPayloadTokens - finalContentEst)
+          effectiveTcTrTotal = correctedTcTr
+          tcTrScale = liveTcTrSum > 0 ? correctedTcTr / liveTcTrSum : 0
+        } else {
+          effectiveTcTrTotal = liveTcTrSum
+          tcTrScale = 1
+        }
 
         for (let r = 0; r < rounds.length - 1; r++) {
           const round = rounds[r]
-          const nextRound = rounds[r + 1]
-          const rawDelta = Math.max(0, nextRound.promptTokens - round.promptTokens)
           // Historical turns: intermediate reasoning stripped → show only for isLastTurn
           if (isLastTurn && round.reasoningTokens > 0) {
             segs.push({ type: 'reasoning', tokens: round.reasoningTokens, msgId: `${msg.id}-ir${r}` })
           }
-          pushTcTr(Math.max(0, rawDelta - round.reasoningTokens), msg, round, r)
+          pushTcTr(Math.round(liveTcTrValues[r] * tcTrScale), msg, round, r)
         }
 
         // Final round reasoning: only for last turn or explicit thinkingInContext opt-in
+        const finalRound = rounds[rounds.length - 1]
         if ((isLastTurn || msg.thinkingInContext) && finalRound.reasoningTokens > 0) {
           segs.push({ type: 'reasoning', tokens: finalRound.reasoningTokens, msgId: `${msg.id}-r` })
         }
-        // Use char/4 for final-round content rather than completionTokens - reasoningTokens.
-        // For tool-calling turns with extended thinking, LM Studio includes non-text tokens
-        // (thinking-block delimiters, format overhead) in completionTokens that do not appear
-        // in msg.content and are NOT sent in the historical reconstruction. The char/4 estimate
-        // is lower quality in isolation but accurately reflects what we actually send to the API.
-        const contentTokens = Math.max(0, Math.ceil((msg.content?.length ?? 0) / 4))
-        if (contentTokens > 0) {
-          segs.push({ type: 'content', tokens: contentTokens, msgId: `${msg.id}-c` })
+        // Final content: char/4 of the actual text we send in the historical reconstruction.
+        if (finalContentEst > 0) {
+          segs.push({ type: 'content', tokens: finalContentEst, msgId: `${msg.id}-c` })
         }
       } else {
         // Simple response (no tool rounds) or legacy messages
@@ -837,6 +855,16 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
         // Capture round 1's prompt tokens before any tool overhead is added
         if (firstRoundPromptTokens === null && usage) {
           firstRoundPromptTokens = usage.promptTokens
+          // When we know this turn's first PT, we can compute the EXACT historical
+          // payload cost for the previous tool-calling turn (replacing the estimate
+          // from PT deltas). Formula: firstPT - prevRound0PT - char4(userContent)
+          if (!isFirstTurn && prevAssistant?.toolRounds?.length && prevAssistant.historicalPayloadTokens === undefined) {
+            const hp = Math.max(0, firstRoundPromptTokens - prevAssistant.toolRounds[0].promptTokens - Math.ceil(userContent.length / 4))
+            prevAssistant.historicalPayloadTokens = hp
+            await saveChatMessage(prevAssistant)
+            activeMessages.update(msgs => msgs.map(m => m.id === prevAssistant!.id ? { ...m, historicalPayloadTokens: hp } : m))
+            refreshSegments()
+          }
         }
 
         // Record per-round token data for this LLM call
@@ -1008,26 +1036,19 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
             ? firstRoundPromptTokens
             : usage!.promptTokens
 
-          // If the previous turn had tool rounds, the standard computeUserTokens formula
-          // gives wildly wrong results because prevAssistantUsage.promptTokens is from the
-          // FINAL tool round (which includes all intermediate reasoning sent live). That
-          // reasoning is now stripped from the historical context, making the difference
-          // negative. We correct by:
-          //   1. Adding back prevIntermediateReasoning (the stripped reasoning total).
-          //   2. Using char/4 for prevContent — completionTokens-reasoningTokens overcounts
-          //      for tool-calling turns because LM Studio includes thinking-block format
-          //      overhead tokens that don't appear in the stored content text.
-          if (!isFirstTurn && prevAssistant?.toolRounds && prevAssistant.toolRounds.length > 0 && prevAssistantUsage) {
-            const prevIntermediateReasoning = prevAssistant.toolRounds
-              .filter(r => r.toolCallIds.length > 0)
-              .reduce((s, r) => s + r.reasoningTokens, 0)
-            const prevReasoningInCtx = (prevAssistant.thinkingInContext ?? false)
-              ? (prevAssistantUsage.reasoningTokens ?? 0) : 0
-            const prevContentEst = Math.ceil((prevAssistant.content?.length ?? 0) / 4)
-            userTokens = Math.max(0,
-              promptForUserCalc - prevAssistantUsage.promptTokens
-              - prevContentEst - prevReasoningInCtx + prevIntermediateReasoning
-            )
+          if (!isFirstTurn && prevAssistant?.toolRounds?.length && prevAssistant.historicalPayloadTokens === undefined) {
+            // Simple turn: this is the first time we know the exact PT for this prompt.
+            // Use it to compute historicalPayloadTokens for the previous tool-calling turn
+            // (replaces the estimate from PT deltas, which overcounts format overhead).
+            const userChar4 = Math.ceil(userContent.length / 4)
+            const hp = Math.max(0, promptForUserCalc - prevAssistant.toolRounds[0].promptTokens - userChar4)
+            prevAssistant.historicalPayloadTokens = hp
+            await saveChatMessage(prevAssistant)
+            activeMessages.update(msgs => msgs.map(m => m.id === prevAssistant!.id ? { ...m, historicalPayloadTokens: hp } : m))
+            // User tokens for a simple turn following a tool-calling turn: use char/4.
+            // historicalPayloadTokens above was defined as (promptPT - round0PT_prev - userChar4)
+            // so the bar total = round0PT_prev + historicalPayload + userChar4 = promptPT exactly.
+            userTokens = userChar4
           } else {
             userTokens = computeUserTokens(
               promptForUserCalc,

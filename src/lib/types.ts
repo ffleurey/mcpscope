@@ -164,5 +164,13 @@ export interface ChatMessage {
   toolCalls?: ToolCallBlock[]
 
   toolRounds?: ToolRound[]   // one entry per LLM call; populated for tool-calling turns
+
+  // Exact historical token cost of this tool-calling turn's payload (tc+tr + final content),
+  // derived from the NEXT turn's promptTokens when it becomes available.
+  // Replaces the tc+tr estimate from PT deltas, which overcounts by ~10 tokens due to
+  // LM Studio including thinking-block format tokens in live promptTokens that are absent
+  // from the stripped historical reconstruction.
+  // Formula: nextTurnFirstPT - this.toolRounds[0].promptTokens - char4(nextUserContent)
+  historicalPayloadTokens?: number
 }
 
