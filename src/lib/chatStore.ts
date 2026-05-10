@@ -156,7 +156,12 @@ function rebuildContextSegments(session: ChatSession, messages: ChatMessage[]): 
         if ((isLastTurn || msg.thinkingInContext) && finalRound.reasoningTokens > 0) {
           segs.push({ type: 'reasoning', tokens: finalRound.reasoningTokens, msgId: `${msg.id}-r` })
         }
-        const contentTokens = Math.max(0, finalRound.completionTokens - finalRound.reasoningTokens)
+        // Use char/4 for final-round content rather than completionTokens - reasoningTokens.
+        // For tool-calling turns with extended thinking, LM Studio includes non-text tokens
+        // (thinking-block delimiters, format overhead) in completionTokens that do not appear
+        // in msg.content and are NOT sent in the historical reconstruction. The char/4 estimate
+        // is lower quality in isolation but accurately reflects what we actually send to the API.
+        const contentTokens = Math.max(0, Math.ceil((msg.content?.length ?? 0) / 4))
         if (contentTokens > 0) {
           segs.push({ type: 'content', tokens: contentTokens, msgId: `${msg.id}-c` })
         }
@@ -1002,14 +1007,37 @@ export async function sendMessage(userContent: string, modelConfig: ModelConfig)
           const promptForUserCalc = (isFirstTurn && firstRoundPromptTokens !== null)
             ? firstRoundPromptTokens
             : usage!.promptTokens
-          userTokens = computeUserTokens(
-            promptForUserCalc,
-            prevAssistantUsage,
-            prevAssistant?.thinkingInContext ?? false,
-            session.systemPromptTokens,
-            isFirstTurn,
-            session.toolDefinitionsTokens
-          )
+
+          // If the previous turn had tool rounds, the standard computeUserTokens formula
+          // gives wildly wrong results because prevAssistantUsage.promptTokens is from the
+          // FINAL tool round (which includes all intermediate reasoning sent live). That
+          // reasoning is now stripped from the historical context, making the difference
+          // negative. We correct by:
+          //   1. Adding back prevIntermediateReasoning (the stripped reasoning total).
+          //   2. Using char/4 for prevContent — completionTokens-reasoningTokens overcounts
+          //      for tool-calling turns because LM Studio includes thinking-block format
+          //      overhead tokens that don't appear in the stored content text.
+          if (!isFirstTurn && prevAssistant?.toolRounds && prevAssistant.toolRounds.length > 0 && prevAssistantUsage) {
+            const prevIntermediateReasoning = prevAssistant.toolRounds
+              .filter(r => r.toolCallIds.length > 0)
+              .reduce((s, r) => s + r.reasoningTokens, 0)
+            const prevReasoningInCtx = (prevAssistant.thinkingInContext ?? false)
+              ? (prevAssistantUsage.reasoningTokens ?? 0) : 0
+            const prevContentEst = Math.ceil((prevAssistant.content?.length ?? 0) / 4)
+            userTokens = Math.max(0,
+              promptForUserCalc - prevAssistantUsage.promptTokens
+              - prevContentEst - prevReasoningInCtx + prevIntermediateReasoning
+            )
+          } else {
+            userTokens = computeUserTokens(
+              promptForUserCalc,
+              prevAssistantUsage,
+              prevAssistant?.thinkingInContext ?? false,
+              session.systemPromptTokens,
+              isFirstTurn,
+              session.toolDefinitionsTokens
+            )
+          }
         }
         userMsg.tokens = userTokens
         await saveChatMessage(userMsg)
