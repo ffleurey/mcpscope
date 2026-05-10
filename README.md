@@ -1,12 +1,12 @@
 # AI Client App
 
-A local-first AI chat SPA for evaluating MCP-based workflows with local language models.
+A local-first AI chat tool for evaluating MCP-based workflows with local language models.
 
 ## What it is
 
 A developer tool for running and inspecting LLM + MCP tool sessions locally. The core value is **context transparency**: the app tracks exactly what is in the model's context window at every turn, segment by segment, with precise token counts derived directly from API data.
 
-Built with: Svelte 5 · TypeScript · Vite · IndexedDB
+Built with: Svelte 5 · TypeScript · Vite · Fastify · SQLite
 
 ## What it connects to
 
@@ -22,7 +22,7 @@ Built with: Svelte 5 · TypeScript · Vite · IndexedDB
 - Configurable model profiles (system prompt, temperature, reasoning mode)
 - Multiple MCP server profiles, optional per chat
 - Full diagnostic export (JSON dump of chat with all token data for offline analysis)
-- Local-only persistence via IndexedDB, no backend required
+- Local-only architecture with a local backend and SQLite persistence
 
 ## Context accounting principles
 
@@ -42,6 +42,17 @@ npm install
 npm run dev
 ```
 
+This starts:
+
+- the frontend dev server
+- the local backend on `http://127.0.0.1:3030`
+
+The backend can also run standalone:
+
+```
+npm run dev:backend
+```
+
 Configure LM Studio connections and model profiles in the sidebar settings. Optionally add MCP server profiles to enable tool use.
 
 ## Diagnostics
@@ -52,4 +63,3 @@ The chat export button (in the chat header) dumps the full session as JSON inclu
 node exports/analyze.js exports/your-export.json
 node exports/plot.js exports/your-export.json  # generates an HTML chart
 ```
-
