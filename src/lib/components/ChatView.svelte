@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
-  import { activeMessages, activeChatId, chatSessions, isStreaming, sendMessage, createChat, abortStreaming, restoredComposerText } from '../chatStore'
+  import { activeMessages, activeChatId, chatSessions, isStreaming, sendMessage, createChat, abortStreaming, restoredComposerText, exportActiveChat } from '../chatStore'
   import { modelConfigs, mcpProfiles } from '../connectionStore'
   import type { ModelConfig } from '../types'
   import ChatMessageBlock from './ChatMessageBlock.svelte'
@@ -108,6 +108,9 @@
   <div class="chat-header">
     <span class="chat-title">{session?.title ?? 'Chat'}</span>
     <span class="chat-model">{displayModelName}</span>
+    {#if hasMessages && !$isStreaming}
+      <button class="btn btn-ghost export-btn" onclick={exportActiveChat} title="Export chat diagnostics as JSON">⬇ Export</button>
+    {/if}
   </div>
 
   <!-- Transcript -->
@@ -248,6 +251,15 @@
     white-space: nowrap;
     margin-left: 1rem;
   }
+
+  .export-btn {
+    font-size: 0.72rem;
+    padding: 0.2rem 0.55rem;
+    margin-left: auto;
+    margin-right: 0.75rem;
+    opacity: 0.6;
+  }
+  .export-btn:hover { opacity: 1; }
 
   .transcript {
     flex: 1;

@@ -192,6 +192,68 @@ export async function initChatStore(): Promise<void> {
   }
 }
 
+// Export the active chat as a JSON diagnostic dump — session metadata, all messages
+// with their full token accounting fields, and the current context segments.
+// Useful for diagnosing context bar discrepancies without needing a test harness.
+export function exportActiveChat(): void {
+  const sessionId = get(activeChatId)
+  const session = get(chatSessions).find(s => s.id === sessionId)
+  if (!session) return
+
+  const messages = get(activeMessages)
+  const segments = get(activeContextSegments)
+
+  const dump = {
+    exportedAt: new Date().toISOString(),
+    session: {
+      id: session.id,
+      title: session.title,
+      modelConfigSnapshot: session.modelConfigSnapshot,
+      mcpSnapshot: session.mcpSnapshot,
+      loadedContextLength: session.loadedContextLength,
+      systemPromptTokens: session.systemPromptTokens,
+      toolDefinitionsTokens: session.toolDefinitionsTokens,
+      chatInitStatus: session.chatInitStatus,
+      isContextExhausted: session.isContextExhausted,
+      mcpTools: session.mcpTools?.map(t => ({ name: t.name, description: t.description })),
+    },
+    contextSegments: segments,
+    contextSegmentsTotal: segments.reduce((s, seg) => s + seg.tokens, 0),
+    messages: messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      status: m.status,
+      timestamp: m.timestamp,
+      contentLength: m.content.length,
+      // Token accounting
+      tokens: m.tokens,
+      usage: m.usage,
+      // Tool call tracing
+      toolRounds: m.toolRounds,
+      toolCalls: m.toolCalls?.map(tc => ({
+        id: tc.id,
+        name: tc.name,
+        status: tc.status,
+        argumentsLength: tc.argumentsJson?.length ?? 0,
+        resultLength: tc.result?.length ?? 0,
+        thinkingBeforeLength: tc.thinkingBefore?.length ?? 0,
+        durationMs: tc.startedAt && tc.completedAt ? tc.completedAt - tc.startedAt : null,
+      })),
+      thinkingInContext: m.thinkingInContext,
+      thinkingLength: m.thinking?.length ?? 0,
+      trace: m.trace,
+    })),
+  }
+
+  const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `chat-export-${session.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${Date.now()}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export async function createChat(modelConfig: ModelConfig, mcpProfileId: string | null = null): Promise<void> {
   const now = Date.now()
 
