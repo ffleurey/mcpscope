@@ -6,7 +6,7 @@ import type { SessionTraceBundle } from './replayHarness.js'
 import { expectTraceToReplay } from './replayHarness.js'
 
 function makeSqlitePath() {
-  return path.join('.tmp-test-data', `replay-fixture-${crypto.randomUUID()}.db`)
+  return path.join('.tmp-test-data', `replay-fixture-${crypto.randomUUID()}`, 'test.db')
 }
 
 async function captureTraceFixture(input: {

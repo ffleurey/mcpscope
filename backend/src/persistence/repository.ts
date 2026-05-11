@@ -1,13 +1,18 @@
 import type Database from 'better-sqlite3'
 import type {
   ModelProfileSnapshot,
-  McpProfileSnapshot,
   PartRecord,
   RawExchangeRecord,
   RoundRecord,
   SessionRecord,
   TurnRecord,
 } from '../domain/model.js'
+import type { McpProfileSnapshot } from '../domain/model.js'
+import type {
+  LmStudioConnection as LmStudioConnectionRecord,
+  ModelConfig as ModelConfigRecord,
+  McpServerProfile as McpServerProfileRecord,
+} from '../domain/configuration.js'
 
 function parseJson<T>(value: string | null): T | null {
   return value ? (JSON.parse(value) as T) : null
@@ -112,6 +117,155 @@ export function getSessionRecord(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
+}
+
+export function listSessionRecords(connection: Database.Database): SessionRecord[] {
+  const rows = connection.prepare(`
+    SELECT *
+    FROM sessions
+    ORDER BY updated_at DESC, created_at DESC
+  `).all() as Array<{
+    id: string
+    title: string
+    status: SessionRecord['status']
+    init_status: SessionRecord['initStatus']
+    model_profile_snapshot_json: string
+    mcp_profile_snapshot_json: string | null
+    loaded_context_length: number | null
+    system_prompt_tokens: number | null
+    tool_definitions_tokens: number | null
+    is_context_exhausted: number
+    created_at: number
+    updated_at: number
+  }>
+
+  return rows.map(row => ({
+    id: row.id,
+    title: row.title,
+    status: row.status,
+    initStatus: row.init_status,
+    modelProfileSnapshot: JSON.parse(row.model_profile_snapshot_json) as ModelProfileSnapshot,
+    mcpProfileSnapshot: parseJson<McpProfileSnapshot>(row.mcp_profile_snapshot_json),
+    loadedContextLength: row.loaded_context_length,
+    systemPromptTokens: row.system_prompt_tokens,
+    toolDefinitionsTokens: row.tool_definitions_tokens,
+    isContextExhausted: row.is_context_exhausted === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }))
+}
+
+export function deleteSessionRecord(connection: Database.Database, sessionId: string): boolean {
+  const result = connection.prepare(`
+    DELETE FROM sessions
+    WHERE id = ?
+  `).run(sessionId)
+
+  return result.changes > 0
+}
+
+function upsertJsonRecord(
+  connection: Database.Database,
+  tableName: string,
+  input: {
+    id: string
+    name: string
+    recordJson: string
+    createdAt: number
+    updatedAt: number
+  },
+): void {
+  connection.prepare(`
+    INSERT INTO ${tableName} (id, name, record_json, created_at, updated_at)
+    VALUES (@id, @name, @recordJson, @createdAt, @updatedAt)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      record_json = excluded.record_json,
+      created_at = excluded.created_at,
+      updated_at = excluded.updated_at
+  `).run(input)
+}
+
+function listJsonRecords<T>(connection: Database.Database, tableName: string): T[] {
+  const rows = connection.prepare(`
+    SELECT record_json
+    FROM ${tableName}
+    ORDER BY updated_at DESC, created_at DESC, name ASC
+  `).all() as Array<{ record_json: string }>
+
+  return rows.map(row => JSON.parse(row.record_json) as T)
+}
+
+function deleteJsonRecord(connection: Database.Database, tableName: string, id: string): boolean {
+  const result = connection.prepare(`
+    DELETE FROM ${tableName}
+    WHERE id = ?
+  `).run(id)
+
+  return result.changes > 0
+}
+
+export function upsertLmConnection(
+  connection: Database.Database,
+  record: LmStudioConnectionRecord,
+): void {
+  upsertJsonRecord(connection, 'lm_connections', {
+    id: record.id,
+    name: record.name,
+    recordJson: JSON.stringify(record),
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  })
+}
+
+export function listLmConnections(connection: Database.Database): LmStudioConnectionRecord[] {
+  return listJsonRecords<LmStudioConnectionRecord>(connection, 'lm_connections')
+}
+
+export function deleteLmConnection(connection: Database.Database, id: string): boolean {
+  return deleteJsonRecord(connection, 'lm_connections', id)
+}
+
+export function upsertModelConfig(
+  connection: Database.Database,
+  record: ModelConfigRecord,
+): void {
+  upsertJsonRecord(connection, 'model_configs', {
+    id: record.id,
+    name: record.name,
+    recordJson: JSON.stringify(record),
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  })
+}
+
+export function listModelConfigs(connection: Database.Database): ModelConfigRecord[] {
+  return listJsonRecords<ModelConfigRecord>(connection, 'model_configs')
+}
+
+export function deleteModelConfig(connection: Database.Database, id: string): boolean {
+  return deleteJsonRecord(connection, 'model_configs', id)
+}
+
+export function upsertMcpServerProfile(
+  connection: Database.Database,
+  record: McpServerProfileRecord,
+): void {
+  upsertJsonRecord(connection, 'mcp_server_profiles', {
+    id: record.id,
+    name: record.name,
+    recordJson: JSON.stringify(record),
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  })
+}
+
+export function listMcpServerProfiles(connection: Database.Database): McpServerProfileRecord[] {
+  return listJsonRecords<McpServerProfileRecord>(connection, 'mcp_server_profiles')
+}
+
+export function deleteMcpServerProfile(connection: Database.Database, id: string): boolean {
+  return deleteJsonRecord(connection, 'mcp_server_profiles', id)
 }
 
 export function insertTurnRecord(connection: Database.Database, turn: TurnRecord): void {

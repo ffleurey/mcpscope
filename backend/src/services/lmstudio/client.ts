@@ -86,6 +86,27 @@ export interface LmStudioStreamedChatCompletionResult {
   chunks: LmStudioChatCompletionChunk[]
 }
 
+export type LmStudioStreamDelta =
+  | {
+      kind: 'reasoning'
+      textDelta: string
+    }
+  | {
+      kind: 'content'
+      textDelta: string
+    }
+  | {
+      kind: 'tool-call'
+      toolCallIndex: number
+      idDelta?: string | undefined
+      nameDelta?: string | undefined
+      argumentsDelta?: string | undefined
+    }
+
+export interface LmStudioStreamCallbacks {
+  onDelta?(delta: LmStudioStreamDelta): void
+}
+
 export interface LmStudioRawExchange {
   requestUrl: string
   requestMethod: string
@@ -337,10 +358,51 @@ export function parseChatCompletionStream(
   }
 }
 
+function emitChunkDeltas(
+  chunk: LmStudioChatCompletionChunk,
+  onDelta: ((delta: LmStudioStreamDelta) => void) | undefined,
+): void {
+  if (!onDelta) {
+    return
+  }
+
+  const delta = chunk.choices?.[0]?.delta
+  if (!delta) {
+    return
+  }
+
+  if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length > 0) {
+    onDelta({
+      kind: 'reasoning',
+      textDelta: delta.reasoning_content,
+    })
+  }
+
+  if (typeof delta.content === 'string' && delta.content.length > 0) {
+    onDelta({
+      kind: 'content',
+      textDelta: delta.content,
+    })
+  }
+
+  if (Array.isArray(delta.tool_calls)) {
+    for (const toolCallDelta of delta.tool_calls) {
+      onDelta({
+        kind: 'tool-call',
+        toolCallIndex: toolCallDelta.index ?? 0,
+        ...(typeof toolCallDelta.id === 'string' ? { idDelta: toolCallDelta.id } : {}),
+        ...(typeof toolCallDelta.function?.name === 'string' ? { nameDelta: toolCallDelta.function.name } : {}),
+        ...(typeof toolCallDelta.function?.arguments === 'string' ? { argumentsDelta: toolCallDelta.function.arguments } : {}),
+      })
+    }
+  }
+}
+
 export async function streamChatCompletion(
   baseUrl: string,
   apiKey: string | undefined,
   body: Record<string, unknown>,
+  callbacks?: LmStudioStreamCallbacks,
 ): Promise<LmStudioStreamedChatCompletionResult> {
   const response = await fetch(buildUrl(baseUrl, 'chat/completions'), {
     method: 'POST',
@@ -363,7 +425,78 @@ export async function streamChatCompletion(
     throw new Error(`LM Studio streamed completion failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
   }
 
-  const rawText = await response.text()
+  if (!response.body) {
+    const rawText = await response.text()
+    const parsed = parseChatCompletionStream(rawText)
+    parsed.chunks.forEach(chunk => emitChunkDeltas(chunk, callbacks?.onDelta))
+    return parsed
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let rawText = ''
+  let buffered = ''
+  let currentDataLines: string[] = []
+
+  const processBufferedLines = () => {
+    while (true) {
+      const newlineIndex = buffered.indexOf('\n')
+      if (newlineIndex < 0) {
+        return
+      }
+
+      const rawLine = buffered.slice(0, newlineIndex)
+      buffered = buffered.slice(newlineIndex + 1)
+      const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
+
+      if (line.length === 0) {
+        if (currentDataLines.length === 0) {
+          continue
+        }
+        const payload = currentDataLines.join('\n')
+        currentDataLines = []
+        if (payload !== '[DONE]') {
+          emitChunkDeltas(JSON.parse(payload) as LmStudioChatCompletionChunk, callbacks?.onDelta)
+        }
+        continue
+      }
+
+      if (line.startsWith('data:')) {
+        currentDataLines.push(line.slice(5).trimStart())
+      }
+    }
+  }
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) {
+      break
+    }
+
+    const text = decoder.decode(value, { stream: true })
+    rawText += text
+    buffered += text
+    processBufferedLines()
+  }
+
+  const finalChunk = decoder.decode()
+  rawText += finalChunk
+  buffered += finalChunk
+  processBufferedLines()
+
+  if (buffered.length > 0) {
+    const line = buffered.endsWith('\r') ? buffered.slice(0, -1) : buffered
+    if (line.startsWith('data:')) {
+      currentDataLines.push(line.slice(5).trimStart())
+    }
+  }
+  if (currentDataLines.length > 0) {
+    const payload = currentDataLines.join('\n')
+    if (payload !== '[DONE]') {
+      emitChunkDeltas(JSON.parse(payload) as LmStudioChatCompletionChunk, callbacks?.onDelta)
+    }
+  }
+
   return parseChatCompletionStream(rawText)
 }
 

@@ -3,12 +3,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { buildBackendApp } from '../app.js'
 import type {
-  PartRecord,
   RawExchangeRecord,
-  RoundRecord,
   SessionRecord,
-  TurnRecord,
 } from '../domain/model.js'
+import type { SessionTraceBundle } from '../domain/trace.js'
+export type { SessionTraceBundle } from '../domain/trace.js'
 import {
   parseChatCompletionStream,
   type LmStudioAssistantSegment,
@@ -18,16 +17,6 @@ import {
 } from '../services/lmstudio/client.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import type { LmStudioGateway } from '../runtime/modelTurns.js'
-
-export interface SessionTraceBundle {
-  session: SessionRecord
-  turns: TurnRecord[]
-  rounds: RoundRecord[]
-  parts: PartRecord[]
-  rawExchanges: RawExchangeRecord[]
-  transcript: unknown[]
-  context: unknown[]
-}
 
 type RawExchangePair = {
   request: RawExchangeRecord
@@ -39,7 +28,7 @@ type ReplayResult = {
 }
 
 function makeSqlitePath() {
-  return path.join('.tmp-test-data', `replay-trace-${crypto.randomUUID()}.db`)
+  return path.join('.tmp-test-data', `replay-trace-${crypto.randomUUID()}`, 'test.db')
 }
 
 function parseJsonBody(text: string | null): unknown {

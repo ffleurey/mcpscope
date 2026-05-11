@@ -9,6 +9,9 @@ import {
   insertRoundRecord,
   insertTurnRecord,
   listPartRecordsBySession,
+  listRawExchangeRecordsBySession,
+  listRoundRecordsBySession,
+  listTurnRecordsBySession,
   updatePartRecord,
   updateRoundRecord,
   updateSessionRecord,
@@ -26,8 +29,10 @@ import { deriveContextEntries, deriveTranscriptEntries, buildModelMessages } fro
 import type {
   LmStudioChatCompletionResponse,
   LmStudioPromptProbeResult,
+  LmStudioStreamCallbacks,
   LmStudioStreamedChatCompletionResult,
 } from '../services/lmstudio/client.js'
+import { buildSessionTraceBundle } from '../domain/trace.js'
 import {
   allocateProportionalTokenCounts,
   deriveExactDeltaTokenMetadata,
@@ -36,6 +41,7 @@ import {
 import { createSystemPromptPart, ensureSessionPreludeTokenMetadata } from './sessionPrelude.js'
 import { probeRequestPromptTokens } from './promptTokenProbing.js'
 import { executeChatCompletion } from './streamedCompletion.js'
+import type { TurnStreamEventSink } from './streamEvents.js'
 
 export interface LmStudioGateway {
   createChatCompletion(
@@ -47,6 +53,7 @@ export interface LmStudioGateway {
     baseUrl: string,
     apiKey: string | undefined,
     body: Record<string, unknown>,
+    callbacks?: LmStudioStreamCallbacks,
   ): Promise<LmStudioStreamedChatCompletionResult>
   probePromptTokens?(
     baseUrl: string,
@@ -137,6 +144,7 @@ export async function createModelOnlyTurn(
   database: BackendDatabase,
   lmStudioGateway: LmStudioGateway,
   input: CreateTurnInput,
+  emitEvent?: TurnStreamEventSink,
 ): Promise<RuntimeTurnResult> {
   const session = getSessionRecord(database.connection, input.sessionId)
   if (!session) {
@@ -238,12 +246,30 @@ export async function createModelOnlyTurn(
     insertPartRecord(database.connection, userPart)
   })
   persistInitialState()
+  emitEvent?.({
+    type: 'turn-started',
+    turn: { ...turn },
+  })
+  emitEvent?.({
+    type: 'round-started',
+    round: { ...round },
+  })
 
   const streamedCompletion = await executeChatCompletion(
     lmStudioGateway,
     session.modelProfileSnapshot.connectionBaseUrl,
     session.modelProfileSnapshot.apiKey ?? undefined,
     requestBody,
+    {
+      onDelta(delta) {
+        emitEvent?.({
+          type: 'part-delta',
+          turnId,
+          roundId,
+          delta,
+        })
+      },
+    },
   )
   const completion = streamedCompletion.completion
 
@@ -521,6 +547,28 @@ export async function createModelOnlyTurn(
   finalizeTx()
 
   const persistedParts = listPartRecordsBySession(database.connection, session.id)
+  assistantParts.forEach(part => emitEvent?.({
+    type: 'part-committed',
+    part,
+  }))
+  emitEvent?.({
+    type: 'round-committed',
+    round: { ...round },
+  })
+  const trace = buildSessionTraceBundle({
+    session,
+    turns: listTurnRecordsBySession(database.connection, session.id),
+    rounds: listRoundRecordsBySession(database.connection, session.id),
+    parts: persistedParts,
+    rawExchanges: listRawExchangeRecordsBySession(database.connection, session.id),
+    transcript: deriveTranscriptEntries(persistedParts),
+    context: deriveContextEntries(persistedParts),
+  })
+  emitEvent?.({
+    type: 'turn-committed',
+    turn: { ...turn },
+    trace,
+  })
 
   return {
     session,
@@ -528,7 +576,7 @@ export async function createModelOnlyTurn(
     round,
     rounds: [round],
     parts: persistedParts.filter(part => part.turnId === turnId),
-    transcript: deriveTranscriptEntries(persistedParts),
-    context: deriveContextEntries(persistedParts),
+    transcript: trace.transcript,
+    context: trace.context,
   }
 }

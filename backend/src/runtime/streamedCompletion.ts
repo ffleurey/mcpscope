@@ -1,6 +1,7 @@
 import type {
   LmStudioAssistantSegment,
   LmStudioChatCompletionResponse,
+  LmStudioStreamCallbacks,
   LmStudioStreamedChatCompletionResult,
 } from '../services/lmstudio/client.js'
 import type { LmStudioGateway } from './modelTurns.js'
@@ -40,9 +41,10 @@ export async function executeChatCompletion(
   baseUrl: string,
   apiKey: string | undefined,
   body: Record<string, unknown>,
+  callbacks?: LmStudioStreamCallbacks,
 ): Promise<LmStudioStreamedChatCompletionResult> {
   if (lmStudioGateway.streamChatCompletion) {
-    return lmStudioGateway.streamChatCompletion(baseUrl, apiKey, body)
+    return lmStudioGateway.streamChatCompletion(baseUrl, apiKey, body, callbacks)
   }
 
   const completion = await lmStudioGateway.createChatCompletion(baseUrl, apiKey, {

@@ -16,6 +16,9 @@ import {
   insertRoundRecord,
   insertTurnRecord,
   listPartRecordsBySession,
+  listRawExchangeRecordsBySession,
+  listRoundRecordsBySession,
+  listTurnRecordsBySession,
   updatePartRecord,
   updateRoundRecord,
   updateSessionRecord,
@@ -24,6 +27,7 @@ import {
 import type { LmStudioGateway, RuntimeTurnResult } from './modelTurns.js'
 import type { ApiMessage } from '../domain/selectors.js'
 import type { McpRawExchange, McpToolCallResult, McpToolsListResult } from '../services/mcp/httpClient.js'
+import { buildSessionTraceBundle } from '../domain/trace.js'
 import {
   allocateProportionalTokenCounts,
   deriveExactDeltaTokenMetadata,
@@ -35,6 +39,7 @@ import {
 } from './sessionPrelude.js'
 import { probeRequestPromptTokens } from './promptTokenProbing.js'
 import { executeChatCompletion } from './streamedCompletion.js'
+import type { TurnStreamEventSink } from './streamEvents.js'
 
 export interface McpGateway {
   initializeSession(serverUrl: string): Promise<{
@@ -825,6 +830,7 @@ export async function createToolEnabledTurn(
   lmStudioGateway: LmStudioGateway,
   mcpGateway: McpGateway,
   input: { sessionId: string; userContent: string; maxToolRounds: number },
+  emitEvent?: TurnStreamEventSink,
 ): Promise<RuntimeTurnResult> {
   if (input.maxToolRounds < 1) {
     throw new Error('maxToolRounds must be at least 1')
@@ -891,6 +897,14 @@ export async function createToolEnabledTurn(
     insertPartRecord(database.connection, userPart)
   })
   initializeTx()
+  emitEvent?.({
+    type: 'turn-started',
+    turn: { ...turn },
+  })
+  emitEvent?.({
+    type: 'round-started',
+    round: { ...initialRound },
+  })
 
   const rounds: RoundRecord[] = []
   let requestMessages: ApiMessage[] = baseMessages
@@ -922,6 +936,16 @@ export async function createToolEnabledTurn(
       session.modelProfileSnapshot.connectionBaseUrl,
       session.modelProfileSnapshot.apiKey ?? undefined,
       requestBody,
+      {
+        onDelta(delta) {
+          emitEvent?.({
+            type: 'part-delta',
+            turnId,
+            roundId: currentRound.id,
+            delta,
+          })
+        },
+      },
     )
     const completion = streamedCompletion.completion
 
@@ -1081,6 +1105,18 @@ export async function createToolEnabledTurn(
         toolResultParts.forEach(part => insertPartRecord(database.connection, part))
       })
       toolTx()
+      assistantMessageParts.forEach(part => emitEvent?.({
+        type: 'part-committed',
+        part,
+      }))
+      toolResultParts.forEach(part => emitEvent?.({
+        type: 'part-committed',
+        part,
+      }))
+      emitEvent?.({
+        type: 'round-committed',
+        round: { ...currentRound },
+      })
 
       const baseMessageCount = requestMessages.length
       requestMessages = [
@@ -1129,6 +1165,10 @@ export async function createToolEnabledTurn(
         responseTraceJson: null,
       }
       insertRoundRecord(database.connection, currentRound)
+      emitEvent?.({
+        type: 'round-started',
+        round: { ...currentRound },
+      })
       continue
     }
 
@@ -1203,16 +1243,38 @@ export async function createToolEnabledTurn(
       updateSessionRecord(database.connection, session)
     })
     finalizeTx()
+    assistantParts.forEach(part => emitEvent?.({
+      type: 'part-committed',
+      part,
+    }))
+    emitEvent?.({
+      type: 'round-committed',
+      round: { ...currentRound },
+    })
 
     const persistedParts = listPartRecordsBySession(database.connection, session.id)
+    const trace = buildSessionTraceBundle({
+      session,
+      turns: listTurnRecordsBySession(database.connection, session.id),
+      rounds: listRoundRecordsBySession(database.connection, session.id),
+      parts: persistedParts,
+      rawExchanges: listRawExchangeRecordsBySession(database.connection, session.id),
+      transcript: deriveTranscriptEntries(persistedParts),
+      context: deriveContextEntries(persistedParts),
+    })
+    emitEvent?.({
+      type: 'turn-committed',
+      turn: { ...turn },
+      trace,
+    })
     return {
       session,
       turn,
       round: currentRound,
       rounds,
       parts: persistedParts.filter(part => part.turnId === turnId),
-      transcript: deriveTranscriptEntries(persistedParts),
-      context: deriveContextEntries(persistedParts),
+      transcript: trace.transcript,
+      context: trace.context,
     }
   }
 

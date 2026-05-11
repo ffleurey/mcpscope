@@ -14,7 +14,7 @@ import {
   turnStatusValues,
 } from '../domain/model.js'
 
-const SQLITE_SCHEMA_VERSION = 1
+const SQLITE_SCHEMA_VERSION = 2
 
 function sqlEnum(values: readonly string[]): string {
   return values.map(value => `'${value}'`).join(', ')
@@ -39,6 +39,30 @@ export function initializeBackendSchema(connection: Database.Database): void {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       snapshot_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS lm_connections (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS model_configs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS mcp_server_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      record_json TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );

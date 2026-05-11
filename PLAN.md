@@ -54,6 +54,8 @@ This is the active implementation order for the remaining frontend/backend archi
 
 Do this before frontend rewiring so the frontend has a stable contract to target.
 
+**Status:** Completed
+
 Deliver:
 
 - `GET /api/sessions` for lightweight sidebar summaries
@@ -70,6 +72,8 @@ Tests:
 #### Step 2. Add backend streaming API
 
 Do this on top of the same trace contract, not as a second model.
+
+**Status:** Initial implementation completed
 
 Deliver:
 
@@ -94,9 +98,17 @@ Tests:
 - reasoning/content/tool-call streaming behavior
 - rule that deltas are transient and committed parts are canonical
 
+Current implementation note:
+
+- the backend now exposes the SSE endpoint and emits canonical `turn-started`, `round-started`, `part-delta`, `part-committed`, `round-committed`, `turn-committed`, and `turn-failed` events
+- local backend tests cover model-only and tool-enabled SSE event ordering and canonical replacement behavior
+- next work moves to the frontend data layer rather than expanding backend protocol shape further
+
 #### Step 3. Build the new frontend data layer
 
 Only after the backend contract is stable enough.
+
+**Status:** Next active step
 
 Deliver:
 
