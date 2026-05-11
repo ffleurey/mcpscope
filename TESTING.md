@@ -74,6 +74,8 @@ Purpose:
 
 Live runtime integration now saves the exported trace bundle to `backend-data/test-artifacts/`.
 
+`backend-data/README.md` documents what belongs in that folder, how to regenerate it, and which captures are intentionally kept.
+
 ## How to add a regression
 
 1. Reproduce the behavior in a live integration run or deterministic backend run.
