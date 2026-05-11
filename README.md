@@ -1,65 +1,87 @@
 # AI Client App
 
-A local-first AI chat tool for evaluating MCP-based workflows with local language models.
+Local-first tooling for **LLM chat, MCP server work, trace inspection, and replayable runtime analysis**.
 
-## What it is
+The project is now organized around a **TypeScript backend as the source of truth** and a frontend that is being slimmed down into a UI layer. The backend owns runtime orchestration, persistence, token/context accounting, reasoning retention, raw exchange capture, and trace export.
 
-A developer tool for running and inspecting LLM + MCP tool sessions locally. The core value is **context transparency**: the app tracks exactly what is in the model's context window at every turn, segment by segment, with precise token counts derived directly from API data.
+## Current status
 
-Built with: Svelte 5 · TypeScript · Vite · Fastify · SQLite
+The first backend increment is complete:
 
-## What it connects to
+- canonical backend model for sessions, turns, rounds, parts, and raw exchanges
+- streamed LM Studio runtime with segmented reasoning/content capture
+- reasoning kept in transcript history but stripped from later model-visible context
+- SQLite persistence for runtime state and diagnostics
+- full session trace export at `/api/sessions/:sessionId/trace`
+- deterministic replay harness that re-runs exported traces as local regression tests
 
-- **LM Studio** — local LLM runtime (OpenAI-compatible API, streaming, extended thinking support)
-- **MCP servers** — tool servers over Streamable HTTP transport (e.g. Home Assistant statistics)
+The next stage is frontend rewiring so the UI becomes a thin client over the backend APIs.
 
-## Key features
+## Architecture
 
-- Real-time streaming chat with reasoning/thinking support
-- Multi-round tool call execution with full trace visibility
-- **Context bar** — color-coded segment-by-segment view of exactly what is in the model's context window, updated live during each turn
-- Per-message token statistics (prompt, completion, reasoning tokens, generation speed)
-- Configurable model profiles (system prompt, temperature, reasoning mode)
-- Multiple MCP server profiles, optional per chat
-- Full diagnostic export (JSON dump of chat with all token data for offline analysis)
-- Local-only architecture with a local backend and SQLite persistence
+### Backend
 
-## Context accounting principles
+- Fastify + TypeScript
+- SQLite runtime store
+- LM Studio integration with streamed completions
+- MCP HTTP client with raw request/response capture
+- canonical runtime entities:
+  - `Session`
+  - `Turn`
+  - `Round`
+  - `Part`
+  - `RawExchangeRecord`
 
-The app tracks every token with a clear provenance:
+### Frontend
 
-- **System prompt and tool definitions** — probed via API at session start (exact)
-- **User messages** — back-calculated from API `promptTokens` deltas (exact for simple turns; char/4 estimate for turns following tool-calling turns)
-- **Tool calls and results (tc+tr)** — computed from per-round `promptTokens` deltas; when the next turn arrives, corrected to the exact historical cost using LM Studio's feedback
-- **Assistant content** — from API `completionTokens - reasoningTokens` (exact for simple turns)
-- **Reasoning/thinking** — shown while in context; stripped from historical turns
-- No permanent character-count estimates remain once API data is available
+- Svelte + TypeScript + Vite
+- progressively moving toward presentation-only responsibilities
+- should consume backend transcript, context, and trace data rather than re-implement runtime logic
 
-## Setup
+## Trace and replay model
 
-```
-npm install
+Every useful runtime artifact should be available from backend state, not reconstructed in tests:
+
+- transcript-visible chat history
+- model-visible context history
+- ordered reasoning/content/tool/result parts
+- raw LM Studio exchanges, including streamed payloads
+- raw MCP exchanges
+- prompt-token probe exchanges used for token attribution
+
+That trace can then be exported and replayed through the backend test harness without guessing missing state.
+
+## Token and reasoning rules
+
+- prompt-side accounting prefers exact probe and delta-based attribution
+- grouped totals are split proportionally only when the upstream API exposes an aggregate but not per-segment counts
+- reasoning is preserved in transcript history for analysis
+- reasoning is stripped from later model-visible context after the turn completes
+- multiple reasoning blocks inside a single tool-enabled turn are captured in order from the streamed response
+
+## Development
+
+```bash
 npm run dev
+npm run backend:dev
+npm run frontend:dev
 ```
 
-This starts:
+## Testing
 
-- the frontend dev server
-- the local backend on `http://127.0.0.1:3030`
-
-The backend can also run standalone:
-
-```
-npm run dev:backend
+```bash
+npm test
+npm run test:integration
 ```
 
-Configure LM Studio connections and model profiles in the sidebar settings. Optionally add MCP server profiles to enable tool use.
+- local tests cover pure logic, runtime behavior, app routes, and trace replay
+- integration tests exercise the live LM Studio + MCP path and save traces that can later be promoted into replay fixtures
 
-## Diagnostics
+## Project docs
 
-The chat export button (in the chat header) dumps the full session as JSON including all token breakdowns per message and tool round. The `exports/` folder contains scripts to analyse exported files:
-
-```
-node exports/analyze.js exports/your-export.json
-node exports/plot.js exports/your-export.json  # generates an HTML chart
-```
+- `PROJECT.md` - project scope and product direction
+- `PLAN.md` - current roadmap
+- `DESIGN.md` - current system design
+- `BACKEND.md` - backend runtime summary
+- `TESTING.md` - test strategy
+- `REFACTORING.md` - backend refactor closure summary

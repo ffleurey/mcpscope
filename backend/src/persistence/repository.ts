@@ -1,0 +1,574 @@
+import type Database from 'better-sqlite3'
+import type {
+  ModelProfileSnapshot,
+  McpProfileSnapshot,
+  PartRecord,
+  RawExchangeRecord,
+  RoundRecord,
+  SessionRecord,
+  TurnRecord,
+} from '../domain/model.js'
+
+function parseJson<T>(value: string | null): T | null {
+  return value ? (JSON.parse(value) as T) : null
+}
+
+function stringifyJson(value: unknown): string | null {
+  return value == null ? null : JSON.stringify(value)
+}
+
+export function createSessionRecord(
+  connection: Database.Database,
+  session: SessionRecord,
+): void {
+  connection.prepare(`
+    INSERT INTO sessions (
+      id, title, status, init_status, model_profile_snapshot_json, mcp_profile_snapshot_json,
+      loaded_context_length, system_prompt_tokens, tool_definitions_tokens,
+      is_context_exhausted, created_at, updated_at
+    ) VALUES (
+      @id, @title, @status, @initStatus, @modelProfileSnapshotJson, @mcpProfileSnapshotJson,
+      @loadedContextLength, @systemPromptTokens, @toolDefinitionsTokens,
+      @isContextExhausted, @createdAt, @updatedAt
+    )
+  `).run({
+    id: session.id,
+    title: session.title,
+    status: session.status,
+    initStatus: session.initStatus,
+    modelProfileSnapshotJson: JSON.stringify(session.modelProfileSnapshot),
+    mcpProfileSnapshotJson: stringifyJson(session.mcpProfileSnapshot),
+    loadedContextLength: session.loadedContextLength,
+    systemPromptTokens: session.systemPromptTokens,
+    toolDefinitionsTokens: session.toolDefinitionsTokens,
+    isContextExhausted: session.isContextExhausted ? 1 : 0,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  })
+
+  connection.prepare(`
+    INSERT OR REPLACE INTO model_profiles (id, name, snapshot_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    session.modelProfileSnapshot.id,
+    session.modelProfileSnapshot.name,
+    JSON.stringify(session.modelProfileSnapshot),
+    session.modelProfileSnapshot.createdAt,
+    session.modelProfileSnapshot.updatedAt,
+  )
+
+  if (session.mcpProfileSnapshot) {
+    connection.prepare(`
+      INSERT OR REPLACE INTO mcp_profiles (id, name, snapshot_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+      session.mcpProfileSnapshot.id,
+      session.mcpProfileSnapshot.name,
+      JSON.stringify(session.mcpProfileSnapshot),
+      session.mcpProfileSnapshot.createdAt,
+      session.mcpProfileSnapshot.updatedAt,
+    )
+  }
+}
+
+export function getSessionRecord(
+  connection: Database.Database,
+  sessionId: string,
+): SessionRecord | null {
+  const row = connection.prepare(`
+    SELECT *
+    FROM sessions
+    WHERE id = ?
+  `).get(sessionId) as
+    | {
+        id: string
+        title: string
+        status: SessionRecord['status']
+        init_status: SessionRecord['initStatus']
+        model_profile_snapshot_json: string
+        mcp_profile_snapshot_json: string | null
+        loaded_context_length: number | null
+        system_prompt_tokens: number | null
+        tool_definitions_tokens: number | null
+        is_context_exhausted: number
+        created_at: number
+        updated_at: number
+      }
+    | undefined
+
+  if (!row) return null
+
+  return {
+    id: row.id,
+    title: row.title,
+    status: row.status,
+    initStatus: row.init_status,
+    modelProfileSnapshot: JSON.parse(row.model_profile_snapshot_json) as ModelProfileSnapshot,
+    mcpProfileSnapshot: parseJson<McpProfileSnapshot>(row.mcp_profile_snapshot_json),
+    loadedContextLength: row.loaded_context_length,
+    systemPromptTokens: row.system_prompt_tokens,
+    toolDefinitionsTokens: row.tool_definitions_tokens,
+    isContextExhausted: row.is_context_exhausted === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function insertTurnRecord(connection: Database.Database, turn: TurnRecord): void {
+  connection.prepare(`
+    INSERT INTO turns (
+      id, session_id, sequence_number, status, outcome,
+      prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
+      created_at, completed_at
+    ) VALUES (
+      @id, @sessionId, @sequenceNumber, @status, @outcome,
+      @promptTokens, @completionTokens, @reasoningTokens, @totalTokens,
+      @createdAt, @completedAt
+    )
+  `).run({
+    id: turn.id,
+    sessionId: turn.sessionId,
+    sequenceNumber: turn.sequenceNumber,
+    status: turn.status,
+    outcome: turn.outcome,
+    promptTokens: turn.usage.promptTokens,
+    completionTokens: turn.usage.completionTokens,
+    reasoningTokens: turn.usage.reasoningTokens,
+    totalTokens: turn.usage.totalTokens,
+    createdAt: turn.createdAt,
+    completedAt: turn.completedAt,
+  })
+}
+
+export function updateTurnRecord(connection: Database.Database, turn: TurnRecord): void {
+  connection.prepare(`
+    UPDATE turns
+    SET status = @status,
+        outcome = @outcome,
+        prompt_tokens = @promptTokens,
+        completion_tokens = @completionTokens,
+        reasoning_tokens = @reasoningTokens,
+        total_tokens = @totalTokens,
+        completed_at = @completedAt
+    WHERE id = @id
+  `).run({
+    id: turn.id,
+    status: turn.status,
+    outcome: turn.outcome,
+    promptTokens: turn.usage.promptTokens,
+    completionTokens: turn.usage.completionTokens,
+    reasoningTokens: turn.usage.reasoningTokens,
+    totalTokens: turn.usage.totalTokens,
+    completedAt: turn.completedAt,
+  })
+}
+
+export function insertRoundRecord(connection: Database.Database, round: RoundRecord): void {
+  connection.prepare(`
+    INSERT INTO rounds (
+      id, turn_id, round_index, status, finish_reason,
+      prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
+      request_payload_json, response_trace_json, started_at, completed_at
+    ) VALUES (
+      @id, @turnId, @roundIndex, @status, @finishReason,
+      @promptTokens, @completionTokens, @reasoningTokens, @totalTokens,
+      @requestPayloadJson, @responseTraceJson, @startedAt, @completedAt
+    )
+  `).run({
+    id: round.id,
+    turnId: round.turnId,
+    roundIndex: round.roundIndex,
+    status: round.status,
+    finishReason: round.finishReason,
+    promptTokens: round.usage.promptTokens,
+    completionTokens: round.usage.completionTokens,
+    reasoningTokens: round.usage.reasoningTokens,
+    totalTokens: round.usage.totalTokens,
+    requestPayloadJson: stringifyJson(round.requestPayloadJson),
+    responseTraceJson: stringifyJson(round.responseTraceJson),
+    startedAt: round.startedAt,
+    completedAt: round.completedAt,
+  })
+}
+
+export function updateRoundRecord(connection: Database.Database, round: RoundRecord): void {
+  connection.prepare(`
+    UPDATE rounds
+    SET status = @status,
+        finish_reason = @finishReason,
+        prompt_tokens = @promptTokens,
+        completion_tokens = @completionTokens,
+        reasoning_tokens = @reasoningTokens,
+        total_tokens = @totalTokens,
+        request_payload_json = @requestPayloadJson,
+        response_trace_json = @responseTraceJson,
+        completed_at = @completedAt
+    WHERE id = @id
+  `).run({
+    id: round.id,
+    status: round.status,
+    finishReason: round.finishReason,
+    promptTokens: round.usage.promptTokens,
+    completionTokens: round.usage.completionTokens,
+    reasoningTokens: round.usage.reasoningTokens,
+    totalTokens: round.usage.totalTokens,
+    requestPayloadJson: stringifyJson(round.requestPayloadJson),
+    responseTraceJson: stringifyJson(round.responseTraceJson),
+    completedAt: round.completedAt,
+  })
+}
+
+export function insertPartRecord(connection: Database.Database, part: PartRecord): void {
+  connection.prepare(`
+    INSERT INTO parts (
+      id, session_id, turn_id, round_id, parent_part_id, ordinal, part_type, role_label,
+      payload_text, payload_json, payload_mime_type, payload_summary,
+      display_state, collapsed_by_default, context_state, context_note,
+      token_count, token_source, token_confidence, token_note,
+      provenance_json, created_at, updated_at
+    ) VALUES (
+      @id, @sessionId, @turnId, @roundId, @parentPartId, @ordinal, @partType, @roleLabel,
+      @payloadText, @payloadJson, @payloadMimeType, @payloadSummary,
+      @displayState, @collapsedByDefault, @contextState, @contextNote,
+      @tokenCount, @tokenSource, @tokenConfidence, @tokenNote,
+      @provenanceJson, @createdAt, @updatedAt
+    )
+  `).run({
+    id: part.id,
+    sessionId: part.sessionId,
+    turnId: part.turnId,
+    roundId: part.roundId,
+    parentPartId: part.parentPartId,
+    ordinal: part.ordinal,
+    partType: part.partType,
+    roleLabel: part.roleLabel,
+    payloadText: part.payload.text,
+    payloadJson: stringifyJson(part.payload.json),
+    payloadMimeType: part.payload.mimeType,
+    payloadSummary: part.payload.summary,
+    displayState: part.display.state,
+    collapsedByDefault: part.display.collapsedByDefault ? 1 : 0,
+    contextState: part.context.state,
+    contextNote: part.context.note,
+    tokenCount: part.tokens.count,
+    tokenSource: part.tokens.source,
+    tokenConfidence: part.tokens.confidence,
+    tokenNote: part.tokens.note,
+    provenanceJson: stringifyJson(part.provenanceJson),
+    createdAt: part.createdAt,
+    updatedAt: part.updatedAt,
+  })
+}
+
+export function updatePartRecord(connection: Database.Database, part: PartRecord): void {
+  connection.prepare(`
+    UPDATE parts
+    SET parent_part_id = @parentPartId,
+        ordinal = @ordinal,
+        part_type = @partType,
+        role_label = @roleLabel,
+        payload_text = @payloadText,
+        payload_json = @payloadJson,
+        payload_mime_type = @payloadMimeType,
+        payload_summary = @payloadSummary,
+        display_state = @displayState,
+        collapsed_by_default = @collapsedByDefault,
+        context_state = @contextState,
+        context_note = @contextNote,
+        token_count = @tokenCount,
+        token_source = @tokenSource,
+        token_confidence = @tokenConfidence,
+        token_note = @tokenNote,
+        provenance_json = @provenanceJson,
+        updated_at = @updatedAt
+    WHERE id = @id
+  `).run({
+    id: part.id,
+    parentPartId: part.parentPartId,
+    ordinal: part.ordinal,
+    partType: part.partType,
+    roleLabel: part.roleLabel,
+    payloadText: part.payload.text,
+    payloadJson: stringifyJson(part.payload.json),
+    payloadMimeType: part.payload.mimeType,
+    payloadSummary: part.payload.summary,
+    displayState: part.display.state,
+    collapsedByDefault: part.display.collapsedByDefault ? 1 : 0,
+    contextState: part.context.state,
+    contextNote: part.context.note,
+    tokenCount: part.tokens.count,
+    tokenSource: part.tokens.source,
+    tokenConfidence: part.tokens.confidence,
+    tokenNote: part.tokens.note,
+    provenanceJson: stringifyJson(part.provenanceJson),
+    updatedAt: part.updatedAt,
+  })
+}
+
+export function insertRawExchangeRecord(connection: Database.Database, exchange: RawExchangeRecord): void {
+  connection.prepare(`
+    INSERT INTO raw_exchanges (
+      id, session_id, turn_id, round_id, kind, request_url, request_method,
+      request_headers_json, request_body, response_status, response_headers_json, response_body, created_at
+    ) VALUES (
+      @id, @sessionId, @turnId, @roundId, @kind, @requestUrl, @requestMethod,
+      @requestHeadersJson, @requestBody, @responseStatus, @responseHeadersJson, @responseBody, @createdAt
+    )
+  `).run({
+    id: exchange.id,
+    sessionId: exchange.sessionId,
+    turnId: exchange.turnId,
+    roundId: exchange.roundId,
+    kind: exchange.kind,
+    requestUrl: exchange.requestUrl,
+    requestMethod: exchange.requestMethod,
+    requestHeadersJson: stringifyJson(exchange.requestHeadersJson),
+    requestBody: exchange.requestBody,
+    responseStatus: exchange.responseStatus,
+    responseHeadersJson: stringifyJson(exchange.responseHeadersJson),
+    responseBody: exchange.responseBody,
+    createdAt: exchange.createdAt,
+  })
+}
+
+export function updateSessionRecord(connection: Database.Database, session: SessionRecord): void {
+  connection.prepare(`
+    UPDATE sessions
+    SET title = @title,
+        status = @status,
+        init_status = @initStatus,
+        loaded_context_length = @loadedContextLength,
+        system_prompt_tokens = @systemPromptTokens,
+        tool_definitions_tokens = @toolDefinitionsTokens,
+        is_context_exhausted = @isContextExhausted,
+        updated_at = @updatedAt
+    WHERE id = @id
+  `).run({
+    id: session.id,
+    title: session.title,
+    status: session.status,
+    initStatus: session.initStatus,
+    loadedContextLength: session.loadedContextLength,
+    systemPromptTokens: session.systemPromptTokens,
+    toolDefinitionsTokens: session.toolDefinitionsTokens,
+    isContextExhausted: session.isContextExhausted ? 1 : 0,
+    updatedAt: session.updatedAt,
+  })
+}
+
+export function listPartRecordsBySession(
+  connection: Database.Database,
+  sessionId: string,
+): PartRecord[] {
+  const rows = connection.prepare(`
+    SELECT *
+    FROM parts
+    WHERE session_id = ?
+    ORDER BY ordinal ASC
+  `).all(sessionId) as Array<{
+    id: string
+    session_id: string
+    turn_id: string | null
+    round_id: string | null
+    parent_part_id: string | null
+    ordinal: number
+    part_type: PartRecord['partType']
+    role_label: string | null
+    payload_text: string | null
+    payload_json: string | null
+    payload_mime_type: string | null
+    payload_summary: string | null
+    display_state: PartRecord['display']['state']
+    collapsed_by_default: number
+    context_state: PartRecord['context']['state']
+    context_note: string | null
+    token_count: number | null
+    token_source: PartRecord['tokens']['source']
+    token_confidence: PartRecord['tokens']['confidence']
+    token_note: string | null
+    provenance_json: string | null
+    created_at: number
+    updated_at: number
+  }>
+
+  return rows.map(row => ({
+    id: row.id,
+    sessionId: row.session_id,
+    turnId: row.turn_id,
+    roundId: row.round_id,
+    parentPartId: row.parent_part_id,
+    ordinal: row.ordinal,
+    partType: row.part_type,
+    roleLabel: row.role_label,
+    payload: {
+      text: row.payload_text,
+      json: parseJson(row.payload_json),
+      mimeType: row.payload_mime_type,
+      summary: row.payload_summary,
+    },
+    display: {
+      state: row.display_state,
+      collapsedByDefault: row.collapsed_by_default === 1,
+    },
+    context: {
+      state: row.context_state,
+      note: row.context_note,
+    },
+    tokens: {
+      count: row.token_count,
+      source: row.token_source,
+      confidence: row.token_confidence,
+      note: row.token_note,
+    },
+    provenanceJson: parseJson(row.provenance_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }))
+}
+
+export function listTurnRecordsBySession(
+  connection: Database.Database,
+  sessionId: string,
+): TurnRecord[] {
+  const rows = connection.prepare(`
+    SELECT *
+    FROM turns
+    WHERE session_id = ?
+    ORDER BY sequence_number ASC
+  `).all(sessionId) as Array<{
+    id: string
+    session_id: string
+    sequence_number: number
+    status: TurnRecord['status']
+    outcome: string | null
+    prompt_tokens: number | null
+    completion_tokens: number | null
+    reasoning_tokens: number | null
+    total_tokens: number | null
+    created_at: number
+    completed_at: number | null
+  }>
+
+  return rows.map(row => ({
+    id: row.id,
+    sessionId: row.session_id,
+    sequenceNumber: row.sequence_number,
+    status: row.status,
+    outcome: row.outcome,
+    usage: {
+      promptTokens: row.prompt_tokens,
+      completionTokens: row.completion_tokens,
+      reasoningTokens: row.reasoning_tokens,
+      totalTokens: row.total_tokens,
+    },
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+  }))
+}
+
+export function listRoundRecordsBySession(
+  connection: Database.Database,
+  sessionId: string,
+): RoundRecord[] {
+  const rows = connection.prepare(`
+    SELECT rounds.*
+    FROM rounds
+    JOIN turns ON turns.id = rounds.turn_id
+    WHERE turns.session_id = ?
+    ORDER BY turns.sequence_number ASC, rounds.round_index ASC
+  `).all(sessionId) as Array<{
+    id: string
+    turn_id: string
+    round_index: number
+    status: RoundRecord['status']
+    finish_reason: RoundRecord['finishReason']
+    prompt_tokens: number | null
+    completion_tokens: number | null
+    reasoning_tokens: number | null
+    total_tokens: number | null
+    request_payload_json: string | null
+    response_trace_json: string | null
+    started_at: number
+    completed_at: number | null
+  }>
+
+  return rows.map(row => ({
+    id: row.id,
+    turnId: row.turn_id,
+    roundIndex: row.round_index,
+    status: row.status,
+    finishReason: row.finish_reason,
+    usage: {
+      promptTokens: row.prompt_tokens,
+      completionTokens: row.completion_tokens,
+      reasoningTokens: row.reasoning_tokens,
+      totalTokens: row.total_tokens,
+    },
+    requestPayloadJson: parseJson(row.request_payload_json),
+    responseTraceJson: parseJson(row.response_trace_json),
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+  }))
+}
+
+export function listRawExchangeRecordsBySession(
+  connection: Database.Database,
+  sessionId: string,
+): RawExchangeRecord[] {
+  const rows = connection.prepare(`
+    SELECT *
+    FROM raw_exchanges
+    WHERE session_id = ?
+    ORDER BY created_at ASC, rowid ASC
+  `).all(sessionId) as Array<{
+    id: string
+    session_id: string
+    turn_id: string | null
+    round_id: string | null
+    kind: RawExchangeRecord['kind']
+    request_url: string
+    request_method: string
+    request_headers_json: string | null
+    request_body: string | null
+    response_status: number | null
+    response_headers_json: string | null
+    response_body: string | null
+    created_at: number
+  }>
+
+  return rows.map(row => ({
+    id: row.id,
+    sessionId: row.session_id,
+    turnId: row.turn_id,
+    roundId: row.round_id,
+    kind: row.kind,
+    requestUrl: row.request_url,
+    requestMethod: row.request_method,
+    requestHeadersJson: parseJson(row.request_headers_json),
+    requestBody: row.request_body,
+    responseStatus: row.response_status,
+    responseHeadersJson: parseJson(row.response_headers_json),
+    responseBody: row.response_body,
+    createdAt: row.created_at,
+  }))
+}
+
+export function getNextTurnSequenceNumber(connection: Database.Database, sessionId: string): number {
+  const row = connection.prepare(`
+    SELECT COALESCE(MAX(sequence_number), 0) AS max_sequence_number
+    FROM turns
+    WHERE session_id = ?
+  `).get(sessionId) as { max_sequence_number: number }
+
+  return row.max_sequence_number + 1
+}
+
+export function getNextPartOrdinal(connection: Database.Database, sessionId: string): number {
+  const row = connection.prepare(`
+    SELECT COALESCE(MAX(ordinal), 0) AS max_ordinal
+    FROM parts
+    WHERE session_id = ?
+  `).get(sessionId) as { max_ordinal: number }
+
+  return row.max_ordinal + 1
+}

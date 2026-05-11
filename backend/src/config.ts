@@ -6,6 +6,7 @@ export interface BackendConfig {
   corsOrigin: string | boolean
   dataDir: string
   sqlitePath: string
+  maxToolRounds: number
 }
 
 const rootDir = process.cwd()
@@ -17,6 +18,7 @@ export function getBackendConfig(): BackendConfig {
   const corsOrigin = process.env.BACKEND_CORS_ORIGIN ?? true
   const dataDir = process.env.BACKEND_DATA_DIR ?? defaultDataDir
   const sqlitePath = process.env.BACKEND_SQLITE_PATH ?? path.join(dataDir, 'ai-clientapp.db')
+  const maxToolRounds = Number(process.env.BACKEND_MAX_TOOL_ROUNDS ?? '5')
 
   return {
     host,
@@ -24,5 +26,6 @@ export function getBackendConfig(): BackendConfig {
     corsOrigin,
     dataDir,
     sqlitePath,
+    maxToolRounds,
   }
 }

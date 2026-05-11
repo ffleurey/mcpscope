@@ -17,6 +17,7 @@
     "lint:backend": "eslint backend/src --ext .ts",
     "lint:fix": "eslint src --fix",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest"
   },
   "devDependencies": {
@@ -29,6 +30,7 @@
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
     "concurrently": "^9.2.1",
+    "dotenv": "^17.2.3",
     "eslint": "^10.3.0",
     "eslint-plugin-svelte": "^3.17.1",
     "fastify": "^5.6.1",

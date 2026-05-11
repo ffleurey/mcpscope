@@ -2,7 +2,20 @@ import cors from '@fastify/cors'
 import Fastify from 'fastify'
 import { z } from 'zod'
 import type { BackendConfig } from './config.js'
+import { getDomainModelSummary } from './domain/model.js'
+import { deriveContextEntries, deriveTranscriptEntries } from './domain/selectors.js'
 import { openBackendDatabase } from './persistence/db.js'
+import {
+  getSessionRecord,
+  listPartRecordsBySession,
+  listRawExchangeRecordsBySession,
+  listRoundRecordsBySession,
+  listTurnRecordsBySession,
+} from './persistence/repository.js'
+import { createChatCompletion, probePromptTokens, probePromptTokensDetailed, streamChatCompletion } from './services/lmstudio/client.js'
+import { callMcpTool, initializeMcpSession, listMcpTools } from './services/mcp/httpClient.js'
+import { createModelOnlyTurn, createSession, type LmStudioGateway } from './runtime/modelTurns.js'
+import { createToolEnabledTurn, type McpGateway } from './runtime/toolTurns.js'
 
 const healthResponseSchema = z.object({
   status: z.literal('ok'),
@@ -10,7 +23,62 @@ const healthResponseSchema = z.object({
   sqlitePath: z.string(),
 })
 
-export async function buildBackendApp(config: BackendConfig) {
+const modelProfileSnapshotInputSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  connectionBaseUrl: z.string().url(),
+  apiKey: z.string().nullable().default(null),
+  modelKey: z.string(),
+  modelDisplayName: z.string(),
+  systemPrompt: z.string(),
+  temperature: z.number(),
+  reasoning: z.enum(['on', 'off']).nullable().default(null),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+})
+
+const mcpProfileSnapshotInputSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  url: z.string().url(),
+  transport: z.literal('streamable-http'),
+  authType: z.enum(['none', 'bearer', 'basic']).nullable().default(null),
+  authValue: z.string().nullable().default(null),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+})
+
+const createSessionInputSchema = z.object({
+  title: z.string().optional(),
+  modelProfileSnapshot: modelProfileSnapshotInputSchema,
+  mcpProfileSnapshot: mcpProfileSnapshotInputSchema.nullable().optional(),
+})
+
+const createTurnInputSchema = z.object({
+  userContent: z.string().min(1),
+})
+
+interface RuntimeDependencies {
+  lmStudioGateway: LmStudioGateway
+  mcpGateway: McpGateway
+}
+
+export async function buildBackendApp(
+  config: BackendConfig,
+  dependencies: RuntimeDependencies = {
+    lmStudioGateway: {
+      createChatCompletion,
+      streamChatCompletion,
+      probePromptTokens,
+      probePromptTokensDetailed,
+    },
+    mcpGateway: {
+      initializeSession: initializeMcpSession,
+      listTools: listMcpTools,
+      callTool: callMcpTool,
+    },
+  },
+) {
   const app = Fastify({
     logger: true,
   })
@@ -32,10 +100,19 @@ export async function buildBackendApp(config: BackendConfig) {
 
   app.get('/api/runtime', async () => {
     return {
-      mode: 'backend-foundation',
+      mode: 'backend-domain-model',
       persistence: 'sqlite',
       streamingTransport: 'http',
       reasoningRetention: 'full',
+      mcpSessionLifecycle: 'per-turn',
+      maxToolRounds: config.maxToolRounds,
+    }
+  })
+
+  app.get('/api/domain-model', async () => {
+    return {
+      ...getDomainModelSummary(),
+      schema: database.schema,
     }
   })
 
@@ -47,8 +124,90 @@ export async function buildBackendApp(config: BackendConfig) {
       },
       storage: {
         sqlitePath: database.path,
+        tables: database.schema.tables,
       },
     }
+  })
+
+  app.post('/api/sessions', async (request, reply) => {
+    const input = createSessionInputSchema.parse(request.body)
+    const session = createSession(database, input)
+    reply.code(201)
+    return { session }
+  })
+
+  app.get('/api/sessions/:sessionId/transcript', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return { error: 'Session not found' }
+    }
+    const parts = listPartRecordsBySession(database.connection, sessionId)
+    return {
+      session,
+      transcript: deriveTranscriptEntries(parts),
+    }
+  })
+
+  app.get('/api/sessions/:sessionId/context', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return { error: 'Session not found' }
+    }
+    const parts = listPartRecordsBySession(database.connection, sessionId)
+    return {
+      session,
+      context: deriveContextEntries(parts),
+    }
+  })
+
+  app.get('/api/sessions/:sessionId/trace', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return { error: 'Session not found' }
+    }
+    const turns = listTurnRecordsBySession(database.connection, sessionId)
+    const rounds = listRoundRecordsBySession(database.connection, sessionId)
+    const parts = listPartRecordsBySession(database.connection, sessionId)
+    const rawExchanges = listRawExchangeRecordsBySession(database.connection, sessionId)
+    return {
+      session,
+      turns,
+      rounds,
+      parts,
+      rawExchanges,
+      transcript: deriveTranscriptEntries(parts),
+      context: deriveContextEntries(parts),
+    }
+  })
+
+  app.post('/api/sessions/:sessionId/turns', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const input = createTurnInputSchema.parse(request.body)
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return { error: 'Session not found' }
+    }
+
+    const result = session.mcpProfileSnapshot
+      ? await createToolEnabledTurn(database, dependencies.lmStudioGateway, dependencies.mcpGateway, {
+          sessionId,
+          userContent: input.userContent,
+          maxToolRounds: config.maxToolRounds,
+        })
+      : await createModelOnlyTurn(database, dependencies.lmStudioGateway, {
+          sessionId,
+          userContent: input.userContent,
+        })
+
+    reply.code(201)
+    return result
   })
 
   app.addHook('onClose', async () => {
