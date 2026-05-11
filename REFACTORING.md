@@ -27,4 +27,16 @@ The main remaining refactor is on the frontend side:
 - consume backend transcript/context/trace APIs directly
 - keep the UI focused on presentation and workflow
 
-This file now serves as a closure note for the backend refactor rather than an active implementation plan.
+## Planning status
+
+This file is **not** the active implementation roadmap.
+
+Use `PLAN.md` for the remaining step-by-step work:
+
+- backend session/profile/import API completion
+- backend SSE streaming contract
+- frontend data-layer rewiring
+- trace import/export UI
+- legacy frontend runtime removal
+
+This file remains a closure note for the completed backend-first refactor.
