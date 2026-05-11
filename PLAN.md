@@ -38,6 +38,12 @@ Work:
 - replace remaining frontend-owned runtime logic with backend API usage
 - render transcript/context/diagnostic state from backend responses
 - expose trace export/import cleanly in the UI
+- standardize the frontend/backend contract on **Turn -> Round -> Part -> Delta**
+- use streamed deltas only for live updates, then replace them with committed backend parts
+- use **SSE** for backend-to-frontend live streaming
+- keep `GET /api/sessions/:sessionId/trace` as the canonical detailed payload
+- add `GET /api/sessions` for lightweight sidebar summaries
+- import traces into backend persistence so imported sessions and live sessions share the same UI path
 - remove stale frontend-only data paths
 
 ### 5. Frontend cleanup and UX
@@ -56,3 +62,5 @@ Work:
 - SQLite remains the canonical store
 - trace export must stay replayable without reconstruction
 - reasoning stays preserved in history even when stripped from later context
+- vocabulary stays standardized as **Turn -> Round -> Part -> Delta**
+- the frontend may render transient deltas, but canonical state always comes from committed backend parts

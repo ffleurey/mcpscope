@@ -30,6 +30,15 @@ The backend is the source of truth. It owns orchestration, persistence, token ac
 
 The frontend should present backend state, initiate actions, and support export/import workflows. It should not remain the place where core runtime correctness is decided.
 
+The frontend vocabulary and data flow should stay aligned with the backend:
+
+- **turn** -> full user request lifecycle
+- **round** -> one model iteration inside a turn
+- **part** -> canonical reasoning/content/tool-call/tool-result unit
+- **delta** -> transient streamed update before a part is committed
+
+The intended live UX is: stream deltas, then replace them with committed backend parts.
+
 ## Current assessment
 
 The backend refactor was worth doing and has materially improved the project:

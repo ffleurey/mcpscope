@@ -9,7 +9,7 @@ The project is now organized around a **TypeScript backend as the source of trut
 The first backend increment is complete:
 
 - canonical backend model for sessions, turns, rounds, parts, and raw exchanges
-- streamed LM Studio runtime with segmented reasoning/content capture
+- streamed LM Studio runtime with ordered reasoning/content/tool-call capture
 - reasoning kept in transcript history but stripped from later model-visible context
 - SQLite persistence for runtime state and diagnostics
 - full session trace export at `/api/sessions/:sessionId/trace`
@@ -38,6 +38,25 @@ The next stage is frontend rewiring so the UI becomes a thin client over the bac
 - progressively moving toward presentation-only responsibilities
 - should consume backend transcript, context, and trace data rather than re-implement runtime logic
 
+## Runtime vocabulary
+
+The project uses one canonical hierarchy:
+
+- **Turn** - one full user request lifecycle
+- **Round** - one model iteration inside that turn
+- **Part** - one committed backend unit inside a round or turn
+- **Delta** - one transient streamed fragment before a part is committed
+
+Examples of part types include:
+
+- `user-message`
+- `assistant-reasoning`
+- `assistant-content`
+- `tool-call`
+- `tool-result`
+
+The LM Studio streaming parser still uses the internal word **segment** while reconstructing streamed output, but the persisted and documented canonical term is **part**.
+
 ## Trace and replay model
 
 Every useful runtime artifact should be available from backend state, not reconstructed in tests:
@@ -51,10 +70,16 @@ Every useful runtime artifact should be available from backend state, not recons
 
 That trace can then be exported and replayed through the backend test harness without guessing missing state.
 
+For the rewired frontend, the same model remains canonical:
+
+- the frontend renders the latest backend trace snapshot
+- live streaming carries only **deltas**
+- once the backend commits a **part**, that canonical backend structure replaces the transient delta state
+
 ## Token and reasoning rules
 
 - prompt-side accounting prefers exact probe and delta-based attribution
-- grouped totals are split proportionally only when the upstream API exposes an aggregate but not per-segment counts
+- grouped totals are split proportionally only when the upstream API exposes an aggregate but not per-part counts
 - reasoning is preserved in transcript history for analysis
 - reasoning is stripped from later model-visible context after the turn completes
 - multiple reasoning blocks inside a single tool-enabled turn are captured in order from the streamed response

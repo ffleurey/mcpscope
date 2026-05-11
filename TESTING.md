@@ -47,6 +47,13 @@ The trace bundle includes:
 - `transcript`
 - `context`
 
+Vocabulary for tests follows the backend model:
+
+- **turn** = full user request lifecycle
+- **round** = one model iteration inside a turn
+- **part** = committed reasoning/content/tool-call/tool-result unit
+- **delta** = transient streamed fragment before a part is committed
+
 `rawExchanges` now includes:
 
 - streamed LM request/response payloads
@@ -61,6 +68,8 @@ Use replay tests whenever behavior spans:
 - LM requests or probes
 - MCP initialization / tools
 - persisted turns / rounds / parts
+
+Replay fixtures and most deterministic tests operate on committed **parts**, not transient streaming **deltas**.
 
 ### 4. Live integration tests
 
