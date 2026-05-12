@@ -1320,5 +1320,94 @@ export async function createToolEnabledTurn(
     }
   }
 
-  throw new Error(`Stopped after ${input.maxToolRounds} tool rounds`)
+  // The tool-call loop exhausted maxToolRounds without producing a final 'stop' response.
+  // `currentRound` was inserted as 'streaming' at the end of the last tool-call iteration
+  // but never processed.  Close it out gracefully so the frontend isn't left hanging.
+  const errorAt = now()
+  currentRound.status = 'error'
+  currentRound.finishReason = 'error'
+  currentRound.completedAt = errorAt
+
+  turn.status = 'error'
+  turn.completedAt = errorAt
+  turn.outcome = `tool-loop-limit:${input.maxToolRounds}`
+
+  const diagnosticNote: PartRecord = {
+    id: createUuid(),
+    sessionId: session.id,
+    turnId,
+    roundId: currentRound.id,
+    parentPartId: null,
+    ordinal: getNextPartOrdinal(database.connection, session.id),
+    partType: 'diagnostic-note',
+    roleLabel: 'system',
+    payload: {
+      text: `Turn stopped: reached the maximum of ${input.maxToolRounds} tool-call rounds without a final assistant response. `
+        + `Increase BACKEND_MAX_TOOL_ROUNDS (currently ${input.maxToolRounds}) if this is too low for your workflow.`,
+      json: null,
+      mimeType: 'text/plain',
+      summary: `Tool-loop limit reached (${input.maxToolRounds} rounds)`,
+    },
+    display: {
+      state: 'transcript',
+      collapsedByDefault: false,
+    },
+    context: {
+      state: 'excluded',
+      note: 'Error diagnostic — not included in model context',
+      strippedByCompactionAtTurnId: null,
+    },
+    tokens: {
+      count: null,
+      source: 'unknown',
+      confidence: 'unknown',
+      note: null,
+    },
+    provenanceJson: { maxToolRounds: input.maxToolRounds },
+    createdAt: errorAt,
+    updatedAt: errorAt,
+  }
+
+  const errorTx = database.connection.transaction(() => {
+    updateRoundRecord(database.connection, currentRound)
+    insertPartRecord(database.connection, diagnosticNote)
+    updateTurnRecord(database.connection, turn)
+    updateSessionRecord(database.connection, session)
+  })
+  errorTx()
+
+  emitEvent?.({
+    type: 'part-committed',
+    part: { ...diagnosticNote },
+  })
+  emitEvent?.({
+    type: 'round-committed',
+    round: { ...currentRound },
+  })
+
+  const persistedPartsOnError = listPartRecordsBySession(database.connection, session.id)
+  const traceOnError = buildSessionTraceBundle({
+    session,
+    turns: listTurnRecordsBySession(database.connection, session.id),
+    rounds: listRoundRecordsBySession(database.connection, session.id),
+    parts: persistedPartsOnError,
+    rawExchanges: listRawExchangeRecordsBySession(database.connection, session.id),
+    transcript: deriveTranscriptEntries(persistedPartsOnError),
+    context: deriveContextEntries(persistedPartsOnError),
+  })
+  emitEvent?.({
+    type: 'turn-committed',
+    turn: { ...turn },
+    trace: traceOnError,
+  })
+
+  return {
+    session,
+    turn,
+    round: currentRound,
+    rounds,
+    parts: persistedPartsOnError.filter(part => part.turnId === turnId),
+    transcript: traceOnError.transcript,
+    context: traceOnError.context,
+  }
 }

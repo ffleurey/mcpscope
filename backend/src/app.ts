@@ -357,6 +357,15 @@ export async function buildBackendApp(
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
     }
 
+    // Track the turn ID as soon as it's emitted so error reporting can reference it.
+    let activeTurnId: string | null = null
+    const trackingEmitEvent = (event: { type: string; [key: string]: unknown }) => {
+      if (event.type === 'turn-started' && typeof event.turn === 'object' && event.turn !== null) {
+        activeTurnId = (event.turn as { id?: string }).id ?? null
+      }
+      emitEvent(event)
+    }
+
     try {
       if (session.mcpProfileSnapshot) {
         await createToolEnabledTurn(
@@ -368,7 +377,7 @@ export async function buildBackendApp(
             userContent: input.userContent,
             maxToolRounds: config.maxToolRounds,
           },
-          emitEvent,
+          trackingEmitEvent,
         )
       } else {
         await createModelOnlyTurn(
@@ -378,13 +387,13 @@ export async function buildBackendApp(
             sessionId,
             userContent: input.userContent,
           },
-          emitEvent,
+          trackingEmitEvent,
         )
       }
     } catch (error) {
       emitEvent({
         type: 'turn-failed',
-        turnId: null,
+        turnId: activeTurnId,
         message: error instanceof Error ? error.message : 'Unknown streaming failure',
       })
     } finally {
