@@ -34,6 +34,7 @@ function part(overrides: {
     context: {
       state: overrides.contextState ?? 'included',
       note: overrides.contextNote ?? null,
+      strippedByCompactionAtTurnId: null,
     },
     tokens: overrides.tokens,
     provenanceJson: overrides.provenanceJson ?? null,
@@ -88,6 +89,7 @@ export const capturedReasoningThreeBatchSession: SessionRecord = {
   systemPromptTokens: 37,
   toolDefinitionsTokens: 3199,
   isContextExhausted: false,
+  compactionStrategy: 'strip-reasoning',
 }
 
 export const capturedReasoningThreeBatchRounds: RoundRecord[] = [

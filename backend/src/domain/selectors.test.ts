@@ -28,6 +28,7 @@ function makeSession(): SessionRecord {
     systemPromptTokens: null,
     toolDefinitionsTokens: null,
     isContextExhausted: false,
+    compactionStrategy: 'strip-reasoning',
   }
 }
 
@@ -54,6 +55,7 @@ function makePart(overrides: Partial<PartRecord>): PartRecord {
     context: overrides.context ?? {
       state: 'included',
       note: null,
+      strippedByCompactionAtTurnId: null,
     },
     tokens: overrides.tokens ?? {
       count: null,
@@ -80,7 +82,7 @@ describe('domain selectors', () => {
         ordinal: 2,
         partType: 'assistant-reasoning',
         payload: { text: 'hidden reasoning', json: null, mimeType: null, summary: null },
-        context: { state: 'stripped', note: 'not forwarded' },
+        context: { state: 'stripped', note: 'not forwarded', strippedByCompactionAtTurnId: null },
       }),
       makePart({
         ordinal: 3,
@@ -110,7 +112,7 @@ describe('domain selectors', () => {
         partType: 'assistant-reasoning',
         roleLabel: 'assistant',
         payload: { text: 'Reasoning', json: null, mimeType: null, summary: null },
-        context: { state: 'stripped', note: 'historical only' },
+        context: { state: 'stripped', note: 'historical only', strippedByCompactionAtTurnId: null },
       }),
       makePart({
         ordinal: 3,
@@ -122,7 +124,7 @@ describe('domain selectors', () => {
         ordinal: 4,
         partType: 'diagnostic-note',
         display: { state: 'diagnostic', collapsedByDefault: true },
-        context: { state: 'excluded', note: 'not user-facing' },
+        context: { state: 'excluded', note: 'not user-facing', strippedByCompactionAtTurnId: null },
         payload: { text: 'raw', json: null, mimeType: null, summary: null },
       }),
     ]

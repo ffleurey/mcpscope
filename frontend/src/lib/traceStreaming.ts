@@ -166,6 +166,7 @@ export function insertStreamingUserPart(
     context: {
       state: 'included',
       note: null,
+      strippedByCompactionAtTurnId: null,
     },
     tokens: {
       count: null,

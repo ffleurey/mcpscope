@@ -30,11 +30,11 @@ export function createSessionRecord(
     INSERT INTO sessions (
       id, title, status, init_status, model_profile_snapshot_json, mcp_profile_snapshot_json,
       loaded_context_length, system_prompt_tokens, tool_definitions_tokens,
-      is_context_exhausted, created_at, updated_at
+      is_context_exhausted, compaction_strategy, created_at, updated_at
     ) VALUES (
       @id, @title, @status, @initStatus, @modelProfileSnapshotJson, @mcpProfileSnapshotJson,
       @loadedContextLength, @systemPromptTokens, @toolDefinitionsTokens,
-      @isContextExhausted, @createdAt, @updatedAt
+      @isContextExhausted, @compactionStrategy, @createdAt, @updatedAt
     )
   `).run({
     id: session.id,
@@ -47,6 +47,7 @@ export function createSessionRecord(
     systemPromptTokens: session.systemPromptTokens,
     toolDefinitionsTokens: session.toolDefinitionsTokens,
     isContextExhausted: session.isContextExhausted ? 1 : 0,
+    compactionStrategy: session.compactionStrategy,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
   })
@@ -96,6 +97,7 @@ export function getSessionRecord(
         system_prompt_tokens: number | null
         tool_definitions_tokens: number | null
         is_context_exhausted: number
+        compaction_strategy: SessionRecord['compactionStrategy']
         created_at: number
         updated_at: number
       }
@@ -114,6 +116,7 @@ export function getSessionRecord(
     systemPromptTokens: row.system_prompt_tokens,
     toolDefinitionsTokens: row.tool_definitions_tokens,
     isContextExhausted: row.is_context_exhausted === 1,
+    compactionStrategy: row.compaction_strategy,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -135,6 +138,7 @@ export function listSessionRecords(connection: Database.Database): SessionRecord
     system_prompt_tokens: number | null
     tool_definitions_tokens: number | null
     is_context_exhausted: number
+    compaction_strategy: SessionRecord['compactionStrategy']
     created_at: number
     updated_at: number
   }>
@@ -150,6 +154,7 @@ export function listSessionRecords(connection: Database.Database): SessionRecord
     systemPromptTokens: row.system_prompt_tokens,
     toolDefinitionsTokens: row.tool_definitions_tokens,
     isContextExhausted: row.is_context_exhausted === 1,
+    compactionStrategy: row.compaction_strategy,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }))
@@ -273,10 +278,14 @@ export function insertTurnRecord(connection: Database.Database, turn: TurnRecord
     INSERT INTO turns (
       id, session_id, sequence_number, status, outcome,
       prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
+      context_tokens_at_turn_end, context_tokens_after_compaction,
+      compaction_applied, compaction_tokens_removed,
       created_at, completed_at
     ) VALUES (
       @id, @sessionId, @sequenceNumber, @status, @outcome,
       @promptTokens, @completionTokens, @reasoningTokens, @totalTokens,
+      @contextTokensAtTurnEnd, @contextTokensAfterCompaction,
+      @compactionApplied, @compactionTokensRemoved,
       @createdAt, @completedAt
     )
   `).run({
@@ -289,6 +298,10 @@ export function insertTurnRecord(connection: Database.Database, turn: TurnRecord
     completionTokens: turn.usage.completionTokens,
     reasoningTokens: turn.usage.reasoningTokens,
     totalTokens: turn.usage.totalTokens,
+    contextTokensAtTurnEnd: turn.contextTokensAtTurnEnd,
+    contextTokensAfterCompaction: turn.contextTokensAfterCompaction,
+    compactionApplied: turn.compactionApplied,
+    compactionTokensRemoved: turn.compactionTokensRemoved,
     createdAt: turn.createdAt,
     completedAt: turn.completedAt,
   })
@@ -303,6 +316,10 @@ export function updateTurnRecord(connection: Database.Database, turn: TurnRecord
         completion_tokens = @completionTokens,
         reasoning_tokens = @reasoningTokens,
         total_tokens = @totalTokens,
+        context_tokens_at_turn_end = @contextTokensAtTurnEnd,
+        context_tokens_after_compaction = @contextTokensAfterCompaction,
+        compaction_applied = @compactionApplied,
+        compaction_tokens_removed = @compactionTokensRemoved,
         completed_at = @completedAt
     WHERE id = @id
   `).run({
@@ -313,6 +330,10 @@ export function updateTurnRecord(connection: Database.Database, turn: TurnRecord
     completionTokens: turn.usage.completionTokens,
     reasoningTokens: turn.usage.reasoningTokens,
     totalTokens: turn.usage.totalTokens,
+    contextTokensAtTurnEnd: turn.contextTokensAtTurnEnd,
+    contextTokensAfterCompaction: turn.contextTokensAfterCompaction,
+    compactionApplied: turn.compactionApplied,
+    compactionTokensRemoved: turn.compactionTokensRemoved,
     completedAt: turn.completedAt,
   })
 }
@@ -378,12 +399,14 @@ export function insertPartRecord(connection: Database.Database, part: PartRecord
       id, session_id, turn_id, round_id, parent_part_id, ordinal, part_type, role_label,
       payload_text, payload_json, payload_mime_type, payload_summary,
       display_state, collapsed_by_default, context_state, context_note,
+      stripped_by_compaction_at_turn_id,
       token_count, token_source, token_confidence, token_note,
       provenance_json, created_at, updated_at
     ) VALUES (
       @id, @sessionId, @turnId, @roundId, @parentPartId, @ordinal, @partType, @roleLabel,
       @payloadText, @payloadJson, @payloadMimeType, @payloadSummary,
       @displayState, @collapsedByDefault, @contextState, @contextNote,
+      @strippedByCompactionAtTurnId,
       @tokenCount, @tokenSource, @tokenConfidence, @tokenNote,
       @provenanceJson, @createdAt, @updatedAt
     )
@@ -404,6 +427,7 @@ export function insertPartRecord(connection: Database.Database, part: PartRecord
     collapsedByDefault: part.display.collapsedByDefault ? 1 : 0,
     contextState: part.context.state,
     contextNote: part.context.note,
+    strippedByCompactionAtTurnId: part.context.strippedByCompactionAtTurnId,
     tokenCount: part.tokens.count,
     tokenSource: part.tokens.source,
     tokenConfidence: part.tokens.confidence,
@@ -429,6 +453,7 @@ export function updatePartRecord(connection: Database.Database, part: PartRecord
         collapsed_by_default = @collapsedByDefault,
         context_state = @contextState,
         context_note = @contextNote,
+        stripped_by_compaction_at_turn_id = @strippedByCompactionAtTurnId,
         token_count = @tokenCount,
         token_source = @tokenSource,
         token_confidence = @tokenConfidence,
@@ -450,6 +475,7 @@ export function updatePartRecord(connection: Database.Database, part: PartRecord
     collapsedByDefault: part.display.collapsedByDefault ? 1 : 0,
     contextState: part.context.state,
     contextNote: part.context.note,
+    strippedByCompactionAtTurnId: part.context.strippedByCompactionAtTurnId,
     tokenCount: part.tokens.count,
     tokenSource: part.tokens.source,
     tokenConfidence: part.tokens.confidence,
@@ -495,6 +521,7 @@ export function updateSessionRecord(connection: Database.Database, session: Sess
         system_prompt_tokens = @systemPromptTokens,
         tool_definitions_tokens = @toolDefinitionsTokens,
         is_context_exhausted = @isContextExhausted,
+        compaction_strategy = @compactionStrategy,
         updated_at = @updatedAt
     WHERE id = @id
   `).run({
@@ -506,6 +533,7 @@ export function updateSessionRecord(connection: Database.Database, session: Sess
     systemPromptTokens: session.systemPromptTokens,
     toolDefinitionsTokens: session.toolDefinitionsTokens,
     isContextExhausted: session.isContextExhausted ? 1 : 0,
+    compactionStrategy: session.compactionStrategy,
     updatedAt: session.updatedAt,
   })
 }
@@ -536,6 +564,7 @@ export function listPartRecordsBySession(
     collapsed_by_default: number
     context_state: PartRecord['context']['state']
     context_note: string | null
+    stripped_by_compaction_at_turn_id: string | null
     token_count: number | null
     token_source: PartRecord['tokens']['source']
     token_confidence: PartRecord['tokens']['confidence']
@@ -567,6 +596,7 @@ export function listPartRecordsBySession(
     context: {
       state: row.context_state,
       note: row.context_note,
+      strippedByCompactionAtTurnId: row.stripped_by_compaction_at_turn_id,
     },
     tokens: {
       count: row.token_count,
@@ -599,6 +629,10 @@ export function listTurnRecordsBySession(
     completion_tokens: number | null
     reasoning_tokens: number | null
     total_tokens: number | null
+    context_tokens_at_turn_end: number | null
+    context_tokens_after_compaction: number | null
+    compaction_applied: TurnRecord['compactionApplied']
+    compaction_tokens_removed: number | null
     created_at: number
     completed_at: number | null
   }>
@@ -615,6 +649,10 @@ export function listTurnRecordsBySession(
       reasoningTokens: row.reasoning_tokens,
       totalTokens: row.total_tokens,
     },
+    contextTokensAtTurnEnd: row.context_tokens_at_turn_end,
+    contextTokensAfterCompaction: row.context_tokens_after_compaction,
+    compactionApplied: row.compaction_applied,
+    compactionTokensRemoved: row.compaction_tokens_removed,
     createdAt: row.created_at,
     completedAt: row.completed_at,
   }))

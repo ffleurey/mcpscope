@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import {
   DOMAIN_MODEL_VERSION,
+  compactionStrategyValues,
   contextStateValues,
   displayStateValues,
   exchangeKindValues,
@@ -14,7 +15,7 @@ import {
   turnStatusValues,
 } from '../domain/model.js'
 
-const SQLITE_SCHEMA_VERSION = 2
+const SQLITE_SCHEMA_VERSION = 3
 
 function sqlEnum(values: readonly string[]): string {
   return values.map(value => `'${value}'`).join(', ')
@@ -78,6 +79,7 @@ export function initializeBackendSchema(connection: Database.Database): void {
       system_prompt_tokens INTEGER,
       tool_definitions_tokens INTEGER,
       is_context_exhausted INTEGER NOT NULL DEFAULT 0,
+      compaction_strategy TEXT NOT NULL DEFAULT 'strip-reasoning' CHECK (compaction_strategy IN (${sqlEnum(compactionStrategyValues)})),
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -92,6 +94,10 @@ export function initializeBackendSchema(connection: Database.Database): void {
       completion_tokens INTEGER,
       reasoning_tokens INTEGER,
       total_tokens INTEGER,
+      context_tokens_at_turn_end INTEGER,
+      context_tokens_after_compaction INTEGER,
+      compaction_applied TEXT CHECK (compaction_applied IS NULL OR compaction_applied IN (${sqlEnum(compactionStrategyValues)})),
+      compaction_tokens_removed INTEGER,
       created_at INTEGER NOT NULL,
       completed_at INTEGER,
       UNIQUE (session_id, sequence_number)
@@ -131,6 +137,7 @@ export function initializeBackendSchema(connection: Database.Database): void {
       collapsed_by_default INTEGER NOT NULL DEFAULT 0,
       context_state TEXT NOT NULL CHECK (context_state IN (${sqlEnum(contextStateValues)})),
       context_note TEXT,
+      stripped_by_compaction_at_turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL,
       token_count INTEGER,
       token_source TEXT NOT NULL CHECK (token_source IN (${sqlEnum(tokenSourceValues)})),
       token_confidence TEXT NOT NULL CHECK (token_confidence IN (${sqlEnum(tokenConfidenceValues)})),
@@ -170,6 +177,26 @@ export function initializeBackendSchema(connection: Database.Database): void {
     VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `)
+
+  // Run additive migrations for databases created before schema v3.
+  // ALTER TABLE ADD COLUMN is safe to wrap in try/catch for idempotency.
+  const currentVersion = Number(
+    (connection
+      .prepare<[], { value: string }>(`SELECT value FROM schema_meta WHERE key = 'sqlite_schema_version'`)
+      .get() as { value: string } | undefined)?.value ?? '0',
+  )
+
+  if (currentVersion < 3) {
+    const migrate = (sql: string) => {
+      try { connection.exec(sql) } catch { /* column already exists */ }
+    }
+    migrate(`ALTER TABLE sessions ADD COLUMN compaction_strategy TEXT NOT NULL DEFAULT 'strip-reasoning'`)
+    migrate(`ALTER TABLE turns ADD COLUMN context_tokens_at_turn_end INTEGER`)
+    migrate(`ALTER TABLE turns ADD COLUMN context_tokens_after_compaction INTEGER`)
+    migrate(`ALTER TABLE turns ADD COLUMN compaction_applied TEXT`)
+    migrate(`ALTER TABLE turns ADD COLUMN compaction_tokens_removed INTEGER`)
+    migrate(`ALTER TABLE parts ADD COLUMN stripped_by_compaction_at_turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL`)
+  }
 
   upsertMeta.run('sqlite_schema_version', String(SQLITE_SCHEMA_VERSION))
   upsertMeta.run('domain_model_version', String(DOMAIN_MODEL_VERSION))

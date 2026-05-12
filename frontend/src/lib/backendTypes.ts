@@ -51,6 +51,7 @@ export const partTypeSchema = z.enum([
 ])
 export const displayStateSchema = z.enum(['transcript', 'diagnostic', 'hidden'])
 export const contextStateSchema = z.enum(['included', 'excluded', 'stripped', 'historical-only', 'round-only'])
+export const compactionStrategySchema = z.enum(['none', 'strip-reasoning'])
 export const tokenSourceSchema = z.enum(['exact-api', 'delta-derived', 'corrected', 'estimated', 'manual', 'unknown'])
 export const tokenConfidenceSchema = z.enum(['exact', 'corrected', 'estimated', 'unknown'])
 export const exchangeKindSchema = z.enum([
@@ -121,6 +122,7 @@ export const partPayloadSchema = z.object({
 export const partContextSchema = z.object({
   state: contextStateSchema,
   note: z.string().nullable(),
+  strippedByCompactionAtTurnId: z.string().nullable(),
 })
 
 export const partDisplaySchema = z.object({
@@ -148,6 +150,7 @@ export const sessionRecordSchema = z.object({
   systemPromptTokens: z.number().int().nonnegative().nullable(),
   toolDefinitionsTokens: z.number().int().nonnegative().nullable(),
   isContextExhausted: z.boolean(),
+  compactionStrategy: compactionStrategySchema,
 })
 
 export const turnRecordSchema = z.object({
@@ -159,6 +162,10 @@ export const turnRecordSchema = z.object({
   completedAt: z.number().int().nonnegative().nullable(),
   outcome: z.string().nullable(),
   usage: usageSummarySchema,
+  contextTokensAtTurnEnd: z.number().int().nonnegative().nullable(),
+  contextTokensAfterCompaction: z.number().int().nonnegative().nullable(),
+  compactionApplied: compactionStrategySchema.nullable(),
+  compactionTokensRemoved: z.number().int().nonnegative().nullable(),
 })
 
 export const roundRecordSchema = z.object({

@@ -31,6 +31,7 @@ function makePart(count: number | null): PartRecord {
     context: {
       state: 'included',
       note: null,
+      strippedByCompactionAtTurnId: null,
     },
     tokens: {
       count,

@@ -88,7 +88,7 @@ describe('backend foundation', () => {
     )
     expect(body.schema.meta).toMatchObject({
       domain_model_version: '1',
-      sqlite_schema_version: '2',
+      sqlite_schema_version: '3',
     })
   })
 
@@ -287,6 +287,10 @@ describe('backend foundation', () => {
             reasoningTokens: 1723,
             totalTokens: 11886,
           },
+          contextTokensAtTurnEnd: null,
+          contextTokensAfterCompaction: null,
+          compactionApplied: null,
+          compactionTokensRemoved: null,
         },
       ],
       rounds: capturedReasoningThreeBatchRounds,

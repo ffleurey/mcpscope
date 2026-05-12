@@ -7,6 +7,7 @@ export const sessionInitStatusValues = ['pending', 'initializing', 'ready', 'err
 export const turnStatusValues = ['draft', 'streaming', 'awaiting-tools', 'complete', 'error', 'aborted'] as const
 export const roundStatusValues = ['pending', 'streaming', 'complete', 'error', 'aborted'] as const
 export const roundFinishReasonValues = ['stop', 'tool_calls', 'length', 'error', 'cancelled'] as const
+export const compactionStrategyValues = ['none', 'strip-reasoning'] as const
 export const partTypeValues = [
   'system-prompt',
   'mcp-instructions',
@@ -36,6 +37,7 @@ export const sessionInitStatusSchema = z.enum(sessionInitStatusValues)
 export const turnStatusSchema = z.enum(turnStatusValues)
 export const roundStatusSchema = z.enum(roundStatusValues)
 export const roundFinishReasonSchema = z.enum(roundFinishReasonValues)
+export const compactionStrategySchema = z.enum(compactionStrategyValues)
 export const partTypeSchema = z.enum(partTypeValues)
 export const displayStateSchema = z.enum(displayStateValues)
 export const contextStateSchema = z.enum(contextStateValues)
@@ -85,6 +87,7 @@ export const partPayloadSchema = z.object({
 export const partContextSchema = z.object({
   state: contextStateSchema,
   note: z.string().nullable(),
+  strippedByCompactionAtTurnId: z.string().nullable(),
 })
 
 export const partDisplaySchema = z.object({
@@ -105,6 +108,7 @@ export const sessionRecordSchema = z.object({
   systemPromptTokens: z.number().int().nonnegative().nullable(),
   toolDefinitionsTokens: z.number().int().nonnegative().nullable(),
   isContextExhausted: z.boolean(),
+  compactionStrategy: compactionStrategySchema,
 })
 
 export const usageSummarySchema = z.object({
@@ -123,6 +127,10 @@ export const turnRecordSchema = z.object({
   completedAt: z.number().int().nonnegative().nullable(),
   outcome: z.string().nullable(),
   usage: usageSummarySchema,
+  contextTokensAtTurnEnd: z.number().int().nonnegative().nullable(),
+  contextTokensAfterCompaction: z.number().int().nonnegative().nullable(),
+  compactionApplied: compactionStrategySchema.nullable(),
+  compactionTokensRemoved: z.number().int().nonnegative().nullable(),
 })
 
 export const roundRecordSchema = z.object({
@@ -175,6 +183,7 @@ export const rawExchangeRecordSchema = z.object({
 export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>
 export type TokenMetadata = z.infer<typeof tokenMetadataSchema>
+export type CompactionStrategy = z.infer<typeof compactionStrategySchema>
 export type SessionRecord = z.infer<typeof sessionRecordSchema>
 export type TurnRecord = z.infer<typeof turnRecordSchema>
 export type RoundRecord = z.infer<typeof roundRecordSchema>
@@ -191,6 +200,7 @@ export function getDomainModelSummary() {
       turnStatusValues,
       roundStatusValues,
       roundFinishReasonValues,
+      compactionStrategyValues,
       partTypeValues,
       displayStateValues,
       contextStateValues,

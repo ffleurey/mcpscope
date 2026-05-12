@@ -43,6 +43,7 @@ export function createSystemPromptPart(session: SessionRecord, ordinal: number, 
     context: {
       state: 'included',
       note: 'Session-level system prompt included in every turn',
+      strippedByCompactionAtTurnId: null,
     },
     tokens: {
       count: null,

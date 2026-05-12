@@ -126,6 +126,21 @@
         </div>
       </section>
     {/each}
+
+    {#if turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
+      <div class="compaction-summary">
+        {#if turn.compactionTokensRemoved !== null && turn.compactionTokensRemoved > 0}
+          <span class="compaction-label">↓ {turn.compactionApplied}</span>
+          <span class="compaction-tokens">−{turn.compactionTokensRemoved.toLocaleString()} tokens</span>
+          {#if turn.contextTokensAtTurnEnd !== null && turn.contextTokensAfterCompaction !== null}
+            <span class="compaction-range">{turn.contextTokensAtTurnEnd.toLocaleString()} → {turn.contextTokensAfterCompaction.toLocaleString()}</span>
+          {/if}
+        {:else}
+          <span class="compaction-label">↓ {turn.compactionApplied}</span>
+          <span class="compaction-tokens">no tokens removed</span>
+        {/if}
+      </div>
+    {/if}
   </section>
 {:else}
   <details class="turn-block" open>
@@ -140,6 +155,9 @@
       <div class="turn-summary-meta">
         {#if turn.usage.totalTokens !== null}
           <span>{turn.usage.totalTokens.toLocaleString()} total tokens</span>
+        {/if}
+        {#if turn.contextTokensAfterCompaction !== null}
+          <span>{turn.contextTokensAfterCompaction.toLocaleString()} ctx after compaction</span>
         {/if}
         <span>{formatTimestamp(turn.completedAt ?? turn.createdAt)}</span>
       </div>
@@ -291,6 +309,33 @@
     display: flex;
     flex-direction: column;
     gap: var(--compact-stack-gap, 0.14rem);
+  }
+
+  .compaction-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.35rem;
+    margin-left: var(--compact-round-indent, 0.82rem);
+    padding: 0.2rem 0.5rem;
+    background: var(--bg-subtle, rgba(0,0,0,0.04));
+    border-radius: 4px;
+    font-size: 0.68rem;
+  }
+
+  .compaction-label {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .compaction-tokens {
+    color: var(--color-warning, #b45309);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .compaction-range {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
   }
 
   .turn-block {

@@ -37,6 +37,7 @@ function makeSession(): SessionRecord {
     systemPromptTokens: null,
     toolDefinitionsTokens: null,
     isContextExhausted: false,
+    compactionStrategy: 'strip-reasoning',
   }
 }
 
@@ -63,6 +64,7 @@ function makePart(overrides: Partial<PartRecord>): PartRecord {
     context: {
       state: 'included',
       note: null,
+      strippedByCompactionAtTurnId: null,
     },
     tokens: {
       count: null,

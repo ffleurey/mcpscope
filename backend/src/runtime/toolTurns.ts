@@ -38,6 +38,7 @@ import {
   ensureSessionPreludeTokenMetadata,
 } from './sessionPrelude.js'
 import { probeRequestPromptTokens } from './promptTokenProbing.js'
+import { applyContextCompaction } from '../domain/compaction.js'
 import { executeChatCompletion } from './streamedCompletion.js'
 import type { TurnStreamEventSink } from './streamEvents.js'
 
@@ -445,6 +446,7 @@ async function ensureMcpContext(
         context: {
           state: 'included',
           note: 'Included as system guidance for MCP-enabled turns',
+          strippedByCompactionAtTurnId: null,
         },
         tokens: {
           count: null,
@@ -481,6 +483,7 @@ async function ensureMcpContext(
         context: {
           state: 'included',
           note: 'Provided through the LM Studio tools array',
+          strippedByCompactionAtTurnId: null,
         },
         tokens: {
           count: null,
@@ -526,6 +529,7 @@ function createUserPart(session: SessionRecord, turnId: string, roundId: string,
     context: {
       state: 'included',
       note: null,
+      strippedByCompactionAtTurnId: null,
     },
     tokens: {
       count: null,
@@ -573,6 +577,7 @@ function createToolCallPart(
     context: {
       state: 'included',
       note: 'Tool calls are part of the assistant-visible history',
+      strippedByCompactionAtTurnId: null,
     },
     tokens: {
       count: null,
@@ -618,6 +623,7 @@ function createToolResultPart(
     context: {
       state: 'included',
       note: 'Tool results remain part of later model-visible history',
+      strippedByCompactionAtTurnId: null,
     },
     tokens: {
       count: null,
@@ -704,8 +710,9 @@ function buildReasoningPartsFromSegments(
         collapsedByDefault: true,
       },
       context: {
-        state: 'stripped' as const,
-        note: 'Reasoning preserved for inspection but not forwarded into later turns',
+        state: 'included' as const,
+        note: 'Reasoning preserved in context for this turn; compaction will strip it after turn completion',
+        strippedByCompactionAtTurnId: null,
       },
       tokens: {
         count: metadata?.count ?? null,
@@ -762,6 +769,7 @@ function buildAssistantContentPartsFromSegments(
       context: {
         state: 'included' as const,
         note: contextNote,
+        strippedByCompactionAtTurnId: null,
       },
       tokens: {
         count: metadata?.count ?? null,
@@ -871,6 +879,10 @@ export async function createToolEnabledTurn(
       reasoningTokens: null,
       totalTokens: null,
     },
+    contextTokensAtTurnEnd: null,
+    contextTokensAfterCompaction: null,
+    compactionApplied: null,
+    compactionTokensRemoved: null,
   }
   const initialRound: RoundRecord = {
     id: userRoundId,
@@ -1244,6 +1256,11 @@ export async function createToolEnabledTurn(
       updateSessionRecord(database.connection, session)
     })
     finalizeTx()
+
+    // Apply context compaction (e.g. strip reasoning) now that the turn is fully persisted.
+    const compactedTurn = applyContextCompaction(database.connection, turn, session.compactionStrategy)
+    Object.assign(turn, compactedTurn)
+
     assistantParts.forEach(part => emitEvent?.({
       type: 'part-committed',
       part,

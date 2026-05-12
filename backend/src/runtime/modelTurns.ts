@@ -42,6 +42,7 @@ import { createSystemPromptPart, ensureSessionPreludeTokenMetadata } from './ses
 import { probeRequestPromptTokens } from './promptTokenProbing.js'
 import { executeChatCompletion } from './streamedCompletion.js'
 import type { TurnStreamEventSink } from './streamEvents.js'
+import { applyContextCompaction } from '../domain/compaction.js'
 
 export interface LmStudioGateway {
   createChatCompletion(
@@ -126,6 +127,7 @@ export function createSession(
     systemPromptTokens: null,
     toolDefinitionsTokens: null,
     isContextExhausted: false,
+    compactionStrategy: 'strip-reasoning',
   }
 
   const tx = database.connection.transaction(() => {
@@ -175,6 +177,10 @@ export async function createModelOnlyTurn(
       reasoningTokens: null,
       totalTokens: null,
     },
+    contextTokensAtTurnEnd: null,
+    contextTokensAfterCompaction: null,
+    compactionApplied: null,
+    compactionTokensRemoved: null,
   }
   const round: RoundRecord = {
     id: roundId,
@@ -228,6 +234,7 @@ export async function createModelOnlyTurn(
     context: {
       state: 'included',
       note: null,
+      strippedByCompactionAtTurnId: null,
     },
     tokens: {
       count: null,
@@ -417,8 +424,9 @@ export async function createModelOnlyTurn(
           collapsedByDefault: true,
         },
         context: {
-          state: 'stripped',
-          note: 'Reasoning preserved for inspection but not forwarded into later turns',
+          state: 'included',
+          note: 'Reasoning preserved in context for this turn; compaction will strip it after turn completion',
+          strippedByCompactionAtTurnId: null,
         },
         tokens: {
           count: tokenMetadata?.count ?? null,
@@ -461,6 +469,7 @@ export async function createModelOnlyTurn(
         context: {
           state: 'included',
           note: 'Assistant answer remains part of later model-visible history',
+          strippedByCompactionAtTurnId: null,
         },
         tokens: {
           count: tokenMetadata?.count ?? null,
@@ -545,6 +554,10 @@ export async function createModelOnlyTurn(
     updateSessionRecord(database.connection, session)
   })
   finalizeTx()
+
+  // Apply context compaction (e.g. strip reasoning) now that the turn is fully persisted.
+  const compactedTurn = applyContextCompaction(database.connection, turn, session.compactionStrategy)
+  Object.assign(turn, compactedTurn)
 
   const persistedParts = listPartRecordsBySession(database.connection, session.id)
   assistantParts.forEach(part => emitEvent?.({

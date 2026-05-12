@@ -174,6 +174,7 @@ function normalizedSession(session: SessionRecord) {
     systemPromptTokens: session.systemPromptTokens,
     toolDefinitionsTokens: session.toolDefinitionsTokens,
     isContextExhausted: session.isContextExhausted,
+    compactionStrategy: session.compactionStrategy,
   }
 }
 
@@ -191,6 +192,10 @@ function normalizeTraceBundle(trace: SessionTraceBundle) {
       status: turn.status,
       outcome: turn.outcome,
       usage: turn.usage,
+      compactionApplied: turn.compactionApplied,
+      contextTokensAtTurnEnd: turn.contextTokensAtTurnEnd,
+      contextTokensAfterCompaction: turn.contextTokensAfterCompaction,
+      compactionTokensRemoved: turn.compactionTokensRemoved,
     })),
     rounds: trace.rounds.map(round => ({
       turnRef: turnRefById.get(round.turnId) ?? null,
@@ -210,7 +215,13 @@ function normalizeTraceBundle(trace: SessionTraceBundle) {
       roleLabel: part.roleLabel,
       payload: part.payload,
       display: part.display,
-      context: part.context,
+      context: {
+        state: part.context.state,
+        note: part.context.note,
+        strippedByCompactionAtTurnRef: part.context.strippedByCompactionAtTurnId
+          ? (turnRefById.get(part.context.strippedByCompactionAtTurnId) ?? part.context.strippedByCompactionAtTurnId)
+          : null,
+      },
       tokens: part.tokens,
       provenanceJson: part.provenanceJson,
     })),
@@ -235,7 +246,7 @@ function normalizeTraceBundle(trace: SessionTraceBundle) {
         text?: unknown
         summary?: unknown
         tokens?: unknown
-        context?: unknown
+        context?: { state?: unknown; note?: unknown; strippedByCompactionAtTurnId?: string | null } | null
       }
       return {
         turnRef: record.turnId ? (turnRefById.get(record.turnId) ?? null) : null,
@@ -245,7 +256,15 @@ function normalizeTraceBundle(trace: SessionTraceBundle) {
         text: record.text ?? null,
         summary: record.summary ?? null,
         tokens: record.tokens ?? null,
-        context: record.context ?? null,
+        context: record.context
+          ? {
+              state: record.context.state ?? null,
+              note: record.context.note ?? null,
+              strippedByCompactionAtTurnRef: record.context.strippedByCompactionAtTurnId
+                ? (turnRefById.get(record.context.strippedByCompactionAtTurnId) ?? record.context.strippedByCompactionAtTurnId)
+                : null,
+            }
+          : null,
       }
     }),
     context: trace.context.map(entry => {
