@@ -81,6 +81,57 @@ export function deriveContextEntries(parts: PartRecord[]): ContextEntry[] {
     }))
 }
 
+/**
+ * Returns the context entries that were present at the END of the given round,
+ * before any inter-turn compaction.
+ *
+ * Includes:
+ *  - `included` parts whose ordinal ≤ the last part of the round
+ *  - `round-only` parts that belong to this round exactly
+ *  - `stripped` parts that were still in context at this round's turn
+ *    (i.e. stripped at a later or equal turn)
+ */
+export function deriveContextSnapshotAtRound(
+  allParts: PartRecord[],
+  roundId: string,
+  allTurns: TurnRecord[],
+): ContextEntry[] {
+  const sorted = sortParts(allParts)
+  const roundParts = sorted.filter((p) => p.roundId === roundId)
+  if (roundParts.length === 0) return []
+
+  const maxOrdinal = roundParts.at(-1)!.ordinal
+  const roundTurnId = roundParts[0].turnId
+  const turnSeqById = new Map(allTurns.map((t) => [t.id, t.sequenceNumber]))
+  const roundTurnSeq = roundTurnId !== null ? (turnSeqById.get(roundTurnId) ?? -1) : -1
+
+  return sorted
+    .filter((p) => p.ordinal <= maxOrdinal)
+    .filter((p) => {
+      if (p.context.state === 'included') return true
+      if (p.context.state === 'round-only') return p.roundId === roundId
+      if (p.context.state === 'stripped') {
+        const strippedAt = p.context.strippedByCompactionAtTurnId
+        if (strippedAt === null) return true
+        const strippedAtSeq = turnSeqById.get(strippedAt) ?? -1
+        // Part was in context during turns whose seq ≤ strippedAtSeq.
+        // Our round is in a turn with seq = roundTurnSeq.
+        return roundTurnSeq <= strippedAtSeq
+      }
+      return false
+    })
+    .map((p) => ({
+      id: p.id,
+      turnId: p.turnId,
+      roundId: p.roundId,
+      type: p.partType,
+      roleLabel: p.roleLabel,
+      text: p.payload.text,
+      summary: p.payload.summary,
+      tokens: p.tokens,
+    }))
+}
+
 function withDerivedEntries(trace: SessionTraceBundle): SessionTraceBundle {
   const sortedParts = sortParts(trace.parts)
   return {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type {
+    ContextEntry,
     PartRecord,
     RawExchangeRecord,
     RoundRecord,
@@ -7,6 +8,7 @@
   } from '../backendTypes'
   import type { StreamingRoundState } from '../traceStreaming'
   import CompactRoundContent from './CompactRoundContent.svelte'
+  import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import JsonDialog from './JsonDialog.svelte'
   import StreamingRoundDeltaBlock from './StreamingRoundDeltaBlock.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
@@ -18,9 +20,22 @@
     rawExchanges: RawExchangeRecord[]
     roundStreams: StreamingRoundState[]
     mode?: 'compact' | 'inspect'
+    /** Per-round context snapshots computed from all parts. */
+    contextSnapshotsByRound?: Map<string, ContextEntry[]>
+    /** Loaded context window size for the context bar scale. */
+    loadedContextLength?: number | null
   }
 
-  const { turn, rounds, parts, rawExchanges, roundStreams, mode = 'inspect' }: Props = $props()
+  const {
+    turn,
+    rounds,
+    parts,
+    rawExchanges,
+    roundStreams,
+    mode = 'inspect',
+    contextSnapshotsByRound,
+    loadedContextLength = null,
+  }: Props = $props()
 
   let showDialog = $state(false)
   let dialogTitle = $state('')
@@ -90,6 +105,7 @@
       {@const roundParts = (partsByRound.get(round.id) ?? []).filter((part) => part.id !== compactUserPart?.id)}
       {@const roundExchanges = rawExchangesByRound.get(round.id) ?? []}
       {@const roundStream = roundStreamsByRound.get(round.id) ?? null}
+      {@const roundSnapshot = contextSnapshotsByRound?.get(round.id) ?? null}
       <section class="compact-round">
         <div class="compact-round-meta">
           <span class="compact-round-label">Round {round.roundIndex + 1}</span>
@@ -124,6 +140,18 @@
         <div class="compact-round-parts">
           <CompactRoundContent parts={roundParts} {roundStream} />
         </div>
+
+        {#if roundSnapshot && roundSnapshot.length > 0}
+          <div class="round-ctx-bar">
+            <ContextSnapshotBar
+              entries={roundSnapshot}
+              contextSize={loadedContextLength}
+              label="ctx"
+              showLegend={false}
+              compact
+            />
+          </div>
+        {/if}
       </section>
     {/each}
 
@@ -189,6 +217,7 @@
         {@const roundParts = partsByRound.get(round.id) ?? []}
         {@const roundExchanges = rawExchangesByRound.get(round.id) ?? []}
         {@const roundStream = roundStreamsByRound.get(round.id) ?? null}
+        {@const roundSnapshot = contextSnapshotsByRound?.get(round.id) ?? null}
         <section class="round-block">
           <div class="round-header">
             <div class="round-header-main">
@@ -243,6 +272,18 @@
               </div>
             {/if}
           </div>
+
+          {#if roundSnapshot && roundSnapshot.length > 0}
+            <div class="round-ctx-bar-full">
+              <ContextSnapshotBar
+                entries={roundSnapshot}
+                contextSize={loadedContextLength}
+                label="Context at round end"
+                showLegend={false}
+                compact
+              />
+            </div>
+          {/if}
         </section>
       {/each}
     </div>
@@ -461,5 +502,18 @@
   .meta-btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+
+  /* Per-round context snapshot bar */
+  .round-ctx-bar {
+    margin-top: var(--compact-meta-gap, 0.14rem);
+    padding-top: 0.18rem;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .round-ctx-bar-full {
+    padding: 0.3rem 0.85rem 0.5rem;
+    border-top: 1px solid var(--border-subtle);
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
   }
 </style>

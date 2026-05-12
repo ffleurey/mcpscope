@@ -16,14 +16,17 @@
   --color-warning: #fbbf24;
   --color-accent: #60a5fa;
 
-  /* Context bar segment colors — one variable per token type */
-  --token-system-prompt:    #dc2626;  /* red          — system prompt */
-  --token-user:             #16a34a;  /* dark green   — user messages */
-  --token-reasoning:        #fb923c;  /* light orange — model chain-of-thought */
-  --token-content:          #86efac;  /* light green  — model response content */
-  --token-tool-definitions: #7c3aed;  /* purple       — MCP tool schemas */
-  --token-tool-call:        #1d4ed8;  /* dark blue    — MCP tool invocations */
-  --token-tool-response:    #60a5fa;  /* light blue   — MCP tool results */
+  /* Context bar segment colors — mirrors PART_COLORS in src/lib/design/partColors.ts.
+     Keep both files in sync when adding/changing part types. */
+  --token-system-prompt:       #ef4444;  /* red-500    — system prompt          */
+  --token-mcp-instructions:    #f472b6;  /* pink-400   — MCP server preambles   */
+  --token-tool-definitions:    #a855f7;  /* purple-500 — tool schemas           */
+  --token-user:                #64748b;  /* slate-500  — user messages          */
+  --token-content:             #94a3b8;  /* slate-400  — assistant response     */
+  --token-reasoning:           #fb923c;  /* orange-400 — chain-of-thought       */
+  --token-tool-call:           #3b82f6;  /* blue-500   — outbound tool calls    */
+  --token-tool-response:       #93c5fd;  /* blue-300   — inbound tool results   */
+  --token-diagnostic:          #6b7280;  /* gray-500   — diagnostic notes       */
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, 'Cascadia Code', Consolas, monospace;

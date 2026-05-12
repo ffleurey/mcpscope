@@ -13,8 +13,9 @@
     sessionError,
   } from '../sessionStore'
   import type { StreamingRoundState } from '../traceStreaming'
+  import { deriveContextSnapshotAtRound } from '../traceStreaming'
   import type { ModelConfig } from '../types'
-  import ContextBar from './ContextBar.svelte'
+  import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import SessionPreludeBlock from './SessionPreludeBlock.svelte'
   import SessionTurnBlock from './SessionTurnBlock.svelte'
 
@@ -90,6 +91,16 @@
     return grouped
   })
   let sessionPreludeRawExchanges = $derived(traceRawExchanges.filter((exchange) => exchange.turnId === null))
+
+  // Per-round context snapshots — used to show a context bar after each round.
+  let allParts = $derived($activeTrace?.parts ?? [])
+  let contextSnapshotsByRound = $derived.by(() => {
+    const result = new Map<string, ReturnType<typeof deriveContextSnapshotAtRound>>()
+    for (const round of traceRounds) {
+      result.set(round.id, deriveContextSnapshotAtRound(allParts, round.id, traceTurns))
+    }
+    return result
+  })
   let activeStreamingTurnId = $derived($activeTurnStream?.turnId ?? null)
   let streamingSignature = $derived.by(() => (
     ($activeTurnStream?.rounds ?? [])
@@ -283,6 +294,8 @@
           rawExchanges={rawExchangesByTurn.get(turn.id) ?? []}
           roundStreams={roundStreamsByTurn.get(turn.id) ?? []}
           mode={viewMode}
+          {contextSnapshotsByRound}
+          loadedContextLength={session?.loadedContextLength ?? null}
         />
       {/each}
     {/if}
@@ -290,9 +303,9 @@
 
   <!-- Context bar (above composer, below transcript) -->
   {#if $activeTrace}
-    <ContextBar
+    <ContextSnapshotBar
       entries={$activeTrace.context}
-      loadedContextLength={session?.loadedContextLength ?? null}
+      contextSize={session?.loadedContextLength ?? null}
     />
   {/if}
 
