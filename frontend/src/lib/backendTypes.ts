@@ -52,6 +52,7 @@ export const partTypeSchema = z.enum([
 export const displayStateSchema = z.enum(['transcript', 'diagnostic', 'hidden'])
 export const contextStateSchema = z.enum(['included', 'excluded', 'stripped', 'historical-only', 'round-only'])
 export const compactionStrategySchema = z.enum(['none', 'strip-reasoning'])
+export const compactionStrategyWithFallbackSchema = compactionStrategySchema.nullable().transform(v => v ?? 'strip-reasoning')
 export const tokenSourceSchema = z.enum(['exact-api', 'delta-derived', 'corrected', 'estimated', 'manual', 'unknown'])
 export const tokenConfidenceSchema = z.enum(['exact', 'corrected', 'estimated', 'unknown'])
 export const exchangeKindSchema = z.enum([
@@ -150,7 +151,7 @@ export const sessionRecordSchema = z.object({
   systemPromptTokens: z.number().int().nonnegative().nullable(),
   toolDefinitionsTokens: z.number().int().nonnegative().nullable(),
   isContextExhausted: z.boolean(),
-  compactionStrategy: compactionStrategySchema,
+  compactionStrategy: compactionStrategyWithFallbackSchema,
 })
 
 export const turnRecordSchema = z.object({
