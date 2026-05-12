@@ -15,7 +15,7 @@ import {
   turnStatusValues,
 } from '../domain/model.js'
 
-const SQLITE_SCHEMA_VERSION = 3
+const SQLITE_SCHEMA_VERSION = 4
 
 function sqlEnum(values: readonly string[]): string {
   return values.map(value => `'${value}'`).join(', ')
@@ -196,6 +196,12 @@ export function initializeBackendSchema(connection: Database.Database): void {
     migrate(`ALTER TABLE turns ADD COLUMN compaction_applied TEXT`)
     migrate(`ALTER TABLE turns ADD COLUMN compaction_tokens_removed INTEGER`)
     migrate(`ALTER TABLE parts ADD COLUMN stripped_by_compaction_at_turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL`)
+  }
+
+  // Backfill NULL compaction_strategy values that may have been written before
+  // the DEFAULT clause was part of the migration.
+  if (currentVersion < 4) {
+    connection.exec(`UPDATE sessions SET compaction_strategy = 'strip-reasoning' WHERE compaction_strategy IS NULL`)
   }
 
   upsertMeta.run('sqlite_schema_version', String(SQLITE_SCHEMA_VERSION))

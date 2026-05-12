@@ -88,7 +88,7 @@ describe('backend foundation', () => {
     )
     expect(body.schema.meta).toMatchObject({
       domain_model_version: '1',
-      sqlite_schema_version: '3',
+      sqlite_schema_version: '4',
     })
   })
 
