@@ -178,31 +178,21 @@ export function initializeBackendSchema(connection: Database.Database): void {
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `)
 
-  // Run additive migrations for databases created before schema v3.
-  // ALTER TABLE ADD COLUMN is safe to wrap in try/catch for idempotency.
-  const currentVersion = Number(
-    (connection
-      .prepare<[], { value: string }>(`SELECT value FROM schema_meta WHERE key = 'sqlite_schema_version'`)
-      .get() as { value: string } | undefined)?.value ?? '0',
-  )
-
-  if (currentVersion < 3) {
-    const migrate = (sql: string) => {
-      try { connection.exec(sql) } catch { /* column already exists */ }
-    }
-    migrate(`ALTER TABLE sessions ADD COLUMN compaction_strategy TEXT NOT NULL DEFAULT 'strip-reasoning'`)
-    migrate(`ALTER TABLE turns ADD COLUMN context_tokens_at_turn_end INTEGER`)
-    migrate(`ALTER TABLE turns ADD COLUMN context_tokens_after_compaction INTEGER`)
-    migrate(`ALTER TABLE turns ADD COLUMN compaction_applied TEXT`)
-    migrate(`ALTER TABLE turns ADD COLUMN compaction_tokens_removed INTEGER`)
-    migrate(`ALTER TABLE parts ADD COLUMN stripped_by_compaction_at_turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL`)
+  // Additive column migrations: always attempt, try/catch handles "column already exists".
+  // Version-gating is intentionally avoided here — using it caused columns to be skipped
+  // on DBs whose schema_meta version was advanced before all columns were applied.
+  const migrate = (sql: string) => {
+    try { connection.exec(sql) } catch { /* column already exists — safe to ignore */ }
   }
+  migrate(`ALTER TABLE sessions ADD COLUMN compaction_strategy TEXT`)
+  migrate(`ALTER TABLE turns ADD COLUMN context_tokens_at_turn_end INTEGER`)
+  migrate(`ALTER TABLE turns ADD COLUMN context_tokens_after_compaction INTEGER`)
+  migrate(`ALTER TABLE turns ADD COLUMN compaction_applied TEXT`)
+  migrate(`ALTER TABLE turns ADD COLUMN compaction_tokens_removed INTEGER`)
+  migrate(`ALTER TABLE parts ADD COLUMN stripped_by_compaction_at_turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL`)
 
-  // Backfill NULL compaction_strategy values that may have been written before
-  // the DEFAULT clause was part of the migration.
-  if (currentVersion < 4) {
-    connection.exec(`UPDATE sessions SET compaction_strategy = 'strip-reasoning' WHERE compaction_strategy IS NULL`)
-  }
+  // Backfill: NULL compaction_strategy → 'strip-reasoning' (for rows predating this column)
+  connection.exec(`UPDATE sessions SET compaction_strategy = 'strip-reasoning' WHERE compaction_strategy IS NULL`)
 
   upsertMeta.run('sqlite_schema_version', String(SQLITE_SCHEMA_VERSION))
   upsertMeta.run('domain_model_version', String(DOMAIN_MODEL_VERSION))
