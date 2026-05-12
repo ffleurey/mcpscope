@@ -125,7 +125,7 @@ Only after the backend contract is stable enough.
 
 Deliver:
 
-- typed backend API client under `src/lib/api/`
+- typed backend API client under `frontend/src/lib/api/`
 - backend payload types aligned with backend responses
 - new session store driven by backend session summaries and trace payloads
 - no frontend persistence, no cache, no parallel chat runtime model
@@ -137,10 +137,10 @@ Tests:
 
 Current implementation note:
 
-- typed backend API helpers now live under `src/lib/api/`
-- backend payload types now live under `src/lib/backendTypes.ts`
-- `connectionStore` now loads and saves backend-owned LM connections, model configs, and MCP profiles through backend CRUD endpoints
-- `sessionStore` now drives session summaries, active trace loading, trace export, and non-streaming turn submission
+- typed backend API helpers now live under `frontend/src/lib/api/`
+- backend payload types now live under `frontend/src/lib/backendTypes.ts`
+- `frontend/src/lib/connectionStore.ts` now loads and saves backend-owned LM connections, model configs, and MCP profiles through backend CRUD endpoints
+- `frontend/src/lib/sessionStore.ts` now drives session summaries, active trace loading, trace export, and turn submission
 - the frontend no longer depends on IndexedDB for active session/runtime state
 
 #### Step 4. Rewire the UI onto backend data
@@ -200,14 +200,20 @@ Current implementation note:
 
 Do this only after the backend-driven path is complete.
 
-**Status:** Next active refactor step
+**Status:** Completed
 
 Deliver:
 
-- remove `src/lib/chatStore.ts`
-- remove `src/lib/db.ts`
+- remove `frontend/src/lib/chatStore.ts`
+- remove `frontend/src/lib/db.ts`
 - remove browser-side LM Studio and MCP runtime logic
 - trim obsolete frontend-only types and compatibility code
+
+Current implementation note:
+
+- the active Svelte/Vite app now lives under `frontend/`
+- the old browser-owned `chatStore.ts`, IndexedDB layer, and MCP browser runtime client have been removed
+- the remaining next phase is token/context trust hardening on the simplified backend-driven UI
 
 Tests:
 
@@ -226,7 +232,7 @@ Work:
 
 ## After refactor boundary is complete
 
-Once the legacy frontend runtime is removed, return to the remaining trust work:
+Now that the legacy frontend runtime has been removed, return to the remaining trust work:
 
 1. harden token counting end-to-end against captured traces and live sessions
 2. verify that the context bar is driven by the same canonical token/context data as the rest of the trace

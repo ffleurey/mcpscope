@@ -15,7 +15,7 @@ The first backend increment is complete:
 - full session trace export at `/api/sessions/:sessionId/trace`
 - deterministic replay harness that re-runs exported traces as local regression tests
 
-The next stage is frontend rewiring so the UI becomes a thin client over the backend APIs.
+The current stage is finishing the frontend refactor so the UI becomes a clean thin client over the backend APIs.
 
 ## Architecture
 
@@ -35,6 +35,7 @@ The next stage is frontend rewiring so the UI becomes a thin client over the bac
 ### Frontend
 
 - Svelte + TypeScript + Vite
+- lives under `frontend/`
 - progressively moving toward presentation-only responsibilities
 - should consume backend transcript, context, and trace data rather than re-implement runtime logic
 
@@ -88,8 +89,8 @@ For the rewired frontend, the same model remains canonical:
 
 ```bash
 npm run dev
-npm run backend:dev
-npm run frontend:dev
+npm run dev:backend
+npm run dev:frontend
 ```
 
 ## Testing

@@ -5,20 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:backend\" \"npm:dev:frontend\"",
-    "dev:frontend": "vite",
+    "dev:frontend": "vite --config frontend/vite.config.ts",
     "dev:backend": "tsx watch backend/src/server.ts",
     "seed:dev-config": "tsx backend/src/dev/seedDevConfig.ts",
     "seed:dev-sessions": "tsx backend/src/dev/seedCapturedSessions.ts",
     "seed:dev-data": "npm run seed:dev-config && npm run seed:dev-sessions",
-    "build": "vite build",
+    "build": "vite build --config frontend/vite.config.ts",
     "build:backend": "tsc -p backend/tsconfig.json",
     "start:backend": "node backend/dist/server.js",
-    "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "preview": "vite preview --config frontend/vite.config.ts",
+    "check": "svelte-check --tsconfig ./frontend/tsconfig.app.json && tsc -p frontend/tsconfig.node.json",
     "check:backend": "tsc -p backend/tsconfig.json --noEmit",
-    "lint": "eslint src",
+    "lint": "eslint frontend/src",
     "lint:backend": "eslint backend/src --ext .ts",
-    "lint:fix": "eslint src --fix",
+    "lint:fix": "eslint frontend/src --fix",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest"
@@ -48,7 +48,6 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.4.1",
-    "idb": "^8.0.3",
     "zod": "^4.4.3"
   }
 }

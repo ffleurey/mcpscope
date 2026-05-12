@@ -30,10 +30,10 @@ export default [
 
   // Frontend TypeScript files
   {
-    files: ['src/**/*.ts'],
+    files: ['frontend/src/**/*.ts'],
     languageOptions: {
       parser: tsParser,
-      parserOptions: { project: './tsconfig.app.json', extraFileExtensions: ['.svelte'] },
+      parserOptions: { project: './frontend/tsconfig.app.json', extraFileExtensions: ['.svelte'] },
       globals: { ...globals.browser },
     },
     plugins: { '@typescript-eslint': ts },
@@ -52,12 +52,12 @@ export default [
 
   // Svelte files
   {
-    files: ['**/*.svelte'],
+    files: ['frontend/src/**/*.svelte'],
     languageOptions: {
       parser: svelteParser,
       parserOptions: {
         parser: tsParser,
-        project: './tsconfig.app.json',
+        project: './frontend/tsconfig.app.json',
         extraFileExtensions: ['.svelte'],
       },
       globals: { ...globals.browser },
@@ -81,6 +81,12 @@ export default [
 
   // Ignore build output and config files
   {
-    ignores: ['dist/**', 'backend/dist/**', 'node_modules/**', 'vite.config.ts', 'svelte.config.js'],
+    ignores: [
+      'backend/dist/**',
+      'frontend/dist/**',
+      'node_modules/**',
+      'frontend/vite.config.ts',
+      'frontend/svelte.config.js',
+    ],
   },
 ]
