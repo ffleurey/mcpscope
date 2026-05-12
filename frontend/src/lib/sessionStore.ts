@@ -57,11 +57,6 @@ function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function buildDraftTitle(userContent: string): string {
-  const trimmed = userContent.trim().replace(/\s+/g, ' ')
-  return trimmed.slice(0, 60) || 'New session'
-}
-
 function buildModelProfileSnapshot(modelConfig: ModelConfig, connection: LmStudioConnection) {
   return {
     id: modelConfig.id,
