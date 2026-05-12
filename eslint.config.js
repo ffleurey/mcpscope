@@ -84,6 +84,8 @@ export default [
     ignores: [
       'backend/dist/**',
       'frontend/dist/**',
+      'dist/**',
+      'exports/**',
       'node_modules/**',
       'frontend/vite.config.ts',
       'frontend/svelte.config.js',
