@@ -38,6 +38,7 @@ export const activeChatId = writable<string | null>(null)
 export const activeTrace = writable<SessionTraceBundle | null>(null)
 export const activeTraceLoading = writable(false)
 export const isSendingTurn = writable(false)
+export const isStartingSession = writable(false)
 export const isImportingTrace = writable(false)
 export const activeTurnStream = writable<TurnStreamingState | null>(null)
 
@@ -168,50 +169,50 @@ export async function deleteChat(sessionId: string): Promise<void> {
   }
 }
 
+export async function startSession(input: {
+  modelConfig: ModelConfig
+  connection: LmStudioConnection
+  mcpProfile: McpServerProfile | null
+  compactionStrategy: 'none' | 'strip-reasoning'
+}): Promise<void> {
+  sessionError.set(null)
+  isStartingSession.set(true)
+  try {
+    const { session } = await createSession({
+      modelProfileSnapshot: buildModelProfileSnapshot(input.modelConfig, input.connection),
+      mcpProfileSnapshot: input.mcpProfile ? buildMcpProfileSnapshot(input.mcpProfile) : null,
+      compactionStrategy: input.compactionStrategy,
+    })
+    activeChatId.set(session.id)
+    upsertSessionSummary(session)
+    await refreshActiveTrace()
+  } catch (error) {
+    sessionError.set(formatError(error))
+  } finally {
+    isStartingSession.set(false)
+  }
+}
+
 export async function sendMessage(input: {
   userContent: string
-  draftSelection?: {
-    modelConfig: ModelConfig
-    connection: LmStudioConnection
-    mcpProfile: McpServerProfile | null
-  }
 }): Promise<void> {
   const userContent = input.userContent.trim()
   if (!userContent) return
+
+  const sessionId = get(activeChatId)
+  if (!sessionId) {
+    sessionError.set('No active session — start a session first')
+    return
+  }
 
   sessionError.set(null)
   isSendingTurn.set(true)
   activeTurnStream.set(null)
 
-  let sessionId = get(activeChatId)
-  let sessionRecord = get(activeSession)
+  const sessionRecord = get(activeSession)
   let streamOutcome: 'committed' | 'failed' | null = null
 
   try {
-    if (!sessionId) {
-      if (!input.draftSelection) {
-        throw new Error('Select a model config before starting a chat')
-      }
-
-      const { session } = await createSession({
-        title: buildDraftTitle(userContent),
-        modelProfileSnapshot: buildModelProfileSnapshot(
-          input.draftSelection.modelConfig,
-          input.draftSelection.connection,
-        ),
-        mcpProfileSnapshot: input.draftSelection.mcpProfile
-          ? buildMcpProfileSnapshot(input.draftSelection.mcpProfile)
-          : null,
-      })
-
-      sessionId = session.id
-      sessionRecord = session
-      activeChatId.set(sessionId)
-      upsertSessionSummary(session)
-      await refreshActiveTrace()
-    }
-
-    sessionRecord = sessionRecord ?? get(activeSession)
     if (!sessionRecord) {
       throw new Error('Active session is not available for streaming')
     }
@@ -234,11 +235,8 @@ export async function sendMessage(input: {
     }
   } catch (error) {
     sessionError.set(formatError(error))
-
-    if (sessionId) {
-      await refreshSessions().catch(() => undefined)
-      await refreshActiveTrace().catch(() => undefined)
-    }
+    await refreshSessions().catch(() => undefined)
+    await refreshActiveTrace().catch(() => undefined)
   } finally {
     activeTurnStream.set(null)
     isSendingTurn.set(false)

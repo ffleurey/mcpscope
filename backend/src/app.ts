@@ -70,6 +70,7 @@ const createSessionInputSchema = z.object({
   title: z.string().optional(),
   modelProfileSnapshot: modelProfileSnapshotInputSchema,
   mcpProfileSnapshot: mcpProfileSnapshotInputSchema.nullable().optional(),
+  compactionStrategy: z.enum(['none', 'strip-reasoning']).optional(),
 })
 
 const createTurnInputSchema = z.object({

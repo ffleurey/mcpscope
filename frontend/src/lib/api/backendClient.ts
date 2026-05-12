@@ -77,6 +77,7 @@ export function createSession(input: {
   title?: string
   modelProfileSnapshot: ModelProfileSnapshot
   mcpProfileSnapshot?: McpProfileSnapshot | null
+  compactionStrategy?: 'none' | 'strip-reasoning'
 }) {
   return request('/api/sessions', {
     method: 'POST',

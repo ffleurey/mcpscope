@@ -77,6 +77,7 @@ export interface CreateSessionInput {
   title?: string | undefined
   modelProfileSnapshot: ModelProfileSnapshot
   mcpProfileSnapshot?: McpProfileSnapshot | null | undefined
+  compactionStrategy?: 'none' | 'strip-reasoning' | undefined
 }
 
 export interface CreateTurnInput {
@@ -132,7 +133,7 @@ export function createSession(
     systemPromptTokens: null,
     toolDefinitionsTokens: null,
     isContextExhausted: false,
-    compactionStrategy: 'strip-reasoning',
+    compactionStrategy: input.compactionStrategy ?? 'strip-reasoning',
   }
 
   const tx = database.connection.transaction(() => {
