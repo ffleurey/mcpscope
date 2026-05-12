@@ -11,6 +11,7 @@
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import JsonDialog from './JsonDialog.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
+  import { highlightMarkdown } from '../markdownHighlight'
 
   interface Props {
     turn: TurnRecord
@@ -134,11 +135,12 @@
     {/if}
 
     {#if chatCollapsed}
-      <!-- Collapsed: plain answer text, no wrapper/header -->
+      <!-- Collapsed: markdown syntax-highlighted answer text -->
       {#each assistantContentParts as part (part.id)}
         {@const text = normalizeText(part.payload.text)}
         {#if text}
-          <div class="chat-answer-text">{text}</div>
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          <pre class="chat-answer-text">{@html highlightMarkdown(text)}</pre>
         {/if}
       {/each}
     {:else}
@@ -359,17 +361,49 @@
     border-left: 2px solid var(--border-subtle);
   }
 
-  /* ── Chat mode: plain answer text ───────────────────────────────────── */
+  /* ── Chat mode: markdown syntax-highlighted answer text ─────────────── */
   .chat-answer-text {
     margin-top: var(--chat-gap);
     margin-left: var(--chat-indent);
     padding-left: var(--chat-pad);
     border-left: 2px solid var(--border-subtle);
     font-size: 0.88rem;
-    line-height: 1.6;
+    font-family: inherit;
+    line-height: 1.65;
     color: var(--text);
     white-space: pre-wrap;
     word-break: break-word;
+    margin-bottom: 0;
+  }
+
+  /* hljs markdown token colours — semantic palette */
+  .chat-answer-text :global(.hljs-section) {
+    color: var(--color-accent, #60a5fa);
+    font-weight: 600;
+  }
+  .chat-answer-text :global(.hljs-strong) {
+    color: var(--text);
+    font-weight: 700;
+  }
+  .chat-answer-text :global(.hljs-emphasis) {
+    color: var(--text);
+    font-style: italic;
+  }
+  .chat-answer-text :global(.hljs-code) {
+    color: var(--color-success, #4ade80);
+    font-family: var(--font-mono, monospace);
+  }
+  .chat-answer-text :global(.hljs-quote) {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+  .chat-answer-text :global(.hljs-bullet) {
+    color: var(--color-accent, #60a5fa);
+    font-weight: 700;
+  }
+  .chat-answer-text :global(.hljs-link) {
+    color: var(--color-accent, #60a5fa);
+    text-decoration: underline;
   }
 
   /* ── Chat mode: toggle row ──────────────────────────────────────────── */

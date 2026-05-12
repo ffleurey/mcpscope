@@ -24,12 +24,12 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@fastify/cors": "^11.1.0",
     "@eslint/js": "^10.0.1",
+    "@fastify/cors": "^11.1.0",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@tsconfig/svelte": "^5.0.8",
-    "@types/node": "^24.12.2",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.12.2",
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
     "concurrently": "^9.2.1",
@@ -40,14 +40,15 @@
     "globals": "^17.6.0",
     "svelte": "^5.55.4",
     "svelte-check": "^4.4.6",
-    "typescript": "~6.0.2",
     "tsx": "^4.20.6",
+    "typescript": "~6.0.2",
     "vite": "^8.0.10",
     "vitest": "^3.2.4"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "better-sqlite3": "^12.4.1",
+    "highlight.js": "^11.11.1",
     "zod": "^4.4.3"
   }
 }
