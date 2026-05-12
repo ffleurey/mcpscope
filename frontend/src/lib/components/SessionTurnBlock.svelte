@@ -110,28 +110,7 @@
   {#if mode === 'chat' && turnIsComplete}
     <!-- ── Chat mode, completed ──────────────────────────────────────── -->
 
-    {#if chatCollapsed}
-      <!-- Collapsed: plain answer text, no wrapper/header -->
-      {#each assistantContentParts as part (part.id)}
-        {@const text = normalizeText(part.payload.text)}
-        {#if text}
-          <div class="chat-answer-text">{text}</div>
-        {/if}
-      {/each}
-    {:else}
-      <!-- Expanded: full round detail (answers visible within rounds) -->
-      {#each sortedRounds as round (round.id)}
-        {@const roundParts = (partsByRound.get(round.id) ?? []).filter((p) => p.id !== userPart?.id)}
-        {@const roundStream = roundStreamsByRound.get(round.id) ?? null}
-        <section class="compact-round">
-          <div class="compact-round-parts">
-            <CompactRoundContent parts={roundParts} {roundStream} />
-          </div>
-        </section>
-      {/each}
-    {/if}
-
-    <!-- Toggle row: only shown when there's tool calls / reasoning / multiple rounds -->
+    <!-- Toggle row: above the content, only when there's detail to show -->
     {#if hasDetail}
       <div class="chat-toggle-row">
         <button
@@ -152,6 +131,27 @@
           {/if}
         </button>
       </div>
+    {/if}
+
+    {#if chatCollapsed}
+      <!-- Collapsed: plain answer text, no wrapper/header -->
+      {#each assistantContentParts as part (part.id)}
+        {@const text = normalizeText(part.payload.text)}
+        {#if text}
+          <div class="chat-answer-text">{text}</div>
+        {/if}
+      {/each}
+    {:else}
+      <!-- Expanded: full round detail (answers visible within rounds) -->
+      {#each sortedRounds as round (round.id)}
+        {@const roundParts = (partsByRound.get(round.id) ?? []).filter((p) => p.id !== userPart?.id)}
+        {@const roundStream = roundStreamsByRound.get(round.id) ?? null}
+        <section class="compact-round">
+          <div class="compact-round-parts">
+            <CompactRoundContent parts={roundParts} {roundStream} />
+          </div>
+        </section>
+      {/each}
     {/if}
 
     <!-- Context bar: always visible after a completed chat turn -->
