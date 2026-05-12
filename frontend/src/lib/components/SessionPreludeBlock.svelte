@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { PartRecord, RawExchangeRecord } from '../backendTypes'
+  import { deriveContextEntries } from '../traceStreaming'
+  import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import JsonDialog from './JsonDialog.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
 
@@ -7,15 +9,19 @@
     parts: PartRecord[]
     rawExchanges: RawExchangeRecord[]
     mode?: 'compact' | 'inspect'
+    /** Loaded context window size for bar scale. */
+    loadedContextLength?: number | null
   }
 
-  const { parts, rawExchanges, mode = 'inspect' }: Props = $props()
+  const { parts, rawExchanges, mode = 'inspect', loadedContextLength = null }: Props = $props()
 
   let showDialog = $state(false)
 
   const totalTokens = $derived(
     parts.reduce((sum, part) => sum + (part.tokens.count ?? 0), 0),
   )
+
+  const contextEntries = $derived(deriveContextEntries(parts))
 
   function openRawDialog(): void {
     showDialog = true
@@ -62,6 +68,18 @@
     </section>
   </div>
 </details>
+
+{#if contextEntries.length > 0}
+  <div class="prelude-ctx-bar" class:compact={mode === 'compact'}>
+    <ContextSnapshotBar
+      entries={contextEntries}
+      contextSize={loadedContextLength}
+      label="Setup context"
+      showLegend={false}
+      compact={mode === 'compact'}
+    />
+  </div>
+{/if}
 
 {#if showDialog}
   <JsonDialog
@@ -196,6 +214,16 @@
 
   .prelude-block.compact .prelude-parts {
     padding: 0;
+  }
+
+  .prelude-ctx-bar {
+    margin-bottom: 1rem;
+  }
+
+  .prelude-ctx-bar.compact {
+    margin-bottom: 0.8rem;
+    padding-left: 0.7rem;
+    border-left: 2px solid var(--border-subtle);
   }
 
   .meta-btn {

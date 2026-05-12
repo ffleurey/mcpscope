@@ -29,7 +29,7 @@ import {
   upsertMcpServerProfile,
   upsertModelConfig,
 } from './persistence/repository.js'
-import { createChatCompletion, probePromptTokens, probePromptTokensDetailed, streamChatCompletion } from './services/lmstudio/client.js'
+import { createChatCompletion, getLoadedContextLength, probePromptTokens, probePromptTokensDetailed, streamChatCompletion } from './services/lmstudio/client.js'
 import { callMcpTool, initializeMcpSession, listMcpTools } from './services/mcp/httpClient.js'
 import { createModelOnlyTurn, createSession, type LmStudioGateway } from './runtime/modelTurns.js'
 import { createToolEnabledTurn, type McpGateway } from './runtime/toolTurns.js'
@@ -89,6 +89,7 @@ export async function buildBackendApp(
       streamChatCompletion,
       probePromptTokens,
       probePromptTokensDetailed,
+      getLoadedContextLength,
     },
     mcpGateway: {
       initializeSession: initializeMcpSession,

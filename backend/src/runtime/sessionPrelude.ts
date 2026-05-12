@@ -148,6 +148,20 @@ export async function ensureSessionPreludeTokenMetadata(
   session: SessionRecord,
   parts: PartRecord[],
 ): Promise<PartRecord[]> {
+  // Capture the loaded context window size once (on first call, before probing tokens).
+  if (session.loadedContextLength == null && lmStudioGateway.getLoadedContextLength) {
+    const contextLength = await lmStudioGateway.getLoadedContextLength(
+      session.modelProfileSnapshot.connectionBaseUrl,
+      session.modelProfileSnapshot.apiKey ?? undefined,
+      session.modelProfileSnapshot.modelKey,
+    )
+    if (contextLength != null) {
+      session.loadedContextLength = contextLength
+      session.updatedAt = now()
+      updateSessionRecord(database.connection, session)
+    }
+  }
+
   let nextParts = await ensureSystemPromptTokenMetadata(database, lmStudioGateway, session, parts)
   const updatedAt = now()
   const updates = new Map<string, PartRecord>()

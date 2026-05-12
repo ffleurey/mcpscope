@@ -220,14 +220,14 @@ const TURN2_REASONING_TOKENS = 2
 function makeModelOnlyGateway(turns: 1 | 2) {
   let completionCallCount = 0
   return {
-    async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | null, body: Record<string, unknown>) {
+    async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
       const messages = body.messages as Array<{ role: string }>
       // System-only probe (1 message): returns fixed small count for system prompt.
       if (messages.length === 1) return makeProbeResult(SYSTEM_PROMPT_TOKENS, body)
       // All other probes return a proportional count based on message count.
       return makeProbeResult(messages.length * 4, body)
     },
-    async createChatCompletion(_baseUrl: string, _apiKey: string | null, _body: unknown) {
+    async createChatCompletion(_baseUrl: string, _apiKey: string | undefined, _body: unknown) {
       completionCallCount++
       if (completionCallCount === 1) {
         return {
@@ -387,7 +387,7 @@ function makeToolGateway() {
 
   return {
     lmStudioGateway: {
-      async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | null, body: unknown) {
+      async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: unknown) {
         const b = body as { messages: Array<{ role: string; content?: string | null }>; tools?: unknown[] }
         const messages = b.messages
         const hasTools = Array.isArray(b.tools) && b.tools.length > 0
@@ -424,7 +424,7 @@ function makeToolGateway() {
         }
         return makeProbeResult(promptTokens, body as Record<string, unknown>)
       },
-      async createChatCompletion(_baseUrl: string, _apiKey: string | null, _body: unknown) {
+      async createChatCompletion(_baseUrl: string, _apiKey: string | undefined, _body: unknown) {
         completionCount++
 
         if (completionCount === 1) {

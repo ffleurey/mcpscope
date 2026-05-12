@@ -283,6 +283,7 @@
           parts={sessionPreludeParts}
           rawExchanges={sessionPreludeRawExchanges}
           mode={viewMode}
+          loadedContextLength={session?.loadedContextLength ?? null}
         />
       {/if}
 
@@ -306,6 +307,7 @@
     <ContextSnapshotBar
       entries={$activeTrace.context}
       contextSize={session?.loadedContextLength ?? null}
+      label="Context after compaction"
     />
   {/if}
 

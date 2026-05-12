@@ -66,6 +66,11 @@ export interface LmStudioGateway {
     apiKey: string | undefined,
     body: Record<string, unknown>,
   ): Promise<LmStudioPromptProbeResult>
+  getLoadedContextLength?(
+    baseUrl: string,
+    apiKey: string | undefined,
+    modelKey: string,
+  ): Promise<number | null>
 }
 
 export interface CreateSessionInput {

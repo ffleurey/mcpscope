@@ -12,6 +12,13 @@
     showLegend?: boolean
     /** Compact mode: thinner bar, no header label. */
     compact?: boolean
+    /**
+     * Initial display mode (non-compact only).
+     *  - `full`: bar width represents the full context window; unused space shown as dark track.
+     *  - `breakdown`: bar fills 100% showing only the used token breakdown.
+     * Defaults to `full` when contextSize is provided, otherwise `breakdown`.
+     */
+    defaultMode?: 'full' | 'breakdown'
   }
 
   const {
@@ -20,7 +27,12 @@
     label = 'Context',
     showLegend = true,
     compact = false,
+    defaultMode,
   }: Props = $props()
+
+  const initialMode = $derived(defaultMode ?? (contextSize != null ? 'full' : 'breakdown'))
+  let displayMode = $state<'full' | 'breakdown'>('breakdown')
+  $effect(() => { displayMode = initialMode })
 
   // ── Grouping ──────────────────────────────────────────────────────────────
   // Consecutive entries that share the same (turnId, roundId) form one group.
@@ -76,8 +88,8 @@
   // ── Helpers ───────────────────────────────────────────────────────────────
   function segWidth(entry: ContextEntry): string {
     const tokens = entry.tokens.count ?? 0
-    if (ctxSize > 0) return `${(tokens / ctxSize) * 100}%`
-    if (totalUsed > 0) return `${(tokens / totalUsed) * 100}%`
+    const denom = displayMode === 'full' && ctxSize > 0 ? ctxSize : totalUsed
+    if (denom > 0) return `${(tokens / denom) * 100}%`
     return '0%'
   }
 
@@ -116,6 +128,11 @@
         <span class="csb-label">{label}</span>
         {#if ctxSize > 0}
           <span class="csb-counts">{fmt(totalUsed)} / {fmt(ctxSize)} tokens ({Math.round(pct)}%)</span>
+          <button
+            class="csb-mode-btn"
+            title={displayMode === 'full' ? 'Switch to breakdown view' : 'Switch to full context view'}
+            onclick={() => { displayMode = displayMode === 'full' ? 'breakdown' : 'full' }}
+          >{displayMode === 'full' ? '⊟' : '⊠'}</button>
         {:else}
           <span class="csb-counts">{fmt(totalUsed)} tokens</span>
         {/if}
@@ -192,6 +209,25 @@
   .csb-counts {
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
+    flex: 1;
+    text-align: right;
+  }
+
+  .csb-mode-btn {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: 3px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 0 0.28rem;
+    line-height: 1.4;
+    margin-left: 0.35rem;
+  }
+
+  .csb-mode-btn:hover {
+    color: var(--text);
+    border-color: var(--border);
   }
 
   /* ── Bar track ────────────────────────────────────────────────────────── */

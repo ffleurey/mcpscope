@@ -128,6 +128,12 @@ function buildUrl(baseUrl: string, relativePath: string): string {
   return new URL(relativePath, normalizedBaseUrl).toString()
 }
 
+/** Strips any path component from baseUrl and returns the scheme+host root. */
+function rootUrl(baseUrl: string): string {
+  const u = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`)
+  return `${u.protocol}//${u.host}`
+}
+
 function authHeaders(apiKey?: string): Record<string, string> {
   return apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
 }
@@ -150,6 +156,41 @@ export async function listModels(baseUrl: string, apiKey?: string): Promise<LmSt
   }
 
   return (await response.json()) as LmStudioModelListResponse
+}
+
+interface LmStudioNativeModel {
+  type?: string
+  key?: string
+  loaded_instances?: Array<{
+    config?: {
+      context_length?: number
+    }
+  }>
+}
+
+/**
+ * Returns the loaded context window size for the currently-loaded instance of
+ * `modelKey`, or null if the native API is unavailable or the model is not loaded.
+ *
+ * Uses the LM Studio native /api/v1/models endpoint (not the OpenAI-compat one).
+ */
+export async function getLoadedContextLength(
+  baseUrl: string,
+  apiKey: string | undefined,
+  modelKey: string,
+): Promise<number | null> {
+  try {
+    const url = `${rootUrl(baseUrl)}/api/v1/models`
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json', ...authHeaders(apiKey) },
+    })
+    if (!response.ok) return null
+    const data = (await response.json()) as { models?: LmStudioNativeModel[] }
+    const model = data.models?.find(m => m.type === 'llm' && m.key === modelKey)
+    return model?.loaded_instances?.[0]?.config?.context_length ?? null
+  } catch {
+    return null
+  }
 }
 
 export async function createChatCompletion(

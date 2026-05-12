@@ -43,6 +43,10 @@
 
   const sortedRounds = $derived([...rounds].sort((left, right) => left.roundIndex - right.roundIndex))
   const sortedParts = $derived([...parts].sort((left, right) => left.ordinal - right.ordinal))
+  const turnIsComplete = $derived(
+    turn.status === 'complete' || turn.status === 'error' || turn.status === 'aborted',
+  )
+  const lastRound = $derived(sortedRounds.at(-1) ?? null)
   const partsByRound = $derived.by(() => {
     const grouped = new Map<string, PartRecord[]>()
     for (const part of sortedParts) {
@@ -141,7 +145,7 @@
           <CompactRoundContent parts={roundParts} {roundStream} />
         </div>
 
-        {#if roundSnapshot && roundSnapshot.length > 0}
+        {#if roundSnapshot && roundSnapshot.length > 0 && !turnIsComplete}
           <div class="round-ctx-bar">
             <ContextSnapshotBar
               entries={roundSnapshot}
@@ -154,6 +158,21 @@
         {/if}
       </section>
     {/each}
+
+    {#if turnIsComplete && lastRound}
+      {@const lastSnapshot = contextSnapshotsByRound?.get(lastRound.id) ?? null}
+      {#if lastSnapshot && lastSnapshot.length > 0}
+        <div class="turn-ctx-bar">
+          <ContextSnapshotBar
+            entries={lastSnapshot}
+            contextSize={loadedContextLength}
+            label="After turn {turn.sequenceNumber}"
+            showLegend={false}
+            compact
+          />
+        </div>
+      {/if}
+    {/if}
 
     {#if turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
       <div class="compaction-summary">
@@ -273,7 +292,7 @@
             {/if}
           </div>
 
-          {#if roundSnapshot && roundSnapshot.length > 0}
+          {#if roundSnapshot && roundSnapshot.length > 0 && !turnIsComplete}
             <div class="round-ctx-bar-full">
               <ContextSnapshotBar
                 entries={roundSnapshot}
@@ -286,6 +305,20 @@
           {/if}
         </section>
       {/each}
+
+      {#if turnIsComplete && lastRound}
+        {@const lastSnapshot = contextSnapshotsByRound?.get(lastRound.id) ?? null}
+        {#if lastSnapshot && lastSnapshot.length > 0}
+          <div class="turn-ctx-bar-inspect">
+            <ContextSnapshotBar
+              entries={lastSnapshot}
+              contextSize={loadedContextLength}
+              label="Context after turn {turn.sequenceNumber}"
+              showLegend={false}
+            />
+          </div>
+        {/if}
+      {/if}
     </div>
   </details>
 {/if}
@@ -515,5 +548,19 @@
     padding: 0.3rem 0.85rem 0.5rem;
     border-top: 1px solid var(--border-subtle);
     background: color-mix(in srgb, var(--bg) 60%, transparent);
+  }
+
+  /* Turn-level collapsed bar (compact mode, after turn complete) */
+  .turn-ctx-bar {
+    margin-top: 0.28rem;
+    margin-left: var(--compact-round-indent, 0.82rem);
+    padding-left: var(--compact-round-padding, 0.72rem);
+    border-left: 2px solid var(--border-subtle);
+  }
+
+  /* Turn-level bar (inspect mode) */
+  .turn-ctx-bar-inspect {
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--border-subtle);
   }
 </style>
