@@ -1,27 +1,36 @@
-// Connection and model config stores.
 import { writable } from 'svelte/store'
 import type { LmStudioConnection, ModelConfig, McpServerProfile } from './types'
 import {
-  getAllConnections, saveConnection, deleteConnection as dbDeleteConnection,
-  getAllModelConfigs, saveModelConfig, deleteModelConfig as dbDeleteModelConfig,
-  getAllMcpProfiles, saveMcpProfile, deleteMcpProfile as dbDeleteMcpProfile,
-} from './db'
+  deleteLmConnection,
+  deleteMcpProfile,
+  deleteModelConfig,
+  listLmConnections,
+  listMcpProfiles,
+  listModelConfigs,
+  upsertLmConnection,
+  upsertMcpProfile as upsertBackendMcpProfile,
+  upsertModelConfig as upsertBackendModelConfig,
+} from './api/backendClient'
 
-export const dbError = writable<string | null>(null)
+export const backendError = writable<string | null>(null)
+
+function sortByUpdatedAtDesc<T extends { updatedAt: number }>(records: T[]): T[] {
+  return [...records].sort((left, right) => right.updatedAt - left.updatedAt)
+}
 
 // Connections
 export const lmConnections = writable<LmStudioConnection[]>([])
 
 export async function upsertConnection(c: LmStudioConnection): Promise<void> {
-  await saveConnection(c)
+  const { lmConnection } = await upsertLmConnection(c)
   lmConnections.update(list => {
-    const idx = list.findIndex(x => x.id === c.id)
-    return idx >= 0 ? list.map(x => x.id === c.id ? c : x) : [c, ...list]
+    const next = list.filter(x => x.id !== lmConnection.id)
+    return sortByUpdatedAtDesc([lmConnection, ...next])
   })
 }
 
 export async function removeConnection(id: string): Promise<void> {
-  await dbDeleteConnection(id)
+  await deleteLmConnection(id)
   lmConnections.update(list => list.filter(x => x.id !== id))
 }
 
@@ -29,15 +38,15 @@ export async function removeConnection(id: string): Promise<void> {
 export const modelConfigs = writable<ModelConfig[]>([])
 
 export async function upsertModelConfig(c: ModelConfig): Promise<void> {
-  await saveModelConfig(c)
+  const { modelConfig } = await upsertBackendModelConfig(c)
   modelConfigs.update(list => {
-    const idx = list.findIndex(x => x.id === c.id)
-    return idx >= 0 ? list.map(x => x.id === c.id ? c : x) : [c, ...list]
+    const next = list.filter(x => x.id !== modelConfig.id)
+    return sortByUpdatedAtDesc([modelConfig, ...next])
   })
 }
 
 export async function removeModelConfig(id: string): Promise<void> {
-  await dbDeleteModelConfig(id)
+  await deleteModelConfig(id)
   modelConfigs.update(list => list.filter(x => x.id !== id))
 }
 
@@ -45,29 +54,33 @@ export async function removeModelConfig(id: string): Promise<void> {
 export const mcpProfiles = writable<McpServerProfile[]>([])
 
 export async function upsertMcpProfile(p: McpServerProfile): Promise<void> {
-  await saveMcpProfile(p)
+  const { mcpProfile } = await upsertBackendMcpProfile({
+    ...p,
+    authType: p.authType ?? null,
+    authValue: p.authValue ?? null,
+  })
   mcpProfiles.update(list => {
-    const idx = list.findIndex(x => x.id === p.id)
-    return idx >= 0 ? list.map(x => x.id === p.id ? p : x) : [p, ...list]
+    const next = list.filter(x => x.id !== mcpProfile.id)
+    return sortByUpdatedAtDesc([mcpProfile, ...next])
   })
 }
 
 export async function removeMcpProfile(id: string): Promise<void> {
-  await dbDeleteMcpProfile(id)
+  await deleteMcpProfile(id)
   mcpProfiles.update(list => list.filter(x => x.id !== id))
 }
 
 export async function initConnectionStore(): Promise<void> {
   try {
-    const [conns, configs, mcps] = await Promise.all([
-      getAllConnections(),
-      getAllModelConfigs(),
-      getAllMcpProfiles(),
+    const [connectionsResponse, modelConfigsResponse, mcpProfilesResponse] = await Promise.all([
+      listLmConnections(),
+      listModelConfigs(),
+      listMcpProfiles(),
     ])
-    lmConnections.set(conns)
-    modelConfigs.set(configs)
-    mcpProfiles.set(mcps)
+    lmConnections.set(sortByUpdatedAtDesc(connectionsResponse.lmConnections))
+    modelConfigs.set(sortByUpdatedAtDesc(modelConfigsResponse.modelConfigs))
+    mcpProfiles.set(sortByUpdatedAtDesc(mcpProfilesResponse.mcpProfiles))
   } catch (e) {
-    dbError.set(e instanceof Error ? e.message : String(e))
+    backendError.set(e instanceof Error ? e.message : String(e))
   }
 }

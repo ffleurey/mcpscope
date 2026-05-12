@@ -2,7 +2,20 @@
 
 ## Status summary
 
-The first backend increment is complete. The project now has a backend runtime foundation strong enough to build on.
+The backend-first rewrite is now far enough along to treat the project as a **first MVP candidate**.
+
+What is already in place:
+
+- backend-owned runtime, persistence, and profile management
+- backend SSE streaming on the canonical trace contract
+- backend-driven frontend sessions, trace loading, streaming submission, import/export, compact chat mode, and inspect mode
+
+What still blocks calling it a trustworthy finished tool:
+
+- the **legacy frontend runtime is still present in the tree**
+- token counting and context bar visualization are not yet fully verified/hardened
+
+The immediate recommendation is to **finish the refactor boundary first** by removing the leftover frontend-owned runtime path, then return to token/context trust work on top of that simplified architecture.
 
 ## Completed
 
@@ -73,7 +86,7 @@ Tests:
 
 Do this on top of the same trace contract, not as a second model.
 
-**Status:** Initial implementation completed
+**Status:** Completed
 
 Deliver:
 
@@ -108,7 +121,7 @@ Current implementation note:
 
 Only after the backend contract is stable enough.
 
-**Status:** Next active step
+**Status:** Completed
 
 Deliver:
 
@@ -119,12 +132,22 @@ Deliver:
 
 Tests:
 
-- frontend store tests against mocked backend responses
-- import-driven tests using captured traces where helpful
+- validate the frontend against the real backend app rather than mocked backend contracts
+- keep captured traces available for import-driven UI inspection
+
+Current implementation note:
+
+- typed backend API helpers now live under `src/lib/api/`
+- backend payload types now live under `src/lib/backendTypes.ts`
+- `connectionStore` now loads and saves backend-owned LM connections, model configs, and MCP profiles through backend CRUD endpoints
+- `sessionStore` now drives session summaries, active trace loading, trace export, and non-streaming turn submission
+- the frontend no longer depends on IndexedDB for active session/runtime state
 
 #### Step 4. Rewire the UI onto backend data
 
 Migrate view by view instead of mixing old and new runtime logic.
+
+**Status:** MVP-level implementation completed
 
 Deliver:
 
@@ -136,24 +159,48 @@ Deliver:
 
 Tests:
 
-- component tests around rendering backend payloads
-- trace-based UI tests for reasoning/tool-call ordering and context display
+- validate the rewired views against the real backend app
+- use imported captured sessions for trace-based UI inspection
 
-#### Step 5. Add trace import/export UI
+Current implementation note:
+
+- the sidebar now reads backend session summaries
+- the chat view now defaults to a much more compact Zed-inspired chat surface, while inspect mode keeps the richer trace hierarchy
+- raw payload access now lives inline at the round level for request / response / raw exchanges
+- session-level setup parts remain visible without introducing a separate inspector workflow
+- the context bar now renders backend `context`
+- compact chat streaming now has better phase handoff behavior for reasoning / tool activity / assistant content
+- compact chat spacing and density were tightened enough for ongoing MVP use, even if more polish may still come later
+
+#### Step 5. Add trace import/export UI and live updates
+
+**Status:** Completed
 
 Deliver:
 
 - export current session trace
 - import a trace and open it through the same backend/session path as live data
+- add SSE-driven live updates on top of the same trace contract
 
 Tests:
 
 - import flow tests
 - rendering tests for imported sessions
 
+Current implementation note:
+
+- the rewired frontend now submits turns through the backend SSE path and renders transient round deltas inline before committed parts replace them
+- live delta state is updated immutably so streamed content keeps growing in real time rather than stalling after the first fragment
+- active streaming now also keeps the transcript pinned to the bottom so live output remains visible without manual scrolling
+- export is available from the active session header
+- trace import is available from the sessions sidebar and opens imported traces through the same backend/session path as live sessions
+- committed `turn-committed` traces still replace the live overlay so the backend trace remains canonical
+
 #### Step 6. Remove the legacy frontend runtime
 
 Do this only after the backend-driven path is complete.
+
+**Status:** Next active refactor step
 
 Deliver:
 
@@ -174,8 +221,16 @@ Goal: make the UI fit the backend-native workflow.
 Work:
 
 - simplify state management around sessions and turns
-- make trace inspection/export easier to use
+- keep trace inspection embedded in the main session view and reserve export for full-trace JSON
 - polish presentation for MCP debugging and data-analysis use cases
+
+## After refactor boundary is complete
+
+Once the legacy frontend runtime is removed, return to the remaining trust work:
+
+1. harden token counting end-to-end against captured traces and live sessions
+2. verify that the context bar is driven by the same canonical token/context data as the rest of the trace
+3. fix any remaining context/token mismatches only after the architecture no longer mixes old and new runtime paths
 
 ## Guiding constraints
 

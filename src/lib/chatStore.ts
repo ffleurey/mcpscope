@@ -154,14 +154,11 @@ function rebuildContextSegments(session: ChatSession, messages: ChatMessage[]): 
         // in the historical context — derived from the next turn's promptTokens via LM Studio
         // feedback. Without it we use the live tc+tr sum (slight overcount from format overhead).
         const finalContentEst = Math.max(0, Math.ceil((msg.content?.length ?? 0) / 4))
-        let effectiveTcTrTotal: number
         let tcTrScale: number
         if (msg.historicalPayloadTokens !== undefined) {
           const correctedTcTr = Math.max(0, msg.historicalPayloadTokens - finalContentEst)
-          effectiveTcTrTotal = correctedTcTr
           tcTrScale = liveTcTrSum > 0 ? correctedTcTr / liveTcTrSum : 0
         } else {
-          effectiveTcTrTotal = liveTcTrSum
           tcTrScale = 1
         }
 
@@ -405,7 +402,7 @@ export async function createChat(modelConfig: ModelConfig, mcpProfileId: string 
 
   const session: ChatSession = {
     id: crypto.randomUUID(),
-    title: 'New chat',
+    title: 'New session',
     modelConfigId: modelConfig.id,
     modelConfigSnapshot: modelConfig,
     mcpProfileId: mcpProfileId,

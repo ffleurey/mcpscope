@@ -25,6 +25,8 @@ export interface McpServerProfile {
   name: string
   url: string
   transport: 'streamable-http'
+  authType?: 'none' | 'bearer' | 'basic' | null
+  authValue?: string | null
   createdAt: number
   updatedAt: number
 }
@@ -173,4 +175,3 @@ export interface ChatMessage {
   // Formula: nextTurnFirstPT - this.toolRounds[0].promptTokens - char4(nextUserContent)
   historicalPayloadTokens?: number
 }
-

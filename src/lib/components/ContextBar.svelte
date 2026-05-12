@@ -1,61 +1,53 @@
 <script lang="ts">
-  import type { ChatMessage, ContextSegment, SegmentType } from '../types'
-  import { activeContextSegments } from '../chatStore'
+  import type { ContextEntry, PartRecord } from '../backendTypes'
 
   interface Props {
-    messages: ChatMessage[]          // needed only for the live streaming estimate
+    entries: ContextEntry[]
     loadedContextLength: number | null
   }
 
-  const { messages, loadedContextLength }: Props = $props()
+  const { entries, loadedContextLength }: Props = $props()
 
   // Map segment type to its CSS variable name
-  const segmentColors: Record<SegmentType, string> = {
-    'system-prompt':    'var(--token-system-prompt)',
-    'user':             'var(--token-user)',
-    'reasoning':        'var(--token-reasoning)',
-    'content':          'var(--token-content)',
+  const segmentColors: Record<ContextEntry['type'], string> = {
+    'system-prompt': 'var(--token-system-prompt)',
+    'mcp-instructions': 'var(--token-system-prompt)',
     'tool-definitions': 'var(--token-tool-definitions)',
-    'tool-call':        'var(--token-tool-call)',
-    'tool-response':    'var(--token-tool-response)',
+    'user-message': 'var(--token-user)',
+    'assistant-reasoning': 'var(--token-reasoning)',
+    'assistant-content': 'var(--token-content)',
+    'tool-call': 'var(--token-tool-call)',
+    'tool-result': 'var(--token-tool-response)',
+    'diagnostic-note': 'var(--text-muted)',
   }
 
-  const segmentLabels: Record<SegmentType, string> = {
-    'system-prompt':    'System prompt',
-    'user':             'User message',
-    'reasoning':        'Reasoning (in context)',
-    'content':          'Response',
+  const segmentLabels: Record<PartRecord['partType'], string> = {
+    'system-prompt': 'System prompt',
+    'mcp-instructions': 'MCP instructions',
     'tool-definitions': 'Tool definitions',
-    'tool-call':        'Tool call',
-    'tool-response':    'Tool response',
+    'user-message': 'User message',
+    'assistant-reasoning': 'Reasoning',
+    'assistant-content': 'Assistant response',
+    'tool-call': 'Tool call',
+    'tool-result': 'Tool result',
+    'diagnostic-note': 'Diagnostic',
   }
 
-  // The authoritative segments come from chatStore (which owns the context window).
-  // We only add one live estimate on top: the growing orange bar while the model streams
-  // reasoning tokens. We can't get the exact token count until the API responds, so we
-  // estimate from character count (≈ 3.5 chars/token for thinking text).
-  let allSegments = $derived.by((): ContextSegment[] => {
-    const base = $activeContextSegments
-    const streaming = messages.find(m => m.status === 'streaming')
-    if (!streaming?.thinking?.length) return base
-    const estimatedTokens = Math.max(1, Math.ceil(streaming.thinking.length / 3.5))
-    return [...base, { type: 'reasoning', tokens: estimatedTokens, msgId: streaming.id + '-live-r' }]
-  })
-
-  let totalUsed = $derived(allSegments.reduce((s, seg) => s + seg.tokens, 0))
+  let totalUsed = $derived(entries.reduce((sum, entry) => sum + (entry.tokens.count ?? 0), 0))
   let ctxSize = $derived(loadedContextLength ?? 0)
   let pct = $derived(ctxSize > 0 ? Math.min(100, (totalUsed / ctxSize) * 100) : 0)
+  let totalKnown = $derived(entries.reduce((sum, entry) => sum + (entry.tokens.count ?? 0), 0))
 
   let legendTypes = $derived.by(() => {
-    const seen = new Set<SegmentType>()
-    for (const seg of allSegments) seen.add(seg.type)
-    return [...seen] as SegmentType[]
+    const seen = new Set<ContextEntry['type']>()
+    for (const entry of entries) seen.add(entry.type)
+    return [...seen] as ContextEntry['type'][]
   })
 
   function fmt(n: number) { return n.toLocaleString() }
 </script>
 
-{#if ctxSize > 0 || allSegments.length > 0}
+{#if ctxSize > 0 || entries.length > 0}
   <div class="context-bar-wrapper">
     <div class="bar-header">
       <span class="bar-label">Context</span>
@@ -68,20 +60,19 @@
 
     <div class="bar-track" title="Context usage by token type">
       {#if ctxSize > 0}
-        {#each allSegments as seg (seg.msgId)}
+        {#each entries as entry (entry.id)}
           <div
             class="bar-segment"
-            style="width: {(seg.tokens / ctxSize) * 100}%; background: {segmentColors[seg.type]};"
-            title="{segmentLabels[seg.type]}: {fmt(seg.tokens)} tokens"
+            style="width: {((entry.tokens.count ?? 0) / ctxSize) * 100}%; background: {segmentColors[entry.type]};"
+            title="{segmentLabels[entry.type]}: {fmt(entry.tokens.count ?? 0)} tokens"
           ></div>
         {/each}
-      {:else if allSegments.length > 0}
-        {@const total = allSegments.reduce((s, g) => s + g.tokens, 0)}
-        {#each allSegments as seg (seg.msgId)}
+      {:else if entries.length > 0}
+        {#each entries as entry (entry.id)}
           <div
             class="bar-segment"
-            style="width: {(seg.tokens / total) * 100}%; background: {segmentColors[seg.type]};"
-            title="{segmentLabels[seg.type]}: {fmt(seg.tokens)} tokens"
+            style="width: {100 / Math.max(entries.length, totalKnown > 0 ? entries.length : 1)}%; background: {segmentColors[entry.type]};"
+            title="{segmentLabels[entry.type]}: {fmt(entry.tokens.count ?? 0)} tokens"
           ></div>
         {/each}
       {/if}

@@ -34,6 +34,8 @@
       name: name.trim(),
       url: url.trim(),
       transport: 'streamable-http',
+      authType: profile?.authType ?? null,
+      authValue: profile?.authValue ?? null,
       createdAt: profile?.createdAt ?? now,
       updatedAt: now,
     })
@@ -56,8 +58,8 @@
   </div>
 
   <div class="field">
-    <label>Transport</label>
-    <input type="text" value="streamable-http" disabled />
+    <label for="mcp-transport">Transport</label>
+    <input id="mcp-transport" type="text" value="streamable-http" disabled />
   </div>
 
   <div class="form-actions">

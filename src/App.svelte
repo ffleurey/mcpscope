@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { currentView } from './lib/navStore'
-  import { initConnectionStore, dbError } from './lib/connectionStore'
-  import { initChatStore } from './lib/chatStore'
+  import { initConnectionStore, backendError } from './lib/connectionStore'
+  import { initSessionStore } from './lib/sessionStore'
   import Sidebar from './lib/components/Sidebar.svelte'
   import LmConnections from './lib/components/LmConnections.svelte'
   import ModelConfigs from './lib/components/ModelConfigs.svelte'
@@ -13,7 +13,7 @@
 
   onMount(async () => {
     try {
-      await Promise.all([initConnectionStore(), initChatStore()])
+      await Promise.all([initConnectionStore(), initSessionStore()])
     } finally {
       loading = false
     }
@@ -23,9 +23,9 @@
 <div class="app-shell">
   <Sidebar />
   <main class="main-content">
-    {#if $dbError}
-      <div class="db-error">
-        <strong>Database error:</strong> {$dbError}
+    {#if $backendError}
+      <div class="backend-error">
+        <strong>Backend error:</strong> {$backendError}
       </div>
     {/if}
 
@@ -57,7 +57,7 @@
     display: flex;
     flex-direction: column;
   }
-  .db-error {
+  .backend-error {
     margin: 1rem 2rem;
     padding: 0.75rem 1rem;
     background: var(--bg-panel);

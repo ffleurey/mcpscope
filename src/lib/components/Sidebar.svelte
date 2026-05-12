@@ -17,7 +17,7 @@
         class:active={$currentView === 'chats'}
         onclick={() => navigate('chats')}
       >
-        Chats
+        Sessions
       </button>
     </li>
     <li>

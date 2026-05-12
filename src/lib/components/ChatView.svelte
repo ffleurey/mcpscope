@@ -1,60 +1,157 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
-  import { activeMessages, activeChatId, chatSessions, isStreaming, sendMessage, createChat, abortStreaming, restoredComposerText, exportActiveChat } from '../chatStore'
+  import { tick } from 'svelte'
   import { modelConfigs, mcpProfiles } from '../connectionStore'
+  import { lmConnections } from '../connectionStore'
+  import {
+    activeSession,
+    activeTrace,
+    activeTraceLoading,
+    activeTurnStream,
+    exportActiveTrace,
+    isSendingTurn,
+    sendMessage,
+    sessionError,
+  } from '../sessionStore'
+  import type { StreamingRoundState } from '../traceStreaming'
   import type { ModelConfig } from '../types'
-  import ChatMessageBlock from './ChatMessageBlock.svelte'
   import ContextBar from './ContextBar.svelte'
-  import AbortedExchange from './AbortedExchange.svelte'
+  import SessionPreludeBlock from './SessionPreludeBlock.svelte'
+  import SessionTurnBlock from './SessionTurnBlock.svelte'
 
   let transcriptEl = $state<HTMLElement | null>(null)
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let composerText = $state('')
   let selectedConfigId = $state<string>('')
-  let selectedMcpProfileId = $state<string>('')  // '' = no MCP
-
-  // Derive active session from stores
-  let session = $derived($chatSessions.find(s => s.id === $activeChatId) ?? null)
-  let hasMessages = $derived($activeMessages.length > 0)
+  let selectedMcpProfileId = $state<string>('')
+  let viewMode = $state<'compact' | 'inspect'>('compact')
+  let stickToBottom = $state(true)
+  let lastSessionId = $state<string | null>(null)
+  let lastTurnCount = $state(0)
+  let lastStreamingTurnId = $state<string | null>(null)
+  let session = $derived($activeSession)
+  let visibleParts = $derived.by(() => (
+    ($activeTrace?.parts ?? [])
+      .filter((part) => part.display.state !== 'hidden')
+      .sort((left, right) => left.ordinal - right.ordinal)
+  ))
+  let transcriptParts = $derived.by(() => (
+    visibleParts.filter((part) => part.display.state === 'transcript')
+  ))
+  let sessionPreludeParts = $derived(visibleParts.filter((part) => part.turnId === null))
+  let traceTurns = $derived.by(() => (
+    [...($activeTrace?.turns ?? [])].sort((left, right) => left.sequenceNumber - right.sequenceNumber)
+  ))
+  let traceRounds = $derived.by(() => (
+    [...($activeTrace?.rounds ?? [])].sort((left, right) => {
+      const leftTurn = $activeTrace?.turns.find((turn) => turn.id === left.turnId)?.sequenceNumber ?? 0
+      const rightTurn = $activeTrace?.turns.find((turn) => turn.id === right.turnId)?.sequenceNumber ?? 0
+      return leftTurn === rightTurn
+        ? left.roundIndex - right.roundIndex
+        : leftTurn - rightTurn
+    })
+  ))
+  let traceRawExchanges = $derived($activeTrace?.rawExchanges ?? [])
+  let partsByTurn = $derived.by(() => {
+    const grouped = new Map<string, typeof transcriptParts>()
+    for (const part of transcriptParts) {
+      if (!part.turnId) continue
+      const current = grouped.get(part.turnId) ?? []
+      current.push(part)
+      grouped.set(part.turnId, current)
+    }
+    return grouped
+  })
+  let roundsByTurn = $derived.by(() => {
+    const grouped = new Map<string, typeof traceRounds>()
+    for (const round of traceRounds) {
+      const current = grouped.get(round.turnId) ?? []
+      current.push(round)
+      grouped.set(round.turnId, current)
+    }
+    return grouped
+  })
+  let rawExchangesByTurn = $derived.by(() => {
+    const grouped = new Map<string, typeof traceRawExchanges>()
+    for (const exchange of traceRawExchanges) {
+      if (!exchange.turnId) continue
+      const current = grouped.get(exchange.turnId) ?? []
+      current.push(exchange)
+      grouped.set(exchange.turnId, current)
+    }
+    return grouped
+  })
+  let roundStreamsByTurn = $derived.by(() => {
+    const grouped = new Map<string, StreamingRoundState[]>()
+    for (const roundState of ($activeTurnStream?.rounds ?? [])) {
+      const current = grouped.get(roundState.turnId) ?? []
+      current.push(roundState)
+      grouped.set(roundState.turnId, current)
+    }
+    return grouped
+  })
+  let sessionPreludeRawExchanges = $derived(traceRawExchanges.filter((exchange) => exchange.turnId === null))
+  let activeStreamingTurnId = $derived($activeTurnStream?.turnId ?? null)
+  let streamingSignature = $derived.by(() => (
+    ($activeTurnStream?.rounds ?? [])
+      .map((roundState) => [
+        roundState.roundId,
+        roundState.reasoningText.length,
+        roundState.completedReasoningText.length,
+        roundState.contentText.length,
+        ...roundState.toolCalls.map((toolCall) => (
+          `${toolCall.toolCallIndex}:${toolCall.id.length}:${toolCall.name.length}:${toolCall.arguments.length}`
+        )),
+      ].join(':'))
+      .join('|')
+  ))
+  let hasTraceContent = $derived(
+    sessionPreludeParts.length > 0
+      || sessionPreludeRawExchanges.length > 0
+      || traceTurns.length > 0,
+  )
+  let hasMessages = $derived(traceTurns.length > 0)
 
   // True when the session has hit the context limit
   let isExhausted = $derived(session?.isContextExhausted === true)
 
-  // Thinking indicator: streaming but no assistant content yet
-  let isThinking = $derived(
-    $isStreaming &&
-    $activeMessages.length > 0 &&
-    $activeMessages[$activeMessages.length - 1].role === 'assistant' &&
-    $activeMessages[$activeMessages.length - 1].content === ''
-  )
-
-  // Initialization status of the current session
-  let initStatus = $derived(session?.chatInitStatus ?? 'ready')
-  let isInitializing = $derived(initStatus === 'pending' || initStatus === 'initializing')
-
   let displayModelName = $derived(
-    session?.modelConfigSnapshot?.name
+    session?.modelProfileSnapshot?.name
       ?? $modelConfigs.find(c => c.id === selectedConfigId)?.name
       ?? 'No model selected'
   )
 
-  onMount(() => {
-    scrollToBottom()
-    if ($modelConfigs.length > 0) {
-      selectedConfigId = $modelConfigs[0].id
+  $effect(() => {
+    if (!$modelConfigs.some((config) => config.id === selectedConfigId)) {
+      selectedConfigId = $modelConfigs[0]?.id ?? ''
     }
   })
 
-  // When an abort restores the user's text, populate the composer and focus it
   $effect(() => {
-    const text = $restoredComposerText
-    if (text !== null) {
-      composerText = text
-      restoredComposerText.set(null)
-      tick().then(() => {
-        resizeTextarea()
-        textareaEl?.focus()
-      })
+    if (!$mcpProfiles.some((profile) => profile.id === selectedMcpProfileId)) {
+      selectedMcpProfileId = ''
+    }
+  })
+
+  $effect(() => {
+    const sessionId = session?.id ?? null
+    const turnCount = traceTurns.length
+    const streamingTurnId = activeStreamingTurnId
+    visibleParts.length + sessionPreludeRawExchanges.length + streamingSignature.length
+
+    const sessionChanged = sessionId !== lastSessionId
+    const newTurnStarted = turnCount > lastTurnCount
+      || (streamingTurnId !== null && streamingTurnId !== lastStreamingTurnId)
+
+    lastSessionId = sessionId
+    lastTurnCount = turnCount
+    lastStreamingTurnId = streamingTurnId
+
+    if (sessionChanged) {
+      stickToBottom = true
+    }
+
+    if (sessionChanged || newTurnStarted || stickToBottom) {
+      tick().then(scrollToBottom)
     }
   })
 
@@ -62,6 +159,16 @@
     if (transcriptEl) {
       transcriptEl.scrollTop = transcriptEl.scrollHeight
     }
+  }
+
+  function isNearBottom(): boolean {
+    if (!transcriptEl) return true
+    const distanceFromBottom = transcriptEl.scrollHeight - transcriptEl.scrollTop - transcriptEl.clientHeight
+    return distanceFromBottom <= 24
+  }
+
+  function handleTranscriptScroll(): void {
+    stickToBottom = isNearBottom()
   }
 
   function resizeTextarea() {
@@ -76,23 +183,37 @@
 
   async function handleSend() {
     const text = composerText.trim()
-    if (!text || $isStreaming || isExhausted || isInitializing) return
+    if (!text || $isSendingTurn || isExhausted) return
 
-    const effectiveConfig: ModelConfig | undefined = session
-      ? session.modelConfigSnapshot
-      : $modelConfigs.find(c => c.id === selectedConfigId)
+    let draftSelection:
+      | {
+          modelConfig: ModelConfig
+          connection: typeof $lmConnections[number]
+          mcpProfile: typeof $mcpProfiles[number] | null
+        }
+      | undefined
 
-    if (!effectiveConfig) return
+    if (!session) {
+      const effectiveConfig = $modelConfigs.find(c => c.id === selectedConfigId)
+      if (!effectiveConfig) return
+
+      const connection = $lmConnections.find((item) => item.id === effectiveConfig.connectionId)
+      if (!connection) return
+
+      draftSelection = {
+        modelConfig: effectiveConfig,
+        connection,
+        mcpProfile: $mcpProfiles.find((profile) => profile.id === selectedMcpProfileId) ?? null,
+      }
+    }
 
     composerText = ''
     await tick()
     resizeTextarea()
-
-    if (!$activeChatId) {
-      await createChat(effectiveConfig, selectedMcpProfileId || null)
-    }
-
-    await sendMessage(text, effectiveConfig)
+    await sendMessage({
+      userContent: text,
+      draftSelection,
+    })
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -106,54 +227,71 @@
 <div class="chat-view">
   <!-- Header -->
   <div class="chat-header">
-    <span class="chat-title">{session?.title ?? 'Chat'}</span>
+    <span class="chat-title">{session?.title ?? 'New session'}</span>
     <span class="chat-model">{displayModelName}</span>
-    {#if hasMessages && !$isStreaming}
-      <button class="btn btn-ghost export-btn" onclick={exportActiveChat} title="Export chat diagnostics as JSON">⬇ Export</button>
+    <div class="view-mode-toggle">
+      <button
+        class="view-mode-btn"
+        class:active={viewMode === 'compact'}
+        onclick={() => { viewMode = 'compact' }}
+        title="Use the compact chat layout"
+      >
+        Chat
+      </button>
+      <button
+        class="view-mode-btn"
+        class:active={viewMode === 'inspect'}
+        onclick={() => { viewMode = 'inspect' }}
+        title="Use the detailed inspection layout"
+      >
+        Inspect
+      </button>
+    </div>
+    {#if $activeTrace}
+      <button class="btn btn-ghost export-btn" onclick={exportActiveTrace} title="Export the canonical session trace as JSON">⬇ Export</button>
     {/if}
   </div>
 
   <!-- Transcript -->
-  <div class="transcript" bind:this={transcriptEl}>
-    {#if $activeMessages.length === 0}
+  <div class="transcript" bind:this={transcriptEl} onscroll={handleTranscriptScroll}>
+    {#if $activeTraceLoading}
       <div class="empty-transcript">
-        {#if isInitializing}
-          <span class="init-status">
-            <span class="init-spinner"></span>
-            {initStatus === 'initializing' ? 'Connecting to model and tools…' : 'Preparing…'}
-          </span>
-        {:else if initStatus === 'error'}
-          <span class="init-error">⚠ Initialization had errors — some features may be unavailable</span>
+        <span>Loading trace…</span>
+      </div>
+    {:else if !hasTraceContent}
+      <div class="empty-transcript">
+        {#if $sessionError}
+          <span class="init-error">{$sessionError}</span>
         {:else}
-          <span>Start a conversation…</span>
+          <span>Start a session…</span>
         {/if}
       </div>
     {:else}
-      {#each $activeMessages as msg, i (msg.id)}
-        {#if msg.status === 'aborted' && msg.role === 'user'}
-          {@const next = $activeMessages[i + 1]}
-          {@const abortedAssistant = next?.status === 'aborted' && next.role === 'assistant' ? next : null}
-          <AbortedExchange userMsg={msg} assistantMsg={abortedAssistant} />
-        {:else if msg.status === 'aborted' && msg.role === 'assistant'}
-          <!-- rendered by the user AbortedExchange block above — skip -->
-        {:else}
-          <ChatMessageBlock
-            message={msg}
-            modelName={session?.modelConfigSnapshot?.name ?? 'Assistant'}
-            loadedContextLength={session?.loadedContextLength ?? null}
-          />
-        {/if}
-      {/each}
-      {#if isThinking}
-        <div class="thinking">Thinking…</div>
+      {#if sessionPreludeParts.length > 0}
+        <SessionPreludeBlock
+          parts={sessionPreludeParts}
+          rawExchanges={sessionPreludeRawExchanges}
+          mode={viewMode}
+        />
       {/if}
+
+      {#each traceTurns as turn (turn.id)}
+        <SessionTurnBlock
+          {turn}
+          rounds={roundsByTurn.get(turn.id) ?? []}
+          parts={partsByTurn.get(turn.id) ?? []}
+          rawExchanges={rawExchangesByTurn.get(turn.id) ?? []}
+          roundStreams={roundStreamsByTurn.get(turn.id) ?? []}
+          mode={viewMode}
+        />
+      {/each}
     {/if}
   </div>
 
   <!-- Context bar (above composer, below transcript) -->
-  {#if hasMessages}
+  {#if $activeTrace}
     <ContextBar
-      messages={$activeMessages}
+      entries={$activeTrace.context}
       loadedContextLength={session?.loadedContextLength ?? null}
     />
   {/if}
@@ -161,40 +299,35 @@
   <!-- Context exhausted banner -->
   {#if isExhausted}
     <div class="exhausted-banner">
-      ⚠️ Context window full — this chat cannot continue. Start a new chat to keep experimenting.
+      ⚠️ Context window full — this session cannot continue. Start a new session to keep experimenting.
     </div>
   {/if}
 
   <!-- Composer -->
   <div class="composer">
     <div class="composer-input-row">
-      <textarea
-        bind:this={textareaEl}
-        bind:value={composerText}
-        placeholder={isExhausted ? 'Context window full — start a new chat' : isInitializing ? 'Initializing…' : 'Message… (Ctrl+Enter to send)'}
-        rows="2"
-        disabled={$isStreaming || isExhausted || isInitializing}
-        oninput={resizeTextarea}
-        onkeydown={handleKeydown}
-      ></textarea>
-      <button
-        class="btn btn-primary send-btn"
-        onclick={handleSend}
-        disabled={$isStreaming || isExhausted || isInitializing || !composerText.trim()}
-      >
-        Send
-      </button>
-      {#if $isStreaming}
-        <button class="btn btn-stop stop-btn" onclick={abortStreaming} title="Stop generation">
-          ■ Stop
+        <textarea
+          bind:this={textareaEl}
+          bind:value={composerText}
+          placeholder={isExhausted ? 'Context window full — start a new session' : 'Message… (Ctrl+Enter to send)'}
+          rows="2"
+          disabled={$isSendingTurn || isExhausted}
+          oninput={resizeTextarea}
+          onkeydown={handleKeydown}
+        ></textarea>
+        <button
+          class="btn btn-primary send-btn"
+          onclick={handleSend}
+          disabled={$isSendingTurn || isExhausted || !composerText.trim()}
+        >
+          {$isSendingTurn ? 'Sending…' : 'Send'}
         </button>
-      {/if}
-    </div>
-    <div class="composer-meta">
-      {#if !hasMessages}
+      </div>
+      <div class="composer-meta">
+        {#if !hasMessages}
         <div class="model-pickers">
           {#if $modelConfigs.length > 0}
-            <select class="model-select" bind:value={selectedConfigId} disabled={$isStreaming}>
+            <select class="model-select" bind:value={selectedConfigId} disabled={$isSendingTurn}>
               {#each $modelConfigs as c (c.id)}
                 <option value={c.id}>{c.name}</option>
               {/each}
@@ -202,7 +335,7 @@
           {:else}
             <span class="model-loading">No model configs — create one first</span>
           {/if}
-          <select class="model-select mcp-select" bind:value={selectedMcpProfileId} disabled={$isStreaming}>
+          <select class="model-select mcp-select" bind:value={selectedMcpProfileId} disabled={$isSendingTurn}>
             <option value="">No MCP</option>
             {#each $mcpProfiles as p (p.id)}
               <option value={p.id}>{p.name}</option>
@@ -252,10 +385,33 @@
     margin-left: 1rem;
   }
 
+  .view-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: auto;
+  }
+
+  .view-mode-btn {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 0.18rem 0.5rem;
+  }
+
+  .view-mode-btn.active {
+    color: var(--text);
+    border-color: var(--border);
+    background: color-mix(in srgb, var(--bg-panel) 85%, transparent);
+  }
+
   .export-btn {
     font-size: 0.72rem;
     padding: 0.2rem 0.55rem;
-    margin-left: auto;
+    margin-left: 0.75rem;
     margin-right: 0.75rem;
     opacity: 0.6;
   }
@@ -274,14 +430,6 @@
     justify-content: center;
     color: var(--text-muted);
     font-size: 0.875rem;
-  }
-
-  .thinking {
-    padding: 0.75rem 0;
-    color: var(--text-muted);
-    font-size: 0.85rem;
-    font-style: italic;
-    border-top: 1px solid var(--border-subtle);
   }
 
   .composer {
@@ -330,20 +478,6 @@
   .send-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  .stop-btn {
-    flex-shrink: 0;
-    align-self: flex-end;
-    background: color-mix(in srgb, var(--danger, #c0392b) 85%, transparent);
-    border-color: var(--danger, #c0392b);
-    color: #fff;
-    font-size: 0.8rem;
-    padding: 0.4rem 0.75rem;
-  }
-
-  .stop-btn:hover {
-    background: var(--danger, #c0392b);
   }
 
   .composer-meta {
@@ -400,29 +534,8 @@
     text-align: center;
   }
 
-  .init-status {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: var(--text-muted);
-    font-size: 0.85rem;
-  }
-
   .init-error {
     color: var(--color-warning);
     font-size: 0.85rem;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .init-spinner {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    border: 2px solid var(--border);
-    border-top-color: var(--color-accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    flex-shrink: 0;
   }
 </style>

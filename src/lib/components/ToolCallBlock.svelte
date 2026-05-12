@@ -41,7 +41,7 @@
 {#if toolCall.thinkingBefore}
   <details class="pre-thinking" bind:open={thinkingOpen}>
     <summary class="pre-thinking-summary">
-      <span class="thinking-label">Thought ({thinkingLineCount} lines)</span>
+      <span class="thinking-label">Reasoning ({thinkingLineCount} lines)</span>
     </summary>
     <div class="pre-thinking-content">{toolCall.thinkingBefore}</div>
   </details>
@@ -83,7 +83,7 @@
 {/if}
 
 <style>
-  /* Thinking block shown before the tool call (reasoning that led to it) */
+  /* Reasoning block shown before the tool call */
   .pre-thinking {
     margin-bottom: 0.2rem;
     border: 1px solid var(--border-subtle);

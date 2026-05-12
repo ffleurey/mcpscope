@@ -115,7 +115,7 @@ export function createSession(
   const timestamp = now()
   const session: SessionRecord = {
     id: createUuid(),
-    title: input.title?.trim() || 'New chat',
+    title: input.title?.trim() || 'New session',
     status: 'ready',
     initStatus: 'ready',
     createdAt: timestamp,

@@ -1,10 +1,19 @@
 <script lang="ts">
-  import { chatSessions, activeChatId, activeMessages, selectChat, deleteChat } from '../chatStore'
+  import {
+    activeChatId,
+    chatSessions,
+    deleteChat,
+    importTraceFile,
+    isImportingTrace,
+    selectChat,
+    startDraftSession,
+  } from '../sessionStore'
   import { modelConfigs } from '../connectionStore'
 
+  let importInput = $state<HTMLInputElement | null>(null)
+
   function handleNewChat() {
-    activeChatId.set(null)
-    activeMessages.set([])
+    startDraftSession()
   }
 
   async function handleSelect(id: string) {
@@ -15,34 +24,57 @@
     e.stopPropagation()
     await deleteChat(id)
   }
+
+  function handleImportClick() {
+    importInput?.click()
+  }
+
+  async function handleImportChange(event: Event) {
+    const target = event.currentTarget as HTMLInputElement | null
+    const file = target?.files?.[0]
+    if (!file) return
+
+    try {
+      await importTraceFile(file)
+    } finally {
+      if (target) target.value = ''
+    }
+  }
 </script>
 
 <div class="chat-list">
   <div class="chat-list-header">
-    {#if $modelConfigs.length === 0}
-      <span class="no-profiles">Create a model config first</span>
-    {:else}
-      <button class="btn btn-sm new-chat-btn" onclick={handleNewChat}>+ New Chat</button>
-    {/if}
+    <input bind:this={importInput} type="file" accept="application/json" hidden onchange={handleImportChange} />
+
+    <div class="session-actions">
+      {#if $modelConfigs.length === 0}
+        <span class="no-profiles">Create a model config first</span>
+      {:else}
+        <button class="btn btn-sm new-chat-btn" onclick={handleNewChat}>+ New Session</button>
+      {/if}
+
+      <button class="btn btn-sm import-btn" onclick={handleImportClick} disabled={$isImportingTrace}>
+        {$isImportingTrace ? 'Importing…' : 'Import Trace'}
+      </button>
+    </div>
   </div>
 
   {#if $chatSessions.length === 0}
-    <div class="empty">No chats yet</div>
+    <div class="empty">No sessions yet</div>
   {:else}
     <ul class="sessions">
       {#each $chatSessions as session (session.id)}
-        <li
-          class="session-item"
-          class:active={$activeChatId === session.id}
-          role="button"
-          tabindex="0"
-          onclick={() => handleSelect(session.id)}
-          onkeydown={(e) => e.key === 'Enter' && handleSelect(session.id)}
-        >
-          <span class="session-title">{session.title}</span>
+        <li class="session-item" class:active={$activeChatId === session.id}>
+          <button
+            class="session-button"
+            onclick={() => handleSelect(session.id)}
+            onkeydown={(e) => e.key === 'Enter' && handleSelect(session.id)}
+          >
+            <span class="session-title">{session.title}</span>
+          </button>
           <button
             class="delete-btn"
-            title="Delete chat"
+            title="Delete session"
             onclick={(e) => handleDelete(e, session.id)}
           >×</button>
         </li>
@@ -64,14 +96,25 @@
     border-bottom: 1px solid var(--border-subtle);
   }
 
+  .session-actions {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
   .no-profiles {
     font-size: 0.75rem;
     color: var(--text-muted);
+    flex: 1;
   }
 
   .new-chat-btn {
-    width: 100%;
+    flex: 1;
     justify-content: center;
+  }
+
+  .import-btn {
+    flex-shrink: 0;
   }
 
   .empty {
@@ -92,12 +135,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: 100%;
     background: none;
-    border: none;
-    cursor: pointer;
     padding: 0.4rem 0.75rem;
-    text-align: left;
     color: var(--text-muted);
     font-size: 0.82rem;
     font-family: inherit;
@@ -114,6 +153,18 @@
   .session-item.active {
     background: var(--bg-active);
     color: var(--text);
+  }
+
+  .session-button {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+    text-align: left;
   }
 
   .session-title {

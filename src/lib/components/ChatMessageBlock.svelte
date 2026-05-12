@@ -83,9 +83,9 @@
         <details class="thinking-block" bind:open={thinkingOpen}>
           <summary class="thinking-summary">
             {#if message.status === 'streaming' && !message.content}
-              <span class="thinking-label thinking-active">Thinking…</span>
+              <span class="thinking-label thinking-active">Reasoning…</span>
             {:else}
-              <span class="thinking-label">Thought ({thinkingLineCount} lines)</span>
+              <span class="thinking-label">Reasoning ({thinkingLineCount} lines)</span>
             {/if}
           </summary>
           <div class="thinking-content" bind:this={thinkingEl}>
@@ -280,4 +280,3 @@
     50% { opacity: 0; }
   }
 </style>
-

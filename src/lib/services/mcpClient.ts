@@ -95,7 +95,7 @@ export class McpClientHandle {
 
     const transport = new StreamableHTTPClientTransport(
       new URL(this.mcpUrl),
-      { fetch: loggingFetch as Parameters<typeof StreamableHTTPClientTransport>[1]['fetch'] }
+      { fetch: loggingFetch as NonNullable<ConstructorParameters<typeof StreamableHTTPClientTransport>[1]>['fetch'] }
     )
 
     await this.client.connect(transport)
@@ -115,7 +115,7 @@ export class McpClientHandle {
       sessionId: crypto.randomUUID(),  // SDK manages real session internally
       serverName: serverInfo?.name ?? 'unknown',
       serverVersion: serverInfo?.version ?? 'unknown',
-      protocolVersion: serverInfo?.protocolVersion ?? '2025-06-18',
+      protocolVersion: '2025-06-18',
       tools,
       instructions: (this.client.getServerCapabilities() as Record<string, unknown> & { instructions?: string })?.instructions as string | undefined,
     }
@@ -132,8 +132,12 @@ export class McpClientHandle {
     const durationMs = Date.now() - startedAt
 
     // Extract text content from result
-    const content = (result.content ?? [])
-      .map((item: unknown) => {
+    const contentItems = Array.isArray((result as { content?: unknown }).content)
+      ? ((result as { content?: unknown[] }).content ?? [])
+      : []
+
+    const content = contentItems
+      .map((item) => {
         const c = item as { type?: string; text?: string }
         if (c.type === 'text') return c.text ?? ''
         return `[${c.type ?? 'unknown'} content]`
