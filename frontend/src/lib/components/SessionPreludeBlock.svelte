@@ -8,7 +8,7 @@
   interface Props {
     parts: PartRecord[]
     rawExchanges: RawExchangeRecord[]
-    mode?: 'compact' | 'inspect'
+    mode?: 'chat' | 'inspect'
     /** Loaded context window size for bar scale. */
     loadedContextLength?: number | null
     /** True while the prelude initialization stream is in progress. */
@@ -31,8 +31,8 @@
   const statusLabel = $derived(isInitializing ? 'initializing' : 'complete')
 </script>
 
-{#if mode === 'compact'}
-  <!-- ── Compact mode: same pattern as compact-turn ────────────────────── -->
+{#if mode === 'chat'}
+  <!-- ── Chat mode: same compact pattern as chat-turn ─────────────────── -->
   <section class="compact-setup">
     <div class="compact-setup-meta">
       <span class="compact-setup-label">Session Setup</span>
@@ -67,7 +67,7 @@
   </section>
 {:else}
   <!-- ── Inspect mode: looks exactly like a Turn block (always open) ───── -->
-  <div class="turn-block" class:is-initializing={isInitializing}>
+  <div class="turn-block">
     <div class="turn-header">
       <div class="turn-header-main">
         <span class="turn-label">Session Setup</span>
@@ -227,7 +227,7 @@
     border-color: var(--border);
   }
 
-  /* ── Compact mode — mirrors compact-turn ────────────────────────────── */
+  /* ── Chat mode — mirrors chat-turn ────────────────────────────────────── */
   .compact-setup {
     margin-bottom: 0.8rem;
   }

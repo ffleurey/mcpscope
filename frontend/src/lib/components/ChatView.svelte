@@ -20,7 +20,7 @@
   let transcriptEl = $state<HTMLElement | null>(null)
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let composerText = $state('')
-  let viewMode = $state<'compact' | 'inspect'>('compact')
+  let viewMode = $state<'chat' | 'inspect'>('chat')
   let stickToBottom = $state(true)
   let lastSessionId = $state<string | null>(null)
   let lastTurnCount = $state(0)
@@ -177,9 +177,9 @@
       <div class="view-mode-toggle">
         <button
           class="view-mode-btn"
-          class:active={viewMode === 'compact'}
-          onclick={() => { viewMode = 'compact' }}
-          title="Compact chat layout"
+          class:active={viewMode === 'chat'}
+          onclick={() => { viewMode = 'chat' }}
+          title="Chat view"
         >Chat</button>
         <button
           class="view-mode-btn"

@@ -19,7 +19,7 @@
     parts: PartRecord[]
     rawExchanges: RawExchangeRecord[]
     roundStreams: StreamingRoundState[]
-    mode?: 'compact' | 'inspect'
+    mode?: 'chat' | 'inspect'
     /** Per-round context snapshots computed from all parts. */
     contextSnapshotsByRound?: Map<string, ContextEntry[]>
     /** Loaded context window size for the context bar scale. */
@@ -74,8 +74,9 @@
     }
     return grouped
   })
-  const compactUserPart = $derived(sortedParts.find((part) => part.partType === 'user-message') ?? null)
+  const userPart = $derived(sortedParts.find((part) => part.partType === 'user-message') ?? null)
   const ungroupedParts = $derived(sortedParts.filter((part) => part.roundId === null))
+  const toolCallCount = $derived(sortedParts.filter((p) => p.partType === 'tool-call').length)
 
   function openDialog(title: string, data: unknown): void {
     dialogTitle = title
@@ -89,107 +90,98 @@
   }
 </script>
 
-{#if mode === 'compact'}
-  <section class="compact-turn">
-    {#if compactUserPart}
-      <TracePartBlock part={compactUserPart} mode="compact" />
+{#if mode === 'chat'}
+  <!-- ── Chat mode ──────────────────────────────────────────────────────── -->
+  <section class="chat-turn">
+
+    <!-- User message: always visible at the top -->
+    {#if userPart}
+      <TracePartBlock part={userPart} mode="compact" />
     {/if}
 
-    {#if ungroupedParts.length > 0 && compactUserPart === null}
-      <div class="compact-round">
-        <div class="compact-round-parts">
-          {#each ungroupedParts as part (part.id)}
-            <TracePartBlock {part} mode="compact" />
+    {#if ungroupedParts.length > 0 && !userPart}
+      {#each ungroupedParts as part (part.id)}
+        <TracePartBlock {part} mode="compact" />
+      {/each}
+    {/if}
+
+    {#if turnIsComplete}
+      <!-- ── Completed: single collapsible summary line ─────────────────── -->
+      <details class="chat-summary">
+        <summary class="chat-summary-row">
+          <span class="chat-summary-status" class:is-error={turn.status === 'error'}>
+            {turn.status}
+          </span>
+          <span class="chat-summary-stats">
+            {sortedRounds.length} round{sortedRounds.length !== 1 ? 's' : ''}
+            {#if toolCallCount > 0}
+              · {toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}
+            {/if}
+            {#if turn.usage.totalTokens !== null}
+              · {turn.usage.totalTokens.toLocaleString()} tokens
+            {/if}
+          </span>
+          {#if turn.outcome && turn.outcome !== 'stop'}
+            <span class="chat-summary-outcome">{turn.outcome}</span>
+          {/if}
+        </summary>
+
+        <!-- Expanded: rounds without meta headers, just content -->
+        <div class="chat-summary-body">
+          {#each sortedRounds as round (round.id)}
+            {@const roundParts = (partsByRound.get(round.id) ?? []).filter((p) => p.id !== userPart?.id)}
+            {#if roundParts.length > 0}
+              <div class="chat-expanded-round">
+                <CompactRoundContent parts={roundParts} roundStream={null} />
+              </div>
+            {/if}
           {/each}
         </div>
-      </div>
-    {/if}
+      </details>
 
-    {#each sortedRounds as round (round.id)}
-      {@const roundParts = (partsByRound.get(round.id) ?? []).filter((part) => part.id !== compactUserPart?.id)}
-      {@const roundExchanges = rawExchangesByRound.get(round.id) ?? []}
-      {@const roundStream = roundStreamsByRound.get(round.id) ?? null}
-      {@const roundSnapshot = contextSnapshotsByRound?.get(round.id) ?? null}
-      <section class="compact-round">
-        <div class="compact-round-meta">
-          <span class="compact-round-label">Round {round.roundIndex + 1}</span>
-          <span class="compact-round-status">{round.finishReason ?? round.status}</span>
-          {#if round.usage.totalTokens !== null}
-            <span class="compact-round-tokens">{round.usage.totalTokens.toLocaleString()} total</span>
+      {#if turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
+        <div class="compaction-summary">
+          {#if turn.compactionTokensRemoved !== null && turn.compactionTokensRemoved > 0}
+            <span class="compaction-label">↓ {turn.compactionApplied}</span>
+            <span class="compaction-tokens">−{turn.compactionTokensRemoved.toLocaleString()} tokens</span>
+            {#if turn.contextTokensAtTurnEnd !== null && turn.contextTokensAfterCompaction !== null}
+              <span class="compaction-range">{turn.contextTokensAtTurnEnd.toLocaleString()} → {turn.contextTokensAfterCompaction.toLocaleString()}</span>
+            {/if}
+          {:else}
+            <span class="compaction-label">↓ {turn.compactionApplied}</span>
+            <span class="compaction-tokens">no tokens removed</span>
           {/if}
-          <div class="compact-round-actions">
-            <button class="meta-btn" onclick={() => openDialog(`Round ${round.roundIndex + 1}`, round)}>
-              Round
-            </button>
-            {#if round.requestPayloadJson !== null}
-              <button class="meta-btn" onclick={() => openDialog(`Round ${round.roundIndex + 1} request`, round.requestPayloadJson)}>
-                Request
-              </button>
-            {/if}
-            {#if round.responseTraceJson !== null}
-              <button class="meta-btn" onclick={() => openDialog(`Round ${round.roundIndex + 1} response`, round.responseTraceJson)}>
-                Response
-              </button>
-            {/if}
-            <button
-              class="meta-btn"
-              disabled={roundExchanges.length === 0}
-              onclick={() => openDialog(`Round ${round.roundIndex + 1} raw exchanges`, roundExchanges)}
-            >
-              Raw{roundExchanges.length > 0 ? ` (${roundExchanges.length})` : ''}
-            </button>
-          </div>
-        </div>
-
-        <div class="compact-round-parts">
-          <CompactRoundContent parts={roundParts} {roundStream} />
-        </div>
-
-        {#if roundSnapshot && roundSnapshot.length > 0 && !turnIsComplete}
-          <div class="round-ctx-bar">
-            <ContextSnapshotBar
-              entries={roundSnapshot}
-              contextSize={loadedContextLength}
-              label="ctx"
-              showLegend={false}
-              compact
-            />
-          </div>
-        {/if}
-      </section>
-    {/each}
-
-    {#if turnIsComplete && lastRound}
-      {@const lastSnapshot = contextSnapshotsByRound?.get(lastRound.id) ?? null}
-      {#if lastSnapshot && lastSnapshot.length > 0}
-        <div class="turn-ctx-bar">
-          <ContextSnapshotBar
-            entries={lastSnapshot}
-            contextSize={loadedContextLength}
-            label="After turn {turn.sequenceNumber}"
-            showLegend={false}
-            compact
-          />
         </div>
       {/if}
-    {/if}
 
-    {#if turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
-      <div class="compaction-summary">
-        {#if turn.compactionTokensRemoved !== null && turn.compactionTokensRemoved > 0}
-          <span class="compaction-label">↓ {turn.compactionApplied}</span>
-          <span class="compaction-tokens">−{turn.compactionTokensRemoved.toLocaleString()} tokens</span>
-          {#if turn.contextTokensAtTurnEnd !== null && turn.contextTokensAfterCompaction !== null}
-            <span class="compaction-range">{turn.contextTokensAtTurnEnd.toLocaleString()} → {turn.contextTokensAfterCompaction.toLocaleString()}</span>
+    {:else}
+      <!-- ── In progress: rounds streaming, no round-meta headers ───────── -->
+      {#each sortedRounds as round (round.id)}
+        {@const roundParts = (partsByRound.get(round.id) ?? []).filter((p) => p.id !== userPart?.id)}
+        {@const roundStream = roundStreamsByRound.get(round.id) ?? null}
+        {@const roundSnapshot = contextSnapshotsByRound?.get(round.id) ?? null}
+        <section class="chat-round">
+          <div class="chat-round-parts">
+            <CompactRoundContent parts={roundParts} {roundStream} />
+          </div>
+          {#if roundSnapshot && roundSnapshot.length > 0}
+            <div class="round-ctx-bar">
+              <ContextSnapshotBar
+                entries={roundSnapshot}
+                contextSize={loadedContextLength}
+                label="ctx"
+                showLegend={false}
+                compact
+              />
+            </div>
           {/if}
-        {:else}
-          <span class="compaction-label">↓ {turn.compactionApplied}</span>
-          <span class="compaction-tokens">no tokens removed</span>
-        {/if}
-      </div>
+        </section>
+      {/each}
     {/if}
   </section>
+
 {:else}
+  <!-- ── Inspect mode: full detail, always open ────────────────────────── -->
   <details class="turn-block" open>
     <summary class="turn-summary">
       <div class="turn-summary-main">
@@ -328,69 +320,124 @@
 {/if}
 
 <style>
-  .compact-turn {
-    --compact-stack-gap: 0.14rem;
-    --compact-inline-gap: 0.35rem;
-    --compact-row-gap: 0.28rem;
-    --compact-round-gap: 0.42rem;
-    --compact-round-indent: 0.82rem;
-    --compact-round-padding: 0.72rem;
-    --compact-summary-pad-y: 0.18rem;
-    --compact-summary-pad-x: 0.38rem;
-    --compact-message-pad-y: 0.38rem;
-    --compact-message-pad-x: 0.72rem;
-    --compact-meta-gap: 0.14rem;
-    --compact-detail-bottom-pad: 0.42rem;
-    --compact-detail-indent: 1.15rem;
-    --compact-line-height: 1.4;
+  /* ── Chat mode ─────────────────────────────────────────────────────────── */
+  .chat-turn {
+    --chat-round-indent: 0.82rem;
+    --chat-round-padding: 0.72rem;
     margin-top: 0.72rem;
   }
 
-  .compact-turn:first-child {
+  .chat-turn:first-child {
     margin-top: 0;
   }
 
-  .compact-round {
-    margin-top: var(--compact-round-gap, 0.42rem);
-    margin-left: var(--compact-round-indent, 0.82rem);
-    padding-left: var(--compact-round-padding, 0.72rem);
+  /* Streaming rounds (no meta header) */
+  .chat-round {
+    margin-top: 0.42rem;
+    margin-left: var(--chat-round-indent);
+    padding-left: var(--chat-round-padding);
     border-left: 2px solid var(--border-subtle);
   }
 
-  .compact-round-meta {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    flex-wrap: wrap;
-    margin-bottom: var(--compact-meta-gap, 0.14rem);
-  }
-
-  .compact-round-label,
-  .compact-round-status,
-  .compact-round-tokens {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-  }
-
-  .compact-round-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    margin-left: auto;
-  }
-
-  .compact-round-parts {
+  .chat-round-parts {
     display: flex;
     flex-direction: column;
-    gap: var(--compact-stack-gap, 0.14rem);
+    gap: 0.14rem;
   }
 
+  .round-ctx-bar {
+    margin-top: 0.14rem;
+    padding-top: 0.18rem;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  /* Completed turn: summary + expand */
+  .chat-summary {
+    margin-top: 0.42rem;
+    margin-left: var(--chat-round-indent);
+  }
+
+  .chat-summary-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.28rem var(--chat-round-padding);
+    list-style: none;
+    cursor: pointer;
+    border-left: 2px solid var(--border-subtle);
+    border-radius: 0 4px 4px 0;
+    user-select: none;
+  }
+
+  .chat-summary-row::-webkit-details-marker {
+    display: none;
+  }
+
+  .chat-summary-row::before {
+    content: '▶';
+    font-size: 0.55rem;
+    color: var(--text-muted);
+    transition: transform 0.12s;
+    flex-shrink: 0;
+  }
+
+  details[open] > .chat-summary-row::before {
+    transform: rotate(90deg);
+  }
+
+  .chat-summary-status {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--color-success, #16a34a);
+    padding: 0.1rem 0.38rem;
+    border: 1px solid color-mix(in srgb, var(--color-success, #16a34a) 40%, transparent);
+    border-radius: 999px;
+  }
+
+  .chat-summary-status.is-error {
+    color: var(--color-error, #dc2626);
+    border-color: color-mix(in srgb, var(--color-error, #dc2626) 40%, transparent);
+  }
+
+  .chat-summary-stats {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .chat-summary-outcome {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    padding: 0.08rem 0.38rem;
+  }
+
+  .chat-summary-body {
+    padding-left: var(--chat-round-padding);
+    border-left: 2px solid var(--border-subtle);
+    margin-top: 0.35rem;
+  }
+
+  .chat-expanded-round {
+    display: flex;
+    flex-direction: column;
+    gap: 0.14rem;
+    padding: 0.28rem 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .chat-expanded-round:first-child {
+    border-top: none;
+  }
+
+  /* Compaction note */
   .compaction-summary {
     display: flex;
     align-items: center;
     gap: 0.45rem;
     margin-top: 0.35rem;
-    margin-left: var(--compact-round-indent, 0.82rem);
+    margin-left: var(--chat-round-indent);
     padding: 0.2rem 0.5rem;
     background: var(--bg-subtle, rgba(0,0,0,0.04));
     border-radius: 4px;
@@ -399,7 +446,6 @@
 
   .compaction-label {
     color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
   }
 
   .compaction-tokens {
@@ -412,6 +458,7 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* ── Inspect mode ─────────────────────────────────────────────────────── */
   .turn-block {
     margin-top: 1rem;
     border: 1px solid var(--border);
@@ -537,28 +584,12 @@
     cursor: not-allowed;
   }
 
-  /* Per-round context snapshot bar */
-  .round-ctx-bar {
-    margin-top: var(--compact-meta-gap, 0.14rem);
-    padding-top: 0.18rem;
-    border-top: 1px solid var(--border-subtle);
-  }
-
   .round-ctx-bar-full {
     padding: 0.3rem 0.85rem 0.5rem;
     border-top: 1px solid var(--border-subtle);
     background: color-mix(in srgb, var(--bg) 60%, transparent);
   }
 
-  /* Turn-level collapsed bar (compact mode, after turn complete) */
-  .turn-ctx-bar {
-    margin-top: 0.28rem;
-    margin-left: var(--compact-round-indent, 0.82rem);
-    padding-left: var(--compact-round-padding, 0.72rem);
-    border-left: 2px solid var(--border-subtle);
-  }
-
-  /* Turn-level bar (inspect mode) */
   .turn-ctx-bar-inspect {
     margin-top: 0.75rem;
     border-top: 1px solid var(--border-subtle);
