@@ -1,115 +1,47 @@
 # AI Client App
 
-Local-first tooling for **LLM chat, MCP server work, trace inspection, and replayable runtime analysis**.
+Local-first **runtime analysis and debugging tool** for MCP server development and multi-turn LLM workflows. Built to inspect how models reason, choose tools, and consume context — with trace export, deterministic replay, and a trust-first approach to token accounting.
 
-The project is now organized around a **TypeScript backend as the source of truth** and a frontend that is being slimmed down into a UI layer. The backend owns runtime orchestration, persistence, token/context accounting, reasoning retention, raw exchange capture, and trace export.
-
-## Current status
-
-The backend-first rewrite is now in place and the project has a usable first MVP shape:
-
-- canonical backend model for sessions, turns, rounds, parts, and raw exchanges
-- streamed LM Studio runtime with ordered reasoning/content/tool-call capture
-- reasoning kept in transcript history but stripped from later model-visible context
-- SQLite persistence for runtime state and diagnostics
-- full session trace export at `/api/sessions/:sessionId/trace`
-- deterministic replay harness that re-runs exported traces as local regression tests
-- backend-driven frontend under `frontend/`, including streaming chat, inspect mode, and trace import/export
-
-The main remaining product-hardening phase is now **token counting and context-bar trust verification**, not more architectural rewiring.
-
-## Architecture
-
-### Backend
-
-- Fastify + TypeScript
-- SQLite runtime store
-- LM Studio integration with streamed completions
-- MCP HTTP client with raw request/response capture
-- canonical runtime entities:
-  - `Session`
-  - `Turn`
-  - `Round`
-  - `Part`
-  - `RawExchangeRecord`
-
-### Frontend
-
-- Svelte + TypeScript + Vite
-- lives under `frontend/`
-- presentation-oriented client over backend-owned session, trace, and streaming state
-- consumes backend transcript, context, and trace data rather than re-implementing runtime logic
-
-## Runtime vocabulary
-
-The project uses one canonical hierarchy:
-
-- **Turn** - one full user request lifecycle
-- **Round** - one model iteration inside that turn
-- **Part** - one committed backend unit inside a round or turn
-- **Delta** - one transient streamed fragment before a part is committed
-
-Examples of part types include:
-
-- `user-message`
-- `assistant-reasoning`
-- `assistant-content`
-- `tool-call`
-- `tool-result`
-
-The LM Studio streaming parser still uses the internal word **segment** while reconstructing streamed output, but the persisted and documented canonical term is **part**.
-
-## Trace and replay model
-
-Every useful runtime artifact should be available from backend state, not reconstructed in tests:
-
-- transcript-visible chat history
-- model-visible context history
-- ordered reasoning/content/tool/result parts
-- raw LM Studio exchanges, including streamed payloads
-- raw MCP exchanges
-- prompt-token probe exchanges used for token attribution
-
-That trace can then be exported and replayed through the backend test harness without guessing missing state.
-
-For the rewired frontend, the same model remains canonical:
-
-- the frontend renders the latest backend trace snapshot
-- live streaming carries only **deltas**
-- once the backend commits a **part**, that canonical backend structure replaces the transient delta state
-
-## Token and reasoning rules
-
-- prompt-side accounting prefers exact probe and delta-based attribution
-- grouped totals are split proportionally only when the upstream API exposes an aggregate but not per-part counts
-- reasoning is preserved in transcript history for analysis
-- reasoning is stripped from later model-visible context after the turn completes
-- multiple reasoning blocks inside a single tool-enabled turn are captured in order from the streamed response
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system design and domain model.
 
 ## Development
 
 ```bash
-npm run dev
-npm run dev:backend
-npm run dev:frontend
+npm run dev              # backend + frontend together
+npm run dev:backend      # backend only (tsx watch)
+npm run dev:frontend     # frontend only (vite)
 ```
 
-## Testing
+### Seeding dev data
 
 ```bash
-npm test
-npm run check
-npm run test:integration
+npm run seed:dev-config    # seed LM connections, model configs, MCP profiles
+npm run seed:dev-sessions  # seed captured session fixtures
+npm run seed:dev-data      # both of the above
 ```
 
-- local tests cover pure logic, runtime behavior, app routes, and trace replay
-- integration tests exercise the live LM Studio + MCP path and save traces that can later be promoted into replay fixtures
+## Build
+
+```bash
+npm run build            # build frontend (vite)
+npm run build:backend    # compile backend TypeScript
+npm run start:backend    # run compiled backend
+```
+
+## Testing and type checking
+
+```bash
+npm test                 # deterministic local tests (pure logic, runtime, app, replay)
+npm run check            # svelte-check + frontend TypeScript
+npm run check:backend    # backend TypeScript check
+npm run test:integration # live LM Studio + MCP validation (requires running LM Studio + MCP server)
+```
+
+See [TESTING.md](TESTING.md) for the test strategy and how to add regressions.
 
 ## Project docs
 
-- `PROJECT.md` - project scope and product direction
-- `PLAN.md` - current roadmap
-- `DESIGN.md` - current system design
-- `BACKEND.md` - backend runtime summary
-- `TESTING.md` - test strategy
-- `REFACTORING.md` - backend refactor closure summary
+- [ARCHITECTURE.md](ARCHITECTURE.md) — system design, domain model, API surface, runtime rules
+- [TESTING.md](TESTING.md) — test strategy and regression workflow
+- [PLAN.md](PLAN.md) — current status and open work
+- [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) — reference use case and evaluation criteria

@@ -2,9 +2,10 @@
 
 ## Commands
 
-- `npm test` — deterministic local backend tests
-- `npm run check:backend` — backend type-check
-- `npm run test:integration` — live LM Studio + MCP validation
+- `npm test` — deterministic local tests (pure logic, runtime, app, replay)
+- `npm run check` — svelte-check + frontend TypeScript
+- `npm run check:backend` — backend TypeScript check
+- `npm run test:integration` — live LM Studio + MCP validation (requires running LM Studio + MCP server)
 
 ## Current test layers
 
@@ -31,38 +32,19 @@ Keep these few and surgical.
 
 ### 3. Trace replay tests
 
-This is now the main regression path for backend workflow behavior.
+This is the main regression path for backend workflow behavior.
 
-The backend exports a full trace at:
+The backend exports a full trace at `GET /api/sessions/:sessionId/trace`. See [ARCHITECTURE.md](ARCHITECTURE.md) for the trace bundle shape and vocabulary.
 
-- `GET /api/sessions/:sessionId/trace`
-
-The trace bundle includes:
-
-- `session`
-- `turns`
-- `rounds`
-- `parts`
-- `rawExchanges`
-- `transcript`
-- `context`
-
-Vocabulary for tests follows the backend model:
-
-- **turn** = full user request lifecycle
-- **round** = one model iteration inside a turn
-- **part** = committed reasoning/content/tool-call/tool-result unit
-- **delta** = transient streamed fragment before a part is committed
-
-`rawExchanges` now includes:
+`rawExchanges` includes:
 
 - streamed LM request/response payloads
 - LM prompt-probe request/response payloads
 - MCP request/response payloads, headers, and raw response text
 
-`backend/src/testing/replayHarness.ts` replays one of these bundles through fake user / LM / MCP gateways and compares the replayed trace to the original normalized trace.
+`backend/src/testing/replayHarness.ts` replays a trace bundle through fake user / LM / MCP gateways and compares the replayed trace to the original normalized trace.
 
-Use replay tests whenever behavior spans:
+Use replay tests whenever the behavior under test spans:
 
 - user input
 - LM requests or probes

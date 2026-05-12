@@ -9,7 +9,7 @@ import {
 } from './domain/configuration.js'
 import { getDomainModelSummary } from './domain/model.js'
 import { deriveContextEntries, deriveTranscriptEntries } from './domain/selectors.js'
-import { buildSessionTraceBundle, sessionTraceBundleSchema } from './domain/trace.js'
+import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from './domain/trace.js'
 import { openBackendDatabase } from './persistence/db.js'
 import {
   deleteLmConnection,
@@ -306,7 +306,7 @@ export async function buildBackendApp(
   })
 
   app.post('/api/traces/import', async (request, reply) => {
-    const input = sessionTraceBundleSchema.parse(request.body) as import('./domain/trace.js').SessionTraceBundle
+    const input = sessionTraceBundleSchema.parse(request.body) as SessionTraceBundle
     const importedSession = importTraceBundle(database, input)
     reply.code(201)
     return { session: importedSession }

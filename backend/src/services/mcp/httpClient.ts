@@ -87,7 +87,7 @@ async function mcpPost(url: string, body: object, sessionId?: string): Promise<M
   }
 
   let responseBody: unknown
-  let responseBodyText = ''
+  let responseBodyText: string
   if (contentType.includes('text/event-stream')) {
     responseBodyText = await response.text()
     if (!responseBodyText.trim()) {

@@ -968,7 +968,8 @@ export async function createToolEnabledTurn(
     }
     rounds.push({ ...currentRound })
 
-    pendingPromptSuffix = await applyPendingPromptSuffixAttribution(
+    // applyPendingPromptSuffixAttribution always returns null — called for DB side-effects only
+    await applyPendingPromptSuffixAttribution(
       database,
       lmStudioGateway,
       session,
