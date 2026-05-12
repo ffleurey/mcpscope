@@ -72,6 +72,15 @@
   const ungroupedParts = $derived(sortedParts.filter((p) => p.roundId === null))
   const assistantContentParts = $derived(sortedParts.filter((p) => p.partType === 'assistant-content'))
   const toolCallCount = $derived(sortedParts.filter((p) => p.partType === 'tool-call').length)
+  const hasReasoning = $derived(sortedParts.some((p) => p.partType === 'assistant-reasoning'))
+  /** True when there's something worth expanding (tool calls, reasoning, multiple rounds) */
+  const hasDetail = $derived(toolCallCount > 0 || hasReasoning || sortedRounds.length > 1 || turn.status === 'error')
+
+  function normalizeText(text: string | null | undefined): string | null {
+    if (!text) return null
+    const normalized = text.replace(/^(?:[ \t]*\n)+/, '').replace(/(?:\n[ \t]*)+$/, '')
+    return normalized.length > 0 ? normalized : null
+  }
 
   function openDialog(title: string, data: unknown): void {
     dialogTitle = title
@@ -102,12 +111,15 @@
     <!-- ── Chat mode, completed ──────────────────────────────────────── -->
 
     {#if chatCollapsed}
-      <!-- Collapsed: show only the model answers as plain text -->
+      <!-- Collapsed: plain answer text, no wrapper/header -->
       {#each assistantContentParts as part (part.id)}
-        <TracePartBlock {part} mode="compact" />
+        {@const text = normalizeText(part.payload.text)}
+        {#if text}
+          <div class="chat-answer-text">{text}</div>
+        {/if}
       {/each}
     {:else}
-      <!-- Expanded: full round detail (includes answers within rounds) -->
+      <!-- Expanded: full round detail (answers visible within rounds) -->
       {#each sortedRounds as round (round.id)}
         {@const roundParts = (partsByRound.get(round.id) ?? []).filter((p) => p.id !== userPart?.id)}
         {@const roundStream = roundStreamsByRound.get(round.id) ?? null}
@@ -119,8 +131,8 @@
       {/each}
     {/if}
 
-    <!-- Toggle row: always visible when there's something to show/hide -->
-    {#if toolCallCount > 0 || sortedRounds.length > 1 || turn.status === 'error'}
+    <!-- Toggle row: only shown when there's tool calls / reasoning / multiple rounds -->
+    {#if hasDetail}
       <div class="chat-toggle-row">
         <button
           class="chat-toggle-btn"
@@ -345,6 +357,19 @@
     margin-left: var(--chat-indent);
     padding-left: var(--chat-pad);
     border-left: 2px solid var(--border-subtle);
+  }
+
+  /* ── Chat mode: plain answer text ───────────────────────────────────── */
+  .chat-answer-text {
+    margin-top: var(--chat-gap);
+    margin-left: var(--chat-indent);
+    padding-left: var(--chat-pad);
+    border-left: 2px solid var(--border-subtle);
+    font-size: 0.88rem;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   /* ── Chat mode: toggle row ──────────────────────────────────────────── */
