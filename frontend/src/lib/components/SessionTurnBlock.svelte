@@ -38,6 +38,8 @@
   let showDialog = $state(false)
   let dialogTitle = $state('')
   let dialogData = $state<unknown>(null)
+  /** Chat mode: collapsed = show only answers; expanded = show full round detail */
+  let chatCollapsed = $state(true)
 
   const sortedRounds = $derived([...rounds].sort((a, b) => a.roundIndex - b.roundIndex))
   const sortedParts = $derived([...parts].sort((a, b) => a.ordinal - b.ordinal))
@@ -99,43 +101,45 @@
   {#if mode === 'chat' && turnIsComplete}
     <!-- ── Chat mode, completed ──────────────────────────────────────── -->
 
-    <!-- Assistant response(s): always visible — this is the chat reply -->
-    {#each assistantContentParts as part (part.id)}
-      <TracePartBlock {part} mode="compact" />
-    {/each}
+    {#if chatCollapsed}
+      <!-- Collapsed: show only the model answers as plain text -->
+      {#each assistantContentParts as part (part.id)}
+        <TracePartBlock {part} mode="compact" />
+      {/each}
+    {:else}
+      <!-- Expanded: full round detail (includes answers within rounds) -->
+      {#each sortedRounds as round (round.id)}
+        {@const roundParts = (partsByRound.get(round.id) ?? []).filter((p) => p.id !== userPart?.id)}
+        {@const roundStream = roundStreamsByRound.get(round.id) ?? null}
+        <section class="compact-round">
+          <div class="compact-round-parts">
+            <CompactRoundContent parts={roundParts} {roundStream} />
+          </div>
+        </section>
+      {/each}
+    {/if}
 
-    <!-- Collapsible behind-the-scenes: only shown when there's activity to explain -->
+    <!-- Toggle row: always visible when there's something to show/hide -->
     {#if toolCallCount > 0 || sortedRounds.length > 1 || turn.status === 'error'}
-      <details class="chat-detail">
-        <summary class="chat-detail-row">
-          <span class="chat-detail-status" class:is-error={turn.status === 'error'}>
+      <div class="chat-toggle-row">
+        <button
+          class="chat-toggle-btn"
+          onclick={() => { chatCollapsed = !chatCollapsed }}
+        >
+          <span class="chat-toggle-arrow" class:open={!chatCollapsed}>▶</span>
+          <span class="chat-toggle-status" class:is-error={turn.status === 'error'}>
             {turn.status}
           </span>
-          <span class="chat-detail-stats">
+          <span class="chat-toggle-stats">
             {sortedRounds.length} round{sortedRounds.length !== 1 ? 's' : ''}
             {#if toolCallCount > 0}· {toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}{/if}
             {#if turn.usage.totalTokens !== null}· {turn.usage.totalTokens.toLocaleString()} tokens{/if}
           </span>
           {#if turn.outcome && turn.outcome !== 'stop'}
-            <span class="chat-detail-outcome">{turn.outcome}</span>
+            <span class="chat-toggle-outcome">{turn.outcome}</span>
           {/if}
-        </summary>
-
-        <!-- Expanded: non-content round parts (tool calls, reasoning, tool results) -->
-        <div class="chat-detail-body">
-          {#each sortedRounds as round (round.id)}
-            {@const allRoundParts = (partsByRound.get(round.id) ?? []).filter(
-              (p) => p.id !== userPart?.id && p.partType !== 'assistant-content',
-            )}
-            {#if allRoundParts.length > 0}
-              <div class="chat-detail-round">
-                <span class="chat-detail-round-label">Round {round.roundIndex + 1}</span>
-                <CompactRoundContent parts={allRoundParts} roundStream={null} />
-              </div>
-            {/if}
-          {/each}
-        </div>
-      </details>
+        </button>
+      </div>
     {/if}
 
     <!-- Context bar: always visible after a completed chat turn -->
@@ -343,41 +347,42 @@
     border-left: 2px solid var(--border-subtle);
   }
 
-  /* ── Chat mode: collapsible behind-the-scenes detail ──────────────── */
-  .chat-detail {
+  /* ── Chat mode: toggle row ──────────────────────────────────────────── */
+  .chat-toggle-row {
     margin-top: var(--chat-gap);
     margin-left: var(--chat-indent);
   }
 
-  .chat-detail-row {
+  .chat-toggle-btn {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.25rem var(--chat-pad);
-    list-style: none;
+    padding: 0.22rem var(--chat-pad);
+    border: none;
+    background: none;
     cursor: pointer;
     border-left: 2px solid var(--border-subtle);
     border-radius: 0 4px 4px 0;
-    user-select: none;
+    width: 100%;
+    text-align: left;
   }
 
-  .chat-detail-row::-webkit-details-marker {
-    display: none;
+  .chat-toggle-btn:hover {
+    background: var(--bg-hover, rgba(0,0,0,0.04));
   }
 
-  .chat-detail-row::before {
-    content: '▶';
+  .chat-toggle-arrow {
     font-size: 0.55rem;
     color: var(--text-muted);
     transition: transform 0.12s;
     flex-shrink: 0;
   }
 
-  details[open] > .chat-detail-row::before {
+  .chat-toggle-arrow.open {
     transform: rotate(90deg);
   }
 
-  .chat-detail-status {
+  .chat-toggle-status {
     font-size: 0.7rem;
     font-weight: 600;
     color: var(--color-success, #16a34a);
@@ -386,47 +391,23 @@
     border-radius: 999px;
   }
 
-  .chat-detail-status.is-error {
+  .chat-toggle-status.is-error {
     color: var(--color-error, #dc2626);
     border-color: color-mix(in srgb, var(--color-error, #dc2626) 35%, transparent);
   }
 
-  .chat-detail-stats {
+  .chat-toggle-stats {
     font-size: 0.7rem;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
 
-  .chat-detail-outcome {
+  .chat-toggle-outcome {
     font-size: 0.68rem;
     color: var(--text-muted);
     border: 1px solid var(--border-subtle);
     border-radius: 999px;
     padding: 0.06rem 0.35rem;
-  }
-
-  .chat-detail-body {
-    margin-top: 0.3rem;
-    padding-left: var(--chat-pad);
-    border-left: 2px solid var(--border-subtle);
-  }
-
-  .chat-detail-round {
-    display: flex;
-    flex-direction: column;
-    gap: var(--chat-stack);
-    padding: 0.25rem 0;
-    border-top: 1px solid var(--border-subtle);
-  }
-
-  .chat-detail-round:first-child {
-    border-top: none;
-  }
-
-  .chat-detail-round-label {
-    font-size: 0.68rem;
-    color: var(--text-muted);
-    margin-bottom: 0.1rem;
   }
 
   /* ── Compaction note ────────────────────────────────────────────────── */

@@ -210,7 +210,6 @@
         {#if sessionPreludeParts.length > 0 || isInitializing}
           <SessionPreludeBlock
             parts={sessionPreludeParts}
-            rawExchanges={sessionPreludeRawExchanges}
             mode={viewMode}
             loadedContextLength={session.loadedContextLength ?? null}
             {isInitializing}

@@ -2,7 +2,6 @@
   import type { PartRecord, RawExchangeRecord } from '../backendTypes'
   import { deriveContextEntries } from '../traceStreaming'
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
-  import JsonDialog from './JsonDialog.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
 
   interface Props {
@@ -17,24 +16,41 @@
 
   const {
     parts,
-    rawExchanges,
     mode = 'inspect',
     loadedContextLength = null,
     isInitializing = false,
   }: Props = $props()
 
-  let showDialog = $state(false)
+  /** Chat mode: collapsed after init completes (user can expand to review setup) */
+  let chatCollapsed = $state(false)
+  $effect(() => {
+    if (!isInitializing) chatCollapsed = true
+  })
 
   const sortedParts = $derived([...parts].sort((a, b) => a.ordinal - b.ordinal))
   const totalTokens = $derived(parts.reduce((sum, p) => sum + (p.tokens.count ?? 0), 0))
   const contextEntries = $derived(deriveContextEntries(parts))
   const statusLabel = $derived(isInitializing ? 'initializing' : 'complete')
+  const canCollapse = $derived(mode === 'chat' && !isInitializing)
 </script>
 
-{#if mode === 'chat'}
-  <!-- ── Chat mode: same compact pattern as chat-turn ─────────────────── -->
-  <section class="compact-setup">
-    <div class="compact-setup-meta">
+<!-- Same compact layout for both modes; chat can collapse after init completes -->
+<section class="compact-setup">
+  <div class="compact-setup-meta">
+    {#if canCollapse}
+      <button
+        class="setup-toggle-btn"
+        onclick={() => { chatCollapsed = !chatCollapsed }}
+        aria-expanded={!chatCollapsed}
+      >
+        <span class="setup-toggle-arrow" class:open={!chatCollapsed}>▶</span>
+        <span class="compact-setup-label">Session Setup</span>
+        <span class="compact-setup-status">{statusLabel}</span>
+        {#if totalTokens > 0}
+          <span class="compact-setup-tokens">{totalTokens.toLocaleString()} tokens</span>
+        {/if}
+      </button>
+    {:else}
       <span class="compact-setup-label">Session Setup</span>
       <span class="compact-setup-status">{statusLabel}</span>
       {#if isInitializing}
@@ -42,8 +58,10 @@
       {:else if totalTokens > 0}
         <span class="compact-setup-tokens">{totalTokens.toLocaleString()} tokens</span>
       {/if}
-    </div>
+    {/if}
+  </div>
 
+  {#if !canCollapse || !chatCollapsed}
     <div class="compact-setup-parts">
       {#each sortedParts as part (part.id)}
         <TracePartBlock {part} mode="compact" />
@@ -64,170 +82,10 @@
         />
       </div>
     {/if}
-  </section>
-{:else}
-  <!-- ── Inspect mode: looks exactly like a Turn block (always open) ───── -->
-  <div class="turn-block">
-    <div class="turn-header">
-      <div class="turn-header-main">
-        <span class="turn-label">Session Setup</span>
-        <span class="turn-status">{statusLabel}</span>
-        {#if isInitializing}
-          <span class="setup-spinner" aria-label="Setting up">⋯</span>
-        {/if}
-      </div>
-      <div class="turn-header-meta">
-        {#if totalTokens > 0}
-          <span>{totalTokens.toLocaleString()} tokens</span>
-        {/if}
-        <span>{parts.length} part{parts.length !== 1 ? 's' : ''}</span>
-        {#if rawExchanges.length > 0}
-          <button class="meta-btn" onclick={() => { showDialog = true }}>
-            Raw ({rawExchanges.length})
-          </button>
-        {/if}
-      </div>
-    </div>
-
-    <div class="turn-body">
-      {#if sortedParts.length > 0}
-        <section class="round-block">
-          <div class="round-parts">
-            {#each sortedParts as part (part.id)}
-              <TracePartBlock {part} mode="inspect" />
-            {/each}
-          </div>
-        </section>
-      {:else if isInitializing}
-        <div class="setup-empty-hint">Setting up session…</div>
-      {/if}
-
-      {#if !isInitializing && contextEntries.length > 0}
-        <div class="setup-ctx-bar">
-          <ContextSnapshotBar
-            entries={contextEntries}
-            contextSize={loadedContextLength}
-            label="Setup context"
-            showLegend={false}
-          />
-        </div>
-      {/if}
-    </div>
-  </div>
-{/if}
-
-{#if showDialog}
-  <JsonDialog
-    title="Session setup raw exchanges"
-    data={rawExchanges}
-    onClose={() => { showDialog = false }}
-  />
-{/if}
+  {/if}
+</section>
 
 <style>
-  /* ── Inspect mode — mirrors SessionTurnBlock's turn-block ─────────────── */
-  .turn-block {
-    margin-bottom: 1rem;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--bg-panel);
-    overflow: hidden;
-  }
-
-  .turn-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.8rem 1rem;
-    background: var(--bg-panel);
-  }
-
-  .turn-header-main,
-  .turn-header-meta {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    flex-wrap: wrap;
-  }
-
-  .turn-label {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--text);
-  }
-
-  .turn-status {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    border: 1px solid var(--border-subtle);
-    border-radius: 999px;
-    padding: 0.12rem 0.45rem;
-  }
-
-  .turn-header-meta {
-    font-size: 0.74rem;
-    color: var(--text-muted);
-  }
-
-  .turn-body {
-    padding: 0 1rem 1rem;
-    border-top: 1px solid var(--border);
-  }
-
-  /* ── Round-like section wrapping the prelude parts ──────────────────── */
-  .round-block {
-    margin-top: 0.9rem;
-    border: 1px solid var(--border-subtle);
-    border-radius: 6px;
-    background: var(--bg);
-    overflow: hidden;
-  }
-
-  .round-parts {
-    padding: 0 0.85rem 0.2rem;
-  }
-
-  /* ── Shared ─────────────────────────────────────────────────────────── */
-  .setup-spinner {
-    font-size: 1.1rem;
-    color: var(--text-muted);
-    animation: blink 1.2s ease-in-out infinite;
-  }
-
-  @keyframes blink {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 1; }
-  }
-
-  .setup-empty-hint {
-    padding: 0.9rem 0;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    font-style: italic;
-  }
-
-  .setup-ctx-bar {
-    margin-top: 0.75rem;
-    border-top: 1px solid var(--border-subtle);
-  }
-
-  .meta-btn {
-    background: none;
-    border: 1px solid var(--border-subtle);
-    border-radius: 4px;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 0.72rem;
-    padding: 0.2rem 0.5rem;
-  }
-
-  .meta-btn:hover {
-    color: var(--text);
-    border-color: var(--border);
-  }
-
-  /* ── Chat mode — mirrors chat-turn ────────────────────────────────────── */
   .compact-setup {
     margin-bottom: 0.8rem;
   }
@@ -237,6 +95,32 @@
     align-items: center;
     gap: 0.45rem;
     margin-bottom: 0.25rem;
+  }
+
+  .setup-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: none;
+    border: none;
+    padding: 0.1rem 0;
+    cursor: pointer;
+    color: inherit;
+  }
+
+  .setup-toggle-btn:hover .compact-setup-label {
+    color: var(--text);
+  }
+
+  .setup-toggle-arrow {
+    font-size: 0.55rem;
+    color: var(--text-muted);
+    transition: transform 0.12s;
+    flex-shrink: 0;
+  }
+
+  .setup-toggle-arrow.open {
+    transform: rotate(90deg);
   }
 
   .compact-setup-label {
@@ -265,5 +149,23 @@
     margin-left: 0.82rem;
     padding-left: 0.72rem;
     border-left: 2px solid var(--border-subtle);
+  }
+
+  .setup-spinner {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
+  }
+
+  .setup-empty-hint {
+    padding: 0.5rem 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    font-style: italic;
   }
 </style>
