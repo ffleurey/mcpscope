@@ -25,6 +25,12 @@
 
   const partLabel = $derived(labels[part.partType] ?? part.partType)
   const tokenCount = $derived(part.tokens.count)
+  const isEstimated = $derived(part.tokens.confidence === 'estimated' || part.tokens.confidence === 'unknown')
+  function fmtTokens(count: number | null): string {
+    if (count === null) return ''
+    const n = count.toLocaleString()
+    return isEstimated ? `~${n} tokens` : `${n} tokens`
+  }
   const hasJsonPayload = $derived(part.payload.json !== null)
   const previewText = $derived.by(() => {
     if (part.payload.summary) return part.payload.summary
@@ -67,7 +73,7 @@
       {/if}
       {#if tokenCount !== null}
         <div class="message-meta">
-          <span class="token-pill">{tokenCount.toLocaleString()} tokens</span>
+          <span class="token-pill">{fmtTokens(tokenCount)}</span>
         </div>
       {/if}
     </div>
@@ -79,7 +85,7 @@
           <span class="part-preview">{previewText}</span>
         {/if}
         {#if tokenCount !== null}
-          <span class="token-pill">{tokenCount.toLocaleString()} tokens</span>
+          <span class="token-pill">{fmtTokens(tokenCount)}</span>
         {/if}
       </summary>
 
@@ -105,7 +111,7 @@
           <span class="part-subtitle">{part.payload.summary}</span>
         {/if}
         {#if tokenCount !== null}
-          <span class="token-pill">{tokenCount.toLocaleString()} tokens</span>
+          <span class="token-pill">{fmtTokens(tokenCount)}</span>
         {/if}
       </summary>
 
@@ -127,7 +133,7 @@
     <div class="part-header">
       <span class="part-title">{partLabel}</span>
       {#if tokenCount !== null}
-        <span class="token-pill">{tokenCount.toLocaleString()} tokens</span>
+        <span class="token-pill">{fmtTokens(tokenCount)}</span>
       {/if}
     </div>
 

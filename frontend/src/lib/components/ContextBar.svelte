@@ -45,6 +45,11 @@
   })
 
   function fmt(n: number) { return n.toLocaleString() }
+  function fmtEntry(entry: ContextEntry): string {
+    const n = fmt(entry.tokens.count ?? 0)
+    const approx = entry.tokens.confidence === 'estimated' || entry.tokens.confidence === 'unknown'
+    return approx ? `~${n} tokens` : `${n} tokens`
+  }
 </script>
 
 {#if ctxSize > 0 || entries.length > 0}
@@ -64,7 +69,7 @@
           <div
             class="bar-segment"
             style="width: {((entry.tokens.count ?? 0) / ctxSize) * 100}%; background: {segmentColors[entry.type]};"
-            title="{segmentLabels[entry.type]}: {fmt(entry.tokens.count ?? 0)} tokens"
+            title="{segmentLabels[entry.type]}: {fmtEntry(entry)}"
           ></div>
         {/each}
       {:else if entries.length > 0}
@@ -72,7 +77,7 @@
           <div
             class="bar-segment"
             style="width: {100 / Math.max(entries.length, totalKnown > 0 ? entries.length : 1)}%; background: {segmentColors[entry.type]};"
-            title="{segmentLabels[entry.type]}: {fmt(entry.tokens.count ?? 0)} tokens"
+            title="{segmentLabels[entry.type]}: {fmtEntry(entry)}"
           ></div>
         {/each}
       {/if}
