@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
-import { initializeBackendSchema, querySchemaSummary } from './schema.js'
+import { initializeBackendSchema, querySchemaSummary, validateBackendSchema } from './schema.js'
 
 export interface BackendDatabase {
   readonly path: string
@@ -16,6 +16,7 @@ export function openBackendDatabase(sqlitePath: string): BackendDatabase {
   connection.pragma('journal_mode = WAL')
   connection.pragma('foreign_keys = ON')
   initializeBackendSchema(connection)
+  validateBackendSchema(connection)
   const schema = querySchemaSummary(connection)
 
   return {

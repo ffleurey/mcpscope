@@ -198,6 +198,56 @@ export function initializeBackendSchema(connection: Database.Database): void {
   upsertMeta.run('domain_model_version', String(DOMAIN_MODEL_VERSION))
 }
 
+export function validateBackendSchema(connection: Database.Database): void {
+  const getColumns = (table: string): Set<string> => {
+    const rows = connection
+      .prepare<[], { name: string }>(`PRAGMA table_info(${table})`)
+      .all()
+    return new Set(rows.map(r => r.name))
+  }
+
+  const required: Record<string, string[]> = {
+    sessions: [
+      'id', 'title', 'status', 'init_status',
+      'model_profile_snapshot_json', 'mcp_profile_snapshot_json',
+      'loaded_context_length', 'system_prompt_tokens', 'tool_definitions_tokens',
+      'is_context_exhausted', 'compaction_strategy', 'created_at', 'updated_at',
+    ],
+    turns: [
+      'id', 'session_id', 'sequence_number', 'status', 'outcome',
+      'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'total_tokens',
+      'context_tokens_at_turn_end', 'context_tokens_after_compaction',
+      'compaction_applied', 'compaction_tokens_removed',
+      'created_at', 'completed_at',
+    ],
+    parts: [
+      'id', 'session_id', 'turn_id', 'round_id', 'parent_part_id',
+      'ordinal', 'part_type', 'role_label',
+      'payload_text', 'payload_json', 'payload_mime_type', 'payload_summary',
+      'display_state', 'collapsed_by_default',
+      'context_state', 'context_note', 'stripped_by_compaction_at_turn_id',
+      'token_count', 'token_source', 'token_confidence', 'token_note',
+      'provenance_json', 'created_at', 'updated_at',
+    ],
+  }
+
+  const missing: string[] = []
+  for (const [table, columns] of Object.entries(required)) {
+    const existing = getColumns(table)
+    for (const col of columns) {
+      if (!existing.has(col)) missing.push(`${table}.${col}`)
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `DB schema validation failed — missing columns:\n  ${missing.join('\n  ')}\n` +
+      `This indicates a failed or incomplete migration. ` +
+      `Delete the database file and restart, or repair manually.`,
+    )
+  }
+}
+
 export function querySchemaSummary(connection: Database.Database) {
   const rows = connection
     .prepare<[], { name: string }>(`
