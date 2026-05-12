@@ -84,11 +84,16 @@ function assertPartTokenSanity(parts: PartRecord[]): void {
     // Rule 2 — proportionality (only when both count > 0 and chars > 0)
     if (count !== null && count > 0 && chars > 0) {
       const charsPerToken = chars / count
-      if (charsPerToken < 0.5 || charsPerToken > 20) {
+      // JSON-payload parts (tool-definitions, tool-call) have denser tokenization
+      // than natural language — allow a wider range for them.
+      const isJsonPart = part.payload.text == null && part.payload.json != null
+      const minRatio = 0.5
+      const maxRatio = isJsonPart ? 40 : 20
+      if (charsPerToken < minRatio || charsPerToken > maxRatio) {
         throw new Error(
           `${label}: suspicious chars-per-token ratio ${charsPerToken.toFixed(2)} ` +
-          `(${chars} chars / ${count} tokens). ` +
-          `Content snippet: "${(part.payload.text ?? '').slice(0, 60)}"`,
+          `(${chars} chars / ${count} tokens, ${isJsonPart ? 'JSON' : 'text'} payload). ` +
+          `Content snippet: "${(part.payload.text ?? JSON.stringify(part.payload.json) ?? '').slice(0, 80)}"`,
         )
       }
     }
@@ -339,8 +344,244 @@ async function captureModelOnlyTrace(userInputs: string[]): Promise<SessionTrace
 }
 
 // ---------------------------------------------------------------------------
-// Tests
+// Tool-enabled fixture
 // ---------------------------------------------------------------------------
+//
+// Scenario: 2 turns. Turn 1 is a multi-round tool-use turn (round 0 produces
+// a tool call; round 1 processes the result and replies). Turn 2 is a plain
+// model-only response.
+//
+// This exercises:
+//   - JSON-payload parts (tool-definitions, tool-call)
+//   - Reasoning stripped from *multiple rounds* by a single turn compaction
+//   - Multi-turn context growth through the tool-use turn
+
+const toolSessionPayload = {
+  title: 'Token sanity — tool turns',
+  modelProfileSnapshot: {
+    id: 'model-1', name: 'Model',
+    connectionBaseUrl: 'https://example.com/v1',
+    apiKey: null, modelKey: 'model-key',
+    modelDisplayName: 'Model Key',
+    systemPrompt: 'Use tools when needed.',
+    temperature: 0, reasoning: 'on',
+    createdAt: 1, updatedAt: 1,
+  },
+  mcpProfileSnapshot: {
+    id: 'mcp-1', name: 'Local MCP',
+    url: 'http://localhost:3001/mcp',
+    transport: 'streamable-http',
+    authType: null, authValue: null,
+    createdAt: 1, updatedAt: 1,
+  },
+}
+
+function makeToolGateway() {
+  let completionCount = 0
+
+  return {
+    lmStudioGateway: {
+      async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | null, body: unknown) {
+        const b = body as { messages: Array<{ role: string; content?: string | null }>; tools?: unknown[] }
+        const messages = b.messages
+        const hasTools = Array.isArray(b.tools) && b.tools.length > 0
+        const hasToolCall = messages.some(m => m.role === 'assistant' && m.content == null)
+        const toolResultCount = messages.filter(m => m.role === 'tool').length
+        const userCount = messages.filter(m => m.role === 'user').length
+        const systemCount = messages.filter(m => m.role === 'system').length
+
+        let promptTokens: number
+        if (messages.length === 1 && !hasTools) {
+          promptTokens = 4                 // system only
+        } else if (systemCount === 2 && messages.length === 2 && !hasTools) {
+          promptTokens = 9                 // system + mcp-instructions, no tools
+        } else if (systemCount === 2 && messages.length === 2 && hasTools) {
+          promptTokens = 16                // system + mcp-instructions + tool defs
+        } else if (messages.length === 3 && hasTools && userCount === 1 && !hasToolCall) {
+          promptTokens = 20                // turn1 round0 start
+        } else if (messages.length === 4 && hasTools && userCount === 1 && hasToolCall && toolResultCount === 0) {
+          promptTokens = 26                // turn1 round0 suffix attribution (+ asst tool-call)
+        } else if (messages.length === 5 && hasTools && userCount === 1 && hasToolCall && toolResultCount === 1) {
+          promptTokens = 32                // turn1 round1 start (+ tool result)
+        } else if (messages.length === 6 && hasTools && userCount === 1 && hasToolCall && toolResultCount === 1) {
+          promptTokens = 39                // turn1 round1 suffix attribution (+ asst content)
+        } else if (messages.length === 7 && hasTools && userCount === 2 && hasToolCall && toolResultCount === 1) {
+          promptTokens = 44                // turn2 round0 start (post-compaction ctx + user2)
+        } else if (messages.length === 8 && hasTools && userCount === 2 && hasToolCall && toolResultCount === 1) {
+          promptTokens = 50                // turn2 round0 suffix attribution (+ asst content2)
+        } else {
+          throw new Error(
+            `Tool mock: unexpected probe shape — ` +
+            `len=${messages.length}, hasTools=${hasTools}, hasToolCall=${hasToolCall}, ` +
+            `toolResults=${toolResultCount}, users=${userCount}, systems=${systemCount}`,
+          )
+        }
+        return makeProbeResult(promptTokens, body as Record<string, unknown>)
+      },
+      async createChatCompletion(_baseUrl: string, _apiKey: string | null, _body: unknown) {
+        completionCount++
+
+        if (completionCount === 1) {
+          // Round 0 of turn 1: tool call
+          return {
+            id: 'cmpl-t1r0', model: 'model-key', created: 123,
+            choices: [{
+              index: 0, finish_reason: 'tool_calls',
+              message: {
+                role: 'assistant',
+                content: null,
+                reasoning_content: 'I should call the time tool to answer this.',
+                tool_calls: [{
+                  id: 'call-1', type: 'function',
+                  function: { name: 'get_current_time', arguments: '{}' },
+                }],
+              },
+            }],
+            usage: {
+              prompt_tokens: 20, completion_tokens: 12,
+              total_tokens: 32,
+              completion_tokens_details: { reasoning_tokens: 6 },
+            },
+          }
+        }
+
+        if (completionCount === 2) {
+          // Round 1 of turn 1: final answer
+          return {
+            id: 'cmpl-t1r1', model: 'model-key', created: 124,
+            choices: [{
+              index: 0, finish_reason: 'stop',
+              message: {
+                role: 'assistant',
+                reasoning_content: 'The tool gave me the time.',
+                content: 'The current time is 12:34.',
+              },
+            }],
+            usage: {
+              prompt_tokens: 32, completion_tokens: 10,
+              total_tokens: 42,
+              completion_tokens_details: { reasoning_tokens: 4 },
+            },
+          }
+        }
+
+        if (completionCount === 3) {
+          // Turn 2: plain response
+          return {
+            id: 'cmpl-t2', model: 'model-key', created: 125,
+            choices: [{
+              index: 0, finish_reason: 'stop',
+              message: {
+                role: 'assistant',
+                reasoning_content: 'Simple follow-up.',
+                content: 'Sure, happy to help further.',
+              },
+            }],
+            usage: {
+              prompt_tokens: 44, completion_tokens: 8,
+              total_tokens: 52,
+              completion_tokens_details: { reasoning_tokens: 3 },
+            },
+          }
+        }
+
+        throw new Error(`Unexpected completion call #${completionCount}`)
+      },
+    },
+    mcpGateway: {
+      async initializeSession() {
+        return {
+          sessionId: 'mcp-session-1',
+          instructions: 'Use tools accurately.',
+          rawExchange: {
+            requestUrl: 'http://localhost:3001/mcp', requestMethod: 'POST',
+            requestHeaders: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+            requestBodyText: '{}',
+            responseStatus: 200,
+            responseHeaders: { 'content-type': 'application/json', 'mcp-session-id': 'mcp-session-1' },
+            responseBodyText: JSON.stringify({ jsonrpc: '2.0', id: 1, result: { instructions: 'Use tools accurately.' } }),
+            responseBody: { jsonrpc: '2.0', id: 1, result: { instructions: 'Use tools accurately.' } },
+          },
+        }
+      },
+      async listTools() {
+        return {
+          tools: [{
+            name: 'get_current_time',
+            description: 'Returns the current time as an ISO 8601 string.',
+            inputSchema: { type: 'object', properties: {} },
+          }],
+          rawResult: {},
+          rawExchange: {
+            requestUrl: 'http://localhost:3001/mcp', requestMethod: 'POST',
+            requestHeaders: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'mcp-session-id': 'mcp-session-1' },
+            requestBodyText: '{}',
+            responseStatus: 200,
+            responseHeaders: { 'content-type': 'application/json' },
+            responseBodyText: JSON.stringify({ jsonrpc: '2.0', id: 2, result: { tools: [] } }),
+            responseBody: { jsonrpc: '2.0', id: 2, result: { tools: [] } },
+          },
+        }
+      },
+      async callTool() {
+        return {
+          content: '2026-05-12T12:34:56+02:00',
+          structuredContent: null,
+          isError: false,
+          rawResult: {},
+          rawExchange: {
+            requestUrl: 'http://localhost:3001/mcp', requestMethod: 'POST',
+            requestHeaders: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'mcp-session-id': 'mcp-session-1' },
+            requestBodyText: '{}',
+            responseStatus: 200,
+            responseHeaders: { 'content-type': 'application/json' },
+            responseBodyText: JSON.stringify({ jsonrpc: '2.0', id: 3, result: { content: [{ type: 'text', text: '2026-05-12T12:34:56+02:00' }] } }),
+            responseBody: { jsonrpc: '2.0', id: 3, result: { content: [{ type: 'text', text: '2026-05-12T12:34:56+02:00' }] } },
+          },
+        }
+      },
+    },
+  }
+}
+
+async function captureToolEnabledTrace(): Promise<SessionTraceBundle> {
+  const sqlitePath = makeSqlitePath()
+  const deps = makeToolGateway()
+  const app = await buildBackendApp(
+    {
+      host: '127.0.0.1', port: 3030, corsOrigin: true,
+      dataDir: path.dirname(sqlitePath), sqlitePath, maxToolRounds: 5,
+    },
+    deps,
+  )
+
+  try {
+    const sessionRes = await app.inject({
+      method: 'POST', url: '/api/sessions',
+      payload: toolSessionPayload,
+    })
+    expect(sessionRes.statusCode).toBe(201)
+    const sessionId = sessionRes.json().session.id as string
+
+    for (const userContent of ['What time is it?', 'Thanks, can you confirm?']) {
+      const turnRes = await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${sessionId}/turns`,
+        payload: { userContent },
+      })
+      expect(turnRes.statusCode).toBe(201)
+    }
+
+    const traceRes = await app.inject({ method: 'GET', url: `/api/sessions/${sessionId}/trace` })
+    expect(traceRes.statusCode).toBe(200)
+    return traceRes.json() as SessionTraceBundle
+  } finally {
+    await app.close()
+    fs.rmSync(path.dirname(sqlitePath), { recursive: true, force: true })
+  }
+}
+
+
 
 describe('token count sanity', () => {
   it('all parts have token counts proportional to their content (single turn)', async () => {
@@ -380,5 +621,53 @@ describe('token count sanity', () => {
 
     expect(turn.compactionTokensRemoved).toBe(strippedSum)
     expect(turn.contextTokensAfterCompaction).toBe(turn.contextTokensAtTurnEnd - strippedSum)
+  })
+})
+
+describe('token count sanity — tool-enabled multi-round scenario', () => {
+  it('all part types (including JSON-payload tool parts) have proportionate token counts', async () => {
+    const trace = await captureToolEnabledTrace()
+    assertPartTokenSanity(trace.parts)
+  })
+
+  it('contextTokensAtTurnEnd and contextTokensAfterCompaction are consistent for both turns', async () => {
+    const trace = await captureToolEnabledTrace()
+    assertTurnContextTokenConsistency(trace.turns, trace.parts)
+  })
+
+  it('context grows monotonically through tool-use and follow-up turns', async () => {
+    const trace = await captureToolEnabledTrace()
+    assertMonotonicContextGrowth(trace.turns)
+  })
+
+  it('reasoning from both rounds of the tool turn is stripped by a single compaction', async () => {
+    const trace = await captureToolEnabledTrace()
+    const sortedTurns = [...trace.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+    const turn1 = sortedTurns[0]!
+
+    const reasoningStrippedByTurn1 = trace.parts.filter(
+      p => p.partType === 'assistant-reasoning'
+        && p.context.strippedByCompactionAtTurnId === turn1.id,
+    )
+
+    // Turn 1 has 2 rounds, each producing a reasoning part — both should be stripped.
+    expect(reasoningStrippedByTurn1.length).toBeGreaterThanOrEqual(2)
+
+    // The stored compaction removal must match the sum of stripped reasoning tokens.
+    const strippedSum = reasoningStrippedByTurn1.reduce((s, p) => s + (p.tokens.count ?? 0), 0)
+    expect(turn1.compactionTokensRemoved).toBe(strippedSum)
+  })
+
+  it('tool-call and tool-result parts are included in contextTokensAtTurnEnd', async () => {
+    const trace = await captureToolEnabledTrace()
+    const sortedTurns = [...trace.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+    const turn1 = sortedTurns[0]!
+
+    // Tool-call and tool-result parts are always 'included' (never stripped by reasoning compaction).
+    const toolParts = trace.parts.filter(
+      p => p.turnId === turn1.id && (p.partType === 'tool-call' || p.partType === 'tool-result'),
+    )
+    expect(toolParts.length).toBeGreaterThan(0)
+    expect(toolParts.every(p => p.context.state === 'included')).toBe(true)
   })
 })
