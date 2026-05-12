@@ -69,6 +69,12 @@ function assertPartTokenSanity(parts: PartRecord[]): void {
   for (const part of parts) {
     if (part.partType === 'diagnostic-note') continue
 
+    // tool-call parts: payload.json is our internal representation of the tool call,
+    // not the raw tokens the model produced. LM Studio also does not count assistant
+    // tool-call messages reliably in probes (returns the same token count before and
+    // after the message is appended). Skip content↔count checks for these parts.
+    if (part.partType === 'tool-call') continue
+
     const chars = payloadCharCount(part)
     const count = part.tokens.count
     const label = partLabel(part)
@@ -84,7 +90,7 @@ function assertPartTokenSanity(parts: PartRecord[]): void {
     // Rule 2 — proportionality (only when both count > 0 and chars > 0)
     if (count !== null && count > 0 && chars > 0) {
       const charsPerToken = chars / count
-      // JSON-payload parts (tool-definitions, tool-call) have denser tokenization
+      // JSON-payload parts (tool-definitions) have denser tokenization
       // than natural language — allow a wider range for them.
       const isJsonPart = part.payload.text == null && part.payload.json != null
       const minRatio = 0.5
