@@ -11,73 +11,108 @@
     mode?: 'compact' | 'inspect'
     /** Loaded context window size for bar scale. */
     loadedContextLength?: number | null
+    /** True while the prelude initialization stream is in progress. */
+    isInitializing?: boolean
   }
 
-  const { parts, rawExchanges, mode = 'inspect', loadedContextLength = null }: Props = $props()
+  const {
+    parts,
+    rawExchanges,
+    mode = 'inspect',
+    loadedContextLength = null,
+    isInitializing = false,
+  }: Props = $props()
 
   let showDialog = $state(false)
 
-  const totalTokens = $derived(
-    parts.reduce((sum, part) => sum + (part.tokens.count ?? 0), 0),
-  )
-
+  const sortedParts = $derived([...parts].sort((a, b) => a.ordinal - b.ordinal))
+  const totalTokens = $derived(parts.reduce((sum, p) => sum + (p.tokens.count ?? 0), 0))
   const contextEntries = $derived(deriveContextEntries(parts))
-
-  function openRawDialog(): void {
-    showDialog = true
-  }
+  const statusLabel = $derived(isInitializing ? 'initializing' : 'complete')
 </script>
 
-<details class="prelude-block" class:compact={mode === 'compact'} open={mode === 'inspect'}>
-  <summary class="prelude-summary">
-    <div class="prelude-summary-main">
-      <span class="prelude-label">Session setup</span>
-      <span class="prelude-status">pre-turn</span>
-    </div>
-    <div class="prelude-summary-meta">
-      {#if totalTokens > 0}
-        <span>{totalTokens.toLocaleString()} total tokens</span>
-      {/if}
-      <span>{parts.length} parts</span>
-      {#if rawExchanges.length > 0}
-        <span>{rawExchanges.length} raw exchanges</span>
+{#if mode === 'compact'}
+  <!-- ── Compact mode: same pattern as compact-turn ────────────────────── -->
+  <section class="compact-setup">
+    <div class="compact-setup-meta">
+      <span class="compact-setup-label">Session Setup</span>
+      <span class="compact-setup-status">{statusLabel}</span>
+      {#if isInitializing}
+        <span class="setup-spinner" aria-label="Setting up">⋯</span>
+      {:else if totalTokens > 0}
+        <span class="compact-setup-tokens">{totalTokens.toLocaleString()} tokens</span>
       {/if}
     </div>
-  </summary>
 
-  <div class="prelude-body">
-    <section class="prelude-section">
-      <div class="prelude-section-header">
-        <span class="prelude-section-label">Included before Turn 1</span>
-        <div class="prelude-actions">
-          <button
-            class="meta-btn"
-            disabled={rawExchanges.length === 0}
-            onclick={openRawDialog}
-          >
-            Raw{rawExchanges.length > 0 ? ` (${rawExchanges.length})` : ''}
+    <div class="compact-setup-parts">
+      {#each sortedParts as part (part.id)}
+        <TracePartBlock {part} mode="compact" />
+      {/each}
+      {#if isInitializing && sortedParts.length === 0}
+        <div class="setup-empty-hint">Setting up session…</div>
+      {/if}
+    </div>
+
+    {#if !isInitializing && contextEntries.length > 0}
+      <div class="compact-ctx-bar">
+        <ContextSnapshotBar
+          entries={contextEntries}
+          contextSize={loadedContextLength}
+          label="Setup context"
+          showLegend={false}
+          compact
+        />
+      </div>
+    {/if}
+  </section>
+{:else}
+  <!-- ── Inspect mode: looks exactly like a Turn block (always open) ───── -->
+  <div class="turn-block" class:is-initializing={isInitializing}>
+    <div class="turn-header">
+      <div class="turn-header-main">
+        <span class="turn-label">Session Setup</span>
+        <span class="turn-status">{statusLabel}</span>
+        {#if isInitializing}
+          <span class="setup-spinner" aria-label="Setting up">⋯</span>
+        {/if}
+      </div>
+      <div class="turn-header-meta">
+        {#if totalTokens > 0}
+          <span>{totalTokens.toLocaleString()} tokens</span>
+        {/if}
+        <span>{parts.length} part{parts.length !== 1 ? 's' : ''}</span>
+        {#if rawExchanges.length > 0}
+          <button class="meta-btn" onclick={() => { showDialog = true }}>
+            Raw ({rawExchanges.length})
           </button>
+        {/if}
+      </div>
+    </div>
+
+    <div class="turn-body">
+      {#if sortedParts.length > 0}
+        <section class="round-block">
+          <div class="round-parts">
+            {#each sortedParts as part (part.id)}
+              <TracePartBlock {part} mode="inspect" />
+            {/each}
+          </div>
+        </section>
+      {:else if isInitializing}
+        <div class="setup-empty-hint">Setting up session…</div>
+      {/if}
+
+      {#if !isInitializing && contextEntries.length > 0}
+        <div class="setup-ctx-bar">
+          <ContextSnapshotBar
+            entries={contextEntries}
+            contextSize={loadedContextLength}
+            label="Setup context"
+            showLegend={false}
+          />
         </div>
-      </div>
-
-      <div class="prelude-parts">
-        {#each parts as part (part.id)}
-          <TracePartBlock {part} {mode} />
-        {/each}
-      </div>
-    </section>
-  </div>
-</details>
-
-{#if contextEntries.length > 0}
-  <div class="prelude-ctx-bar" class:compact={mode === 'compact'}>
-    <ContextSnapshotBar
-      entries={contextEntries}
-      contextSize={loadedContextLength}
-      label="Setup context"
-      showLegend={false}
-      compact={mode === 'compact'}
-    />
+      {/if}
+    </div>
   </div>
 {/if}
 
@@ -90,7 +125,8 @@
 {/if}
 
 <style>
-  .prelude-block {
+  /* ── Inspect mode — mirrors SessionTurnBlock's turn-block ─────────────── */
+  .turn-block {
     margin-bottom: 1rem;
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -98,64 +134,30 @@
     overflow: hidden;
   }
 
-  .prelude-block.compact {
-    border: none;
-    border-left: 2px solid var(--border);
-    border-radius: 0;
-    background: transparent;
-    margin-bottom: 0.8rem;
-    padding-left: 0.7rem;
-  }
-
-  .prelude-summary {
+  .turn-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
     padding: 0.8rem 1rem;
-    cursor: pointer;
-    list-style: none;
     background: var(--bg-panel);
   }
 
-  .prelude-block.compact .prelude-summary {
-    padding: 0.2rem 0 0.4rem;
-    background: transparent;
-  }
-
-  .prelude-summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .prelude-summary::before {
-    content: '▶';
-    font-size: 0.62rem;
-    color: var(--text-muted);
-    transition: transform 0.15s;
-    margin-right: 0.5rem;
-  }
-
-  details[open] > .prelude-summary::before {
-    transform: rotate(90deg);
-  }
-
-  .prelude-summary-main,
-  .prelude-summary-meta,
-  .prelude-actions {
+  .turn-header-main,
+  .turn-header-meta {
     display: flex;
     align-items: center;
     gap: 0.55rem;
     flex-wrap: wrap;
   }
 
-  .prelude-label,
-  .prelude-section-label {
+  .turn-label {
     font-size: 0.8rem;
     font-weight: 700;
     color: var(--text);
   }
 
-  .prelude-status {
+  .turn-status {
     font-size: 0.72rem;
     color: var(--text-muted);
     border: 1px solid var(--border-subtle);
@@ -163,22 +165,18 @@
     padding: 0.12rem 0.45rem;
   }
 
-  .prelude-summary-meta {
+  .turn-header-meta {
     font-size: 0.74rem;
     color: var(--text-muted);
   }
 
-  .prelude-body {
+  .turn-body {
     padding: 0 1rem 1rem;
     border-top: 1px solid var(--border);
   }
 
-  .prelude-block.compact .prelude-body {
-    padding: 0 0 0.15rem;
-    border-top: none;
-  }
-
-  .prelude-section {
+  /* ── Round-like section wrapping the prelude parts ──────────────────── */
+  .round-block {
     margin-top: 0.9rem;
     border: 1px solid var(--border-subtle);
     border-radius: 6px;
@@ -186,44 +184,32 @@
     overflow: hidden;
   }
 
-  .prelude-block.compact .prelude-section {
-    margin-top: 0.1rem;
-    border: none;
-    background: transparent;
-  }
-
-  .prelude-section-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.75rem 0.85rem;
-    border-bottom: 1px solid var(--border-subtle);
-    background: color-mix(in srgb, var(--bg-panel) 85%, transparent);
-  }
-
-  .prelude-block.compact .prelude-section-header {
-    padding: 0.15rem 0 0.2rem;
-    border-bottom: none;
-    background: transparent;
-  }
-
-  .prelude-parts {
+  .round-parts {
     padding: 0 0.85rem 0.2rem;
   }
 
-  .prelude-block.compact .prelude-parts {
-    padding: 0;
+  /* ── Shared ─────────────────────────────────────────────────────────── */
+  .setup-spinner {
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    animation: blink 1.2s ease-in-out infinite;
   }
 
-  .prelude-ctx-bar {
-    margin-bottom: 1rem;
+  @keyframes blink {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 1; }
   }
 
-  .prelude-ctx-bar.compact {
-    margin-bottom: 0.8rem;
-    padding-left: 0.7rem;
-    border-left: 2px solid var(--border-subtle);
+  .setup-empty-hint {
+    padding: 0.9rem 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .setup-ctx-bar {
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--border-subtle);
   }
 
   .meta-btn {
@@ -236,13 +222,48 @@
     padding: 0.2rem 0.5rem;
   }
 
-  .meta-btn:hover:enabled {
+  .meta-btn:hover {
     color: var(--text);
     border-color: var(--border);
   }
 
-  .meta-btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
+  /* ── Compact mode — mirrors compact-turn ────────────────────────────── */
+  .compact-setup {
+    margin-bottom: 0.8rem;
+  }
+
+  .compact-setup-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .compact-setup-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .compact-setup-status,
+  .compact-setup-tokens {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+  }
+
+  .compact-setup-parts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.14rem;
+    margin-left: 0.82rem;
+    padding-left: 0.72rem;
+    border-left: 2px solid var(--border-subtle);
+  }
+
+  .compact-ctx-bar {
+    margin-top: 0.28rem;
+    margin-left: 0.82rem;
+    padding-left: 0.72rem;
+    border-left: 2px solid var(--border-subtle);
   }
 </style>

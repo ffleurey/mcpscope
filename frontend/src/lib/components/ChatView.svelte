@@ -103,7 +103,7 @@
   )
 
   let hasTraceContent = $derived(
-    sessionPreludeParts.length > 0 || sessionPreludeRawExchanges.length > 0 || traceTurns.length > 0,
+    isInitializing || sessionPreludeParts.length > 0 || sessionPreludeRawExchanges.length > 0 || traceTurns.length > 0,
   )
   let isExhausted = $derived(session?.isContextExhausted === true)
   let isInitializing = $derived(session != null && session.initStatus !== 'ready')
@@ -148,7 +148,7 @@
 
   async function handleSend() {
     const text = composerText.trim()
-    if (!text || $isSendingTurn || isExhausted || isInitializing || !session) return
+    if (!text || $isSendingTurn || isExhausted || !session) return
     composerText = ''
     await tick()
     resizeTextarea()
@@ -202,19 +202,18 @@
         <div class="empty-state">
           {#if $sessionError}
             <span class="init-error">{$sessionError}</span>
-          {:else if isInitializing}
-            <span class="empty-hint">Setting up session…</span>
           {:else}
             <span class="empty-hint">Session ready — type your first message below</span>
           {/if}
         </div>
       {:else}
-        {#if sessionPreludeParts.length > 0}
+        {#if sessionPreludeParts.length > 0 || isInitializing}
           <SessionPreludeBlock
             parts={sessionPreludeParts}
             rawExchanges={sessionPreludeRawExchanges}
             mode={viewMode}
             loadedContextLength={session.loadedContextLength ?? null}
+            {isInitializing}
           />
         {/if}
         {#each traceTurns as turn (turn.id)}
@@ -232,8 +231,8 @@
       {/if}
     </div>
 
-    <!-- Context bar above composer -->
-    {#if $activeTrace}
+    <!-- Context bar above composer — only shown when session is ready -->
+    {#if $activeTrace && !isInitializing}
       <ContextSnapshotBar
         entries={$activeTrace.context}
         contextSize={session.loadedContextLength ?? null}
@@ -247,35 +246,35 @@
       </div>
     {/if}
 
-    <!-- Composer: full-width bubble styled like user messages -->
-    <div class="composer">
-      {#if $sessionError && !$isSendingTurn}
-        <div class="composer-error">{$sessionError}</div>
-      {/if}
-      <div class="composer-bubble" class:is-disabled={$isSendingTurn || isExhausted || isInitializing}>
-        <textarea
-          bind:this={textareaEl}
-          bind:value={composerText}
-          placeholder={
-            isExhausted
-              ? 'Context window full — start a new session'
-              : isInitializing
-              ? 'Setting up session…'
-              : $isSendingTurn
-              ? 'Waiting for response…'
-              : 'Message… (Ctrl+Enter to send)'
-          }
-          rows="2"
-          disabled={$isSendingTurn || isExhausted || isInitializing}
-          oninput={resizeTextarea}
-          onkeydown={handleKeydown}
-        ></textarea>
+    <!-- Composer: hidden while initializing -->
+    {#if !isInitializing}
+      <div class="composer">
+        {#if $sessionError && !$isSendingTurn}
+          <div class="composer-error">{$sessionError}</div>
+        {/if}
+        <div class="composer-bubble" class:is-disabled={$isSendingTurn || isExhausted}>
+          <textarea
+            bind:this={textareaEl}
+            bind:value={composerText}
+            placeholder={
+              isExhausted
+                ? 'Context window full — start a new session'
+                : $isSendingTurn
+                ? 'Waiting for response…'
+                : 'Message… (Ctrl+Enter to send)'
+            }
+            rows="2"
+            disabled={$isSendingTurn || isExhausted}
+            oninput={resizeTextarea}
+            onkeydown={handleKeydown}
+          ></textarea>
+        </div>
+        <div class="composer-footer">
+          <span class="composer-model">{displayModelName}</span>
+          <span class="composer-hint">Ctrl+Enter to send</span>
+        </div>
       </div>
-      <div class="composer-footer">
-        <span class="composer-model">{displayModelName}</span>
-        <span class="composer-hint">Ctrl+Enter to send</span>
-      </div>
-    </div>
+    {/if}
   {/if}
 </div>
 
