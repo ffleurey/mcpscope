@@ -283,6 +283,21 @@ export const turnStreamEventSchema = z.discriminatedUnion('type', [
   }),
 ])
 
+export const preludeStreamEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('part-committed'),
+    part: partRecordSchema,
+  }),
+  z.object({
+    type: z.literal('prelude-complete'),
+    trace: sessionTraceBundleSchema,
+  }),
+  z.object({
+    type: z.literal('prelude-failed'),
+    message: z.string(),
+  }),
+])
+
 export const listSessionsResponseSchema = z.object({
   sessions: z.array(sessionRecordSchema),
 })
@@ -330,3 +345,4 @@ export type ContextEntry = z.infer<typeof contextEntrySchema>
 export type SessionTraceBundle = z.infer<typeof sessionTraceBundleSchema>
 export type LmStudioStreamDelta = z.infer<typeof lmStudioStreamDeltaSchema>
 export type TurnStreamEvent = z.infer<typeof turnStreamEventSchema>
+export type PreludeStreamEvent = z.infer<typeof preludeStreamEventSchema>

@@ -406,7 +406,7 @@ async function applyPendingPromptSuffixAttribution(
   return null
 }
 
-async function ensureMcpContext(
+export async function ensureMcpContext(
   database: BackendDatabase,
   session: SessionRecord,
   mcpGateway: McpGateway,

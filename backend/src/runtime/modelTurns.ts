@@ -124,7 +124,7 @@ export function createSession(
     id: createUuid(),
     title: input.title?.trim() || 'New session',
     status: 'ready',
-    initStatus: 'ready',
+    initStatus: 'pending',
     createdAt: timestamp,
     updatedAt: timestamp,
     modelProfileSnapshot: input.modelProfileSnapshot,

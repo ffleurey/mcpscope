@@ -34,6 +34,7 @@ import { callMcpTool, initializeMcpSession, listMcpTools } from './services/mcp/
 import { createModelOnlyTurn, createSession, type LmStudioGateway } from './runtime/modelTurns.js'
 import { createToolEnabledTurn, type McpGateway } from './runtime/toolTurns.js'
 import { importTraceBundle } from './runtime/traceImport.js'
+import { runSessionInitialization } from './runtime/sessionInit.js'
 
 const healthResponseSchema = z.object({
   status: z.literal('ok'),
@@ -336,6 +337,43 @@ export async function buildBackendApp(
 
     reply.code(201)
     return result
+  })
+
+  app.post('/api/sessions/:sessionId/initialize', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return { error: 'Session not found' }
+    }
+
+    reply.hijack()
+    reply.raw.statusCode = 200
+    reply.raw.setHeader('content-type', 'text/event-stream; charset=utf-8')
+    reply.raw.setHeader('cache-control', 'no-cache, no-transform')
+    reply.raw.setHeader('connection', 'keep-alive')
+
+    const emitEvent = (event: { type: string; [key: string]: unknown }) => {
+      reply.raw.write(`event: ${event.type}\n`)
+      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
+    }
+
+    try {
+      await runSessionInitialization(
+        database,
+        dependencies.lmStudioGateway,
+        dependencies.mcpGateway,
+        sessionId,
+        emitEvent,
+      )
+    } catch (error) {
+      emitEvent({
+        type: 'prelude-failed',
+        message: error instanceof Error ? error.message : 'Unknown initialization failure',
+      })
+    } finally {
+      reply.raw.end()
+    }
   })
 
   app.post('/api/sessions/:sessionId/turns/stream', async (request, reply) => {

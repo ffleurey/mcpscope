@@ -5,6 +5,7 @@ import {
   listMcpProfilesResponseSchema,
   listModelConfigsResponseSchema,
   listSessionsResponseSchema,
+  preludeStreamEventSchema,
   turnStreamEventSchema,
   sessionTraceBundleSchema,
   upsertLmConnectionResponseSchema,
@@ -15,6 +16,7 @@ import {
   type McpServerProfile,
   type ModelConfig,
   type ModelProfileSnapshot,
+  type PreludeStreamEvent,
   type SessionTraceBundle,
   type TurnStreamEvent,
 } from '../backendTypes'
@@ -182,6 +184,73 @@ export async function streamTurn(
   const trailing = parseSseBlock(buffer.trim())
   if (trailing?.dataText) {
     const event = turnStreamEventSchema.parse(JSON.parse(trailing.dataText))
+    if (trailing.eventName && trailing.eventName !== event.type) {
+      throw new Error(`Streaming event mismatch: header=${trailing.eventName} payload=${event.type}`)
+    }
+    await onEvent(event)
+  }
+}
+
+export async function streamPreludeInit(
+  sessionId: string,
+  onEvent: (event: PreludeStreamEvent) => void | Promise<void>,
+): Promise<void> {
+  const response = await fetch(buildUrl(`/api/sessions/${sessionId}/initialize`), {
+    method: 'POST',
+    headers: {
+      Accept: 'text/event-stream',
+    },
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    const payload = text.length > 0 ? JSON.parse(text) : null
+    const message = (
+      payload
+      && typeof payload === 'object'
+      && 'error' in payload
+      && typeof payload.error === 'string'
+    )
+      ? payload.error
+      : `Backend request failed (${response.status})`
+    throw new Error(message)
+  }
+
+  if (!response.body) {
+    throw new Error('Streaming response body is missing')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+
+    let separatorIndex = buffer.search(/\r?\n\r?\n/)
+    while (separatorIndex >= 0) {
+      const block = buffer.slice(0, separatorIndex)
+      buffer = buffer.slice(separatorIndex + (buffer[separatorIndex] === '\r' ? 4 : 2))
+      const parsed = parseSseBlock(block)
+      if (parsed?.dataText) {
+        const event = preludeStreamEventSchema.parse(JSON.parse(parsed.dataText))
+        if (parsed.eventName && parsed.eventName !== event.type) {
+          throw new Error(`Streaming event mismatch: header=${parsed.eventName} payload=${event.type}`)
+        }
+        await onEvent(event)
+      }
+      separatorIndex = buffer.search(/\r?\n\r?\n/)
+    }
+
+    if (done) {
+      break
+    }
+  }
+
+  const trailing = parseSseBlock(buffer.trim())
+  if (trailing?.dataText) {
+    const event = preludeStreamEventSchema.parse(JSON.parse(trailing.dataText))
     if (trailing.eventName && trailing.eventName !== event.type) {
       throw new Error(`Streaming event mismatch: header=${trailing.eventName} payload=${event.type}`)
     }

@@ -5,9 +5,11 @@ import {
   getSessionTrace,
   importTrace as importBackendTrace,
   listSessions,
+  streamPreludeInit,
   streamTurn as streamBackendTurn,
 } from './api/backendClient'
 import type {
+  PreludeStreamEvent,
   SessionRecord,
   SessionTraceBundle,
   TurnStreamEvent,
@@ -183,14 +185,39 @@ export async function startSession(input: {
       mcpProfileSnapshot: input.mcpProfile ? buildMcpProfileSnapshot(input.mcpProfile) : null,
       compactionStrategy: input.compactionStrategy,
     })
+    // Show the chat view immediately (composer locked until initStatus = 'ready')
     activeChatId.set(session.id)
     upsertSessionSummary(session)
-    await refreshActiveTrace()
+    activeTrace.set(createEmptyTrace(session))
+
+    // Stream the prelude initialization — parts and token probing appear in real-time
+    await streamPreludeInit(session.id, (event) => applyPreludeStreamEvent(event))
+
+    await refreshSessions()
   } catch (error) {
     sessionError.set(formatError(error))
   } finally {
     isStartingSession.set(false)
   }
+}
+
+function applyPreludeStreamEvent(event: PreludeStreamEvent): void {
+  if (event.type === 'part-committed') {
+    activeTrace.update((trace) => {
+      if (!trace) return trace
+      return upsertPart(trace, event.part)
+    })
+    return
+  }
+
+  if (event.type === 'prelude-complete') {
+    activeTrace.set(event.trace)
+    upsertSessionSummary(event.trace.session)
+    return
+  }
+
+  // prelude-failed
+  sessionError.set(event.message)
 }
 
 export async function sendMessage(input: {

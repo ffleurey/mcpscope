@@ -106,6 +106,7 @@
     sessionPreludeParts.length > 0 || sessionPreludeRawExchanges.length > 0 || traceTurns.length > 0,
   )
   let isExhausted = $derived(session?.isContextExhausted === true)
+  let isInitializing = $derived(session != null && session.initStatus !== 'ready')
   let displayModelName = $derived(session?.modelProfileSnapshot?.name ?? '')
 
   $effect(() => {
@@ -147,7 +148,7 @@
 
   async function handleSend() {
     const text = composerText.trim()
-    if (!text || $isSendingTurn || isExhausted || !session) return
+    if (!text || $isSendingTurn || isExhausted || isInitializing || !session) return
     composerText = ''
     await tick()
     resizeTextarea()
@@ -201,6 +202,8 @@
         <div class="empty-state">
           {#if $sessionError}
             <span class="init-error">{$sessionError}</span>
+          {:else if isInitializing}
+            <span class="empty-hint">Setting up session…</span>
           {:else}
             <span class="empty-hint">Session ready — type your first message below</span>
           {/if}
@@ -249,19 +252,21 @@
       {#if $sessionError && !$isSendingTurn}
         <div class="composer-error">{$sessionError}</div>
       {/if}
-      <div class="composer-bubble" class:is-disabled={$isSendingTurn || isExhausted}>
+      <div class="composer-bubble" class:is-disabled={$isSendingTurn || isExhausted || isInitializing}>
         <textarea
           bind:this={textareaEl}
           bind:value={composerText}
           placeholder={
             isExhausted
               ? 'Context window full — start a new session'
+              : isInitializing
+              ? 'Setting up session…'
               : $isSendingTurn
               ? 'Waiting for response…'
               : 'Message… (Ctrl+Enter to send)'
           }
           rows="2"
-          disabled={$isSendingTurn || isExhausted}
+          disabled={$isSendingTurn || isExhausted || isInitializing}
           oninput={resizeTextarea}
           onkeydown={handleKeydown}
         ></textarea>
