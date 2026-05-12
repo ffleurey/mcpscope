@@ -170,8 +170,8 @@
       {/if}
     {/if}
 
-    <!-- Compaction note -->
-    {#if turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
+    <!-- Compaction note: inspect mode only -->
+    {#if mode === 'inspect' && turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
       <div class="compaction-summary">
         {#if turn.compactionTokensRemoved !== null && turn.compactionTokensRemoved > 0}
           <span class="compaction-label">↓ {turn.compactionApplied}</span>
@@ -266,8 +266,8 @@
       {/if}
     {/if}
 
-    <!-- Compaction note -->
-    {#if turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
+    <!-- Compaction note: inspect mode only -->
+    {#if mode === 'inspect' && turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
       <div class="compaction-summary">
         {#if turn.compactionTokensRemoved !== null && turn.compactionTokensRemoved > 0}
           <span class="compaction-label">↓ {turn.compactionApplied}</span>
@@ -410,9 +410,9 @@
   .chat-toggle-status {
     font-size: 0.7rem;
     font-weight: 600;
-    color: var(--color-success, #16a34a);
+    color: var(--text-muted);
     padding: 0.08rem 0.35rem;
-    border: 1px solid color-mix(in srgb, var(--color-success, #16a34a) 35%, transparent);
+    border: 1px solid var(--border-subtle);
     border-radius: 999px;
   }
 

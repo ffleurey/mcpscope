@@ -108,6 +108,8 @@
   let isExhausted = $derived(session?.isContextExhausted === true)
   let isInitializing = $derived(session != null && session.initStatus !== 'ready')
   let displayModelName = $derived(session?.modelProfileSnapshot?.name ?? '')
+  let displayMcpName = $derived(session?.mcpProfileSnapshot?.name ?? null)
+  let displayCompaction = $derived(session?.compactionStrategy ?? null)
 
   $effect(() => {
     const sessionId = session?.id ?? null
@@ -269,7 +271,17 @@
           ></textarea>
         </div>
         <div class="composer-footer">
-          <span class="composer-model">{displayModelName}</span>
+          <div class="composer-config">
+            {#if displayModelName}
+              <span class="config-pill">{displayModelName}</span>
+            {/if}
+            {#if displayMcpName}
+              <span class="config-pill config-pill-mcp">{displayMcpName}</span>
+            {/if}
+            {#if displayCompaction && displayCompaction !== 'none'}
+              <span class="config-pill config-pill-compaction">{displayCompaction}</span>
+            {/if}
+          </div>
           <span class="composer-hint">Ctrl+Enter to send</span>
         </div>
       </div>
@@ -443,10 +455,30 @@
     padding: 0 0.15rem;
   }
 
-  .composer-model {
-    font-size: 0.72rem;
+  .composer-config {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+
+  .config-pill {
+    font-size: 0.68rem;
     color: var(--text-muted);
-    opacity: 0.75;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    padding: 0.08rem 0.45rem;
+    opacity: 0.8;
+  }
+
+  .config-pill-mcp {
+    color: var(--color-tool, #7c3aed);
+    border-color: color-mix(in srgb, var(--color-tool, #7c3aed) 30%, transparent);
+  }
+
+  .config-pill-compaction {
+    color: var(--color-reasoning, #b45309);
+    border-color: color-mix(in srgb, var(--color-reasoning, #b45309) 30%, transparent);
   }
 
   .composer-hint {
