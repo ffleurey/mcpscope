@@ -67,6 +67,11 @@ type PendingPromptSuffixAttribution =
   | {
       kind: 'tool-cycle'
       baseMessageCount: number
+      // completion_tokens - reasoning_tokens for the round that generated the tool calls.
+      // Used to attribute tool-call message cost when tool results are present — probing the
+      // assistant message directly returns 0 because LM Studio does not count the tool_calls
+      // field of assistant messages in prompt probes.
+      assistantContentTokens: number | null
       assistantContentParts: PartRecord[]
       toolCallParts: PartRecord[]
       toolResultParts: PartRecord[]
@@ -250,17 +255,22 @@ async function applyPendingPromptSuffixAttribution(
     return null
   }
 
-  const toolCallMessageIndex = pending.baseMessageCount
-  const afterToolCallMessages = requestMessages.slice(0, toolCallMessageIndex + 1)
-  const afterToolCallTokens = pending.toolResultParts.length > 0
-    ? await probeRequestPromptTokens(lmStudioGateway, session, afterToolCallMessages, lmTools, traceContext)
-    : promptTokens
+  // Determine the token budget for the assistant message (tool calls + any text content).
+  //
+  // When there are NO tool results, the next round's promptTokens covers exactly
+  // [prefix + assistant{tool_calls}], so the delta is exact.
+  //
+  // When there ARE tool results, probing the assistant message returns 0 — LM Studio does
+  // not count the `tool_calls` field of assistant messages in prompt probes. We therefore
+  // use `completion_tokens − reasoning_tokens` from the round that generated the tool calls
+  // as a proxy. This is the generation cost, which approximates the re-consumption cost;
+  // the delta is the chat-template overhead for the assistant message (~3–5 tokens), which
+  // we cannot recover without a working probe.
+  const hasToolResults = pending.toolResultParts.length > 0
+  const toolCallGroupTokens = hasToolResults
+    ? Math.max(0, pending.assistantContentTokens ?? 0)
+    : Math.max(0, (promptTokens ?? 0) - prefixTokens)
 
-  if (afterToolCallTokens == null) {
-    return null
-  }
-
-  const toolCallGroupTokens = Math.max(0, afterToolCallTokens - prefixTokens)
   const groupedAssistantParts = [
     ...pending.assistantContentParts,
     ...pending.toolCallParts,
@@ -276,16 +286,23 @@ async function applyPendingPromptSuffixAttribution(
         )),
       )
 
-  let runningTokens = afterToolCallTokens
+  // Confidence for the tool-call message attribution:
+  // - Exact when: no tool results (delta is exact) + single tool call + no text content.
+  // - exact-api when: tool results present + single tool call + no text (uses completion_tokens directly).
+  // - Estimated otherwise: multiple parts or multiple tool calls (proportional allocation).
+  const singleExactCase = !hasToolResults && pending.assistantContentParts.length === 0 && pending.toolCallParts.length === 1
+  const singleApiCase = hasToolResults && pending.assistantContentParts.length === 0 && pending.toolCallParts.length === 1
   const updatedAssistantContentParts = pending.assistantContentParts.map((part, index) => updatePartTokens(
         part,
         {
           count: groupedAllocations[index] ?? 0,
           source: 'estimated',
           confidence: 'estimated',
-          note: 'Allocated proportionally from the exact grouped assistant message delta shared with tool calls',
+          note: hasToolResults
+            ? 'Allocated proportionally from completion_tokens (tool results present; prompt probe returns 0 for tool_calls)'
+            : 'Allocated proportionally from the exact grouped assistant message prompt delta',
         },
-        { derivedFrom: 'lmstudio.prompt_tokens.assistant-tool-message-delta', allocation: 'proportional-by-payload' },
+        { derivedFrom: hasToolResults ? 'completion.usage.assistant-content-tokens' : 'lmstudio.prompt_tokens.assistant-tool-message-delta', allocation: 'proportional-by-payload' },
         updatedAt,
       ))
   const toolCallAllocationOffset = pending.assistantContentParts.length
@@ -293,63 +310,69 @@ async function applyPendingPromptSuffixAttribution(
     const count = groupedAllocations[index + toolCallAllocationOffset] ?? 0
     return updatePartTokens(
       part,
-      pending.assistantContentParts.length === 0 && pending.toolCallParts.length === 1
+      singleExactCase
         ? {
             count,
             source: 'delta-derived',
             confidence: 'exact',
             note: 'Derived as exact prompt delta for the assistant tool-call message',
           }
-        : {
-            count,
-            source: 'estimated',
-            confidence: 'estimated',
-            note: 'Allocated proportionally from the exact grouped assistant tool-call prompt delta',
-          },
-      pending.assistantContentParts.length === 0 && pending.toolCallParts.length === 1
+        : singleApiCase
+          ? {
+              count,
+              source: 'exact-api',
+              confidence: 'estimated',
+              note: 'Derived from completion_tokens (generation cost; chat-template overhead ~3–5 tokens attributed to tool results)',
+            }
+          : {
+              count,
+              source: 'estimated',
+              confidence: 'estimated',
+              note: hasToolResults
+                ? 'Allocated proportionally from completion_tokens (generation cost; chat-template overhead applies)'
+                : 'Allocated proportionally from the exact grouped assistant tool-call prompt delta',
+            },
+      singleExactCase
         ? { derivedFrom: 'lmstudio.prompt_tokens.tool-call-delta' }
-        : { derivedFrom: 'lmstudio.prompt_tokens.assistant-tool-message-delta', allocation: 'proportional-by-payload' },
+        : singleApiCase
+          ? { derivedFrom: 'completion.usage.assistant-content-tokens' }
+          : { derivedFrom: hasToolResults ? 'completion.usage.assistant-content-tokens' : 'lmstudio.prompt_tokens.assistant-tool-message-delta', allocation: 'proportional-by-payload' },
       updatedAt,
     )
   })
 
-  const updatedToolResultParts: PartRecord[] = []
-  for (let index = 0; index < pending.toolResultParts.length; index++) {
-    const part = pending.toolResultParts[index]
-    if (!part) continue
+  // Tool result attribution: allocate the remaining budget proportionally.
+  // Total = promptTokens − prefixTokens − toolCallGroupTokens (conserved exactly).
+  // Individual splits are proportional by content length → confidence: estimated.
+  // This avoids per-result probes, which also suffered from the assistant-message blind spot.
+  const totalToolResultTokens = promptTokens == null
+    ? null
+    : Math.max(0, promptTokens - prefixTokens - toolCallGroupTokens)
+  const toolResultWeights = pending.toolResultParts.map(p => Math.max(1, (p.payload.text ?? '').length))
+  const toolResultAllocations = totalToolResultTokens == null || pending.toolResultParts.length === 0
+    ? pending.toolResultParts.map(() => null)
+    : pending.toolResultParts.length === 1
+      ? [totalToolResultTokens]
+      : allocateProportionalTokenCounts(totalToolResultTokens, toolResultWeights)
 
-    const isLast = index === pending.toolResultParts.length - 1
-    const nextRunningTokens = isLast
-      ? promptTokens
-      : await probeRequestPromptTokens(
-          lmStudioGateway,
-          session,
-          requestMessages.slice(0, toolCallMessageIndex + 2 + index),
-          lmTools,
-          {
-            database,
-            sessionId: session.id,
-            turnId: part.turnId,
-            roundId: part.roundId,
-          },
-        )
-
-    const tokens = deriveExactDeltaTokenMetadata(
-      nextRunningTokens,
-      runningTokens,
-      'Derived as exact prompt delta for the tool result message',
-      'Exact tool-result prompt tokens could not be derived',
-    )
-
-    const updatedPart = updatePartTokens(
+  const updatedToolResultParts: PartRecord[] = pending.toolResultParts.map((part, index) => {
+    const count = toolResultAllocations[index]
+    return updatePartTokens(
       part,
-      tokens,
-      { derivedFrom: 'lmstudio.prompt_tokens.tool-result-delta' },
+      count == null
+        ? { count: null, source: 'unknown', confidence: 'unknown', note: 'Prompt token total was not available' }
+        : {
+            count,
+            source: 'estimated',
+            confidence: 'estimated',
+            note: pending.toolResultParts.length === 1
+              ? 'Derived as total tool-result context budget (promptTokens − prefix − assistantMessage)'
+              : 'Allocated proportionally from total tool-result context budget (promptTokens − prefix − assistantMessage)',
+          },
+      { derivedFrom: 'lmstudio.prompt_tokens.tool-result-proportional' },
       updatedAt,
     )
-    updatedToolResultParts.push(updatedPart)
-    runningTokens = nextRunningTokens ?? runningTokens
-  }
+  })
 
   const tx = database.connection.transaction(() => {
     updatedAssistantContentParts.forEach(part => updatePartRecord(database.connection, part))
@@ -1155,6 +1178,7 @@ export async function createToolEnabledTurn(
       pendingPromptSuffix = {
         kind: 'tool-cycle',
         baseMessageCount,
+        assistantContentTokens: usage.assistantContentTokens,
         assistantContentParts,
         toolCallParts,
         toolResultParts,

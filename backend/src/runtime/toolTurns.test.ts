@@ -217,14 +217,14 @@ describe('tool-enabled turn runtime', () => {
       confidence: 'exact',
     })
     expect(result.parts[2]?.tokens).toMatchObject({
-      count: 4,
-      source: 'delta-derived',
-      confidence: 'exact',
+      count: 6,
+      source: 'exact-api',
+      confidence: 'estimated',
     })
     expect(result.parts[3]?.tokens).toMatchObject({
-      count: 6,
-      source: 'delta-derived',
-      confidence: 'exact',
+      count: 4,
+      source: 'estimated',
+      confidence: 'estimated',
     })
     expect(result.context.map(entry => entry.type)).toContain('tool-call')
     expect(result.context.map(entry => entry.type)).toContain('tool-result')
@@ -448,12 +448,12 @@ describe('tool-enabled turn runtime', () => {
 
     expect(toolCallParts).toHaveLength(2)
     expect(toolCallParts.every(part => part.tokens.source === 'estimated')).toBe(true)
-    expect(toolCallParts.reduce((sum, part) => sum + (part.tokens.count ?? 0), 0)).toBe(8)
+    expect(toolCallParts.reduce((sum, part) => sum + (part.tokens.count ?? 0), 0)).toBe(9)
     expect(toolCallParts[1]!.tokens.count).toBeGreaterThan(toolCallParts[0]!.tokens.count ?? 0)
 
     expect(toolResultParts).toHaveLength(2)
-    expect(toolResultParts.map(part => part.tokens.count)).toEqual([5, 7])
-    expect(toolResultParts.every(part => part.tokens.source === 'delta-derived')).toBe(true)
+    expect(toolResultParts.map(part => part.tokens.count)).toEqual([8, 3])
+    expect(toolResultParts.every(part => part.tokens.source === 'estimated')).toBe(true)
 
     db.connection.close()
   })
@@ -653,19 +653,19 @@ describe('tool-enabled turn runtime', () => {
 
     expect(mixedAssistantContent?.payload.text).toBe('I will check the time.')
     expect(mixedAssistantContent?.tokens).toMatchObject({
-      count: 1,
+      count: 2,
       source: 'estimated',
       confidence: 'estimated',
     })
     expect(toolCallPart?.tokens).toMatchObject({
-      count: 5,
+      count: 6,
       source: 'estimated',
       confidence: 'estimated',
     })
     expect(toolResultPart?.tokens).toMatchObject({
-      count: 5,
-      source: 'delta-derived',
-      confidence: 'exact',
+      count: 3,
+      source: 'estimated',
+      confidence: 'estimated',
     })
 
     const assistantMessages = result.context.filter(entry => entry.type === 'assistant-content')
