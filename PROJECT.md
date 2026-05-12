@@ -48,11 +48,11 @@ The backend refactor was worth doing and has materially improved the project:
 - the project now has a realistic path to trustworthy regression testing
 - exported traces can become reusable replay fixtures
 
-The project is now worth continuing, but the frontend must be aligned with this architecture before more feature growth.
+The project is now worth continuing. The frontend has been moved onto the backend-driven architecture closely enough that the main risk is no longer structural confusion, but **whether token/context reporting is fully trustworthy**.
 
 ## Immediate next phase
 
-1. rewire the frontend to consume backend APIs
-2. remove duplicated frontend runtime/accounting logic
-3. expose trace export/import and replay-oriented diagnostics cleanly in the UI
-4. continue building MCP-focused analysis features on top of the backend foundation
+1. verify token accounting against captured traces and real sessions
+2. confirm the context bar reflects the same canonical context/token state as the backend trace
+3. fix any remaining token/context mismatches on top of the now-simplified backend-driven UI
+4. continue building MCP-focused analysis features on top of that trusted runtime foundation

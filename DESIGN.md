@@ -222,4 +222,10 @@ That keeps local regressions close to real runtime behavior without depending on
 
 ## Current architectural direction
 
-Backend design is now in a good enough state to build on. The next design task is to simplify the frontend around these backend surfaces rather than adding more logic on the client side.
+The backend-driven architecture is now in place end-to-end:
+
+- backend remains the canonical source of truth
+- the active frontend lives under `frontend/`
+- the legacy browser-owned runtime path has been removed
+
+The next design task is no longer architectural rewiring. It is to verify that token accounting and context visualization are faithfully derived from the same canonical backend trace model the rest of the product now uses.

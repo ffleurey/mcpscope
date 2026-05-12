@@ -6,7 +6,7 @@ The project is now organized around a **TypeScript backend as the source of trut
 
 ## Current status
 
-The first backend increment is complete:
+The backend-first rewrite is now in place and the project has a usable first MVP shape:
 
 - canonical backend model for sessions, turns, rounds, parts, and raw exchanges
 - streamed LM Studio runtime with ordered reasoning/content/tool-call capture
@@ -14,8 +14,9 @@ The first backend increment is complete:
 - SQLite persistence for runtime state and diagnostics
 - full session trace export at `/api/sessions/:sessionId/trace`
 - deterministic replay harness that re-runs exported traces as local regression tests
+- backend-driven frontend under `frontend/`, including streaming chat, inspect mode, and trace import/export
 
-The current stage is finishing the frontend refactor so the UI becomes a clean thin client over the backend APIs.
+The main remaining product-hardening phase is now **token counting and context-bar trust verification**, not more architectural rewiring.
 
 ## Architecture
 
@@ -36,8 +37,8 @@ The current stage is finishing the frontend refactor so the UI becomes a clean t
 
 - Svelte + TypeScript + Vite
 - lives under `frontend/`
-- progressively moving toward presentation-only responsibilities
-- should consume backend transcript, context, and trace data rather than re-implement runtime logic
+- presentation-oriented client over backend-owned session, trace, and streaming state
+- consumes backend transcript, context, and trace data rather than re-implementing runtime logic
 
 ## Runtime vocabulary
 
@@ -97,6 +98,7 @@ npm run dev:frontend
 
 ```bash
 npm test
+npm run check
 npm run test:integration
 ```
 

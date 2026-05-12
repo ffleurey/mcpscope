@@ -12,10 +12,9 @@ What is already in place:
 
 What still blocks calling it a trustworthy finished tool:
 
-- the **legacy frontend runtime is still present in the tree**
 - token counting and context bar visualization are not yet fully verified/hardened
 
-The immediate recommendation is to **finish the refactor boundary first** by removing the leftover frontend-owned runtime path, then return to token/context trust work on top of that simplified architecture.
+The immediate recommendation is now to **focus on token/context trust work** on top of the simplified backend-driven architecture.
 
 ## Completed
 
@@ -58,6 +57,8 @@ Work:
 - add `GET /api/sessions` for lightweight sidebar summaries
 - import traces into backend persistence so imported sessions and live sessions share the same UI path
 - remove stale frontend-only data paths
+
+**Status:** Completed at MVP level
 
 ### 5. Step-by-step execution plan
 

@@ -97,23 +97,25 @@ This gives the project a queryable and testable foundation that the frontend-onl
 ## Main API surfaces
 
 - `POST /api/sessions`
-- `GET /api/sessions` *(planned for frontend rewiring)*
-- `DELETE /api/sessions/:sessionId` *(planned for frontend rewiring)*
+- `GET /api/sessions`
+- `DELETE /api/sessions/:sessionId`
 - `POST /api/sessions/:sessionId/turns`
-- `POST /api/sessions/:sessionId/turns/stream` *(planned SSE endpoint)*
+- `POST /api/sessions/:sessionId/turns/stream`
 - `GET /api/sessions/:sessionId/transcript`
 - `GET /api/sessions/:sessionId/context`
 - `GET /api/sessions/:sessionId/trace`
 - `GET /api/domain-model`
+- backend-owned CRUD endpoints for LM connections, model profiles, and MCP profiles
+- trace import endpoint(s) used by the frontend import flow
 
 `/trace` is the most important diagnostic endpoint: it exports the complete backend view needed to replay a run locally.
 
 For the rewired frontend:
 
-- `GET /api/sessions` should return small session summaries, not full traces
-- `GET /api/sessions/:sessionId/trace` should remain the canonical detailed payload
-- the streaming endpoint should emit transient **deltas** and then committed **parts**
-- trace import should persist imported traces as normal backend sessions
+- `GET /api/sessions` returns small session summaries, not full traces
+- `GET /api/sessions/:sessionId/trace` remains the canonical detailed payload
+- the streaming endpoint emits transient **deltas** and then committed **parts**
+- trace import persists imported traces as normal backend sessions
 
 ## Test position
 
@@ -128,9 +130,8 @@ This is the foundation that should let the project evolve safely.
 
 ## Next backend-adjacent work
 
-The next major step is **not another backend rewrite**. It is frontend rewiring:
+The next major step is **not another backend rewrite**. It is trust hardening on top of the current contract:
 
-- move the UI onto backend transcript/context/trace APIs
-- stream backend-native deltas and replace them with committed parts
-- remove remaining duplicated runtime logic from the frontend
-- keep export and replay as first-class product features
+- verify token attribution against captured traces and live runs
+- confirm the context bar and context selectors reflect the same canonical backend state
+- keep export and replay as first-class product features while improving confidence in the displayed statistics

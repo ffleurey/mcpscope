@@ -19,13 +19,13 @@ The first major refactor is complete: the project has been moved from a fragile 
 - side-car token/context structures that drift from the displayed history
 - reliance on hand-written local fixtures for most end-to-end regressions
 
-## Remaining refactor target
+## Frontend follow-through
 
-The main remaining refactor is on the frontend side:
+The frontend follow-through that this refactor pointed toward has now been completed at the structural level:
 
-- remove duplicated runtime logic
-- consume backend transcript/context/trace APIs directly
-- keep the UI focused on presentation and workflow
+- the active frontend was moved under `frontend/`
+- the backend-driven UI path is the active path
+- the old browser-owned runtime, IndexedDB chat path, and duplicate MCP browser runtime were removed
 
 ## Planning status
 
@@ -33,10 +33,8 @@ This file is **not** the active implementation roadmap.
 
 Use `PLAN.md` for the remaining step-by-step work:
 
-- backend session/profile/import API completion
-- backend SSE streaming contract
-- frontend data-layer rewiring
-- trace import/export UI
-- legacy frontend runtime removal
+- token counting hardening
+- context-bar trust verification
+- next product increments on top of the backend-driven MVP
 
 This file remains a closure note for the completed backend-first refactor.
