@@ -145,6 +145,16 @@
     if (e.key === 'Escape') cancelTitleEdit()
   }
 
+  // Auto-focus textarea when turn completes
+  let _wasSending = false
+  $effect(() => {
+    const sending = $isSendingTurn
+    if (_wasSending && !sending && textareaEl && !editingTitle) {
+      tick().then(() => textareaEl?.focus())
+    }
+    _wasSending = sending
+  })
+
   $effect(() => {
     const sessionId = session?.id ?? null
     const turnCount = traceTurns.length
