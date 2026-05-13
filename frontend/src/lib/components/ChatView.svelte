@@ -12,6 +12,7 @@
   } from '../sessionStore'
   import type { StreamingRoundState } from '../traceStreaming'
   import { deriveContextSnapshotAtRound } from '../traceStreaming'
+  import { patchSessionTitle } from '../api/backendClient'
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import NewSessionPanel from './NewSessionPanel.svelte'
   import SessionPreludeBlock from './SessionPreludeBlock.svelte'
@@ -25,6 +26,9 @@
   let lastSessionId = $state<string | null>(null)
   let lastTurnCount = $state(0)
   let lastStreamingTurnId = $state<string | null>(null)
+  let editingTitle = $state(false)
+  let titleDraft = $state('')
+  let titleInputEl = $state<HTMLInputElement | null>(null)
 
   let session = $derived($activeSession)
   let visibleParts = $derived.by(() =>
@@ -111,6 +115,32 @@
   let displayMcpName = $derived(session?.mcpProfileSnapshot?.name ?? null)
   let displayCompaction = $derived(session?.compactionStrategy ?? null)
 
+  async function startEditTitle() {
+    if (!session) return
+    titleDraft = session.title
+    editingTitle = true
+    await tick()
+    titleInputEl?.select()
+  }
+
+  async function commitTitleEdit() {
+    if (!session || !editingTitle) return
+    editingTitle = false
+    const trimmed = titleDraft.trim()
+    if (trimmed && trimmed !== session.title) {
+      await patchSessionTitle(session.id, trimmed)
+    }
+  }
+
+  function cancelTitleEdit() {
+    editingTitle = false
+  }
+
+  function handleTitleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') { e.preventDefault(); void commitTitleEdit() }
+    if (e.key === 'Escape') cancelTitleEdit()
+  }
+
   $effect(() => {
     const sessionId = session?.id ?? null
     const turnCount = traceTurns.length
@@ -172,9 +202,18 @@
   {:else}
     <!-- ── Active session ────────────────────────────────────────────────── -->
     <div class="chat-header">
-      <span class="chat-title">{session.title}</span>
-      {#if displayModelName}
-        <span class="chat-model">{displayModelName}</span>
+      {#if editingTitle}
+        <input
+          class="chat-title-input"
+          bind:this={titleInputEl}
+          bind:value={titleDraft}
+          onblur={commitTitleEdit}
+          onkeydown={handleTitleKeydown}
+        />
+      {:else}
+        <button class="chat-title" onclick={startEditTitle} title="Click to rename">
+          {session.title}
+        </button>
       {/if}
       <div class="view-mode-toggle">
         <button
@@ -272,15 +311,11 @@
         </div>
         <div class="composer-footer">
           <div class="composer-config">
-            {#if displayModelName}
-              <span class="config-pill">{displayModelName}</span>
-            {/if}
-            {#if displayMcpName}
-              <span class="config-pill config-pill-mcp">{displayMcpName}</span>
-            {/if}
-            {#if displayCompaction && displayCompaction !== 'none'}
-              <span class="config-pill config-pill-compaction">{displayCompaction}</span>
-            {/if}
+            <span class="config-label">
+              Model: {displayModelName || '—'}
+              {#if displayMcpName} · MCP: {displayMcpName}{:else} · MCP: none{/if}
+              {#if displayCompaction && displayCompaction !== 'none'} · Compaction: {displayCompaction}{:else} · Compaction: none{/if}
+            </span>
           </div>
           <span class="composer-hint">Ctrl+Enter to send</span>
         </div>
@@ -318,13 +353,30 @@
     white-space: nowrap;
     min-width: 0;
     flex: 1;
+    /* button reset */
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    cursor: text;
+    border-radius: 4px;
   }
 
-  .chat-model {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    white-space: nowrap;
-    flex-shrink: 0;
+  .chat-title:hover {
+    background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+  }
+
+  .chat-title-input {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text);
+    background: var(--bg-panel);
+    border: 1px solid var(--color-accent, #60a5fa);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    min-width: 0;
+    flex: 1;
+    outline: none;
   }
 
   .view-mode-toggle {
@@ -458,32 +510,23 @@
   .composer-config {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    flex-wrap: wrap;
+    min-width: 0;
+    flex: 1;
   }
 
-  .config-pill {
+  .config-label {
     font-size: 0.68rem;
     color: var(--text-muted);
-    border: 1px solid var(--border-subtle);
-    border-radius: 999px;
-    padding: 0.08rem 0.45rem;
-    opacity: 0.8;
-  }
-
-  .config-pill-mcp {
-    color: var(--color-tool, #7c3aed);
-    border-color: color-mix(in srgb, var(--color-tool, #7c3aed) 30%, transparent);
-  }
-
-  .config-pill-compaction {
-    color: var(--color-reasoning, #b45309);
-    border-color: color-mix(in srgb, var(--color-reasoning, #b45309) 30%, transparent);
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .composer-hint {
     font-size: 0.7rem;
     color: var(--text-muted);
     opacity: 0.55;
+    flex-shrink: 0;
   }
 </style>

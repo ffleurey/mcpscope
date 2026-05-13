@@ -19,6 +19,11 @@
      * Defaults to `full` when contextSize is provided, otherwise `breakdown`.
      */
     defaultMode?: 'full' | 'breakdown'
+    /**
+     * If provided, enables a `turn` display mode that shows only entries
+     * belonging to this turn. Compact label becomes clickable to cycle modes.
+     */
+    turnId?: string | null
   }
 
   const {
@@ -28,11 +33,37 @@
     showLegend = true,
     compact = false,
     defaultMode,
+    turnId = null,
   }: Props = $props()
 
+  type DisplayMode = 'full' | 'breakdown' | 'turn'
   const initialMode = $derived(defaultMode ?? (contextSize != null ? 'full' : 'breakdown'))
-  let displayMode = $state<'full' | 'breakdown'>('breakdown')
+  let displayMode = $state<DisplayMode>('breakdown')
   $effect(() => { displayMode = initialMode })
+
+  /** Entries for the current display mode (filtered for 'turn' mode). */
+  const activeEntries = $derived(
+    displayMode === 'turn' && turnId != null
+      ? entries.filter((e) => e.turnId === turnId)
+      : entries,
+  )
+
+  /** Cycle compact label through: breakdown → full (if contextSize) → turn (if turnId) → breakdown */
+  function cycleMode() {
+    if (displayMode === 'breakdown') {
+      displayMode = contextSize != null ? 'full' : turnId != null ? 'turn' : 'breakdown'
+    } else if (displayMode === 'full') {
+      displayMode = turnId != null ? 'turn' : 'breakdown'
+    } else {
+      displayMode = 'breakdown'
+    }
+  }
+
+  function modeCycleLabel(): string {
+    if (displayMode === 'turn') return `${label} (turn)`
+    if (displayMode === 'full') return `${label} (full)`
+    return label
+  }
 
   // ── Grouping ──────────────────────────────────────────────────────────────
   // Consecutive entries that share the same (turnId, roundId) form one group.
@@ -46,7 +77,7 @@
 
   const groups = $derived.by((): SegGroup[] => {
     const result: SegGroup[] = []
-    for (const entry of entries) {
+    for (const entry of activeEntries) {
       const last = result.at(-1)
       if (last && last.turnId === entry.turnId && last.roundId === entry.roundId) {
         last.entries.push(entry)
@@ -81,7 +112,7 @@
   })
 
   // ── Token totals ─────────────────────────────────────────────────────────
-  const totalUsed = $derived(entries.reduce((sum, e) => sum + (e.tokens.count ?? 0), 0))
+  const totalUsed = $derived(activeEntries.reduce((sum, e) => sum + (e.tokens.count ?? 0), 0))
   const ctxSize   = $derived(contextSize ?? 0)
   const pct       = $derived(ctxSize > 0 ? Math.min(100, (totalUsed / ctxSize) * 100) : 0)
 
@@ -115,7 +146,7 @@
 
   const legendTypes = $derived.by(() => {
     const seen = new Set<ContextEntry['type']>()
-    for (const e of entries) seen.add(e.type)
+    for (const e of activeEntries) seen.add(e.type)
     return [...seen] as ContextEntry['type'][]
   })
 </script>
@@ -160,8 +191,10 @@
     </div>
 
     {#if compact}
-      <span class="csb-compact-label">{label}</span>
-      {#if ctxSize > 0}
+      <button class="csb-compact-label" onclick={cycleMode} title="Click to cycle view mode">
+        {modeCycleLabel()}
+      </button>
+      {#if displayMode === 'full' && ctxSize > 0}
         <span class="csb-compact-counts">{fmt(totalUsed)} / {fmt(ctxSize)} ({Math.round(pct)}%)</span>
       {:else}
         <span class="csb-compact-counts">{fmt(totalUsed)} tokens</span>
@@ -287,6 +320,15 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     white-space: nowrap;
+    /* button reset */
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .csb-compact-label:hover {
+    color: var(--text);
   }
 
   .csb-compact-counts {

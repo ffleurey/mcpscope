@@ -174,6 +174,19 @@ export async function buildBackendApp(
     return null
   })
 
+  app.patch('/api/sessions/:sessionId', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const { title } = z.object({ title: z.string().min(1).max(200) }).parse(request.body)
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return { error: 'Session not found' }
+    }
+    session.title = title.trim()
+    updateSessionRecord(database.connection, session)
+    return { session }
+  })
+
   app.get('/api/lm-connections', async () => {
     return {
       lmConnections: listLmConnections(database.connection),

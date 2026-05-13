@@ -272,6 +272,14 @@ export function deleteSession(sessionId: string) {
   })
 }
 
+export function patchSessionTitle(sessionId: string, title: string) {
+  return request(`/api/sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: { title },
+    schema: createSessionResponseSchema,
+  })
+}
+
 export function listLmConnections() {
   return request('/api/lm-connections', {
     schema: listLmConnectionsResponseSchema,

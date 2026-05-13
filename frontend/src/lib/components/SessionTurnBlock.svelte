@@ -166,6 +166,7 @@
             contextSize={loadedContextLength}
             label="After turn {turn.sequenceNumber}"
             showLegend={false}
+            turnId={turn.id}
             compact
           />
         </div>
@@ -262,6 +263,7 @@
             contextSize={loadedContextLength}
             label="After turn {turn.sequenceNumber}"
             showLegend={false}
+            turnId={turn.id}
             compact
           />
         </div>
