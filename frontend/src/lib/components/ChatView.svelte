@@ -458,7 +458,7 @@
 
   /* Bubble styled to match the user message in the transcript */
   .composer-bubble {
-    background: color-mix(in srgb, var(--bg-panel) 92%, black 8%);
+    background: var(--bg-active);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 0.38rem 0.72rem;

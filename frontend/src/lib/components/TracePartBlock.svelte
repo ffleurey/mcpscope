@@ -289,7 +289,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: end;
     column-gap: var(--compact-inline-gap, 0.35rem);
-    background: color-mix(in srgb, var(--bg-panel) 92%, black 8%);
+    background: var(--bg-active);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: var(--compact-message-pad-y, 0.38rem) var(--compact-message-pad-x, 0.72rem);
