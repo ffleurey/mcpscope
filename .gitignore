@@ -10,6 +10,16 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+backend/dist
+backend-data/*
+!backend-data/README.md
+!backend-data/test-artifacts/
+backend-data/test-artifacts/*
+.tmp-test-data
+.env.dev
+*.db
+*.db-shm
+*.db-wal
 *.local
 
 # Editor directories and files

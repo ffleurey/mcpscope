@@ -1,55 +1,47 @@
 # AI Client App
 
-A local-first AI chat SPA for evaluating MCP-based workflows with local language models.
+Local-first **runtime analysis and debugging tool** for MCP server development and multi-turn LLM workflows. Built to inspect how models reason, choose tools, and consume context — with trace export, deterministic replay, and a trust-first approach to token accounting.
 
-## What it is
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system design and domain model.
 
-A developer tool for running and inspecting LLM + MCP tool sessions locally. The core value is **context transparency**: the app tracks exactly what is in the model's context window at every turn, segment by segment, with precise token counts derived directly from API data.
+## Development
 
-Built with: Svelte 5 · TypeScript · Vite · IndexedDB
-
-## What it connects to
-
-- **LM Studio** — local LLM runtime (OpenAI-compatible API, streaming, extended thinking support)
-- **MCP servers** — tool servers over Streamable HTTP transport (e.g. Home Assistant statistics)
-
-## Key features
-
-- Real-time streaming chat with reasoning/thinking support
-- Multi-round tool call execution with full trace visibility
-- **Context bar** — color-coded segment-by-segment view of exactly what is in the model's context window, updated live during each turn
-- Per-message token statistics (prompt, completion, reasoning tokens, generation speed)
-- Configurable model profiles (system prompt, temperature, reasoning mode)
-- Multiple MCP server profiles, optional per chat
-- Full diagnostic export (JSON dump of chat with all token data for offline analysis)
-- Local-only persistence via IndexedDB, no backend required
-
-## Context accounting principles
-
-The app tracks every token with a clear provenance:
-
-- **System prompt and tool definitions** — probed via API at session start (exact)
-- **User messages** — back-calculated from API `promptTokens` deltas (exact for simple turns; char/4 estimate for turns following tool-calling turns)
-- **Tool calls and results (tc+tr)** — computed from per-round `promptTokens` deltas; when the next turn arrives, corrected to the exact historical cost using LM Studio's feedback
-- **Assistant content** — from API `completionTokens - reasoningTokens` (exact for simple turns)
-- **Reasoning/thinking** — shown while in context; stripped from historical turns
-- No permanent character-count estimates remain once API data is available
-
-## Setup
-
-```
-npm install
-npm run dev
+```bash
+npm run dev              # backend + frontend together
+npm run dev:backend      # backend only (tsx watch)
+npm run dev:frontend     # frontend only (vite)
 ```
 
-Configure LM Studio connections and model profiles in the sidebar settings. Optionally add MCP server profiles to enable tool use.
+### Seeding dev data
 
-## Diagnostics
-
-The chat export button (in the chat header) dumps the full session as JSON including all token breakdowns per message and tool round. The `exports/` folder contains scripts to analyse exported files:
-
-```
-node exports/analyze.js exports/your-export.json
-node exports/plot.js exports/your-export.json  # generates an HTML chart
+```bash
+npm run seed:dev-config    # seed LM connections, model configs, MCP profiles
+npm run seed:dev-sessions  # seed captured session fixtures
+npm run seed:dev-data      # both of the above
 ```
 
+## Build
+
+```bash
+npm run build            # build frontend (vite)
+npm run build:backend    # compile backend TypeScript
+npm run start:backend    # run compiled backend
+```
+
+## Testing and type checking
+
+```bash
+npm test                 # deterministic local tests (pure logic, runtime, app, replay)
+npm run check            # svelte-check + frontend TypeScript
+npm run check:backend    # backend TypeScript check
+npm run test:integration # live LM Studio + MCP validation (requires running LM Studio + MCP server)
+```
+
+See [TESTING.md](TESTING.md) for the test strategy and how to add regressions.
+
+## Project docs
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — system design, domain model, API surface, runtime rules
+- [TESTING.md](TESTING.md) — test strategy and regression workflow
+- [PLAN.md](PLAN.md) — current status and open work
+- [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) — reference use case and evaluation criteria

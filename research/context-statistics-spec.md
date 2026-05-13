@@ -1,6 +1,16 @@
 # Context Statistics — Specification
 
-**Status:** Superseded — this document guided the design of Increment 4 but has been overtaken by the actual implementation. For the current architecture, see the "Context Accounting Design" section in `DESIGN.md`. Key divergences: tokens are attached directly to message data structures (not computed separately); `historicalPayloadTokens` replaces per-segment PT-delta arithmetic for tool-calling turns; all permanent estimates have been eliminated.
+**Status:** Superseded — this document guided early design work and has been overtaken by the backend-first implementation. See `ARCHITECTURE.md` for the current system design.
+
+The LM Studio API observations in this document remain accurate: the `prompt_tokens` delta arithmetic, the `reasoning_tokens` field in `completion_tokens_details`, and the streaming usage payload shape are valid descriptions of the API behaviour and are still relevant when working on token attribution.
+
+Key divergences from this spec to the current implementation:
+
+- Token accounting is now attached to `PartRecord` entities persisted in SQLite, not to frontend `ChatMessage` structures.
+- The type hierarchy (`ChatMessage`, `TokenSegment`, etc.) no longer exists; the canonical model is `Session → Turn → Round → Part → RawExchangeRecord`.
+- The `SegmentType` / `TokenSegment` vocabulary from this spec was superseded by the `partType` field on `PartRecord` (see `ARCHITECTURE.md`). Note: LM Studio response blocks are still called `LmStudioAssistantSegment` internally — that is a service-layer type distinct from domain `Part` records.
+- Prompt-token delta attribution for tool-enabled turns is implemented in `applyPendingPromptSuffixAttribution` in `backend/src/runtime/toolTurns.ts`, using the same delta arithmetic described here.
+- Context bar visualization is driven by backend `context` data from `GET /api/sessions/:sessionId/trace`, not client-side segment arrays.
 
 ---
 
