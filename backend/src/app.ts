@@ -103,6 +103,7 @@ export async function buildBackendApp(
 ) {
   const app = Fastify({
     logger: true,
+    bodyLimit: 50 * 1024 * 1024, // 50MB — large trace files can be several MB
   })
 
   await app.register(cors, {

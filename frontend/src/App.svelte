@@ -8,6 +8,7 @@
   import ModelConfigs from './lib/components/ModelConfigs.svelte'
   import McpProfiles from './lib/components/McpProfiles.svelte'
   import ChatView from './lib/components/ChatView.svelte'
+  import ErrorDialog from './lib/components/ErrorDialog.svelte'
 
   let loading = $state(true)
 
@@ -42,6 +43,8 @@
     {/if}
   </main>
 </div>
+
+<ErrorDialog />
 
 <style>
   .app-shell {

@@ -48,6 +48,8 @@
     try {
       await importTraceFile(file)
       currentView.set('chats')
+    } catch {
+      // error is already surfaced via sessionError → ErrorDialog
     } finally {
       if (target) target.value = ''
     }
