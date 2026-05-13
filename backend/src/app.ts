@@ -17,6 +17,7 @@ import {
   deleteModelConfig,
   deleteSessionRecord,
   getSessionRecord,
+  updateSessionRecord,
   listLmConnections,
   listMcpServerProfiles,
   listModelConfigs,
@@ -183,6 +184,7 @@ export async function buildBackendApp(
       return { error: 'Session not found' }
     }
     session.title = title.trim()
+    session.updatedAt = Date.now()
     updateSessionRecord(database.connection, session)
     return { session }
   })
