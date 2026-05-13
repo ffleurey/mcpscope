@@ -280,15 +280,6 @@
       {/if}
     </div>
 
-    <!-- Context bar above composer — only shown when session is ready -->
-    {#if $activeTrace && !isInitializing}
-      <ContextSnapshotBar
-        entries={$activeTrace.context}
-        contextSize={session.loadedContextLength ?? null}
-        label="Context after compaction"
-      />
-    {/if}
-
     {#if isExhausted}
       <div class="exhausted-banner">
         ⚠️ Context window full — this session cannot continue. Start a new session.
