@@ -5,6 +5,7 @@
     activeTrace,
     activeTraceLoading,
     activeTurnStream,
+    chatSessions,
     exportActiveTrace,
     isSendingTurn,
     sendMessage,
@@ -129,6 +130,9 @@
     const trimmed = titleDraft.trim()
     if (trimmed && trimmed !== session.title) {
       await patchSessionTitle(session.id, trimmed)
+      chatSessions.update((sessions) =>
+        sessions.map((s) => (s.id === session!.id ? { ...s, title: trimmed } : s))
+      )
     }
   }
 
