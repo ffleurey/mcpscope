@@ -7,6 +7,7 @@ export interface BackendConfig {
   dataDir: string
   sqlitePath: string
   maxToolRounds: number
+  staticDir?: string | null
 }
 
 const rootDir = process.cwd()
@@ -19,6 +20,7 @@ export function getBackendConfig(): BackendConfig {
   const dataDir = process.env.BACKEND_DATA_DIR ?? defaultDataDir
   const sqlitePath = process.env.BACKEND_SQLITE_PATH ?? path.join(dataDir, 'ai-clientapp.db')
   const maxToolRounds = Number(process.env.BACKEND_MAX_TOOL_ROUNDS ?? '10')
+  const staticDir = process.env.BACKEND_STATIC_DIR ?? null
 
   return {
     host,
@@ -27,5 +29,6 @@ export function getBackendConfig(): BackendConfig {
     dataDir,
     sqlitePath,
     maxToolRounds,
+    staticDir,
   }
 }
