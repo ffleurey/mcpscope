@@ -152,7 +152,9 @@
             <!-- eslint-disable-next-line svelte/no-at-html-tags -->
             <pre class="chat-answer-text">{@html highlightMarkdown(text)}</pre>
             {#if looksLikeMarkdown(text)}
-              <button class="preview-btn" onclick={() => openMarkdownPreview(text)}>Preview</button>
+              <button class="preview-btn" onclick={() => openMarkdownPreview(text)} aria-label="Render preview" title="Render preview">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
             {/if}
           </div>
         {/if}
@@ -383,9 +385,9 @@
 
   /* ── Chat mode: markdown syntax-highlighted answer text ─────────────── */
   .chat-answer-block {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
     margin-top: var(--chat-gap);
     margin-left: var(--chat-indent);
     padding-left: var(--chat-pad);
@@ -403,19 +405,31 @@
   }
 
   .preview-btn {
-    align-self: flex-start;
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: none;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid transparent;
     border-radius: 4px;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 0.72rem;
-    padding: 0.18rem 0.5rem;
+    padding: 0.15rem;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  .chat-answer-block:hover .preview-btn {
+    opacity: 1;
   }
 
   .preview-btn:hover {
     color: var(--text);
-    border-color: var(--border);
+    border-color: var(--border-subtle);
+    background: var(--bg-panel);
+    opacity: 1;
   }
 
   /* hljs markdown token colours — semantic palette */

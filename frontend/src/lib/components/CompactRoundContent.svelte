@@ -185,13 +185,15 @@
           <div class="assistant-text">{assistantText}</div>
         {/if}
         <div class="message-meta">
-          {#if assistantText && looksLikeMarkdown(assistantText)}
-            <button class="preview-btn" onclick={() => openMarkdownPreview(assistantText)}>Preview</button>
-          {/if}
           {#if item.part.tokens.count !== null}
             <span class="token-pill">{item.part.tokens.count.toLocaleString()} tokens</span>
           {/if}
         </div>
+        {#if assistantText && looksLikeMarkdown(assistantText)}
+          <button class="preview-btn" onclick={() => openMarkdownPreview(assistantText)} aria-label="Render preview" title="Render preview">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        {/if}
       </section>
     {:else if item.kind === 'reasoning'}
       <details class="collapsed-row">
@@ -330,6 +332,7 @@
   }
 
   .assistant-block {
+    position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: end;
@@ -433,17 +436,30 @@
   }
 
   .preview-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: none;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid transparent;
     border-radius: 4px;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 0.68rem;
-    padding: 0.1rem 0.4rem;
+    padding: 0.15rem;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  .assistant-block:hover .preview-btn {
+    opacity: 1;
   }
 
   .preview-btn:hover {
     color: var(--text);
-    border-color: var(--border);
+    border-color: var(--border-subtle);
+    background: var(--bg-panel);
+    opacity: 1;
   }
 </style>
