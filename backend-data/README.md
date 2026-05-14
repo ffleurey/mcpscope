@@ -6,8 +6,8 @@ This folder is intentionally **not** a source tree. It is the working data area 
 
 ## Structure
 
-- `ai-clientapp.db` - local SQLite database used by the backend
-- `ai-clientapp.db-shm` / `ai-clientapp.db-wal` - SQLite side files when WAL mode is active
+- `mcpscope.db` - local SQLite database used by the backend
+- `mcpscope.db-shm` / `mcpscope.db-wal` - SQLite side files when WAL mode is active
 - `test-artifacts/` - JSON captures written by the live integration tests
 
 Only this README is tracked in git. The database files and JSON artifacts are local outputs.

@@ -330,7 +330,7 @@ describe('session trace replay harness', () => {
                     protocolVersion: '2024-11-05',
                     capabilities: {},
                     clientInfo: {
-                      name: 'mcpscope-backend-tests',
+                      name: 'mcpscope',
                       version: '0.1.0',
                     },
                   },
