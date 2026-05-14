@@ -3,7 +3,7 @@
   import type { McpServerProfile, ConnectionTestResult } from '../types'
   import McpProfileForm from './McpProfileForm.svelte'
   import ConnectionTestResultComponent from './ConnectionTestResult.svelte'
-  import { testMcpConnection } from '../services/mcp'
+  import { testMcpProfile } from '../api/backendClient'
 
   let editingId = $state<string | null>(null)
   let showNew = $state(false)
@@ -36,8 +36,24 @@
 
   async function handleTest(profile: McpServerProfile) {
     testResults[profile.id] = { status: 'testing', message: '', details: [] }
-    const result = await testMcpConnection(profile.url)
-    testResults[profile.id] = result
+    try {
+      const result = await testMcpProfile(profile.url)
+      if (result.status === 'success') {
+        testResults[profile.id] = {
+          status: 'success',
+          message: `${result.serverName} v${result.serverVersion}`,
+          details: result.tools.length > 0 ? [`Tools: ${result.tools.join(', ')}`] : ['No tools found'],
+        }
+      } else {
+        testResults[profile.id] = { status: 'error', message: result.message, details: [] }
+      }
+    } catch (e) {
+      testResults[profile.id] = {
+        status: 'error',
+        message: e instanceof Error ? e.message : String(e),
+        details: [],
+      }
+    }
   }
 </script>
 

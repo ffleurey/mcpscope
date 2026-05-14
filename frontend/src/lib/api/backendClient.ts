@@ -352,3 +352,16 @@ export function deleteMcpProfile(mcpProfileId: string) {
     method: 'DELETE',
   })
 }
+
+const mcpTestResponseSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('success'), serverName: z.string(), serverVersion: z.string(), tools: z.array(z.string()) }),
+  z.object({ status: z.literal('error'), message: z.string() }),
+])
+
+export function testMcpProfile(url: string) {
+  return request('/api/mcp-profiles/test', {
+    method: 'POST',
+    body: { url },
+    schema: mcpTestResponseSchema,
+  })
+}

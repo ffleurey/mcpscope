@@ -295,6 +295,26 @@ export async function buildBackendApp(
     return null
   })
 
+  app.post('/api/mcp-profiles/test', async (_request, reply) => {
+    const { url } = z.object({ url: z.string().url() }).parse(_request.body)
+    try {
+      const init = await initializeMcpSession(url)
+      const toolsResult = await listMcpTools(url, init.sessionId)
+      return {
+        status: 'success',
+        serverName: init.serverInfo.name,
+        serverVersion: init.serverInfo.version,
+        tools: toolsResult.tools.map(t => t.name),
+      }
+    } catch (e) {
+      reply.code(200) // return structured error, not HTTP error
+      return {
+        status: 'error',
+        message: e instanceof Error ? e.message : String(e),
+      }
+    }
+  })
+
   app.get('/api/sessions/:sessionId/transcript', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     const session = getSessionRecord(database.connection, sessionId)
