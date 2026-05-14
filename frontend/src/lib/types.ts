@@ -32,9 +32,3 @@ export interface McpServerProfile {
 }
 
 export type NavView = 'chats' | 'connections' | 'model-configs' | 'mcp-profiles'
-
-export interface ConnectionTestResult {
-  status: 'idle' | 'testing' | 'success' | 'error'
-  message: string
-  details: string[]
-}

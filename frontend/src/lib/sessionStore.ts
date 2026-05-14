@@ -357,5 +357,6 @@ function applyTurnStreamEvent(
   }
 
   activeTurnStream.set(null)
-  sessionError.set(event.message)
+  // turn-failed event
+  sessionError.set(new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0))
 }

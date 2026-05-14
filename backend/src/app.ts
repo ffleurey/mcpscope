@@ -117,7 +117,7 @@ export async function buildBackendApp(
       return
     }
     app.log.error({ err: error.message }, 'Unhandled route error')
-    reply.code(500).send(apiError('internal', 'Unexpected server error'))
+    reply.code(500).send(apiError('internal', error.message || 'Unexpected server error'))
   })
 
   await app.register(cors, {
@@ -304,6 +304,24 @@ export async function buildBackendApp(
     reply.code(204)
     return null
   })
+
+  app.post('/api/lm-connections/test', async (_request, reply) => {
+    const { baseUrl, apiKey } = z
+      .object({ baseUrl: z.string().url(), apiKey: z.string().nullable().optional() })
+      .parse(_request.body)
+    try {
+      const result = await listModels(baseUrl, apiKey ?? undefined)
+      return { models: result.data?.map(m => m.id ?? '').filter(Boolean) ?? [] }
+    } catch (e) {
+      app.log.warn({ baseUrl, err: e instanceof Error ? e.message : String(e) }, 'LM connection test failed')
+      reply.code(503)
+      return apiError('upstream', e instanceof Error ? e.message : 'LM Studio unreachable', {
+        code: 'lm_studio_unreachable',
+        details: { baseUrl },
+      })
+    }
+  })
+
 
   app.post('/api/mcp-profiles/test', async (_request, reply) => {
     const { url } = z.object({ url: z.string().url() }).parse(_request.body)

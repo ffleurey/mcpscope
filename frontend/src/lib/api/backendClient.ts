@@ -362,6 +362,16 @@ export function deleteMcpProfile(mcpProfileId: string) {
   })
 }
 
+const lmConnectionTestResponseSchema = z.object({ models: z.array(z.string()) })
+
+export function testLmConnection(baseUrl: string, apiKey?: string | null) {
+  return request('/api/lm-connections/test', {
+    method: 'POST',
+    body: { baseUrl, apiKey: apiKey ?? null },
+    schema: lmConnectionTestResponseSchema,
+  })
+}
+
 const mcpTestResponseSchema = z.object({
   serverName: z.string(),
   serverVersion: z.string(),

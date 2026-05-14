@@ -3,7 +3,7 @@
   import type { LmStudioConnection } from '../types'
   import LmConnectionForm from './LmConnectionForm.svelte'
   import ConnectionTestDialog from './ConnectionTestDialog.svelte'
-  import { testLmStudioConnection } from '../services/lmstudio'
+  import { testLmConnection } from '../api/backendClient'
 
   let editingId = $state<string | null>(null)
   let showNew = $state(false)
@@ -38,16 +38,17 @@
   async function handleTest(conn: LmStudioConnection) {
     testDialogConn = conn
     testDialogResult = { ok: false, message: 'Testing…' }
-    const result = await testLmStudioConnection(conn.baseUrl, conn.apiKey)
-    const ok = result.status === 'success'
-    const detailsMap: Record<string, unknown> = {}
-    for (const d of result.details ?? []) {
-      detailsMap[d.label] = d.value
-    }
-    testDialogResult = {
-      ok,
-      message: result.message,
-      details: Object.keys(detailsMap).length > 0 ? detailsMap : undefined,
+    try {
+      const result = await testLmConnection(conn.baseUrl, conn.apiKey)
+      testDialogResult = {
+        ok: true,
+        message: 'Connected',
+        details: { Models: result.models.length > 0 ? result.models.join(', ') : 'none' },
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      const details = (e as { details?: unknown }).details
+      testDialogResult = { ok: false, message: msg, rawDetails: details }
     }
   }
 
