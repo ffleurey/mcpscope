@@ -40,31 +40,11 @@ docker compose build
 docker compose up -d
 ```
 
-### Pulling a released image from GHCR
-
-```bash
-docker login ghcr.io -u YOUR_GITHUB_USERNAME --password YOUR_PAT
-docker pull ghcr.io/ffleurey/mcpscope:latest
-# or a specific version:
-docker pull ghcr.io/ffleurey/mcpscope:v1.0.0
-```
-
-Run it directly (without docker-compose):
-```bash
-docker run -d -p 3030:3030 -v mcpscope-data:/data ghcr.io/ffleurey/mcpscope:latest
-```
+See [RELEASING.md](RELEASING.md) for pulling a released image from GHCR.
 
 ## Releasing
 
-Images are automatically built and pushed to GHCR when a GitHub Release is published.
-
-```bash
-npm version patch          # or: minor / major
-git push --follow-tags
-gh release create v$(node -p "require('./package.json').version") --title "v..." --notes "..."
-```
-
-The GitHub Action builds the Docker image tagged with the version (e.g. `v1.2.3`, `1.2`, `latest`) and pushes it to `ghcr.io/ffleurey/mcpscope`.
+See [RELEASING.md](RELEASING.md) for the full release workflow and GHCR pull instructions.
 
 ## Build
 
@@ -89,5 +69,6 @@ See [TESTING.md](TESTING.md) for the test strategy and how to add regressions.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — system design, domain model, API surface, runtime rules
 - [TESTING.md](TESTING.md) — test strategy and regression workflow
+- [RELEASING.md](RELEASING.md) — release workflow and Docker image distribution
 - [PLAN.md](PLAN.md) — current status and open work
 - [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) — reference use case and evaluation criteria
