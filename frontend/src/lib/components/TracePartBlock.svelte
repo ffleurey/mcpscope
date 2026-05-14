@@ -176,10 +176,13 @@
                 {#each Object.entries(tool.inputSchema.properties) as [paramName, param]}
                   {@const isRequired = tool.inputSchema?.required?.includes(paramName) ?? false}
                   <div class="tool-param">
-                    <span class="param-name">{paramName}</span>
-                    {#if param.type}<span class="param-type">{param.type}</span>{/if}
-                    {#if isRequired}<span class="param-required">required</span>{/if}
-                    {#if param.description}<span class="param-desc">{param.description}</span>{/if}
+                    <div class="param-header">
+                      <span class="param-name">{paramName}</span>
+                      <span class="param-meta">{param.type ?? 'any'}{#if isRequired} (required){/if}</span>
+                    </div>
+                    {#if param.description}
+                      <div class="param-desc">{param.description}</div>
+                    {/if}
                   </div>
                 {/each}
               </div>
@@ -456,45 +459,38 @@
   .tool-params {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.35rem;
   }
 
   .tool-param {
     display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .param-header {
+    display: flex;
     align-items: baseline;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-    font-size: 0.78rem;
+    gap: 0.4rem;
   }
 
   .param-name {
     font-family: monospace;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     color: var(--text);
     font-weight: 500;
-    flex-shrink: 0;
   }
 
-  .param-type {
-    font-size: 0.72rem;
-    color: var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-    border-radius: 3px;
-    padding: 0.05rem 0.3rem;
-    flex-shrink: 0;
-  }
-
-  .param-required {
-    font-size: 0.68rem;
-    color: var(--color-warning);
-    opacity: 0.8;
-    flex-shrink: 0;
+  .param-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
   }
 
   .param-desc {
+    font-size: 0.78rem;
     color: var(--text-muted);
-    flex: 1;
-    min-width: 0;
+    padding-left: 0.6rem;
+    line-height: 1.4;
   }
 
   .tool-no-params {
