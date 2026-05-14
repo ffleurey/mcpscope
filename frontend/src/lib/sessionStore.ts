@@ -177,7 +177,7 @@ export async function startSession(input: {
 
     // Pre-flight: check connectivity before creating the session record
     await preflightSession({
-      lmConnectionSnapshot: { baseUrl: input.connection.baseUrl },
+      lmConnectionSnapshot: { baseUrl: input.connection.baseUrl, apiKey: input.connection.apiKey ?? null },
       mcpProfileSnapshot: mcpSnapshot ? { url: mcpSnapshot.url } : null,
     })
 

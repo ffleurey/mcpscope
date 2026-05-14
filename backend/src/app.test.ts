@@ -1275,7 +1275,7 @@ describe('error handling contract', () => {
       method: 'POST',
       url: '/api/sessions/preflight',
       payload: {
-        lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1' },
+        lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1', apiKey: null },
         mcpProfileSnapshot: null,
       },
     })

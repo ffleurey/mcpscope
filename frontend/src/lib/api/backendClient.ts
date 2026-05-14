@@ -379,7 +379,7 @@ export function testMcpProfile(url: string) {
 const preflightResponseSchema = z.object({ ok: z.literal(true) })
 
 export function preflightSession(input: {
-  lmConnectionSnapshot: { baseUrl: string }
+  lmConnectionSnapshot: { baseUrl: string; apiKey?: string | null }
   mcpProfileSnapshot?: { url: string } | null
 }) {
   return request('/api/sessions/preflight', {

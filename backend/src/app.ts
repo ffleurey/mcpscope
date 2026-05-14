@@ -327,14 +327,14 @@ export async function buildBackendApp(
   app.post('/api/sessions/preflight', async (_request, reply) => {
     const { lmConnectionSnapshot, mcpProfileSnapshot } = z
       .object({
-        lmConnectionSnapshot: z.object({ baseUrl: z.string() }),
+        lmConnectionSnapshot: z.object({ baseUrl: z.string(), apiKey: z.string().nullable().optional() }),
         mcpProfileSnapshot: z.object({ url: z.string() }).nullable().optional(),
       })
       .parse(_request.body)
 
     // Check LM Studio reachability
     try {
-      await listModels(lmConnectionSnapshot.baseUrl)
+      await listModels(lmConnectionSnapshot.baseUrl, lmConnectionSnapshot.apiKey ?? undefined)
     } catch (e) {
       app.log.warn({ baseUrl: lmConnectionSnapshot.baseUrl, err: e instanceof Error ? e.message : String(e) }, 'Preflight: LM Studio unreachable')
       reply.code(503)
