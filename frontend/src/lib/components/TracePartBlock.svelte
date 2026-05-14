@@ -66,6 +66,17 @@
     return (part.payload.json as McpTool[]).filter(t => t?.name)
   })
 
+  const toolsCharTotal = $derived(tools.reduce((sum, t) => sum + JSON.stringify(t).length, 0))
+
+  function paramCount(tool: McpTool): number {
+    return Object.keys(tool.inputSchema?.properties ?? {}).length
+  }
+
+  function estimateToolTokens(tool: McpTool): number | null {
+    if (tokenCount === null || toolsCharTotal === 0) return null
+    return Math.round(tokenCount * JSON.stringify(tool).length / toolsCharTotal)
+  }
+
   function normalizeCompactMessageText(text: string | null | undefined): string | null {
     if (!text) {
       return null
@@ -96,7 +107,9 @@
     <details class="part-details compact-row">
       <summary class="part-summary compact-summary">
         <span class="part-title">{partLabel}</span>
-        {#if previewText}
+        {#if part.partType === 'tool-definitions'}
+          <span class="part-preview">({tools.length} tool{tools.length !== 1 ? 's' : ''})</span>
+        {:else if previewText}
           <span class="part-preview">{previewText}</span>
         {/if}
         {#if tokenCount !== null}
@@ -112,7 +125,9 @@
     <details class="part-details" open={!part.display.collapsedByDefault}>
       <summary class="part-summary">
         <span class="part-title">{partLabel}</span>
-        {#if part.payload.summary}
+        {#if part.partType === 'tool-definitions'}
+          <span class="part-subtitle">({tools.length} tool{tools.length !== 1 ? 's' : ''})</span>
+        {:else if part.payload.summary}
           <span class="part-subtitle">{part.payload.summary}</span>
         {/if}
         {#if tokenCount !== null}
@@ -142,11 +157,14 @@
   {#if part.partType === 'tool-definitions' && tools.length > 0}
     <div class="tool-list">
       {#each tools as tool}
+        {@const nParams = paramCount(tool)}
+        {@const estTokens = estimateToolTokens(tool)}
         <details class="tool-item">
           <summary class="tool-summary">
             <span class="tool-name">{tool.name}</span>
-            {#if tool.description}
-              <span class="tool-desc-preview">{tool.description}</span>
+            <span class="tool-meta">({nParams} parameter{nParams !== 1 ? 's' : ''})</span>
+            {#if estTokens !== null}
+              <span class="token-pill">~{estTokens.toLocaleString()} tokens</span>
             {/if}
           </summary>
           <div class="tool-detail">
@@ -415,13 +433,10 @@
     flex-shrink: 0;
   }
 
-  .tool-desc-preview {
-    font-size: 0.78rem;
+  .tool-meta {
+    font-size: 0.75rem;
     color: var(--text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
+    flex-shrink: 0;
   }
 
   .tool-detail {

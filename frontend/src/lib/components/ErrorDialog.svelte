@@ -12,11 +12,12 @@
 
 {#if $sessionError}
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div class="overlay" role="dialog" aria-modal="true" aria-label="Error" onkeydown={handleKeydown}>
+  <div class="overlay" role="dialog" aria-modal="true" aria-label="Error" tabindex="-1" onkeydown={handleKeydown}>
     <div class="dialog">
       <div class="dialog-title">Error</div>
       <div class="dialog-body">{$sessionError}</div>
       <div class="dialog-actions">
+        <!-- svelte-ignore a11y_autofocus -->
         <button class="btn" onclick={dismiss} autofocus>OK</button>
       </div>
     </div>
