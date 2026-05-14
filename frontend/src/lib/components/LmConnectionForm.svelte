@@ -9,10 +9,19 @@
 
   let { connection = null, onSave, onCancel }: Props = $props()
 
-  let name = $state(connection?.name ?? '')
-  let baseUrl = $state(connection?.baseUrl ?? 'http://localhost:1234/v1')
-  let apiKey = $state(connection?.apiKey ?? '')
+  let name = $state('')
+  let baseUrl = $state('http://localhost:1234/v1')
+  let apiKey = $state('')
   let showApiKey = $state(false)
+  let seededConnection = $state<LmStudioConnection | null | undefined>(undefined)
+
+  $effect(() => {
+    if (connection === seededConnection) return
+    seededConnection = connection
+    name = connection?.name ?? ''
+    baseUrl = connection?.baseUrl ?? 'http://localhost:1234/v1'
+    apiKey = connection?.apiKey ?? ''
+  })
 
   let errors = $state<Record<string, string>>({})
 

@@ -79,6 +79,30 @@ export default [
     },
   },
 
+  // Trusted highlighted/rendered HTML sinks used by shared UI viewers
+  {
+    files: [
+      'frontend/src/lib/components/ConnectionTestDialog.svelte',
+      'frontend/src/lib/components/ErrorDialog.svelte',
+      'frontend/src/lib/components/InlineAppError.svelte',
+      'frontend/src/lib/components/JsonDialog.svelte',
+      'frontend/src/lib/components/MarkdownPreviewDialog.svelte',
+      'frontend/src/lib/components/NewSessionPanel.svelte',
+      'frontend/src/lib/components/SessionTurnBlock.svelte',
+    ],
+    rules: {
+      'svelte/no-at-html-tags': 'off',
+    },
+  },
+
+  // Dev seed scripts intentionally print operational progress
+  {
+    files: ['backend/src/dev/**/*.ts'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
   // Ignore build output and config files
   {
     ignores: [

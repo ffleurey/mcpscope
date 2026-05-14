@@ -1,12 +1,11 @@
 <script lang="ts">
-  import type { PartRecord, RawExchangeRecord } from '../backendTypes'
+  import type { PartRecord } from '../backendTypes'
   import { deriveContextEntries } from '../traceStreaming'
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
 
   interface Props {
     parts: PartRecord[]
-    rawExchanges: RawExchangeRecord[]
     mode?: 'chat' | 'inspect'
     /** Loaded context window size for bar scale. */
     loadedContextLength?: number | null

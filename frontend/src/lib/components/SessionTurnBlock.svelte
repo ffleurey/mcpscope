@@ -189,22 +189,6 @@
       {/if}
     {/if}
 
-    <!-- Compaction note: inspect mode only -->
-    {#if mode === 'inspect' && turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
-      <div class="compaction-summary">
-        {#if turn.compactionTokensRemoved !== null && turn.compactionTokensRemoved > 0}
-          <span class="compaction-label">↓ {turn.compactionApplied}</span>
-          <span class="compaction-tokens">−{turn.compactionTokensRemoved.toLocaleString()} tokens</span>
-          {#if turn.contextTokensAtTurnEnd !== null && turn.contextTokensAfterCompaction !== null}
-            <span class="compaction-range">{turn.contextTokensAtTurnEnd.toLocaleString()} → {turn.contextTokensAfterCompaction.toLocaleString()}</span>
-          {/if}
-        {:else}
-          <span class="compaction-label">↓ {turn.compactionApplied}</span>
-          <span class="compaction-tokens">no tokens removed</span>
-        {/if}
-      </div>
-    {/if}
-
   {:else}
     <!-- ── Chat (in-progress) OR Inspect (always): all rounds shown ──── -->
     {#each sortedRounds as round (round.id)}
@@ -301,6 +285,22 @@
         {/if}
       </div>
     {/if}
+  {/if}
+
+  <!-- Compaction note: inspect mode only -->
+  {#if mode === 'inspect' && turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
+    <div class="compaction-summary">
+      {#if turn.compactionTokensRemoved !== null && turn.compactionTokensRemoved > 0}
+        <span class="compaction-label">↓ {turn.compactionApplied}</span>
+        <span class="compaction-tokens">−{turn.compactionTokensRemoved.toLocaleString()} tokens</span>
+        {#if turn.contextTokensAtTurnEnd !== null && turn.contextTokensAfterCompaction !== null}
+          <span class="compaction-range">{turn.contextTokensAtTurnEnd.toLocaleString()} → {turn.contextTokensAfterCompaction.toLocaleString()}</span>
+        {/if}
+      {:else}
+        <span class="compaction-label">↓ {turn.compactionApplied}</span>
+        <span class="compaction-tokens">no tokens removed</span>
+      {/if}
+    </div>
   {/if}
 
 </section>

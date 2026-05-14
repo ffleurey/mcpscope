@@ -418,10 +418,10 @@ export async function buildBackendApp(
       .parse(_request.body)
 
     // Check LM Studio reachability
-    let modelIds: string[] = []
+    let listedByCompatApi: boolean
     try {
       const modelList = await listModels(lmConnectionSnapshot.baseUrl, lmConnectionSnapshot.apiKey ?? undefined)
-      modelIds = modelList.data?.map(m => m.id ?? '').filter(Boolean) ?? []
+      listedByCompatApi = (modelList.data?.some((m) => m.id === selectedModel.modelKey) ?? false)
     } catch (e) {
       app.log.warn({ baseUrl: lmConnectionSnapshot.baseUrl, err: e instanceof Error ? e.message : String(e) }, 'Preflight: LM Studio unreachable')
       reply.code(503)
@@ -436,7 +436,6 @@ export async function buildBackendApp(
       lmConnectionSnapshot.apiKey ?? undefined,
       selectedModel.modelKey,
     )
-    const listedByCompatApi = modelIds.includes(selectedModel.modelKey)
     if (loaded === false || (loaded === null && !listedByCompatApi)) {
       const label = selectedModel.modelDisplayName ?? selectedModel.modelKey
       reply.code(409)

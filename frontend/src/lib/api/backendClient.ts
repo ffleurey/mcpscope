@@ -31,7 +31,7 @@ function buildUrl(path: string): string {
 async function request<T>(
   path: string,
   options: {
-    method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
     body?: unknown
     schema?: ZodType<T>
   } = {},

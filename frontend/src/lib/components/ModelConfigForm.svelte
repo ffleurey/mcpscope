@@ -13,13 +13,26 @@
 
   let { modelConfig = null, onSave, onCancel }: Props = $props()
 
-  let name = $state(modelConfig?.name ?? '')
-  let connectionId = $state(modelConfig?.connectionId ?? '')
-  let modelKey = $state(modelConfig?.modelKey ?? '')
-  let modelDisplayName = $state(modelConfig?.modelDisplayName ?? '')
-  let temperature = $state(modelConfig?.temperature ?? 0.7)
-  let systemPrompt = $state(modelConfig?.systemPrompt ?? '')
-  let reasoning = $state<'on' | 'off' | undefined>(modelConfig?.reasoning)
+  let name = $state('')
+  let connectionId = $state('')
+  let modelKey = $state('')
+  let modelDisplayName = $state('')
+  let temperature = $state(0.7)
+  let systemPrompt = $state('')
+  let reasoning = $state<'on' | 'off' | undefined>(undefined)
+  let seededModelConfig = $state<ModelConfig | null | undefined>(undefined)
+
+  $effect(() => {
+    if (modelConfig === seededModelConfig) return
+    seededModelConfig = modelConfig
+    name = modelConfig?.name ?? ''
+    connectionId = modelConfig?.connectionId ?? ''
+    modelKey = modelConfig?.modelKey ?? ''
+    modelDisplayName = modelConfig?.modelDisplayName ?? ''
+    temperature = modelConfig?.temperature ?? 0.7
+    systemPrompt = modelConfig?.systemPrompt ?? ''
+    reasoning = modelConfig?.reasoning
+  })
 
   let availableModels = $state<LmStudioModel[]>([])
   let modelsLoading = $state(false)

@@ -274,12 +274,12 @@ export async function sendMessage(input: {
 
     await refreshSessions()
     if (streamOutcome !== 'committed') {
-      await refreshActiveTrace().catch((e) => console.warn('Could not refresh trace after non-committed turn', e))
+      await refreshActiveTrace().catch(() => undefined)
     }
   } catch (error) {
     setSessionError(toAppError(error))
-    await refreshSessions().catch((e) => console.warn('Could not refresh sessions after turn error', e))
-    await refreshActiveTrace().catch((e) => console.warn('Could not refresh trace after turn error', e))
+    await refreshSessions().catch(() => undefined)
+    await refreshActiveTrace().catch(() => undefined)
   } finally {
     activeTurnStream.set(null)
     isSendingTurn.set(false)

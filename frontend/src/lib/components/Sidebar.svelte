@@ -92,7 +92,13 @@
       </button>
     </div>
 
-    <div class="resize-handle" class:dragging={isResizing} role="separator" aria-orientation="vertical" onmousedown={startResize}></div>
+    <button
+      type="button"
+      class="resize-handle"
+      class:dragging={isResizing}
+      aria-label="Resize sidebar"
+      onmousedown={startResize}
+    ></button>
   {/if}
 </nav>
 
@@ -221,6 +227,9 @@
     top: 0;
     right: 0;
     width: 4px;
+    padding: 0;
+    border: none;
+    background: transparent;
     height: 100%;
     cursor: ew-resize;
     z-index: 10;

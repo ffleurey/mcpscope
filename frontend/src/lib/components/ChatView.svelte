@@ -107,11 +107,11 @@
       .join('|'),
   )
 
+  let isInitializing = $derived(session != null && session.initStatus !== 'ready')
   let hasTraceContent = $derived(
     isInitializing || sessionPreludeParts.length > 0 || sessionPreludeRawExchanges.length > 0 || traceTurns.length > 0,
   )
   let isExhausted = $derived(session?.isContextExhausted === true)
-  let isInitializing = $derived(session != null && session.initStatus !== 'ready')
   let displayModelName = $derived(session?.modelProfileSnapshot?.name ?? '')
   let displayMcpName = $derived(session?.mcpProfileSnapshot?.name ?? null)
   let displayCompaction = $derived(session?.compactionStrategy ?? null)

@@ -9,8 +9,16 @@
 
   let { profile = null, onSave, onCancel }: Props = $props()
 
-  let name = $state(profile?.name ?? '')
-  let url = $state(profile?.url ?? '')
+  let name = $state('')
+  let url = $state('')
+  let seededProfile = $state<McpServerProfile | null | undefined>(undefined)
+
+  $effect(() => {
+    if (profile === seededProfile) return
+    seededProfile = profile
+    name = profile?.name ?? ''
+    url = profile?.url ?? ''
+  })
 
   let errors = $state<Record<string, string>>({})
 

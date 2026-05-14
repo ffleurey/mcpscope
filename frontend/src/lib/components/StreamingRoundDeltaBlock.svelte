@@ -130,12 +130,6 @@
     font-size: 0.78rem;
   }
 
-  .stream-message-meta {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 0.3rem;
-  }
-
   .stream-tool-row {
     display: flex;
     align-items: center;
