@@ -453,6 +453,7 @@
   .tool-description {
     font-size: 0.82rem;
     color: var(--text-muted);
+    font-style: italic;
     line-height: 1.45;
     white-space: pre-wrap;
     word-break: break-word;
@@ -480,18 +481,19 @@
     font-family: var(--mono);
     font-size: 0.78rem;
     color: var(--text);
-    font-weight: 500;
+    font-weight: 600;
   }
 
   .param-meta {
     font-family: var(--mono);
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: var(--text);
   }
 
   .param-desc {
     font-size: 0.8rem;
     color: var(--text-muted);
+    font-style: italic;
     padding-left: 0.6rem;
     line-height: 1.4;
     white-space: pre-wrap;
