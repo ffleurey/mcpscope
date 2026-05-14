@@ -1,5 +1,8 @@
 import cors from '@fastify/cors'
+import staticFiles from '@fastify/static'
 import Fastify from 'fastify'
+import fs from 'node:fs'
+import path from 'node:path'
 import { z } from 'zod'
 import type { BackendConfig } from './config.js'
 import {
@@ -39,7 +42,7 @@ import { runSessionInitialization } from './runtime/sessionInit.js'
 
 const healthResponseSchema = z.object({
   status: z.literal('ok'),
-  service: z.literal('ai-clientapp-backend'),
+  service: z.literal('mcpscope-backend'),
   sqlitePath: z.string(),
 })
 
@@ -103,11 +106,28 @@ export async function buildBackendApp(
 ) {
   const app = Fastify({
     logger: true,
+    bodyLimit: 50 * 1024 * 1024, // 50MB — large trace files can be several MB
   })
 
   await app.register(cors, {
     origin: config.corsOrigin,
   })
+
+  // Serve pre-built frontend when BACKEND_STATIC_DIR is set (production/Docker mode)
+  if (config.staticDir != null && fs.existsSync(config.staticDir)) {
+    await app.register(staticFiles, {
+      root: path.resolve(config.staticDir),
+      prefix: '/',
+      // SPA fallback: non-API routes that don't match a file return index.html
+      wildcard: false,
+    })
+    app.setNotFoundHandler(async (request, reply) => {
+      if (!request.url.startsWith('/api/')) {
+        return reply.sendFile('index.html')
+      }
+      return reply.status(404).send({ error: 'Not found' })
+    })
+  }
 
   const database = openBackendDatabase(config.sqlitePath)
   app.decorate('backendDb', database)
@@ -115,7 +135,7 @@ export async function buildBackendApp(
   app.get('/api/health', async () => {
     return healthResponseSchema.parse({
       status: 'ok',
-      service: 'ai-clientapp-backend',
+      service: 'mcpscope-backend',
       sqlitePath: database.path,
     })
   })

@@ -9,7 +9,6 @@
     exportActiveTrace,
     isSendingTurn,
     sendMessage,
-    sessionError,
   } from '../sessionStore'
   import type { StreamingRoundState } from '../traceStreaming'
   import { deriveContextSnapshotAtRound } from '../traceStreaming'
@@ -145,6 +144,16 @@
     if (e.key === 'Escape') cancelTitleEdit()
   }
 
+  // Auto-focus textarea when turn completes
+  let _wasSending = false
+  $effect(() => {
+    const sending = $isSendingTurn
+    if (_wasSending && !sending && textareaEl && !editingTitle) {
+      tick().then(() => textareaEl?.focus())
+    }
+    _wasSending = sending
+  })
+
   $effect(() => {
     const sessionId = session?.id ?? null
     const turnCount = traceTurns.length
@@ -245,11 +254,7 @@
         <div class="empty-state"><span>Loading trace…</span></div>
       {:else if !hasTraceContent}
         <div class="empty-state">
-          {#if $sessionError}
-            <span class="init-error">{$sessionError}</span>
-          {:else}
-            <span class="empty-hint">Session ready — type your first message below</span>
-          {/if}
+          <span class="empty-hint">Session ready — type your first message below</span>
         </div>
       {:else}
         {#if sessionPreludeParts.length > 0 || isInitializing}
@@ -275,15 +280,6 @@
       {/if}
     </div>
 
-    <!-- Context bar above composer — only shown when session is ready -->
-    {#if $activeTrace && !isInitializing}
-      <ContextSnapshotBar
-        entries={$activeTrace.context}
-        contextSize={session.loadedContextLength ?? null}
-        label="Context after compaction"
-      />
-    {/if}
-
     {#if isExhausted}
       <div class="exhausted-banner">
         ⚠️ Context window full — this session cannot continue. Start a new session.
@@ -293,9 +289,6 @@
     <!-- Composer: hidden while initializing -->
     {#if !isInitializing}
       <div class="composer">
-        {#if $sessionError && !$isSendingTurn}
-          <div class="composer-error">{$sessionError}</div>
-        {/if}
         <div class="composer-bubble" class:is-disabled={$isSendingTurn || isExhausted}>
           <textarea
             bind:this={textareaEl}
@@ -324,6 +317,15 @@
           <span class="composer-hint">Ctrl+Enter to send</span>
         </div>
       </div>
+    {/if}
+
+    <!-- Context bar at the bottom — shown when session is active -->
+    {#if $activeTrace && !isInitializing}
+      <ContextSnapshotBar
+        entries={$activeTrace.context}
+        contextSize={session.loadedContextLength ?? null}
+        label="Context after compaction"
+      />
     {/if}
   {/if}
 </div>
@@ -435,11 +437,6 @@
     font-size: 0.82rem;
   }
 
-  .init-error {
-    color: var(--color-warning);
-    font-size: 0.85rem;
-  }
-
   /* ── Exhausted banner ─────────────────────────────────────────────────── */
   .exhausted-banner {
     flex-shrink: 0;
@@ -459,16 +456,9 @@
     background: var(--bg);
   }
 
-  .composer-error {
-    font-size: 0.78rem;
-    color: var(--color-error);
-    margin-bottom: 0.4rem;
-    padding: 0 0.2rem;
-  }
-
   /* Bubble styled to match the user message in the transcript */
   .composer-bubble {
-    background: color-mix(in srgb, var(--bg-panel) 92%, black 8%);
+    background: var(--bg-active);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 0.38rem 0.72rem;

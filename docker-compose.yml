@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    image: mcpscope
+    ports:
+      - "3030:3030"
+    volumes:
+      - mcpscope-data:/data
+    environment:
+      # Override any defaults here if needed, e.g.:
+      # BACKEND_MAX_TOOL_ROUNDS: "20"
+      BACKEND_HOST: "0.0.0.0"
+      BACKEND_PORT: "3030"
+      BACKEND_DATA_DIR: "/data"
+      BACKEND_STATIC_DIR: "/app/frontend/dist"
+    restart: unless-stopped
+
+volumes:
+  mcpscope-data:

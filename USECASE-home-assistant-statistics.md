@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This file defines the first concrete end-to-end use case for the AI Client App MVP.
+This file defines the first concrete end-to-end use case for the mcpscope MVP.
 
 It exists to give the project a focused build target: one realistic workflow that is specific enough to implement and test, while still representing the broader category of data-analysis MCP clients.
 

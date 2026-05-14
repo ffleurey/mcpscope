@@ -143,7 +143,7 @@ export async function initializeMcpSession(serverUrl: string): Promise<McpInitia
       protocolVersion: '2024-11-05',
       capabilities: {},
       clientInfo: {
-        name: 'ai-clientapp-backend-tests',
+        name: 'mcpscope-backend-tests',
         version: '0.1.0',
       },
     },
