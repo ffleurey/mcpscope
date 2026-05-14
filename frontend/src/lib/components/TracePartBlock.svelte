@@ -451,7 +451,7 @@
   }
 
   .tool-description {
-    font-size: 0.82rem;
+    font-size: 0.84rem;
     color: var(--text-muted);
     font-style: italic;
     line-height: 1.45;
@@ -491,7 +491,7 @@
   }
 
   .param-desc {
-    font-size: 0.8rem;
+    font-size: 0.84rem;
     color: var(--text-muted);
     font-style: italic;
     padding-left: 0.6rem;
