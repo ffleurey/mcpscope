@@ -2,6 +2,16 @@
   import type { PartRecord } from '../backendTypes'
   import JsonDialog from './JsonDialog.svelte'
 
+  interface McpTool {
+    name: string
+    description?: string
+    inputSchema?: {
+      type?: string
+      properties?: Record<string, { type?: string; description?: string; enum?: unknown[] }>
+      required?: string[]
+    }
+  }
+
   interface Props {
     part: PartRecord
     mode?: 'compact' | 'inspect'
@@ -51,6 +61,11 @@
     || part.partType === 'mcp-instructions',
   )
 
+  const tools = $derived.by((): McpTool[] => {
+    if (part.partType !== 'tool-definitions' || !Array.isArray(part.payload.json)) return []
+    return (part.payload.json as McpTool[]).filter(t => t?.name)
+  })
+
   function normalizeCompactMessageText(text: string | null | undefined): string | null {
     if (!text) {
       return null
@@ -90,17 +105,7 @@
       </summary>
 
       <div class="part-body">
-        {#if part.payload.text}
-          <pre class="part-text">{part.payload.text}</pre>
-        {/if}
-
-        {#if hasJsonPayload}
-          <button class="raw-btn" onclick={() => { showJson = true }}>View JSON</button>
-        {/if}
-
-        {#if part.context.note}
-          <div class="part-note">{part.context.note}</div>
-        {/if}
+        {@render partBodyContent()}
       </div>
     </details>
   {:else if isCollapsible}
@@ -116,17 +121,7 @@
       </summary>
 
       <div class="part-body">
-        {#if part.payload.text}
-          <pre class="part-text">{part.payload.text}</pre>
-        {/if}
-
-        {#if hasJsonPayload}
-          <button class="raw-btn" onclick={() => { showJson = true }}>View JSON</button>
-        {/if}
-
-        {#if part.context.note}
-          <div class="part-note">{part.context.note}</div>
-        {/if}
+        {@render partBodyContent()}
       </div>
     </details>
   {:else}
@@ -142,6 +137,53 @@
     {/if}
   {/if}
 </div>
+
+{#snippet partBodyContent()}
+  {#if part.partType === 'tool-definitions' && tools.length > 0}
+    <div class="tool-list">
+      {#each tools as tool}
+        <details class="tool-item">
+          <summary class="tool-summary">
+            <span class="tool-name">{tool.name}</span>
+            {#if tool.description}
+              <span class="tool-desc-preview">{tool.description}</span>
+            {/if}
+          </summary>
+          <div class="tool-detail">
+            {#if tool.description}
+              <div class="tool-description">{tool.description}</div>
+            {/if}
+            {#if tool.inputSchema?.properties && Object.keys(tool.inputSchema.properties).length > 0}
+              <div class="tool-params">
+                {#each Object.entries(tool.inputSchema.properties) as [paramName, param]}
+                  {@const isRequired = tool.inputSchema?.required?.includes(paramName) ?? false}
+                  <div class="tool-param">
+                    <span class="param-name">{paramName}</span>
+                    {#if param.type}<span class="param-type">{param.type}</span>{/if}
+                    {#if isRequired}<span class="param-required">required</span>{/if}
+                    {#if param.description}<span class="param-desc">{param.description}</span>{/if}
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <div class="tool-no-params">No parameters</div>
+            {/if}
+          </div>
+        </details>
+      {/each}
+    </div>
+  {:else if part.payload.text}
+    <pre class="part-text">{part.payload.text}</pre>
+  {/if}
+
+  {#if hasJsonPayload}
+    <button class="raw-btn" onclick={() => { showJson = true }}>View JSON</button>
+  {/if}
+
+  {#if part.context.note && part.partType !== 'tool-definitions'}
+    <div class="part-note">{part.context.note}</div>
+  {/if}
+{/snippet}
 
 {#if showJson}
   <JsonDialog
@@ -320,5 +362,129 @@
   .raw-btn:hover {
     border-color: var(--border);
     color: var(--text);
+  }
+
+  /* ── Tool definitions list ───────────────────────────────────────────── */
+  .tool-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin-top: 0.25rem;
+  }
+
+  .tool-item {
+    border: 1px solid var(--border-subtle);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+
+  .tool-summary {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.28rem 0.5rem;
+    cursor: pointer;
+    list-style: none;
+    border-radius: 5px;
+  }
+
+  .tool-summary::-webkit-details-marker { display: none; }
+
+  .tool-summary::before {
+    content: '▶';
+    font-size: 0.55rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    transition: transform 0.12s;
+    margin-top: 0.1rem;
+  }
+
+  .tool-item[open] > .tool-summary::before {
+    transform: rotate(90deg);
+  }
+
+  .tool-summary:hover {
+    background: var(--bg-hover);
+  }
+
+  .tool-name {
+    font-family: monospace;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text);
+    flex-shrink: 0;
+  }
+
+  .tool-desc-preview {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .tool-detail {
+    padding: 0.4rem 0.7rem 0.5rem;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .tool-description {
+    font-size: 0.8rem;
+    color: var(--text);
+    line-height: 1.45;
+  }
+
+  .tool-params {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .tool-param {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+  }
+
+  .param-name {
+    font-family: monospace;
+    font-size: 0.78rem;
+    color: var(--text);
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .param-type {
+    font-size: 0.72rem;
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    border-radius: 3px;
+    padding: 0.05rem 0.3rem;
+    flex-shrink: 0;
+  }
+
+  .param-required {
+    font-size: 0.68rem;
+    color: var(--color-warning);
+    opacity: 0.8;
+    flex-shrink: 0;
+  }
+
+  .param-desc {
+    color: var(--text-muted);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .tool-no-params {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
   }
 </style>
