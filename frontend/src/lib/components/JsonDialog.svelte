@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { highlightJson } from '../jsonHighlight'
+  import DialogShell from './DialogShell.svelte'
 
   interface Props {
     title: string
@@ -9,94 +10,78 @@
 
   let { title, data, onClose }: Props = $props()
 
-  let dialogEl = $state<HTMLDialogElement | null>(null)
+  let wrap = $state(false)
 
-  onMount(() => {
-    dialogEl?.showModal()
-  })
-
-  function handleBackdropClick(e: MouseEvent) {
-    if (e.target === dialogEl) onClose()
-  }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') onClose()
-  }
-
-  const formatted = $derived(JSON.stringify(data, null, 2))
+  const highlighted = $derived(highlightJson(data))
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<dialog
-  bind:this={dialogEl}
-  class="json-dialog"
-  onclick={handleBackdropClick}
-  onkeydown={handleKeydown}
->
-  <div class="dialog-inner">
-    <div class="dialog-header">
-      <span class="dialog-title">{title}</span>
-      <button class="close-btn" onclick={onClose} aria-label="Close">✕</button>
-    </div>
-    <pre class="json-body">{formatted}</pre>
+<DialogShell {title} {onClose} dialogClass="json-dialog-size">
+  <div class="json-toolbar">
+    <button
+      class="wrap-btn"
+      class:active={wrap}
+      onclick={() => { wrap = !wrap }}
+      title={wrap ? 'Disable line wrap' : 'Enable line wrap'}
+    >
+      {wrap ? 'No wrap' : 'Wrap'}
+    </button>
   </div>
-</dialog>
+  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+  <pre class="json-body" class:wrapped={wrap}>{@html highlighted}</pre>
+</DialogShell>
 
 <style>
-  .json-dialog {
-    background: transparent;
-    border: none;
-    padding: 0;
-    max-width: min(720px, 95vw);
-    width: 100%;
-    max-height: 85vh;
+  :global(.json-dialog-size) {
+    max-width: min(760px, 95vw);
   }
-  .json-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.55);
-  }
-  .dialog-inner {
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-    max-height: 85vh;
-    overflow: hidden;
-  }
-  .dialog-header {
+
+  .json-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--border);
+    justify-content: flex-end;
+    padding: 0.35rem 0.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-panel);
     flex-shrink: 0;
   }
-  .dialog-title {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--text);
-  }
-  .close-btn {
+
+  .wrap-btn {
     background: none;
-    border: none;
+    border: 1px solid var(--border);
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 1rem;
-    padding: 0.2rem 0.4rem;
+    font-size: 0.72rem;
+    padding: 0.15rem 0.5rem;
     border-radius: 3px;
-    line-height: 1;
+    line-height: 1.4;
   }
-  .close-btn:hover { color: var(--text); background: var(--bg); }
+
+  .wrap-btn:hover { color: var(--text); background: var(--bg); }
+  .wrap-btn.active { color: var(--color-accent); border-color: var(--color-accent); }
+
   .json-body {
     margin: 0;
     padding: 1rem;
     overflow: auto;
-    font-family: var(--mono, monospace);
+    font-family: var(--font-mono, monospace);
     font-size: 0.78rem;
     line-height: 1.5;
     color: var(--text);
     background: var(--bg);
-    flex: 1;
     white-space: pre;
+    flex: 1;
   }
+
+  .json-body.wrapped {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* hljs JSON token colours */
+  .json-body :global(.hljs-attr)    { color: var(--color-accent, #60a5fa); }
+  .json-body :global(.hljs-string)  { color: var(--color-success, #4ade80); }
+  .json-body :global(.hljs-number)  { color: #f9a825; }
+  .json-body :global(.hljs-literal) { color: #e879f9; }
+  .json-body :global(.hljs-punctuation),
+  .json-body :global(.hljs-attr + .hljs-punctuation) { color: var(--text-muted); }
 </style>

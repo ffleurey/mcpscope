@@ -1,0 +1,110 @@
+<script lang="ts">
+  import { onMount } from 'svelte'
+  import type { Snippet } from 'svelte'
+
+  interface Props {
+    title: string
+    onClose: () => void
+    /** Optional extra CSS class on the <dialog> element for sizing overrides */
+    dialogClass?: string
+    children: Snippet
+  }
+
+  let { title, onClose, dialogClass = '', children }: Props = $props()
+
+  let dialogEl = $state<HTMLDialogElement | null>(null)
+
+  onMount(() => {
+    dialogEl?.showModal()
+  })
+
+  function handleBackdropClick(e: MouseEvent) {
+    if (e.target === dialogEl) onClose()
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') onClose()
+  }
+</script>
+
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<dialog
+  bind:this={dialogEl}
+  class="shell-dialog {dialogClass}"
+  onclick={handleBackdropClick}
+  onkeydown={handleKeydown}
+>
+  <div class="dialog-inner">
+    <div class="dialog-header">
+      <span class="dialog-title">{title}</span>
+      <button class="close-btn" onclick={onClose} aria-label="Close">✕</button>
+    </div>
+    <div class="dialog-body">
+      {@render children()}
+    </div>
+  </div>
+</dialog>
+
+<style>
+  .shell-dialog {
+    background: transparent;
+    border: none;
+    padding: 0;
+    max-width: min(720px, 95vw);
+    width: 100%;
+    max-height: 85vh;
+  }
+
+  .shell-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  .dialog-inner {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+    overflow: hidden;
+  }
+
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .dialog-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .close-btn:hover { color: var(--text); background: var(--bg); }
+
+  .dialog-body {
+    flex: 1;
+    overflow: auto;
+    min-height: 0;
+  }
+</style>
