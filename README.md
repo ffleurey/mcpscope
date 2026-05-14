@@ -20,6 +20,32 @@ npm run seed:dev-sessions  # seed captured session fixtures
 npm run seed:dev-data      # both of the above
 ```
 
+## Docker (recommended for MCP server development)
+
+The easiest way to run the app is via Docker — no Node.js install required.
+
+```bash
+docker compose up          # build image and start (first run ~2 min)
+docker compose up -d       # same, detached
+docker compose down        # stop
+```
+
+Then open **http://localhost:3030**.
+
+Session data (SQLite) is persisted in a named Docker volume (`ai-clientapp-data`) and survives container restarts and image upgrades.
+
+To rebuild the image after pulling changes:
+```bash
+docker compose build
+docker compose up -d
+```
+
+To publish to Docker Hub:
+```bash
+docker build -t <your-hub-user>/ai-clientapp:latest .
+docker push <your-hub-user>/ai-clientapp:latest
+```
+
 ## Build
 
 ```bash
