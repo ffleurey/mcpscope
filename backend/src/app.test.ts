@@ -1221,3 +1221,133 @@ describe('backend foundation', () => {
     )
   })
 })
+
+describe('error handling contract', () => {
+  let app: FastifyInstance | undefined
+  let dataDir: string | undefined
+
+  afterEach(async () => {
+    await app?.close()
+    app = undefined
+    if (dataDir) {
+      fs.rmSync(dataDir, { recursive: true, force: true })
+      dataDir = undefined
+    }
+  })
+
+  it('returns structured { error: { type, message } } on 404', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/sessions/does-not-exist/trace',
+    })
+
+    expect(response.statusCode).toBe(404)
+    const body = response.json()
+    expect(body).toMatchObject({ error: { type: 'not_found', message: expect.any(String) } })
+  })
+
+  it('returns 503 with upstream error shape when MCP test endpoint cannot connect', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/mcp-profiles/test',
+      payload: { url: 'http://127.0.0.1:9/mcp' },
+    })
+
+    expect(response.statusCode).toBe(503)
+    const body = response.json()
+    expect(body).toMatchObject({ error: { type: 'upstream', message: expect.any(String) } })
+  })
+
+  it('returns 503 with lm_studio_unreachable code when preflight cannot reach LM Studio', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/preflight',
+      payload: {
+        lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1' },
+        mcpProfileSnapshot: null,
+      },
+    })
+
+    expect(response.statusCode).toBe(503)
+    const body = response.json()
+    expect(body).toMatchObject({
+      error: { type: 'upstream', code: 'lm_studio_unreachable', message: expect.any(String) },
+    })
+  })
+
+  it('emits turn-failed SSE event with errorType when streaming gateway throws', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async probePromptTokensDetailed(_baseUrl, _apiKey, body) {
+          return {
+            promptTokens: 3,
+            completion: {
+              id: 'probe-1', model: 'model-key', created: 1, choices: [],
+              usage: { prompt_tokens: 3, completion_tokens: 0, total_tokens: 3 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: { 'Content-Type': 'application/json' },
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: { 'content-type': 'application/json' },
+              responseBody: '{}',
+            },
+          }
+        },
+        async createChatCompletion() { throw new Error('not used') },
+        async streamChatCompletion() { throw new Error('LM Studio connection lost') },
+      },
+      mcpGateway: {
+        async initializeSession() { throw new Error('not used') },
+        async listTools() { throw new Error('not used') },
+        async callTool() { throw new Error('not used') },
+      },
+    })
+
+    const sessionRes = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        title: 'Error test session',
+        modelProfileSnapshot: {
+          id: 'model-1', name: 'Model', connectionBaseUrl: 'https://example.com/v1',
+          apiKey: null, modelKey: 'model-key', modelDisplayName: 'Model Key',
+          systemPrompt: 'You are helpful.', temperature: 0, reasoning: null,
+          createdAt: 1, updatedAt: 1,
+        },
+      },
+    })
+    const sessionId = sessionRes.json().session.id as string
+
+    const streamRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/turns/stream`,
+      payload: { userContent: 'Hello' },
+    })
+
+    const events = parseSseEvents(streamRes.body)
+    const failedEvent = events.find(e => e.event === 'turn-failed')
+    expect(failedEvent).toBeDefined()
+    expect(failedEvent!.data).toMatchObject({
+      type: 'turn-failed',
+      errorType: expect.any(String),
+      message: expect.any(String),
+    })
+  })
+})
