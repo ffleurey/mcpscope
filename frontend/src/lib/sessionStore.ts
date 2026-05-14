@@ -37,6 +37,7 @@ import type {
 } from './types'
 
 export const sessionError = writable<AppError | null>(null)
+export const sessionErrorSurface = writable<'dialog' | 'new-session'>('dialog')
 export const chatSessions = writable<SessionRecord[]>([])
 export const activeChatId = writable<string | null>(null)
 export const activeTrace = writable<SessionTraceBundle | null>(null)
@@ -50,6 +51,16 @@ export const activeSession = derived(
   [chatSessions, activeChatId],
   ([$chatSessions, $activeChatId]) => $chatSessions.find((session) => session.id === $activeChatId) ?? null,
 )
+
+export function clearSessionError(): void {
+  sessionError.set(null)
+  sessionErrorSurface.set('dialog')
+}
+
+function setSessionError(error: AppError, surface: 'dialog' | 'new-session' = 'dialog'): void {
+  sessionError.set(error)
+  sessionErrorSurface.set(surface)
+}
 
 function sortByUpdatedAtDesc<T extends { updatedAt: number }>(records: T[]): T[] {
   return [...records].sort((left, right) => right.updatedAt - left.updatedAt)
@@ -120,7 +131,7 @@ async function refreshActiveTrace(): Promise<SessionTraceBundle | null> {
 }
 
 export async function initSessionStore(): Promise<void> {
-  sessionError.set(null)
+  clearSessionError()
   await refreshSessions()
   activeChatId.set(null)
   activeTrace.set(null)
@@ -128,26 +139,26 @@ export async function initSessionStore(): Promise<void> {
 }
 
 export function startDraftSession(): void {
-  sessionError.set(null)
+  clearSessionError()
   activeChatId.set(null)
   activeTrace.set(null)
   activeTurnStream.set(null)
 }
 
 export async function selectChat(sessionId: string): Promise<void> {
-  sessionError.set(null)
+  clearSessionError()
   activeChatId.set(sessionId)
 
   try {
     await refreshActiveTrace()
   } catch (error) {
-    sessionError.set(toAppError(error))
+    setSessionError(toAppError(error))
     throw error
   }
 }
 
 export async function deleteChat(sessionId: string): Promise<void> {
-  sessionError.set(null)
+  clearSessionError()
 
   try {
     await deleteBackendSession(sessionId)
@@ -159,7 +170,7 @@ export async function deleteChat(sessionId: string): Promise<void> {
       activeTurnStream.set(null)
     }
   } catch (error) {
-    sessionError.set(toAppError(error))
+    setSessionError(toAppError(error))
     throw error
   }
 }
@@ -170,7 +181,7 @@ export async function startSession(input: {
   mcpProfile: McpServerProfile | null
   compactionStrategy: 'none' | 'strip-reasoning'
 }): Promise<void> {
-  sessionError.set(null)
+  clearSessionError()
   isStartingSession.set(true)
   try {
     const mcpSnapshot = input.mcpProfile ? buildMcpProfileSnapshot(input.mcpProfile) : null
@@ -179,6 +190,10 @@ export async function startSession(input: {
     await preflightSession({
       lmConnectionSnapshot: { baseUrl: input.connection.baseUrl, apiKey: input.connection.apiKey ?? null },
       mcpProfileSnapshot: mcpSnapshot ? { url: mcpSnapshot.url } : null,
+      selectedModel: {
+        modelKey: input.modelConfig.modelKey,
+        modelDisplayName: input.modelConfig.modelDisplayName,
+      },
     })
 
     const { session } = await createSession({
@@ -196,7 +211,7 @@ export async function startSession(input: {
 
     await refreshSessions()
   } catch (error) {
-    sessionError.set(toAppError(error))
+    setSessionError(toAppError(error), 'new-session')
   } finally {
     isStartingSession.set(false)
   }
@@ -218,7 +233,7 @@ function applyPreludeStreamEvent(event: PreludeStreamEvent): void {
   }
 
   // prelude-failed
-  sessionError.set(new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0))
+  setSessionError(new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0))
 }
 
 export async function sendMessage(input: {
@@ -229,11 +244,11 @@ export async function sendMessage(input: {
 
   const sessionId = get(activeChatId)
   if (!sessionId) {
-    sessionError.set(new AppError('No active session — start a session first', 'internal', 0))
+    setSessionError(new AppError('No active session — start a session first', 'internal', 0))
     return
   }
 
-  sessionError.set(null)
+  clearSessionError()
   isSendingTurn.set(true)
   activeTurnStream.set(null)
 
@@ -262,7 +277,7 @@ export async function sendMessage(input: {
       await refreshActiveTrace().catch((e) => console.warn('Could not refresh trace after non-committed turn', e))
     }
   } catch (error) {
-    sessionError.set(toAppError(error))
+    setSessionError(toAppError(error))
     await refreshSessions().catch((e) => console.warn('Could not refresh sessions after turn error', e))
     await refreshActiveTrace().catch((e) => console.warn('Could not refresh trace after turn error', e))
   } finally {
@@ -288,7 +303,7 @@ export function exportActiveTrace(): void {
 }
 
 export async function importTraceFile(file: File): Promise<void> {
-  sessionError.set(null)
+  clearSessionError()
   isImportingTrace.set(true)
 
   try {
@@ -299,7 +314,7 @@ export async function importTraceFile(file: File): Promise<void> {
     await refreshSessions()
     await selectChat(session.id)
   } catch (error) {
-    sessionError.set(toAppError(error))
+    setSessionError(toAppError(error))
     throw error
   } finally {
     isImportingTrace.set(false)
@@ -358,5 +373,5 @@ function applyTurnStreamEvent(
 
   activeTurnStream.set(null)
   // turn-failed event
-  sessionError.set(new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0))
+  setSessionError(new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0))
 }

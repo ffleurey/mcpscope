@@ -1,13 +1,15 @@
 <script lang="ts">
+  import InlineAppError from './InlineAppError.svelte'
   import { lmConnections, upsertConnection, removeConnection } from '../connectionStore'
   import type { LmStudioConnection } from '../types'
   import LmConnectionForm from './LmConnectionForm.svelte'
   import ConnectionTestDialog from './ConnectionTestDialog.svelte'
   import { testLmConnection } from '../api/backendClient'
+  import { toAppError, type AppError } from '../errors'
 
   let editingId = $state<string | null>(null)
   let showNew = $state(false)
-  let saveError = $state<string | null>(null)
+  let saveError = $state<AppError | null>(null)
   let testDialogConn = $state<LmStudioConnection | null>(null)
   let testDialogResult = $state<{ ok: boolean; message: string; details?: Record<string, unknown>; rawDetails?: unknown } | null>(null)
 
@@ -19,19 +21,21 @@
   async function handleSave(conn: LmStudioConnection) {
     try {
       await upsertConnection(conn)
+      saveError = null
       showNew = false
       editingId = null
     } catch (e) {
-      saveError = e instanceof Error ? e.message : String(e)
+      saveError = toAppError(e)
     }
   }
 
   async function handleDelete(id: string) {
     try {
       await removeConnection(id)
+      saveError = null
       if (editingId === id) editingId = null
     } catch (e) {
-      saveError = e instanceof Error ? e.message : String(e)
+      saveError = toAppError(e)
     }
   }
 
@@ -46,9 +50,8 @@
         details: { Models: result.models.length > 0 ? result.models.join(', ') : 'none' },
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      const details = (e as { details?: unknown }).details
-      testDialogResult = { ok: false, message: msg, rawDetails: details }
+      const error = toAppError(e)
+      testDialogResult = { ok: false, message: error.message, rawDetails: error.details }
     }
   }
 
@@ -66,9 +69,7 @@
     {/if}
   </div>
 
-  {#if saveError}
-    <p class="save-error">{saveError}</p>
-  {/if}
+  <InlineAppError error={saveError} />
 
   {#if showNew}
     <LmConnectionForm onSave={handleSave} onCancel={cancelNew} />
@@ -128,7 +129,6 @@
     color: var(--text);
   }
   .empty-state { color: var(--text-muted); font-size: 0.9rem; }
-  .save-error { color: var(--color-error); font-size: 0.875rem; margin-bottom: 1rem; }
   .profile-card {
     background: var(--bg-panel);
     border: 1px solid var(--border);
@@ -157,4 +157,3 @@
   dd { margin: 0; color: var(--text); word-break: break-all; }
   code { font-family: var(--mono); font-size: 0.8rem; }
 </style>
-

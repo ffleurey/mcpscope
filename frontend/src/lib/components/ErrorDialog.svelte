@@ -1,9 +1,9 @@
 <script lang="ts">
   import { highlightJson } from '../jsonHighlight'
-  import { sessionError } from '../sessionStore'
+  import { clearSessionError, sessionError, sessionErrorSurface } from '../sessionStore'
 
   function dismiss() {
-    sessionError.set(null)
+    clearSessionError()
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -11,7 +11,7 @@
   }
 </script>
 
-{#if $sessionError}
+{#if $sessionError && $sessionErrorSurface === 'dialog'}
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="overlay" role="dialog" aria-modal="true" aria-label="Error" tabindex="-1" onkeydown={handleKeydown}>
     <div class="dialog">

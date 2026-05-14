@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { highlightJson } from '../jsonHighlight'
   import { lmConnections, modelConfigs, mcpProfiles } from '../connectionStore'
-  import { sessionError, isStartingSession, startSession } from '../sessionStore'
+  import { sessionError, sessionErrorSurface, isStartingSession, startSession } from '../sessionStore'
 
   let selectedConfigId = $state('')
   let selectedMcpProfileId = $state('')
@@ -28,8 +29,17 @@
   <div class="new-session-card">
     <h2 class="card-title">New session</h2>
 
-    {#if $sessionError}
-      <div class="error-banner">{$sessionError.message}</div>
+    {#if $sessionError && $sessionErrorSurface === 'new-session'}
+      <div class="error-banner">
+        <div class="error-message">{$sessionError.message}</div>
+        {#if $sessionError.details !== undefined}
+          <details class="error-details">
+            <summary>Details</summary>
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+            <pre class="error-details-body">{@html highlightJson($sessionError.details)}</pre>
+          </details>
+        {/if}
+      </div>
     {/if}
 
     <div class="field">
@@ -119,8 +129,40 @@
     border: 1px solid color-mix(in srgb, var(--color-error) 35%, transparent);
     border-radius: 6px;
     color: var(--color-error);
-    font-size: 0.82rem;
     padding: 0.5rem 0.75rem;
+  }
+
+  .error-message {
+    font-size: 0.82rem;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .error-details {
+    margin-top: 0.45rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  .error-details summary {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .error-details-body {
+    margin: 0.45rem 0 0;
+    background: var(--bg);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 0.45rem 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 170px;
+    overflow-y: auto;
   }
 
   .field {

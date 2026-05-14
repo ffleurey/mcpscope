@@ -158,14 +158,102 @@ export async function listModels(baseUrl: string, apiKey?: string): Promise<LmSt
   return (await response.json()) as LmStudioModelListResponse
 }
 
-interface LmStudioNativeModel {
+export interface LmStudioNativeModel {
   type?: string
   key?: string
+  display_name?: string
+  max_context_length?: number
+  capabilities?: {
+    reasoning?: {
+      allowed_options?: string[]
+      default?: string
+    }
+  }
   loaded_instances?: Array<{
+    id?: string
     config?: {
       context_length?: number
     }
   }>
+}
+
+export interface LmStudioModelStatus {
+  uid: string
+  key: string
+  displayName: string
+  maxContextLength: number | null
+  loadedContextLength: number | null
+  isLoaded: boolean
+  supportsReasoning: boolean
+  defaultReasoningOn: boolean
+  raw: LmStudioNativeModel
+}
+
+async function listNativeLlmModels(baseUrl: string, apiKey?: string): Promise<LmStudioNativeModel[] | null> {
+  try {
+    const url = `${rootUrl(baseUrl)}/api/v1/models`
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json', ...authHeaders(apiKey) },
+    })
+    if (!response.ok) return null
+    const data = (await response.json()) as { models?: LmStudioNativeModel[] }
+    return (data.models ?? []).filter(m => m.type === 'llm' && typeof m.key === 'string')
+  } catch {
+    return null
+  }
+}
+
+export async function listModelsWithStatus(baseUrl: string, apiKey?: string): Promise<LmStudioModelStatus[]> {
+  const nativeModels = await listNativeLlmModels(baseUrl, apiKey)
+  if (nativeModels && nativeModels.length > 0) {
+    return nativeModels.map((m) => {
+      const displayName = m.display_name ?? m.key ?? ''
+      const loadedInstance = m.loaded_instances?.[0]
+      const reasoningOptions = m.capabilities?.reasoning?.allowed_options ?? []
+      const supportsReasoning = reasoningOptions.includes('on') && reasoningOptions.includes('off')
+      return {
+        uid: `${m.key}:${displayName}`,
+        key: m.key ?? '',
+        displayName,
+        maxContextLength: m.max_context_length ?? null,
+        loadedContextLength: loadedInstance?.config?.context_length ?? null,
+        isLoaded: (m.loaded_instances?.length ?? 0) > 0,
+        supportsReasoning,
+        defaultReasoningOn: m.capabilities?.reasoning?.default === 'on',
+        raw: m,
+      }
+    })
+  }
+
+  const compat = await listModels(baseUrl, apiKey)
+  const ids = compat.data?.map(m => m.id ?? '').filter(Boolean) ?? []
+  return ids.map((id) => ({
+    uid: id,
+    key: id,
+    displayName: id,
+    maxContextLength: null,
+    loadedContextLength: null,
+    isLoaded: false,
+    supportsReasoning: false,
+    defaultReasoningOn: false,
+    raw: { type: 'llm', key: id },
+  }))
+}
+
+/**
+ * Returns whether `modelKey` currently has at least one loaded instance.
+ * Returns null if the native model endpoint cannot be queried.
+ */
+export async function isModelLoaded(
+  baseUrl: string,
+  apiKey: string | undefined,
+  modelKey: string,
+): Promise<boolean | null> {
+  const models = await listNativeLlmModels(baseUrl, apiKey)
+  if (!models) return null
+  const model = models.find(m => m.key === modelKey)
+  if (!model) return false
+  return (model.loaded_instances?.length ?? 0) > 0
 }
 
 /**
@@ -179,17 +267,51 @@ export async function getLoadedContextLength(
   apiKey: string | undefined,
   modelKey: string,
 ): Promise<number | null> {
-  try {
-    const url = `${rootUrl(baseUrl)}/api/v1/models`
-    const response = await fetch(url, {
-      headers: { Accept: 'application/json', ...authHeaders(apiKey) },
-    })
-    if (!response.ok) return null
-    const data = (await response.json()) as { models?: LmStudioNativeModel[] }
-    const model = data.models?.find(m => m.type === 'llm' && m.key === modelKey)
-    return model?.loaded_instances?.[0]?.config?.context_length ?? null
-  } catch {
-    return null
+  const models = await listNativeLlmModels(baseUrl, apiKey)
+  if (!models) return null
+  const model = models.find(m => m.key === modelKey)
+  return model?.loaded_instances?.[0]?.config?.context_length ?? null
+}
+
+export async function loadModel(
+  baseUrl: string,
+  apiKey: string | undefined,
+  modelKey: string,
+): Promise<void> {
+  const url = `${rootUrl(baseUrl)}/api/v1/models/load`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...authHeaders(apiKey),
+    },
+    body: JSON.stringify({ model: modelKey }),
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`LM Studio load model failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
+  }
+}
+
+export async function unloadModel(
+  baseUrl: string,
+  apiKey: string | undefined,
+  instanceId: string,
+): Promise<void> {
+  const url = `${rootUrl(baseUrl)}/api/v1/models/unload`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...authHeaders(apiKey),
+    },
+    body: JSON.stringify({ instance_id: instanceId }),
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`LM Studio unload model failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
   }
 }
 

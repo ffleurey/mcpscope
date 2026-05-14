@@ -110,13 +110,6 @@ export function createSession(input: {
   })
 }
 
-export function createTurn(sessionId: string, userContent: string) {
-  return request(`/api/sessions/${sessionId}/turns`, {
-    method: 'POST',
-    body: { userContent },
-  })
-}
-
 function parseSseBlock(block: string): { eventName: string | null; dataText: string | null } | null {
   const lines = block.split(/\r?\n/)
   let eventName: string | null = null
@@ -372,6 +365,48 @@ export function testLmConnection(baseUrl: string, apiKey?: string | null) {
   })
 }
 
+const lmConnectionModelSchema = z.object({
+  uid: z.string(),
+  key: z.string(),
+  displayName: z.string(),
+  maxContextLength: z.number().nullable(),
+  loadedContextLength: z.number().nullable(),
+  isLoaded: z.boolean(),
+  supportsReasoning: z.boolean(),
+  defaultReasoningOn: z.boolean(),
+  raw: z.unknown(),
+})
+
+const lmConnectionModelsResponseSchema = z.object({ models: z.array(lmConnectionModelSchema) })
+
+export type LmConnectionModel = z.infer<typeof lmConnectionModelSchema>
+
+export function listLmConnectionModels(baseUrl: string, apiKey?: string | null) {
+  return request('/api/lm-connections/models', {
+    method: 'POST',
+    body: { baseUrl, apiKey: apiKey ?? null },
+    schema: lmConnectionModelsResponseSchema,
+  })
+}
+
+const lmConnectionModelMutationResponseSchema = z.object({ ok: z.literal(true) })
+
+export function loadLmConnectionModel(baseUrl: string, modelKey: string, apiKey?: string | null) {
+  return request('/api/lm-connections/models/load', {
+    method: 'POST',
+    body: { baseUrl, modelKey, apiKey: apiKey ?? null },
+    schema: lmConnectionModelMutationResponseSchema,
+  })
+}
+
+export function unloadLmConnectionModel(baseUrl: string, instanceId: string, apiKey?: string | null) {
+  return request('/api/lm-connections/models/unload', {
+    method: 'POST',
+    body: { baseUrl, instanceId, apiKey: apiKey ?? null },
+    schema: lmConnectionModelMutationResponseSchema,
+  })
+}
+
 const mcpTestResponseSchema = z.object({
   serverName: z.string(),
   serverVersion: z.string(),
@@ -391,6 +426,7 @@ const preflightResponseSchema = z.object({ ok: z.literal(true) })
 export function preflightSession(input: {
   lmConnectionSnapshot: { baseUrl: string; apiKey?: string | null }
   mcpProfileSnapshot?: { url: string } | null
+  selectedModel: { modelKey: string; modelDisplayName?: string }
 }) {
   return request('/api/sessions/preflight', {
     method: 'POST',

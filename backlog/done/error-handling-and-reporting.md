@@ -1,3 +1,24 @@
+## Completion note
+
+This task is complete.
+
+The main consolidation goals from this task are now in place:
+
+- backend and frontend use a shared structured error model for normal request/response paths
+- session creation now performs pre-flight validation and fails before creating a session when dependencies are not ready
+- session creation errors are kept inline in the new-session flow, while operational/runtime errors use the dialog surface
+- LM Studio and MCP connection tests now use consistent result dialogs with preserved details
+- config screens now use the shared frontend error shape for local inline failures
+- the remaining browser-side LM Studio testing-era calls were removed from the frontend
+
+Related follow-up work was intentionally split into separate backlog items:
+
+- `backlog/model-load-recovery.md`
+- `backlog/streaming-error-and-sse-payloads.md`
+- `backlog/mcp-tool-drift-detection.md`
+
+Visual polish and UX refinement of some error dialogs is also separate from this completed consolidation pass.
+
 We need a consistent error handling and reporting model across frontend and backend.
 
 The goal is **not** clever recovery or interpretation. The goal is:

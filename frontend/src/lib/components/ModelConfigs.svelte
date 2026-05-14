@@ -5,11 +5,14 @@
   import type { LmStudioModel } from '../services/lmstudio'
   import type { ModelConfig } from '../types'
   import ModelConfigForm from './ModelConfigForm.svelte'
+  import InlineAppError from './InlineAppError.svelte'
   import JsonDialog from './JsonDialog.svelte'
+  import { AppError, toAppError } from '../errors'
 
   let editingId = $state<string | null>(null)
   let showNew = $state(false)
-  let saveError = $state<string | null>(null)
+  let saveError = $state<AppError | null>(null)
+  let statusError = $state<AppError | null>(null)
 
   // Live model status keyed by connectionId → model key → LmStudioModel
   let liveModels = $state<Map<string, Map<string, LmStudioModel>>>(new Map())
@@ -17,7 +20,7 @@
 
   // Per-card action state: key = config.id
   let cardBusy = $state<Map<string, string>>(new Map())  // value = 'loading' | 'ejecting'
-  let cardError = $state<Map<string, string>>(new Map())
+  let cardError = $state<Map<string, AppError>>(new Map())
 
   // Details dialog
   let detailsData = $state<unknown>(null)
@@ -31,8 +34,10 @@
 
   async function fetchAllStatuses() {
     statusLoading = true
+    statusError = null
     const uniqueConnIds = [...new Set($modelConfigs.map(c => c.connectionId))]
     const next = new Map<string, Map<string, LmStudioModel>>()
+    let firstError: AppError | null = null
     await Promise.all(uniqueConnIds.map(async connId => {
       const conn = $lmConnections.find(c => c.id === connId)
       if (!conn) return
@@ -41,12 +46,21 @@
         const byKey = new Map<string, LmStudioModel>()
         for (const m of models) byKey.set(m.key, m)
         next.set(connId, byKey)
-      } catch {
-        // ignore per-connection errors — card will just show no status
+      } catch (e) {
+        if (!firstError) {
+          const error = toAppError(e)
+          firstError = new AppError(
+            `Could not refresh model status for ${conn.name}: ${error.message}`,
+            error.errorType,
+            error.statusCode,
+            { code: error.code, details: error.details },
+          )
+        }
       }
     }))
     liveModels = next
     statusLoading = false
+    statusError = firstError
   }
 
   function liveModel(config: ModelConfig): LmStudioModel | undefined {
@@ -57,12 +71,14 @@
     const conn = $lmConnections.find(c => c.id === config.connectionId)
     if (!conn) return
     cardBusy = new Map(cardBusy).set(config.id, 'loading')
-    cardError = new Map(cardError).set(config.id, '')
+    const nextCardError = new Map(cardError)
+    nextCardError.delete(config.id)
+    cardError = nextCardError
     try {
       await loadModel(conn.baseUrl, config.modelKey, conn.apiKey)
       await fetchAllStatuses()
     } catch (e) {
-      cardError = new Map(cardError).set(config.id, e instanceof Error ? e.message : String(e))
+      cardError = new Map(cardError).set(config.id, toAppError(e))
     } finally {
       const next = new Map(cardBusy); next.delete(config.id); cardBusy = next
     }
@@ -72,12 +88,14 @@
     const conn = $lmConnections.find(c => c.id === config.connectionId)
     if (!conn) return
     cardBusy = new Map(cardBusy).set(config.id, 'ejecting')
-    cardError = new Map(cardError).set(config.id, '')
+    const nextCardError = new Map(cardError)
+    nextCardError.delete(config.id)
+    cardError = nextCardError
     try {
       await unloadModel(conn.baseUrl, config.modelKey, conn.apiKey)
       await fetchAllStatuses()
     } catch (e) {
-      cardError = new Map(cardError).set(config.id, e instanceof Error ? e.message : String(e))
+      cardError = new Map(cardError).set(config.id, toAppError(e))
     } finally {
       const next = new Map(cardBusy); next.delete(config.id); cardBusy = next
     }
@@ -93,20 +111,22 @@
   async function handleSave(config: ModelConfig) {
     try {
       await upsertModelConfig(config)
+      saveError = null
       showNew = false
       editingId = null
       await fetchAllStatuses()
     } catch (e) {
-      saveError = e instanceof Error ? e.message : String(e)
+      saveError = toAppError(e)
     }
   }
 
   async function handleDelete(id: string) {
     try {
       await removeModelConfig(id)
+      saveError = null
       if (editingId === id) editingId = null
     } catch (e) {
-      saveError = e instanceof Error ? e.message : String(e)
+      saveError = toAppError(e)
     }
   }
 
@@ -130,9 +150,8 @@
     </div>
   </div>
 
-  {#if saveError}
-    <p class="save-error">{saveError}</p>
-  {/if}
+  <InlineAppError error={saveError} />
+  <InlineAppError error={statusError} />
 
   {#if showNew}
     <ModelConfigForm onSave={handleSave} onCancel={cancelNew} />
@@ -173,7 +192,7 @@
           </div>
         </div>
         {#if err}
-          <p class="card-error">{err}</p>
+          <InlineAppError error={err} />
         {/if}
         <dl class="card-details">
           <div class="detail-row">
@@ -226,7 +245,6 @@
     color: var(--text);
   }
   .empty-state { color: var(--text-muted); font-size: 0.9rem; }
-  .save-error { color: var(--color-error); font-size: 0.875rem; margin-bottom: 1rem; }
   .profile-card {
     background: var(--bg-panel);
     border: 1px solid var(--border);
@@ -250,7 +268,6 @@
   .card-name { font-weight: 600; font-size: 0.95rem; color: var(--text); }
   .card-model { font-size: 0.8rem; color: var(--text-muted); }
   .card-actions { display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
-  .card-error { color: var(--color-error); font-size: 0.8rem; margin: 0 0 0.5rem; }
   .badge-loaded { font-size: 0.75rem; color: #4ade80; font-weight: 500; }
   .badge-unloaded { font-size: 0.75rem; color: var(--text-muted); }
   .card-details { margin: 0; }
@@ -276,4 +293,3 @@
   }
   code { font-family: var(--mono); font-size: 0.8rem; }
 </style>
-

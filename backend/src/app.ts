@@ -33,7 +33,18 @@ import {
   upsertMcpServerProfile,
   upsertModelConfig,
 } from './persistence/repository.js'
-import { createChatCompletion, getLoadedContextLength, listModels, probePromptTokens, probePromptTokensDetailed, streamChatCompletion } from './services/lmstudio/client.js'
+import {
+  createChatCompletion,
+  getLoadedContextLength,
+  isModelLoaded,
+  listModelsWithStatus,
+  listModels,
+  loadModel as loadLmModel,
+  probePromptTokens,
+  probePromptTokensDetailed,
+  streamChatCompletion,
+  unloadModel as unloadLmModel,
+} from './services/lmstudio/client.js'
 import { callMcpTool, initializeMcpSession, listMcpTools } from './services/mcp/httpClient.js'
 import { apiError } from './errors.js'
 import { createModelOnlyTurn, createSession, type LmStudioGateway } from './runtime/modelTurns.js'
@@ -113,11 +124,12 @@ export async function buildBackendApp(
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof z.ZodError) {
-      reply.code(400).send(apiError('validation', 'Invalid request body', { details: error.errors }))
+      reply.code(400).send(apiError('validation', 'Invalid request body', { details: error.issues }))
       return
     }
-    app.log.error({ err: error.message }, 'Unhandled route error')
-    reply.code(500).send(apiError('internal', error.message || 'Unexpected server error'))
+    const message = error instanceof Error ? error.message : String(error)
+    app.log.error({ err: message }, 'Unhandled route error')
+    reply.code(500).send(apiError('internal', message || 'Unexpected server error'))
   })
 
   await app.register(cors, {
@@ -322,6 +334,57 @@ export async function buildBackendApp(
     }
   })
 
+  app.post('/api/lm-connections/models', async (_request, reply) => {
+    const { baseUrl, apiKey } = z
+      .object({ baseUrl: z.string().url(), apiKey: z.string().nullable().optional() })
+      .parse(_request.body)
+    try {
+      const models = await listModelsWithStatus(baseUrl, apiKey ?? undefined)
+      return { models }
+    } catch (e) {
+      app.log.warn({ baseUrl, err: e instanceof Error ? e.message : String(e) }, 'LM models listing failed')
+      reply.code(503)
+      return apiError('upstream', e instanceof Error ? e.message : 'LM Studio unreachable', {
+        code: 'lm_studio_unreachable',
+        details: { baseUrl },
+      })
+    }
+  })
+
+  app.post('/api/lm-connections/models/load', async (_request, reply) => {
+    const { baseUrl, apiKey, modelKey } = z
+      .object({ baseUrl: z.string().url(), apiKey: z.string().nullable().optional(), modelKey: z.string().min(1) })
+      .parse(_request.body)
+    try {
+      await loadLmModel(baseUrl, apiKey ?? undefined, modelKey)
+      return { ok: true }
+    } catch (e) {
+      app.log.warn({ baseUrl, modelKey, err: e instanceof Error ? e.message : String(e) }, 'LM model load failed')
+      reply.code(503)
+      return apiError('upstream', e instanceof Error ? e.message : 'LM model load failed', {
+        code: 'lm_model_load_failed',
+        details: { baseUrl, modelKey },
+      })
+    }
+  })
+
+  app.post('/api/lm-connections/models/unload', async (_request, reply) => {
+    const { baseUrl, apiKey, instanceId } = z
+      .object({ baseUrl: z.string().url(), apiKey: z.string().nullable().optional(), instanceId: z.string().min(1) })
+      .parse(_request.body)
+    try {
+      await unloadLmModel(baseUrl, apiKey ?? undefined, instanceId)
+      return { ok: true }
+    } catch (e) {
+      app.log.warn({ baseUrl, instanceId, err: e instanceof Error ? e.message : String(e) }, 'LM model unload failed')
+      reply.code(503)
+      return apiError('upstream', e instanceof Error ? e.message : 'LM model unload failed', {
+        code: 'lm_model_unload_failed',
+        details: { baseUrl, instanceId },
+      })
+    }
+  })
+
 
   app.post('/api/mcp-profiles/test', async (_request, reply) => {
     const { url } = z.object({ url: z.string().url() }).parse(_request.body)
@@ -343,22 +406,47 @@ export async function buildBackendApp(
   })
 
   app.post('/api/sessions/preflight', async (_request, reply) => {
-    const { lmConnectionSnapshot, mcpProfileSnapshot } = z
+    const { lmConnectionSnapshot, mcpProfileSnapshot, selectedModel } = z
       .object({
         lmConnectionSnapshot: z.object({ baseUrl: z.string(), apiKey: z.string().nullable().optional() }),
         mcpProfileSnapshot: z.object({ url: z.string() }).nullable().optional(),
+        selectedModel: z.object({
+          modelKey: z.string().min(1),
+          modelDisplayName: z.string().min(1).optional(),
+        }),
       })
       .parse(_request.body)
 
     // Check LM Studio reachability
+    let modelIds: string[] = []
     try {
-      await listModels(lmConnectionSnapshot.baseUrl, lmConnectionSnapshot.apiKey ?? undefined)
+      const modelList = await listModels(lmConnectionSnapshot.baseUrl, lmConnectionSnapshot.apiKey ?? undefined)
+      modelIds = modelList.data?.map(m => m.id ?? '').filter(Boolean) ?? []
     } catch (e) {
       app.log.warn({ baseUrl: lmConnectionSnapshot.baseUrl, err: e instanceof Error ? e.message : String(e) }, 'Preflight: LM Studio unreachable')
       reply.code(503)
       return apiError('upstream', 'Cannot reach LM Studio. Check that it is running and accessible.', {
         code: 'lm_studio_unreachable',
         details: { baseUrl: lmConnectionSnapshot.baseUrl },
+      })
+    }
+
+    const loaded = await isModelLoaded(
+      lmConnectionSnapshot.baseUrl,
+      lmConnectionSnapshot.apiKey ?? undefined,
+      selectedModel.modelKey,
+    )
+    const listedByCompatApi = modelIds.includes(selectedModel.modelKey)
+    if (loaded === false || (loaded === null && !listedByCompatApi)) {
+      const label = selectedModel.modelDisplayName ?? selectedModel.modelKey
+      reply.code(409)
+      return apiError('validation', `Selected model "${label}" is not loaded in LM Studio. Load it and try again.`, {
+        code: 'lm_model_not_loaded',
+        details: {
+          modelKey: selectedModel.modelKey,
+          modelDisplayName: selectedModel.modelDisplayName ?? null,
+          baseUrl: lmConnectionSnapshot.baseUrl,
+        },
       })
     }
 

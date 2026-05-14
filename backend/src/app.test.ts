@@ -1,4 +1,6 @@
 import fs from 'node:fs'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import { buildBackendApp } from './app.js'
@@ -1277,6 +1279,7 @@ describe('error handling contract', () => {
       payload: {
         lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1', apiKey: null },
         mcpProfileSnapshot: null,
+        selectedModel: { modelKey: 'qwen3.6-35b-a3b-apex' },
       },
     })
 
@@ -1285,6 +1288,74 @@ describe('error handling contract', () => {
     expect(body).toMatchObject({
       error: { type: 'upstream', code: 'lm_studio_unreachable', message: expect.any(String) },
     })
+  })
+
+  it('returns 409 with lm_model_not_loaded when preflight selected model is not loaded', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const lmServer = createServer((req, res) => {
+      if (req.url === '/v1/models') {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ data: [{ id: 'loaded-model' }] }))
+        return
+      }
+
+      if (req.url === '/api/v1/models') {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(
+          JSON.stringify({
+            models: [
+              {
+                type: 'llm',
+                key: 'loaded-model',
+                loaded_instances: [{ config: { context_length: 8192 } }],
+              },
+              {
+                type: 'llm',
+                key: 'unloaded-model',
+                loaded_instances: [],
+              },
+            ],
+          }),
+        )
+        return
+      }
+
+      res.writeHead(404, { 'content-type': 'application/json' })
+      res.end('{}')
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      lmServer.once('error', reject)
+      lmServer.listen(0, '127.0.0.1', () => resolve())
+    })
+
+    try {
+      const port = (lmServer.address() as AddressInfo).port
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/preflight',
+        payload: {
+          lmConnectionSnapshot: { baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: null },
+          mcpProfileSnapshot: null,
+          selectedModel: { modelKey: 'unloaded-model', modelDisplayName: 'Unloaded Model' },
+        },
+      })
+
+      expect(response.statusCode).toBe(409)
+      const body = response.json()
+      expect(body).toMatchObject({
+        error: {
+          type: 'validation',
+          code: 'lm_model_not_loaded',
+          message: expect.stringContaining('not loaded'),
+        },
+      })
+    } finally {
+      await new Promise<void>((resolve) => lmServer.close(() => resolve()))
+    }
   })
 
   it('emits turn-failed SSE event with errorType when streaming gateway throws', async () => {

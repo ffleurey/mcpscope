@@ -1,5 +1,5 @@
 import type { PartRecord, SessionRecord } from '../domain/model.js'
-import { deriveExactDeltaTokenMetadata, deriveExactUserTokenMetadata } from '../domain/tokenAccounting.js'
+import { deriveExactDeltaTokenMetadata } from '../domain/tokenAccounting.js'
 import { updatePartRecord, updateSessionRecord } from '../persistence/repository.js'
 import type { BackendDatabase } from '../persistence/db.js'
 import type { LmStudioGateway } from './modelTurns.js'
@@ -261,19 +261,6 @@ export async function ensureSessionPreludeTokenMetadata(
   tx()
 
   return nextParts
-}
-
-export function deriveModelOnlyUserTokens(
-  promptTokens: number | null,
-  parts: PartRecord[],
-): PartRecord['tokens'] {
-  const includedPreludeParts = parts.filter(part => (
-    part.turnId === null
-    && part.context.state === 'included'
-    && (part.partType === 'system-prompt' || part.partType === 'mcp-instructions')
-  ))
-
-  return deriveExactUserTokenMetadata(promptTokens, includedPreludeParts)
 }
 
 export function deriveExactToolPreludeTokens(
