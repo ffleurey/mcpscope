@@ -10,6 +10,7 @@
     isSendingTurn,
     sendMessage,
   } from '../sessionStore'
+  import { appVersion } from '../connectionStore'
   import type { StreamingRoundState } from '../traceStreaming'
   import { deriveContextSnapshotAtRound } from '../traceStreaming'
   import { patchSessionTitle } from '../api/backendClient'
@@ -314,7 +315,7 @@
               {#if displayCompaction && displayCompaction !== 'none'} · Compaction: {displayCompaction}{:else} · Compaction: none{/if}
             </span>
           </div>
-          <span class="composer-hint">Ctrl+Enter to send</span>
+          <span class="composer-hint">v{$appVersion} · Ctrl+Enter to send</span>
         </div>
       </div>
     {/if}

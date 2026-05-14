@@ -8,6 +8,7 @@ export interface BackendConfig {
   sqlitePath: string
   maxToolRounds: number
   staticDir?: string | null
+  appVersion?: string
 }
 
 const rootDir = process.cwd()
@@ -21,6 +22,7 @@ export function getBackendConfig(): BackendConfig {
   const sqlitePath = process.env.BACKEND_SQLITE_PATH ?? path.join(dataDir, 'mcpscope.db')
   const maxToolRounds = Number(process.env.BACKEND_MAX_TOOL_ROUNDS ?? '10')
   const staticDir = process.env.BACKEND_STATIC_DIR ?? null
+  const appVersion = process.env.APP_VERSION ?? 'dev'
 
   return {
     host,
@@ -30,5 +32,6 @@ export function getBackendConfig(): BackendConfig {
     sqlitePath,
     maxToolRounds,
     staticDir,
+    appVersion,
   }
 }

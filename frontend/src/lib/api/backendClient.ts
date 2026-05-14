@@ -63,6 +63,19 @@ async function request<T>(
   return options.schema ? options.schema.parse(payload) : payload as T
 }
 
+import { z } from 'zod'
+
+const healthResponseSchema = z.object({
+  status: z.literal('ok'),
+  service: z.string(),
+  version: z.string(),
+  sqlitePath: z.string(),
+})
+
+export function fetchHealth() {
+  return request('/api/health', { schema: healthResponseSchema })
+}
+
 export function listSessions() {
   return request('/api/sessions', {
     schema: listSessionsResponseSchema,

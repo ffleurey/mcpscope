@@ -18,6 +18,7 @@ function makeTestConfig() {
     dataDir,
     sqlitePath: `${dataDir}/test.db`,
     maxToolRounds: 5,
+    appVersion: 'test',
   }
 }
 

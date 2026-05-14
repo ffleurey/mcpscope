@@ -40,11 +40,31 @@ docker compose build
 docker compose up -d
 ```
 
-To publish to Docker Hub:
+### Pulling a released image from GHCR
+
 ```bash
-docker build -t <your-hub-user>/mcpscope:latest .
-docker push <your-hub-user>/mcpscope:latest
+docker login ghcr.io -u YOUR_GITHUB_USERNAME --password YOUR_PAT
+docker pull ghcr.io/ffleurey/mcpscope:latest
+# or a specific version:
+docker pull ghcr.io/ffleurey/mcpscope:v1.0.0
 ```
+
+Run it directly (without docker-compose):
+```bash
+docker run -d -p 3030:3030 -v mcpscope-data:/data ghcr.io/ffleurey/mcpscope:latest
+```
+
+## Releasing
+
+Images are automatically built and pushed to GHCR when a GitHub Release is published.
+
+```bash
+npm version patch          # or: minor / major
+git push --follow-tags
+gh release create v$(node -p "require('./package.json').version") --title "v..." --notes "..."
+```
+
+The GitHub Action builds the Docker image tagged with the version (e.g. `v1.2.3`, `1.2`, `latest`) and pushes it to `ghcr.io/ffleurey/mcpscope`.
 
 ## Build
 

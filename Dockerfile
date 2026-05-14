@@ -18,6 +18,9 @@ RUN npm run build:backend  # tsc  → backend/dist/
 # ─── Stage 2: Production image ────────────────────────────────────────────────
 FROM node:22-alpine AS production
 
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
+
 WORKDIR /app
 
 # Copy only the package manifests and install production deps

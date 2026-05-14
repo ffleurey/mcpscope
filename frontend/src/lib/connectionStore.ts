@@ -4,6 +4,7 @@ import {
   deleteLmConnection,
   deleteMcpProfile,
   deleteModelConfig,
+  fetchHealth,
   listLmConnections,
   listMcpProfiles,
   listModelConfigs,
@@ -13,6 +14,7 @@ import {
 } from './api/backendClient'
 
 export const backendError = writable<string | null>(null)
+export const appVersion = writable<string>('dev')
 
 function sortByUpdatedAtDesc<T extends { updatedAt: number }>(records: T[]): T[] {
   return [...records].sort((left, right) => right.updatedAt - left.updatedAt)
@@ -72,11 +74,13 @@ export async function removeMcpProfile(id: string): Promise<void> {
 
 export async function initConnectionStore(): Promise<void> {
   try {
-    const [connectionsResponse, modelConfigsResponse, mcpProfilesResponse] = await Promise.all([
+    const [health, connectionsResponse, modelConfigsResponse, mcpProfilesResponse] = await Promise.all([
+      fetchHealth(),
       listLmConnections(),
       listModelConfigs(),
       listMcpProfiles(),
     ])
+    appVersion.set(health.version)
     lmConnections.set(sortByUpdatedAtDesc(connectionsResponse.lmConnections))
     modelConfigs.set(sortByUpdatedAtDesc(modelConfigsResponse.modelConfigs))
     mcpProfiles.set(sortByUpdatedAtDesc(mcpProfilesResponse.mcpProfiles))
