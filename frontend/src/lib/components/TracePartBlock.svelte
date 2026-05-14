@@ -178,7 +178,7 @@
                   <div class="tool-param">
                     <div class="param-header">
                       <span class="param-name">{paramName}</span>
-                      <span class="param-meta">{param.type ?? 'any'}{#if isRequired} (required){/if}</span>
+                      <span class="param-meta">{param.type ?? 'any'}{isRequired ? ' (required)' : ''}</span>
                     </div>
                     {#if param.description}
                       <div class="param-desc">{param.description}</div>
@@ -429,7 +429,7 @@
   }
 
   .tool-name {
-    font-family: monospace;
+    font-family: var(--mono);
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--text);
@@ -451,9 +451,11 @@
   }
 
   .tool-description {
-    font-size: 0.8rem;
-    color: var(--text);
+    font-size: 0.82rem;
+    color: var(--text-muted);
     line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .tool-params {
@@ -475,22 +477,25 @@
   }
 
   .param-name {
-    font-family: monospace;
-    font-size: 0.8rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
     color: var(--text);
     font-weight: 500;
   }
 
   .param-meta {
-    font-size: 0.78rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
     color: var(--text-muted);
   }
 
   .param-desc {
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     color: var(--text-muted);
     padding-left: 0.6rem;
     line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .tool-no-params {
