@@ -1,11 +1,11 @@
 services:
   app:
     build: .
-    image: ai-clientapp
+    image: mcpscope
     ports:
       - "3030:3030"
     volumes:
-      - ai-clientapp-data:/data
+      - mcpscope-data:/data
     environment:
       # Override any defaults here if needed, e.g.:
       # BACKEND_MAX_TOOL_ROUNDS: "20"
@@ -16,4 +16,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  ai-clientapp-data:
+  mcpscope-data:

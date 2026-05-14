@@ -42,7 +42,7 @@ import { runSessionInitialization } from './runtime/sessionInit.js'
 
 const healthResponseSchema = z.object({
   status: z.literal('ok'),
-  service: z.literal('ai-clientapp-backend'),
+  service: z.literal('mcpscope-backend'),
   sqlitePath: z.string(),
 })
 
@@ -135,7 +135,7 @@ export async function buildBackendApp(
   app.get('/api/health', async () => {
     return healthResponseSchema.parse({
       status: 'ok',
-      service: 'ai-clientapp-backend',
+      service: 'mcpscope-backend',
       sqlitePath: database.path,
     })
   })

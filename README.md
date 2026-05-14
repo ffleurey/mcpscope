@@ -1,4 +1,4 @@
-# AI Client App
+# mcpscope
 
 Local-first **runtime analysis and debugging tool** for MCP server development and multi-turn LLM workflows. Built to inspect how models reason, choose tools, and consume context — with trace export, deterministic replay, and a trust-first approach to token accounting.
 
@@ -32,7 +32,7 @@ docker compose down        # stop
 
 Then open **http://localhost:3030**.
 
-Session data (SQLite) is persisted in a named Docker volume (`ai-clientapp-data`) and survives container restarts and image upgrades.
+Session data (SQLite) is persisted in a named Docker volume (`mcpscope-data`) and survives container restarts and image upgrades.
 
 To rebuild the image after pulling changes:
 ```bash
@@ -42,8 +42,8 @@ docker compose up -d
 
 To publish to Docker Hub:
 ```bash
-docker build -t <your-hub-user>/ai-clientapp:latest .
-docker push <your-hub-user>/ai-clientapp:latest
+docker build -t <your-hub-user>/mcpscope:latest .
+docker push <your-hub-user>/mcpscope:latest
 ```
 
 ## Build
