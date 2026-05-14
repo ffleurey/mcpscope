@@ -5,6 +5,7 @@ import {
   getSessionTrace,
   importTrace as importBackendTrace,
   listSessions,
+  preflightSession,
   streamPreludeInit,
   streamTurn as streamBackendTurn,
 } from './api/backendClient'
@@ -15,6 +16,7 @@ import type {
   TurnStreamEvent,
 } from './backendTypes'
 import { sessionTraceBundleSchema } from './backendTypes'
+import { AppError, toAppError } from './errors'
 import {
   applyStreamingDelta,
   bindStreamingTurnId,
@@ -34,7 +36,7 @@ import type {
   ModelConfig,
 } from './types'
 
-export const sessionError = writable<string | null>(null)
+export const sessionError = writable<AppError | null>(null)
 export const chatSessions = writable<SessionRecord[]>([])
 export const activeChatId = writable<string | null>(null)
 export const activeTrace = writable<SessionTraceBundle | null>(null)
@@ -51,10 +53,6 @@ export const activeSession = derived(
 
 function sortByUpdatedAtDesc<T extends { updatedAt: number }>(records: T[]): T[] {
   return [...records].sort((left, right) => right.updatedAt - left.updatedAt)
-}
-
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function buildModelProfileSnapshot(modelConfig: ModelConfig, connection: LmStudioConnection) {
@@ -143,7 +141,7 @@ export async function selectChat(sessionId: string): Promise<void> {
   try {
     await refreshActiveTrace()
   } catch (error) {
-    sessionError.set(formatError(error))
+    sessionError.set(toAppError(error))
     throw error
   }
 }
@@ -161,7 +159,7 @@ export async function deleteChat(sessionId: string): Promise<void> {
       activeTurnStream.set(null)
     }
   } catch (error) {
-    sessionError.set(formatError(error))
+    sessionError.set(toAppError(error))
     throw error
   }
 }
@@ -175,9 +173,17 @@ export async function startSession(input: {
   sessionError.set(null)
   isStartingSession.set(true)
   try {
+    const mcpSnapshot = input.mcpProfile ? buildMcpProfileSnapshot(input.mcpProfile) : null
+
+    // Pre-flight: check connectivity before creating the session record
+    await preflightSession({
+      lmConnectionSnapshot: { baseUrl: input.connection.baseUrl },
+      mcpProfileSnapshot: mcpSnapshot ? { url: mcpSnapshot.url } : null,
+    })
+
     const { session } = await createSession({
       modelProfileSnapshot: buildModelProfileSnapshot(input.modelConfig, input.connection),
-      mcpProfileSnapshot: input.mcpProfile ? buildMcpProfileSnapshot(input.mcpProfile) : null,
+      mcpProfileSnapshot: mcpSnapshot,
       compactionStrategy: input.compactionStrategy,
     })
     // Show the chat view immediately (composer locked until initStatus = 'ready')
@@ -190,7 +196,7 @@ export async function startSession(input: {
 
     await refreshSessions()
   } catch (error) {
-    sessionError.set(formatError(error))
+    sessionError.set(toAppError(error))
   } finally {
     isStartingSession.set(false)
   }
@@ -212,7 +218,7 @@ function applyPreludeStreamEvent(event: PreludeStreamEvent): void {
   }
 
   // prelude-failed
-  sessionError.set(event.message)
+  sessionError.set(new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0))
 }
 
 export async function sendMessage(input: {
@@ -223,7 +229,7 @@ export async function sendMessage(input: {
 
   const sessionId = get(activeChatId)
   if (!sessionId) {
-    sessionError.set('No active session — start a session first')
+    sessionError.set(new AppError('No active session — start a session first', 'internal', 0))
     return
   }
 
@@ -253,12 +259,12 @@ export async function sendMessage(input: {
 
     await refreshSessions()
     if (streamOutcome !== 'committed') {
-      await refreshActiveTrace().catch(() => undefined)
+      await refreshActiveTrace().catch((e) => console.warn('Could not refresh trace after non-committed turn', e))
     }
   } catch (error) {
-    sessionError.set(formatError(error))
-    await refreshSessions().catch(() => undefined)
-    await refreshActiveTrace().catch(() => undefined)
+    sessionError.set(toAppError(error))
+    await refreshSessions().catch((e) => console.warn('Could not refresh sessions after turn error', e))
+    await refreshActiveTrace().catch((e) => console.warn('Could not refresh trace after turn error', e))
   } finally {
     activeTurnStream.set(null)
     isSendingTurn.set(false)
@@ -293,7 +299,7 @@ export async function importTraceFile(file: File): Promise<void> {
     await refreshSessions()
     await selectChat(session.id)
   } catch (error) {
-    sessionError.set(formatError(error))
+    sessionError.set(toAppError(error))
     throw error
   } finally {
     isImportingTrace.set(false)

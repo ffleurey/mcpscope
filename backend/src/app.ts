@@ -33,8 +33,9 @@ import {
   upsertMcpServerProfile,
   upsertModelConfig,
 } from './persistence/repository.js'
-import { createChatCompletion, getLoadedContextLength, probePromptTokens, probePromptTokensDetailed, streamChatCompletion } from './services/lmstudio/client.js'
+import { createChatCompletion, getLoadedContextLength, listModels, probePromptTokens, probePromptTokensDetailed, streamChatCompletion } from './services/lmstudio/client.js'
 import { callMcpTool, initializeMcpSession, listMcpTools } from './services/mcp/httpClient.js'
+import { apiError } from './errors.js'
 import { createModelOnlyTurn, createSession, type LmStudioGateway } from './runtime/modelTurns.js'
 import { createToolEnabledTurn, type McpGateway } from './runtime/toolTurns.js'
 import { importTraceBundle } from './runtime/traceImport.js'
@@ -110,6 +111,15 @@ export async function buildBackendApp(
     bodyLimit: 50 * 1024 * 1024, // 50MB — large trace files can be several MB
   })
 
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof z.ZodError) {
+      reply.code(400).send(apiError('validation', 'Invalid request body', { details: error.errors }))
+      return
+    }
+    app.log.error({ err: error.message }, 'Unhandled route error')
+    reply.code(500).send(apiError('internal', 'Unexpected server error'))
+  })
+
   await app.register(cors, {
     origin: config.corsOrigin,
   })
@@ -126,7 +136,7 @@ export async function buildBackendApp(
       if (!request.url.startsWith('/api/')) {
         return reply.sendFile('index.html')
       }
-      return reply.status(404).send({ error: 'Not found' })
+      return reply.status(404).send(apiError('not_found', 'Not found'))
     })
   }
 
@@ -191,7 +201,7 @@ export async function buildBackendApp(
     const deleted = deleteSessionRecord(database.connection, sessionId)
     if (!deleted) {
       reply.code(404)
-      return { error: 'Session not found' }
+      return apiError('not_found', 'Session not found')
     }
     reply.code(204)
     return null
@@ -203,7 +213,7 @@ export async function buildBackendApp(
     const session = getSessionRecord(database.connection, sessionId)
     if (!session) {
       reply.code(404)
-      return { error: 'Session not found' }
+      return apiError('not_found', 'Session not found')
     }
     session.title = title.trim()
     session.updatedAt = Date.now()
@@ -222,7 +232,7 @@ export async function buildBackendApp(
     const record = lmStudioConnectionSchema.parse(request.body)
     if (record.id !== connectionId) {
       reply.code(400)
-      return { error: 'Connection ID mismatch' }
+      return apiError('validation', 'Connection ID mismatch')
     }
     upsertLmConnection(database.connection, record)
     return { lmConnection: record }
@@ -233,7 +243,7 @@ export async function buildBackendApp(
     const deleted = deleteLmConnection(database.connection, connectionId)
     if (!deleted) {
       reply.code(404)
-      return { error: 'LM connection not found' }
+      return apiError('not_found', 'LM connection not found')
     }
     reply.code(204)
     return null
@@ -250,7 +260,7 @@ export async function buildBackendApp(
     const record = modelConfigSchema.parse(request.body)
     if (record.id !== modelConfigId) {
       reply.code(400)
-      return { error: 'Model config ID mismatch' }
+      return apiError('validation', 'Model config ID mismatch')
     }
     upsertModelConfig(database.connection, record)
     return { modelConfig: record }
@@ -261,7 +271,7 @@ export async function buildBackendApp(
     const deleted = deleteModelConfig(database.connection, modelConfigId)
     if (!deleted) {
       reply.code(404)
-      return { error: 'Model config not found' }
+      return apiError('not_found', 'Model config not found')
     }
     reply.code(204)
     return null
@@ -278,7 +288,7 @@ export async function buildBackendApp(
     const record = mcpServerProfileSchema.parse(request.body)
     if (record.id !== mcpProfileId) {
       reply.code(400)
-      return { error: 'MCP profile ID mismatch' }
+      return apiError('validation', 'MCP profile ID mismatch')
     }
     upsertMcpServerProfile(database.connection, record)
     return { mcpProfile: record }
@@ -289,7 +299,7 @@ export async function buildBackendApp(
     const deleted = deleteMcpServerProfile(database.connection, mcpProfileId)
     if (!deleted) {
       reply.code(404)
-      return { error: 'MCP profile not found' }
+      return apiError('not_found', 'MCP profile not found')
     }
     reply.code(204)
     return null
@@ -301,18 +311,54 @@ export async function buildBackendApp(
       const init = await initializeMcpSession(url)
       const toolsResult = await listMcpTools(url, init.sessionId)
       return {
-        status: 'success',
         serverName: init.serverInfo.name,
         serverVersion: init.serverInfo.version,
         tools: toolsResult.tools.map(t => t.name),
       }
     } catch (e) {
-      reply.code(200) // return structured error, not HTTP error
-      return {
-        status: 'error',
-        message: e instanceof Error ? e.message : String(e),
+      app.log.error({ url, err: e instanceof Error ? e.message : String(e) }, 'MCP profile test failed')
+      reply.code(503)
+      return apiError('upstream', e instanceof Error ? e.message : 'MCP server unreachable', {
+        details: { url },
+      })
+    }
+  })
+
+  app.post('/api/sessions/preflight', async (_request, reply) => {
+    const { lmConnectionSnapshot, mcpProfileSnapshot } = z
+      .object({
+        lmConnectionSnapshot: z.object({ baseUrl: z.string() }),
+        mcpProfileSnapshot: z.object({ url: z.string() }).nullable().optional(),
+      })
+      .parse(_request.body)
+
+    // Check LM Studio reachability
+    try {
+      await listModels(lmConnectionSnapshot.baseUrl)
+    } catch (e) {
+      app.log.warn({ baseUrl: lmConnectionSnapshot.baseUrl, err: e instanceof Error ? e.message : String(e) }, 'Preflight: LM Studio unreachable')
+      reply.code(503)
+      return apiError('upstream', 'Cannot reach LM Studio. Check that it is running and accessible.', {
+        code: 'lm_studio_unreachable',
+        details: { baseUrl: lmConnectionSnapshot.baseUrl },
+      })
+    }
+
+    // Check MCP reachability if profile supplied
+    if (mcpProfileSnapshot?.url) {
+      try {
+        await initializeMcpSession(mcpProfileSnapshot.url)
+      } catch (e) {
+        app.log.warn({ url: mcpProfileSnapshot.url, err: e instanceof Error ? e.message : String(e) }, 'Preflight: MCP server unreachable')
+        reply.code(503)
+        return apiError('upstream', 'Cannot reach MCP server. Check that it is running and accessible.', {
+          code: 'mcp_unreachable',
+          details: { url: mcpProfileSnapshot.url },
+        })
       }
     }
+
+    return { ok: true }
   })
 
   app.get('/api/sessions/:sessionId/transcript', async (request, reply) => {
@@ -320,7 +366,7 @@ export async function buildBackendApp(
     const session = getSessionRecord(database.connection, sessionId)
     if (!session) {
       reply.code(404)
-      return { error: 'Session not found' }
+      return apiError('not_found', 'Session not found')
     }
     const parts = listPartRecordsBySession(database.connection, sessionId)
     return {
@@ -334,7 +380,7 @@ export async function buildBackendApp(
     const session = getSessionRecord(database.connection, sessionId)
     if (!session) {
       reply.code(404)
-      return { error: 'Session not found' }
+      return apiError('not_found', 'Session not found')
     }
     const parts = listPartRecordsBySession(database.connection, sessionId)
     return {
@@ -348,7 +394,7 @@ export async function buildBackendApp(
     const session = getSessionRecord(database.connection, sessionId)
     if (!session) {
       reply.code(404)
-      return { error: 'Session not found' }
+      return apiError('not_found', 'Session not found')
     }
     const turns = listTurnRecordsBySession(database.connection, sessionId)
     const rounds = listRoundRecordsBySession(database.connection, sessionId)
@@ -378,7 +424,7 @@ export async function buildBackendApp(
     const session = getSessionRecord(database.connection, sessionId)
     if (!session) {
       reply.code(404)
-      return { error: 'Session not found' }
+      return apiError('not_found', 'Session not found')
     }
 
     const result = session.mcpProfileSnapshot
@@ -401,7 +447,7 @@ export async function buildBackendApp(
     const session = getSessionRecord(database.connection, sessionId)
     if (!session) {
       reply.code(404)
-      return { error: 'Session not found' }
+      return apiError('not_found', 'Session not found')
     }
 
     reply.hijack()
@@ -424,8 +470,10 @@ export async function buildBackendApp(
         emitEvent,
       )
     } catch (error) {
+      app.log.error({ sessionId, err: error instanceof Error ? error.message : String(error) }, 'Session initialization failed')
       emitEvent({
         type: 'prelude-failed',
+        errorType: 'internal',
         message: error instanceof Error ? error.message : 'Unknown initialization failure',
       })
     } finally {
@@ -439,7 +487,7 @@ export async function buildBackendApp(
     const session = getSessionRecord(database.connection, sessionId)
     if (!session) {
       reply.code(404)
-      return { error: 'Session not found' }
+      return apiError('not_found', 'Session not found')
     }
 
     reply.hijack()
@@ -487,8 +535,10 @@ export async function buildBackendApp(
         )
       }
     } catch (error) {
+      app.log.error({ sessionId, turnId: activeTurnId, err: error instanceof Error ? error.message : String(error) }, 'Streaming turn failed')
       emitEvent({
         type: 'turn-failed',
+        errorType: 'internal',
         turnId: activeTurnId,
         message: error instanceof Error ? error.message : 'Unknown streaming failure',
       })

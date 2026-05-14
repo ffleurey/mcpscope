@@ -29,7 +29,7 @@
     <h2 class="card-title">New session</h2>
 
     {#if $sessionError}
-      <div class="error-banner">{$sessionError}</div>
+      <div class="error-banner">{$sessionError.message}</div>
     {/if}
 
     <div class="field">

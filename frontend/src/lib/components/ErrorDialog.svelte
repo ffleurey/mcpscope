@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { highlightJson } from '../jsonHighlight'
   import { sessionError } from '../sessionStore'
 
   function dismiss() {
@@ -15,7 +16,14 @@
   <div class="overlay" role="dialog" aria-modal="true" aria-label="Error" tabindex="-1" onkeydown={handleKeydown}>
     <div class="dialog">
       <div class="dialog-title">Error</div>
-      <div class="dialog-body">{$sessionError}</div>
+      <div class="dialog-body">{$sessionError.message}</div>
+      {#if $sessionError.details !== undefined}
+        <details class="details-section">
+          <summary>Details</summary>
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          <pre class="details-body">{@html highlightJson($sessionError.details)}</pre>
+        </details>
+      {/if}
       <div class="dialog-actions">
         <!-- svelte-ignore a11y_autofocus -->
         <button class="btn" onclick={dismiss} autofocus>OK</button>
@@ -41,7 +49,7 @@
     border-radius: 8px;
     padding: 1.5rem;
     min-width: 320px;
-    max-width: 520px;
+    max-width: 560px;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
@@ -60,6 +68,31 @@
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  .details-section {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .details-section summary {
+    cursor: pointer;
+    user-select: none;
+    margin-bottom: 0.5rem;
+  }
+
+  .details-body {
+    background: var(--bg);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
   }
 
   .dialog-actions {

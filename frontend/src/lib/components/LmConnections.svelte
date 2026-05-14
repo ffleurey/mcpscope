@@ -1,14 +1,15 @@
 <script lang="ts">
   import { lmConnections, upsertConnection, removeConnection } from '../connectionStore'
-  import type { LmStudioConnection, ConnectionTestResult } from '../types'
+  import type { LmStudioConnection } from '../types'
   import LmConnectionForm from './LmConnectionForm.svelte'
-  import ConnectionTestResultComponent from './ConnectionTestResult.svelte'
+  import ConnectionTestDialog from './ConnectionTestDialog.svelte'
   import { testLmStudioConnection } from '../services/lmstudio'
 
   let editingId = $state<string | null>(null)
   let showNew = $state(false)
-  let testResults = $state<Record<string, ConnectionTestResult>>({})
   let saveError = $state<string | null>(null)
+  let testDialogConn = $state<LmStudioConnection | null>(null)
+  let testDialogResult = $state<{ ok: boolean; message: string; details?: Record<string, unknown>; rawDetails?: unknown } | null>(null)
 
   function startNew() { showNew = true; editingId = null }
   function cancelNew() { showNew = false }
@@ -35,9 +36,24 @@
   }
 
   async function handleTest(conn: LmStudioConnection) {
-    testResults[conn.id] = { status: 'testing', message: '', details: [] }
+    testDialogConn = conn
+    testDialogResult = { ok: false, message: 'Testing…' }
     const result = await testLmStudioConnection(conn.baseUrl, conn.apiKey)
-    testResults[conn.id] = result
+    const ok = result.status === 'success'
+    const detailsMap: Record<string, unknown> = {}
+    for (const d of result.details ?? []) {
+      detailsMap[d.label] = d.value
+    }
+    testDialogResult = {
+      ok,
+      message: result.message,
+      details: Object.keys(detailsMap).length > 0 ? detailsMap : undefined,
+    }
+  }
+
+  function closeTestDialog() {
+    testDialogConn = null
+    testDialogResult = null
   }
 </script>
 
@@ -82,13 +98,19 @@
             <dt>API Key</dt><dd>{conn.apiKey ? '••••••••' : 'none'}</dd>
           </div>
         </dl>
-        {#if testResults[conn.id]}
-          <ConnectionTestResultComponent result={testResults[conn.id]} />
-        {/if}
       </div>
     {/if}
   {/each}
 </div>
+
+{#if testDialogConn && testDialogResult}
+  <ConnectionTestDialog
+    title="LM Studio Connection Test"
+    target={testDialogConn.baseUrl}
+    result={testDialogResult}
+    onClose={closeTestDialog}
+  />
+{/if}
 
 <style>
   .view { padding: 1.5rem 2rem; }
@@ -134,3 +156,4 @@
   dd { margin: 0; color: var(--text); word-break: break-all; }
   code { font-family: var(--mono); font-size: 0.8rem; }
 </style>
+

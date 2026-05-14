@@ -1,14 +1,15 @@
 <script lang="ts">
   import { mcpProfiles, upsertMcpProfile, removeMcpProfile } from '../connectionStore'
-  import type { McpServerProfile, ConnectionTestResult } from '../types'
+  import type { McpServerProfile } from '../types'
   import McpProfileForm from './McpProfileForm.svelte'
-  import ConnectionTestResultComponent from './ConnectionTestResult.svelte'
+  import ConnectionTestDialog from './ConnectionTestDialog.svelte'
   import { testMcpProfile } from '../api/backendClient'
 
   let editingId = $state<string | null>(null)
   let showNew = $state(false)
-  let testResults = $state<Record<string, ConnectionTestResult>>({})
   let saveError = $state<string | null>(null)
+  let testDialogProfile = $state<McpServerProfile | null>(null)
+  let testDialogResult = $state<{ ok: boolean; message: string; details?: Record<string, unknown>; rawDetails?: unknown } | null>(null)
 
   function startNew() { showNew = true; editingId = null }
   function cancelNew() { showNew = false }
@@ -35,25 +36,29 @@
   }
 
   async function handleTest(profile: McpServerProfile) {
-    testResults[profile.id] = { status: 'testing', message: '', details: [] }
+    testDialogProfile = profile
+    testDialogResult = { ok: false, message: 'Testing…' }
     try {
       const result = await testMcpProfile(profile.url)
-      if (result.status === 'success') {
-        testResults[profile.id] = {
-          status: 'success',
-          message: `${result.serverName} v${result.serverVersion}`,
-          details: result.tools.length > 0 ? [`Tools: ${result.tools.join(', ')}`] : ['No tools found'],
-        }
-      } else {
-        testResults[profile.id] = { status: 'error', message: result.message, details: [] }
+      testDialogResult = {
+        ok: true,
+        message: `${result.serverName} v${result.serverVersion}`,
+        details: { Tools: result.tools.length > 0 ? result.tools.join(', ') : 'none' },
       }
     } catch (e) {
-      testResults[profile.id] = {
-        status: 'error',
-        message: e instanceof Error ? e.message : String(e),
-        details: [],
+      const msg = e instanceof Error ? e.message : String(e)
+      const details = (e as { details?: unknown }).details
+      testDialogResult = {
+        ok: false,
+        message: msg,
+        rawDetails: details,
       }
     }
+  }
+
+  function closeTestDialog() {
+    testDialogProfile = null
+    testDialogResult = null
   }
 </script>
 
@@ -98,13 +103,19 @@
             <dt>Transport</dt><dd>{profile.transport}</dd>
           </div>
         </dl>
-        {#if testResults[profile.id]}
-          <ConnectionTestResultComponent result={testResults[profile.id]} />
-        {/if}
       </div>
     {/if}
   {/each}
 </div>
+
+{#if testDialogProfile && testDialogResult}
+  <ConnectionTestDialog
+    title="MCP Connection Test"
+    target={testDialogProfile.url}
+    result={testDialogResult}
+    onClose={closeTestDialog}
+  />
+{/if}
 
 <style>
   .view { padding: 1.5rem 2rem; }
@@ -150,3 +161,4 @@
   dd { margin: 0; color: var(--text); word-break: break-all; }
   code { font-family: var(--mono); font-size: 0.8rem; }
 </style>
+

@@ -280,6 +280,8 @@ export const turnStreamEventSchema = z.discriminatedUnion('type', [
     type: z.literal('turn-failed'),
     turnId: z.string().nullable(),
     message: z.string(),
+    errorType: z.string().optional(),
+    details: z.unknown().optional(),
   }),
 ])
 
@@ -295,6 +297,8 @@ export const preludeStreamEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('prelude-failed'),
     message: z.string(),
+    errorType: z.string().optional(),
+    details: z.unknown().optional(),
   }),
 ])
 

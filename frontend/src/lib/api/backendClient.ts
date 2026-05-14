@@ -20,6 +20,7 @@ import {
   type SessionTraceBundle,
   type TurnStreamEvent,
 } from '../backendTypes'
+import { AppError } from '../errors'
 
 const apiBase = (import.meta.env.VITE_BACKEND_API_BASE ?? '').replace(/\/$/, '')
 
@@ -49,15 +50,23 @@ async function request<T>(
   const payload = text.length > 0 ? JSON.parse(text) : null
 
   if (!response.ok) {
-    const message = (
+    // Parse the new structured error shape { error: { type, message, code?, details? } }
+    const errorObj = (
       payload
       && typeof payload === 'object'
       && 'error' in payload
-      && typeof payload.error === 'string'
+      && payload.error !== null
+      && typeof payload.error === 'object'
+    ) ? payload.error as { type?: string; message?: string; code?: string; details?: unknown } : null
+
+    const message = errorObj?.message ?? (
+      typeof payload?.error === 'string' ? payload.error : `Backend request failed (${response.status})`
     )
-      ? payload.error
-      : `Backend request failed (${response.status})`
-    throw new Error(message)
+    const errorType = (errorObj?.type as AppError['errorType']) ?? 'internal'
+    throw new AppError(message, errorType, response.status, {
+      code: errorObj?.code,
+      details: errorObj?.details,
+    })
   }
 
   return options.schema ? options.schema.parse(payload) : payload as T
@@ -353,15 +362,29 @@ export function deleteMcpProfile(mcpProfileId: string) {
   })
 }
 
-const mcpTestResponseSchema = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('success'), serverName: z.string(), serverVersion: z.string(), tools: z.array(z.string()) }),
-  z.object({ status: z.literal('error'), message: z.string() }),
-])
+const mcpTestResponseSchema = z.object({
+  serverName: z.string(),
+  serverVersion: z.string(),
+  tools: z.array(z.string()),
+})
 
 export function testMcpProfile(url: string) {
   return request('/api/mcp-profiles/test', {
     method: 'POST',
     body: { url },
     schema: mcpTestResponseSchema,
+  })
+}
+
+const preflightResponseSchema = z.object({ ok: z.literal(true) })
+
+export function preflightSession(input: {
+  lmConnectionSnapshot: { baseUrl: string }
+  mcpProfileSnapshot?: { url: string } | null
+}) {
+  return request('/api/sessions/preflight', {
+    method: 'POST',
+    body: input,
+    schema: preflightResponseSchema,
   })
 }

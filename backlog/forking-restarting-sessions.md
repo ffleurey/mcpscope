@@ -1,0 +1,1 @@
+Based on a session, we have no functionality to easily restart a similar session. This can be useful when the MCP server has been updated and the session is no longer in a meaningful state. We should be able to start a new session
