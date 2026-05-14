@@ -2,21 +2,23 @@
 
 Local backend runtime data and live-test captures.
 
-This folder is intentionally **not** a source tree. It is the working data area for the backend and for integration-test artifacts generated on a developer machine.
+This folder is intentionally **not** a source tree. It is the backend working-data area plus ignored integration-test output generated on a developer machine.
 
 ## Structure
 
-- `mcpscope.db` - local SQLite database used by the backend
+- `mcpscope.db` - default local SQLite database used by the backend
 - `mcpscope.db-shm` / `mcpscope.db-wal` - SQLite side files when WAL mode is active
 - `test-artifacts/` - JSON captures written by the live integration tests
 
-Only this README is tracked in git. The database files and JSON artifacts are local outputs.
+Only this README is tracked in git. Database files and JSON artifacts in this folder are local outputs and should not be committed.
 
 ## How it is used
 
 ### Backend runtime
 
 The backend stores its local state here by default. That includes sessions, turns, rounds, parts, raw exchanges, and profile snapshots.
+
+If needed, the SQLite file location can be overridden with `BACKEND_SQLITE_PATH`. The data directory itself can be changed with `BACKEND_DATA_DIR`.
 
 ### Live integration captures
 

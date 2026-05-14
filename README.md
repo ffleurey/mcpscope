@@ -1,8 +1,16 @@
 # mcpscope
 
-Local-first **runtime analysis and debugging tool** for MCP server development and multi-turn LLM workflows. Built to inspect how models reason, choose tools, and consume context — with trace export, deterministic replay, and a trust-first approach to token accounting.
+Local-first **runtime analysis and debugging tool** for MCP server development and multi-turn LLM workflows. Built to inspect how models reason, choose tools, and consume context, with trace export, deterministic replay, and auditable token attribution.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system design and domain model.
+## Documentation map
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) - canonical system design, runtime vocabulary, and API surface
+- [PLAN.md](PLAN.md) - current product state and near-term focus
+- [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
+- [RELEASING.md](RELEASING.md) - release workflow and GHCR image publishing
+- [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) - reference workflow used to evaluate MCP analysis scenarios
+- [`research/`](research/) - archived payload studies and superseded design research kept for context
+- [`backend-data/README.md`](backend-data/README.md) - local runtime data and live-test artifact policy
 
 ## Development
 
@@ -20,7 +28,7 @@ npm run seed:dev-sessions  # seed captured session fixtures
 npm run seed:dev-data      # both of the above
 ```
 
-## Docker (recommended for MCP server development)
+## Docker
 
 The easiest way to run the app is via Docker — no Node.js install required.
 
@@ -40,11 +48,7 @@ docker compose build
 docker compose up -d
 ```
 
-See [RELEASING.md](RELEASING.md) for pulling a released image from GHCR.
-
-## Releasing
-
-See [RELEASING.md](RELEASING.md) for the full release workflow and GHCR pull instructions.
+See [RELEASING.md](RELEASING.md) for released-image usage and the full release workflow.
 
 ## Build
 
@@ -65,10 +69,7 @@ npm run test:integration # live LM Studio + MCP validation (requires running LM 
 
 See [TESTING.md](TESTING.md) for the test strategy and how to add regressions.
 
-## Project docs
+## Repository notes
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — system design, domain model, API surface, runtime rules
-- [TESTING.md](TESTING.md) — test strategy and regression workflow
-- [RELEASING.md](RELEASING.md) — release workflow and Docker image distribution
-- [PLAN.md](PLAN.md) — current status and open work
-- [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) — reference use case and evaluation criteria
+- `backend-data/` is local runtime state and live integration output; only its README is tracked.
+- `research/` contains reference material and archived investigations, not active implementation specs.

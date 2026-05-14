@@ -1,10 +1,10 @@
-# Initial Use Case: Home Assistant Historical Statistics
+# Reference Use Case: Home Assistant Historical Statistics
 
 ## Purpose
 
-This file defines the first concrete end-to-end use case for the mcpscope MVP.
+This file defines the first concrete end-to-end use case for mcpscope.
 
-It exists to give the project a focused build target: one realistic workflow that is specific enough to implement and test, while still representing the broader category of data-analysis MCP clients.
+It exists to give the project a focused evaluation target: one realistic workflow that is specific enough to build and test, while still representing the broader category of data-analysis MCP clients.
 
 ## Use Case Summary
 
@@ -27,7 +27,7 @@ LM Studio documentation examples assume the OpenAI-compatible API is exposed at:
 
 That should be treated as the initial expected value, not a hardcoded guarantee. The application should let the user configure the LM Studio base URL.
 
-General application behavior such as central profile management, persistence, and context monitoring is defined in `DESIGN.md`.
+General application behavior such as central profile management, persistence, and context monitoring is defined in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Why This Use Case Matters
 
@@ -74,7 +74,7 @@ The application must make it easier to inspect and understand:
 
 ## Representative Questions
 
-Examples of the kind of questions this MVP should support:
+Examples of the kind of questions this workflow should support:
 
 - "How did indoor temperature change over the last 7 days?"
 - "Compare this week's energy consumption to last week's."
@@ -102,15 +102,15 @@ For this use case, the long-term preferred result pattern is:
 
 The client should keep the artifact out of the main model context when possible.
 
-For the initial MVP, the UI does not need to render these richer artifacts yet. It is enough to show tool inputs and outputs clearly in the chat interface while preserving room for later artifact support.
+The current UI does not need to render these richer artifacts yet. It is enough to show tool inputs and outputs clearly in the chat interface while preserving room for later artifact support.
 
-## MVP Scope for This Use Case
+## Current scope for this use case
 
-The first version should focus on a traditional chat flow with visible traces.
+The current product scope focuses on a traditional chat flow with visible traces.
 
 It does **not** need to implement the eventual vision of a fully prompt-built interactive dashboard yet.
 
-For this initial use case, the MVP should support:
+For this use case, the application should support:
 
 - one working LM Studio integration
 - one working local MCP server integration
@@ -123,9 +123,9 @@ For this initial use case, the MVP should support:
 - support for multiple active chats, with one visible at a time
 - retry-friendly error handling
 
-## Evaluation Criteria
+## Evaluation criteria
 
-The MVP should help answer questions like:
+The product should help answer questions like:
 
 - Did the model choose the correct tool?
 - Did the tool schema help the model produce correct arguments?
