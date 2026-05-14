@@ -12,6 +12,8 @@
   import JsonDialog from './JsonDialog.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
   import { highlightMarkdown } from '../markdownHighlight'
+  import { looksLikeMarkdown } from '../markdownRender'
+  import MarkdownPreviewDialog from './MarkdownPreviewDialog.svelte'
 
   interface Props {
     turn: TurnRecord
@@ -39,6 +41,8 @@
   let showDialog = $state(false)
   let dialogTitle = $state('')
   let dialogData = $state<unknown>(null)
+  let showMarkdownPreview = $state(false)
+  let markdownPreviewSource = $state('')
   /** Chat mode: collapsed = show only answers; expanded = show full round detail */
   let chatCollapsed = $state(true)
 
@@ -87,6 +91,11 @@
     dialogTitle = title
     dialogData = data
     showDialog = true
+  }
+
+  function openMarkdownPreview(text: string): void {
+    markdownPreviewSource = text
+    showMarkdownPreview = true
   }
 </script>
 
@@ -139,8 +148,13 @@
       {#each assistantContentParts as part (part.id)}
         {@const text = normalizeText(part.payload.text)}
         {#if text}
-          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-          <pre class="chat-answer-text">{@html highlightMarkdown(text)}</pre>
+          <div class="chat-answer-block">
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+            <pre class="chat-answer-text">{@html highlightMarkdown(text)}</pre>
+            {#if looksLikeMarkdown(text)}
+              <button class="preview-btn" onclick={() => openMarkdownPreview(text)}>Preview</button>
+            {/if}
+          </div>
         {/if}
       {/each}
     {:else}
@@ -293,6 +307,10 @@
   <JsonDialog title={dialogTitle} data={dialogData} onClose={() => { showDialog = false }} />
 {/if}
 
+{#if showMarkdownPreview}
+  <MarkdownPreviewDialog source={markdownPreviewSource} onClose={() => { showMarkdownPreview = false }} />
+{/if}
+
 <style>
   .compact-turn {
     --chat-indent: 0.82rem;
@@ -364,18 +382,40 @@
   }
 
   /* ── Chat mode: markdown syntax-highlighted answer text ─────────────── */
-  .chat-answer-text {
+  .chat-answer-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
     margin-top: var(--chat-gap);
     margin-left: var(--chat-indent);
     padding-left: var(--chat-pad);
     border-left: 2px solid var(--border-subtle);
+  }
+
+  .chat-answer-text {
     font-size: 0.88rem;
     font-family: inherit;
     line-height: 1.65;
     color: var(--text);
     white-space: pre-wrap;
     word-break: break-word;
-    margin-bottom: 0;
+    margin: 0;
+  }
+
+  .preview-btn {
+    align-self: flex-start;
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.72rem;
+    padding: 0.18rem 0.5rem;
+  }
+
+  .preview-btn:hover {
+    color: var(--text);
+    border-color: var(--border);
   }
 
   /* hljs markdown token colours — semantic palette */

@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { PartRecord } from '../backendTypes'
   import type { StreamingRoundState } from '../traceStreaming'
+  import { looksLikeMarkdown } from '../markdownRender'
   import JsonDialog from './JsonDialog.svelte'
+  import MarkdownPreviewDialog from './MarkdownPreviewDialog.svelte'
   import StreamingRoundDeltaBlock from './StreamingRoundDeltaBlock.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
 
@@ -38,11 +40,18 @@
   let showDialog = $state(false)
   let dialogTitle = $state('')
   let dialogData = $state<unknown>(null)
+  let showMarkdownPreview = $state(false)
+  let markdownPreviewSource = $state('')
 
   function openDialog(title: string, data: unknown): void {
     dialogTitle = title
     dialogData = data
     showDialog = true
+  }
+
+  function openMarkdownPreview(text: string): void {
+    markdownPreviewSource = text
+    showMarkdownPreview = true
   }
 
   function normalizeToolName(part: PartRecord | null): string {
@@ -175,11 +184,14 @@
         {#if assistantText}
           <div class="assistant-text">{assistantText}</div>
         {/if}
-        {#if item.part.tokens.count !== null}
-          <div class="message-meta">
+        <div class="message-meta">
+          {#if assistantText && looksLikeMarkdown(assistantText)}
+            <button class="preview-btn" onclick={() => openMarkdownPreview(assistantText)}>Preview</button>
+          {/if}
+          {#if item.part.tokens.count !== null}
             <span class="token-pill">{item.part.tokens.count.toLocaleString()} tokens</span>
-          </div>
-        {/if}
+          {/if}
+        </div>
       </section>
     {:else if item.kind === 'reasoning'}
       <details class="collapsed-row">
@@ -272,6 +284,10 @@
 
 {#if showDialog}
   <JsonDialog title={dialogTitle} data={dialogData} onClose={() => { showDialog = false }} />
+{/if}
+
+{#if showMarkdownPreview}
+  <MarkdownPreviewDialog source={markdownPreviewSource} onClose={() => { showMarkdownPreview = false }} />
 {/if}
 
 <style>
@@ -412,6 +428,21 @@
   }
 
   .meta-btn:hover {
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  .preview-btn {
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.68rem;
+    padding: 0.1rem 0.4rem;
+  }
+
+  .preview-btn:hover {
     color: var(--text);
     border-color: var(--border);
   }
