@@ -1,7 +1,7 @@
 {
   "name": "mcpscope",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:backend\" \"npm:dev:frontend\"",
