@@ -1,6 +1,7 @@
 import type { ZodType } from 'zod'
 import {
   createSessionResponseSchema,
+  hierarchicalLookupResponseSchema,
   listLmConnectionsResponseSchema,
   listMcpProfilesResponseSchema,
   listModelConfigsResponseSchema,
@@ -18,6 +19,7 @@ import {
   type ModelProfileSnapshot,
   type PreludeStreamEvent,
   type SessionTraceBundle,
+  type HierarchicalLookupResponse,
   type TurnStreamEvent,
 } from '../backendTypes'
 import { AppError } from '../errors'
@@ -98,6 +100,7 @@ export function getSessionTrace(sessionId: string) {
 }
 
 export function createSession(input: {
+  sessionId?: string
   title?: string
   modelProfileSnapshot: ModelProfileSnapshot
   mcpProfileSnapshot?: McpProfileSnapshot | null
@@ -107,6 +110,13 @@ export function createSession(input: {
     method: 'POST',
     body: input,
     schema: createSessionResponseSchema,
+  })
+}
+
+export function lookupByHierarchicalId(id: string, mode: 'summary' | 'full'): Promise<HierarchicalLookupResponse> {
+  const encodedId = encodeURIComponent(id)
+  return request(`/api/lookup/${encodedId}?mode=${mode}`, {
+    schema: hierarchicalLookupResponseSchema,
   })
 }
 

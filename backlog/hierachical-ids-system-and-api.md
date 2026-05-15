@@ -328,6 +328,30 @@ Keep the first automated coverage simple and focused.
 - full fetch button returns the expected JSON shape
 - the JSON dialog allows the API to be inspected end to end from the frontend
 
+## Status update
+
+### Done
+
+- canonical hierarchical IDs are implemented for sessions, turns, rounds, and parts
+- explicit session IDs are supported and validated
+- `GET /api/lookup/:id?mode=summary|full` is implemented
+- IDs are shown in the UI and can be copied in Inspect mode
+- Inspect mode can fetch lookup JSON for session, turn, round, and part IDs
+- automated backend regression coverage now uses a real exported multi-turn trace with tool calls
+- lookup regression tests now assert summary/full payloads for session, turn, round, and part
+- setup/system-prompt content is now blocked from leaking through direct part lookup payloads
+- round lookup no longer exposes low-level `requestPayloadJson` / `responseTraceJson` blobs
+
+### Remaining QA / adjustment work
+
+- manual UI smoke testing is still needed for the Inspect-mode lookup buttons and JSON dialog payloads
+- we should verify that turn/round/part lookups in the UI never show session-prelude/setup content unless a setup part is explicitly requested
+- lookup payloads still need a field-by-field audit across every node type (session / turn / round / part) and for every exposed event/content kind to confirm we return exactly the intended structured data
+- summary-mode payloads should be reviewed once more in the UI to ensure they stay lightweight and do not include full text or full tool payloads
+- full-mode payloads still need additional QA to confirm they include the right fields for each node type without leaking extra conversation state
+- the placement and visibility of the Inspect-mode lookup buttons in the UI still need follow-up work
+- frontend-specific automated coverage for the Inspect-mode lookup actions is still missing
+
 ## Dependency
 
 This task should be completed before implementing `mcpscope-cli`.

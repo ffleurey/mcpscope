@@ -1,6 +1,8 @@
 import type { BackendDatabase } from '../persistence/db.js'
 import {
   createSessionRecord,
+  getNextPreludePartSequence,
+  getNextRoundPartSequence,
   getNextPartOrdinal,
   getNextTurnSequenceNumber,
   getSessionRecord,
@@ -17,6 +19,13 @@ import {
   updateSessionRecord,
   updateTurnRecord,
 } from '../persistence/repository.js'
+import {
+  formatPartId,
+  formatRoundId,
+  formatTurnId,
+  generateUniqueSessionId,
+  isValidSessionId,
+} from '../domain/hierarchicalIds.js'
 import type {
   McpProfileSnapshot,
   ModelProfileSnapshot,
@@ -74,6 +83,7 @@ export interface LmStudioGateway {
 }
 
 export interface CreateSessionInput {
+  sessionId?: string | undefined
   title?: string | undefined
   modelProfileSnapshot: ModelProfileSnapshot
   mcpProfileSnapshot?: McpProfileSnapshot | null | undefined
@@ -94,6 +104,10 @@ export interface RuntimeTurnResult {
   transcript: ReturnType<typeof deriveTranscriptEntries>
   context: ReturnType<typeof deriveContextEntries>
 }
+
+export class SessionIdInputError extends Error {}
+export class SessionIdConflictError extends Error {}
+export class SessionIdGenerationError extends Error {}
 
 type SegmentTokenMetadata = {
   count: number | null
@@ -120,8 +134,27 @@ export function createSession(
   input: CreateSessionInput,
 ): SessionRecord {
   const timestamp = now()
+  const explicitSessionId = input.sessionId?.trim().toUpperCase()
+  if (explicitSessionId && !isValidSessionId(explicitSessionId)) {
+    throw new SessionIdInputError('Session ID must be 4 uppercase characters from A-Z and 2-9, excluding O, I, 0, 1')
+  }
+
+  const sessionId = explicitSessionId
+    ?? generateUniqueSessionId(
+      candidate => getSessionRecord(database.connection, candidate) !== null,
+      3,
+    )
+
+  if (sessionId == null) {
+    throw new SessionIdGenerationError('Could not generate a unique session ID after 3 attempts')
+  }
+
+  if (getSessionRecord(database.connection, sessionId) !== null) {
+    throw new SessionIdConflictError(`Session ID already exists: ${sessionId}`)
+  }
+
   const session: SessionRecord = {
-    id: createUuid(),
+    id: sessionId,
     title: input.title?.trim() || 'New session',
     status: 'ready',
     initStatus: 'pending',
@@ -138,7 +171,12 @@ export function createSession(
 
   const tx = database.connection.transaction(() => {
     createSessionRecord(database.connection, session)
-    const systemPromptPart = createSystemPromptPart(session, getNextPartOrdinal(database.connection, session.id), timestamp)
+    const systemPromptPart = createSystemPromptPart(
+      session,
+      getNextPartOrdinal(database.connection, session.id),
+      getNextPreludePartSequence(database.connection, session.id),
+      timestamp,
+    )
     if (systemPromptPart) {
       insertPartRecord(database.connection, systemPromptPart)
     }
@@ -167,12 +205,13 @@ export async function createModelOnlyTurn(
   )
   const requestMessages = buildModelMessages(session, existingParts, input.userContent)
   const startedAt = now()
-  const turnId = createUuid()
-  const roundId = createUuid()
+  const turnSequenceNumber = getNextTurnSequenceNumber(database.connection, session.id)
+  const turnId = formatTurnId(session.id, turnSequenceNumber)
+  const roundId = formatRoundId(session.id, turnSequenceNumber, 0)
   const turn: TurnRecord = {
     id: turnId,
     sessionId: session.id,
-    sequenceNumber: getNextTurnSequenceNumber(database.connection, session.id),
+    sequenceNumber: turnSequenceNumber,
     status: 'streaming',
     createdAt: startedAt,
     completedAt: null,
@@ -218,8 +257,9 @@ export async function createModelOnlyTurn(
   }
 
   const initialOrdinal = getNextPartOrdinal(database.connection, session.id)
+  const initialPartNumber = getNextRoundPartSequence(database.connection, roundId)
   const userPart: PartRecord = {
-    id: createUuid(),
+    id: formatPartId(session.id, turnSequenceNumber, 0, initialPartNumber),
     sessionId: session.id,
     turnId,
     roundId,
@@ -402,6 +442,7 @@ export async function createModelOnlyTurn(
 
   const assistantParts: PartRecord[] = []
   let nextOrdinal = initialOrdinal + 1
+  let nextPartNumber = initialPartNumber + 1
 
   for (const segment of streamedCompletion.segments) {
     if (segment.kind === 'reasoning') {
@@ -411,7 +452,7 @@ export async function createModelOnlyTurn(
       }
       const tokenMetadata = reasoningTokenMetadata.shift()
       assistantParts.push({
-        id: createUuid(),
+        id: formatPartId(session.id, turnSequenceNumber, 0, nextPartNumber++),
         sessionId: session.id,
         turnId,
         roundId,
@@ -454,7 +495,7 @@ export async function createModelOnlyTurn(
       }
       const tokenMetadata = assistantContentTokenMetadata.shift()
       assistantParts.push({
-        id: createUuid(),
+        id: formatPartId(session.id, turnSequenceNumber, 0, nextPartNumber++),
         sessionId: session.id,
         turnId,
         roundId,

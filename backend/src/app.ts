@@ -47,10 +47,18 @@ import {
 } from './services/lmstudio/client.js'
 import { callMcpTool, initializeMcpSession, listMcpTools } from './services/mcp/httpClient.js'
 import { apiError } from './errors.js'
-import { createModelOnlyTurn, createSession, type LmStudioGateway } from './runtime/modelTurns.js'
+import {
+  createModelOnlyTurn,
+  createSession,
+  SessionIdConflictError,
+  SessionIdGenerationError,
+  SessionIdInputError,
+  type LmStudioGateway,
+} from './runtime/modelTurns.js'
 import { createToolEnabledTurn, type McpGateway } from './runtime/toolTurns.js'
 import { importTraceBundle } from './runtime/traceImport.js'
 import { runSessionInitialization } from './runtime/sessionInit.js'
+import { resolveHierarchicalId } from './runtime/hierarchicalLookup.js'
 
 const healthResponseSchema = z.object({
   status: z.literal('ok'),
@@ -85,6 +93,7 @@ const mcpProfileSnapshotInputSchema = z.object({
 })
 
 const createSessionInputSchema = z.object({
+  sessionId: z.string().optional(),
   title: z.string().optional(),
   modelProfileSnapshot: modelProfileSnapshotInputSchema,
   mcpProfileSnapshot: mcpProfileSnapshotInputSchema.nullable().optional(),
@@ -197,9 +206,42 @@ export async function buildBackendApp(
 
   app.post('/api/sessions', async (request, reply) => {
     const input = createSessionInputSchema.parse(request.body)
-    const session = createSession(database, input)
+    let session
+    try {
+      session = createSession(database, input)
+    } catch (error) {
+      if (error instanceof SessionIdInputError) {
+        reply.code(400)
+        return apiError('validation', error.message, { code: 'invalid_session_id' })
+      }
+      if (error instanceof SessionIdConflictError) {
+        reply.code(409)
+        return apiError('validation', error.message, { code: 'duplicate_session_id' })
+      }
+      if (error instanceof SessionIdGenerationError) {
+        reply.code(409)
+        return apiError('validation', error.message, { code: 'session_id_generation_failed' })
+      }
+      throw error
+    }
     reply.code(201)
     return { session }
+  })
+
+  app.get('/api/lookup/:id', async (request, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params)
+    const { mode } = z.object({ mode: z.enum(['summary', 'full']).optional() }).parse(request.query)
+
+    const resolved = resolveHierarchicalId(database.connection, id, mode ?? 'summary')
+    if (resolved.status === 'invalid') {
+      reply.code(400)
+      return apiError('validation', resolved.message, { code: 'invalid_hierarchical_id' })
+    }
+    if (resolved.status === 'not_found') {
+      reply.code(404)
+      return apiError('not_found', resolved.message, { code: 'hierarchical_id_not_found' })
+    }
+    return resolved.payload
   })
 
   app.get('/api/sessions', async () => {

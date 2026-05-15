@@ -322,6 +322,18 @@ export const createSessionResponseSchema = z.object({
   session: sessionRecordSchema,
 })
 
+export const hierarchicalLookupResponseSchema = z.object({
+  id: z.string(),
+  type: z.enum(['session', 'turn', 'round', 'part']),
+  mode: z.enum(['summary', 'full']),
+  parentIds: z.object({
+    sessionId: z.string(),
+    turnId: z.string().nullable(),
+    roundId: z.string().nullable(),
+  }),
+  data: z.unknown(),
+})
+
 export const upsertLmConnectionResponseSchema = z.object({
   lmConnection: lmStudioConnectionSchema,
 })
@@ -350,3 +362,4 @@ export type SessionTraceBundle = z.infer<typeof sessionTraceBundleSchema>
 export type LmStudioStreamDelta = z.infer<typeof lmStudioStreamDeltaSchema>
 export type TurnStreamEvent = z.infer<typeof turnStreamEventSchema>
 export type PreludeStreamEvent = z.infer<typeof preludeStreamEventSchema>
+export type HierarchicalLookupResponse = z.infer<typeof hierarchicalLookupResponseSchema>

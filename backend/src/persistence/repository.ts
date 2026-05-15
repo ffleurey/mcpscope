@@ -122,6 +122,170 @@ export function getSessionRecord(
   }
 }
 
+export function getTurnRecord(connection: Database.Database, turnId: string): TurnRecord | null {
+  const row = connection.prepare(`
+    SELECT *
+    FROM turns
+    WHERE id = ?
+  `).get(turnId) as
+    | {
+        id: string
+        session_id: string
+        sequence_number: number
+        status: TurnRecord['status']
+        outcome: string | null
+        prompt_tokens: number | null
+        completion_tokens: number | null
+        reasoning_tokens: number | null
+        total_tokens: number | null
+        context_tokens_at_turn_end: number | null
+        context_tokens_after_compaction: number | null
+        compaction_applied: TurnRecord['compactionApplied']
+        compaction_tokens_removed: number | null
+        created_at: number
+        completed_at: number | null
+      }
+    | undefined
+
+  if (!row) return null
+
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    sequenceNumber: row.sequence_number,
+    status: row.status,
+    outcome: row.outcome,
+    usage: {
+      promptTokens: row.prompt_tokens,
+      completionTokens: row.completion_tokens,
+      reasoningTokens: row.reasoning_tokens,
+      totalTokens: row.total_tokens,
+    },
+    contextTokensAtTurnEnd: row.context_tokens_at_turn_end,
+    contextTokensAfterCompaction: row.context_tokens_after_compaction,
+    compactionApplied: row.compaction_applied,
+    compactionTokensRemoved: row.compaction_tokens_removed,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+  }
+}
+
+export function getRoundRecord(connection: Database.Database, roundId: string): RoundRecord | null {
+  const row = connection.prepare(`
+    SELECT *
+    FROM rounds
+    WHERE id = ?
+  `).get(roundId) as
+    | {
+        id: string
+        turn_id: string
+        round_index: number
+        status: RoundRecord['status']
+        finish_reason: RoundRecord['finishReason']
+        prompt_tokens: number | null
+        completion_tokens: number | null
+        reasoning_tokens: number | null
+        total_tokens: number | null
+        request_payload_json: string | null
+        response_trace_json: string | null
+        started_at: number
+        completed_at: number | null
+      }
+    | undefined
+
+  if (!row) return null
+
+  return {
+    id: row.id,
+    turnId: row.turn_id,
+    roundIndex: row.round_index,
+    status: row.status,
+    finishReason: row.finish_reason,
+    usage: {
+      promptTokens: row.prompt_tokens,
+      completionTokens: row.completion_tokens,
+      reasoningTokens: row.reasoning_tokens,
+      totalTokens: row.total_tokens,
+    },
+    requestPayloadJson: parseJson(row.request_payload_json),
+    responseTraceJson: parseJson(row.response_trace_json),
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+  }
+}
+
+export function getPartRecord(connection: Database.Database, partId: string): PartRecord | null {
+  const row = connection.prepare(`
+    SELECT *
+    FROM parts
+    WHERE id = ?
+  `).get(partId) as
+    | {
+        id: string
+        session_id: string
+        turn_id: string | null
+        round_id: string | null
+        parent_part_id: string | null
+        ordinal: number
+        part_type: PartRecord['partType']
+        role_label: string | null
+        payload_text: string | null
+        payload_json: string | null
+        payload_mime_type: string | null
+        payload_summary: string | null
+        display_state: PartRecord['display']['state']
+        collapsed_by_default: number
+        context_state: PartRecord['context']['state']
+        context_note: string | null
+        stripped_by_compaction_at_turn_id: string | null
+        token_count: number | null
+        token_source: PartRecord['tokens']['source']
+        token_confidence: PartRecord['tokens']['confidence']
+        token_note: string | null
+        provenance_json: string | null
+        created_at: number
+        updated_at: number
+      }
+    | undefined
+
+  if (!row) return null
+
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    turnId: row.turn_id,
+    roundId: row.round_id,
+    parentPartId: row.parent_part_id,
+    ordinal: row.ordinal,
+    partType: row.part_type,
+    roleLabel: row.role_label,
+    payload: {
+      text: row.payload_text,
+      json: parseJson(row.payload_json),
+      mimeType: row.payload_mime_type,
+      summary: row.payload_summary,
+    },
+    display: {
+      state: row.display_state,
+      collapsedByDefault: row.collapsed_by_default === 1,
+    },
+    context: {
+      state: row.context_state,
+      note: row.context_note,
+      strippedByCompactionAtTurnId: row.stripped_by_compaction_at_turn_id,
+    },
+    tokens: {
+      count: row.token_count,
+      source: row.token_source,
+      confidence: row.token_confidence,
+      note: row.token_note,
+    },
+    provenanceJson: parseJson(row.provenance_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
 export function listSessionRecords(connection: Database.Database): SessionRecord[] {
   const rows = connection.prepare(`
     SELECT *
@@ -763,4 +927,24 @@ export function getNextPartOrdinal(connection: Database.Database, sessionId: str
   `).get(sessionId) as { max_ordinal: number }
 
   return row.max_ordinal + 1
+}
+
+export function getNextRoundPartSequence(connection: Database.Database, roundId: string): number {
+  const row = connection.prepare(`
+    SELECT COUNT(*) AS part_count
+    FROM parts
+    WHERE round_id = ?
+  `).get(roundId) as { part_count: number }
+
+  return row.part_count + 1
+}
+
+export function getNextPreludePartSequence(connection: Database.Database, sessionId: string): number {
+  const row = connection.prepare(`
+    SELECT COUNT(*) AS part_count
+    FROM parts
+    WHERE session_id = ? AND turn_id IS NULL
+  `).get(sessionId) as { part_count: number }
+
+  return row.part_count + 1
 }

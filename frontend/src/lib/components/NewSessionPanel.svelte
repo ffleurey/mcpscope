@@ -6,6 +6,7 @@
   let selectedConfigId = $state('')
   let selectedMcpProfileId = $state('')
   let compactionStrategy = $state<'strip-reasoning' | 'none'>('strip-reasoning')
+  let sessionId = $state('')
 
   // Auto-select the first model config when available
   $effect(() => {
@@ -21,7 +22,13 @@
     if (!connection) return
     const mcpProfile = $mcpProfiles.find(p => p.id === selectedMcpProfileId) ?? null
 
-    await startSession({ modelConfig: config, connection, mcpProfile, compactionStrategy })
+    await startSession({
+      sessionId: sessionId.trim() ? sessionId.trim().toUpperCase() : undefined,
+      modelConfig: config,
+      connection,
+      mcpProfile,
+      compactionStrategy,
+    })
   }
 </script>
 
@@ -41,6 +48,20 @@
         {/if}
       </div>
     {/if}
+
+    <div class="field">
+      <label class="field-label" for="session-id">Session ID <span class="optional">(optional)</span></label>
+      <input
+        id="session-id"
+        class="field-select"
+        type="text"
+        maxlength="4"
+        placeholder="AB12"
+        bind:value={sessionId}
+        oninput={() => { sessionId = sessionId.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) }}
+        disabled={$isStartingSession}
+      />
+    </div>
 
     <div class="field">
       <label class="field-label" for="model-select">Model</label>

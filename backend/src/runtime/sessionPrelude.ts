@@ -1,4 +1,5 @@
 import type { PartRecord, SessionRecord } from '../domain/model.js'
+import { formatPartId } from '../domain/hierarchicalIds.js'
 import { deriveExactDeltaTokenMetadata } from '../domain/tokenAccounting.js'
 import { updatePartRecord, updateSessionRecord } from '../persistence/repository.js'
 import type { BackendDatabase } from '../persistence/db.js'
@@ -7,22 +8,23 @@ import type { ApiMessage } from '../domain/selectors.js'
 import { buildLmToolDefinitions } from '../domain/selectors.js'
 import { probeRequestPromptTokens } from './promptTokenProbing.js'
 
-function createUuid(): string {
-  return crypto.randomUUID()
-}
-
 function now(): number {
   return Date.now()
 }
 
-export function createSystemPromptPart(session: SessionRecord, ordinal: number, createdAt = now()): PartRecord | null {
+export function createSystemPromptPart(
+  session: SessionRecord,
+  ordinal: number,
+  preludePartNumber: number,
+  createdAt = now(),
+): PartRecord | null {
   const prompt = session.modelProfileSnapshot.systemPrompt.trim()
   if (!prompt) {
     return null
   }
 
   return {
-    id: createUuid(),
+    id: formatPartId(session.id, 0, 0, preludePartNumber),
     sessionId: session.id,
     turnId: null,
     roundId: null,

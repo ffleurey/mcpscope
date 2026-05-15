@@ -29,7 +29,7 @@
           onclick={() => handleSelect(session.id)}
           onkeydown={(e) => e.key === 'Enter' && handleSelect(session.id)}
         >
-          <span class="session-title">{session.title}</span>
+          <span class="session-title">[{session.id}] {session.title}</span>
         </button>
         <button
           class="delete-btn"

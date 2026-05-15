@@ -8,6 +8,12 @@ import type {
 } from '../domain/model.js'
 import type { SessionTraceBundle } from '../domain/trace.js'
 import {
+  formatPartId,
+  formatRoundId,
+  formatTurnId,
+  generateUniqueSessionId,
+} from '../domain/hierarchicalIds.js'
+import {
   createSessionRecord,
   insertPartRecord,
   insertRawExchangeRecord,
@@ -23,10 +29,46 @@ export function importTraceBundle(
   database: BackendDatabase,
   trace: SessionTraceBundle,
 ): SessionRecord {
-  const sessionId = createUuid()
-  const turnIdBySource = new Map(trace.turns.map(turn => [turn.id, createUuid()]))
-  const roundIdBySource = new Map(trace.rounds.map(round => [round.id, createUuid()]))
-  const partIdBySource = new Map(trace.parts.map(part => [part.id, createUuid()]))
+  const sessionId = generateUniqueSessionId(
+    candidate => database.connection
+      .prepare('SELECT 1 FROM sessions WHERE id = ?')
+      .get(candidate) != null,
+    3,
+  ) ?? createUuid()
+
+  const sortedSourceTurns = [...trace.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+  const turnIdBySource = new Map(sortedSourceTurns.map(turn => [turn.id, formatTurnId(sessionId, turn.sequenceNumber)]))
+  const roundIdBySource = new Map(trace.rounds.map(round => {
+    const mappedTurn = trace.turns.find(turn => turn.id === round.turnId)
+    const turnSequence = mappedTurn?.sequenceNumber ?? 0
+    return [round.id, formatRoundId(sessionId, turnSequence, round.roundIndex)] as const
+  }))
+
+  const partIdBySource = new Map<string, string>()
+  const preludeParts = trace.parts
+    .filter(part => part.turnId === null)
+    .sort((a, b) => a.ordinal - b.ordinal)
+  preludeParts.forEach((part, index) => {
+    partIdBySource.set(part.id, formatPartId(sessionId, 0, 0, index + 1))
+  })
+
+  const roundPartsBySource = new Map<string, typeof trace.parts>()
+  for (const part of trace.parts.filter(p => p.roundId !== null)) {
+    const key = part.roundId as string
+    roundPartsBySource.set(key, [...(roundPartsBySource.get(key) ?? []), part])
+  }
+  for (const [sourceRoundId, parts] of roundPartsBySource.entries()) {
+    const mappedRoundId = roundIdBySource.get(sourceRoundId)
+    const mappedTurnId = trace.rounds.find(round => round.id === sourceRoundId)?.turnId ?? null
+    const turnSequence = trace.turns.find(turn => turn.id === mappedTurnId)?.sequenceNumber ?? 0
+    const roundIndex = trace.rounds.find(round => round.id === sourceRoundId)?.roundIndex ?? 0
+    if (!mappedRoundId) continue
+    parts
+      .sort((a, b) => a.ordinal - b.ordinal)
+      .forEach((part, index) => {
+        partIdBySource.set(part.id, formatPartId(sessionId, turnSequence, roundIndex, index + 1))
+      })
+  }
 
   const session: SessionRecord = {
     ...trace.session,
@@ -35,23 +77,29 @@ export function importTraceBundle(
 
   const turns: TurnRecord[] = trace.turns.map(turn => ({
     ...turn,
-    id: turnIdBySource.get(turn.id) ?? createUuid(),
+    id: turnIdBySource.get(turn.id) ?? formatTurnId(sessionId, turn.sequenceNumber),
     sessionId,
   }))
 
   const rounds: RoundRecord[] = trace.rounds.map(round => ({
     ...round,
-    id: roundIdBySource.get(round.id) ?? createUuid(),
-    turnId: turnIdBySource.get(round.turnId) ?? createUuid(),
+    id: roundIdBySource.get(round.id) ?? formatRoundId(sessionId, 0, round.roundIndex),
+    turnId: turnIdBySource.get(round.turnId) ?? formatTurnId(sessionId, 0),
   }))
 
   const parts: PartRecord[] = trace.parts.map(part => ({
     ...part,
-    id: partIdBySource.get(part.id) ?? createUuid(),
+    id: partIdBySource.get(part.id) ?? formatPartId(sessionId, 0, 0, 1),
     sessionId,
     turnId: part.turnId ? (turnIdBySource.get(part.turnId) ?? null) : null,
     roundId: part.roundId ? (roundIdBySource.get(part.roundId) ?? null) : null,
     parentPartId: part.parentPartId ? (partIdBySource.get(part.parentPartId) ?? null) : null,
+    context: {
+      ...part.context,
+      strippedByCompactionAtTurnId: part.context.strippedByCompactionAtTurnId
+        ? (turnIdBySource.get(part.context.strippedByCompactionAtTurnId) ?? null)
+        : null,
+    },
   }))
 
   const rawExchanges: RawExchangeRecord[] = trace.rawExchanges.map(exchange => ({

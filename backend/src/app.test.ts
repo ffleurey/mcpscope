@@ -179,6 +179,57 @@ describe('backend foundation', () => {
     ])
   })
 
+  it('supports explicit session IDs and validates duplicates/format', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const createPayload = {
+      sessionId: 'AB23',
+      title: 'With explicit ID',
+      modelProfileSnapshot: {
+        id: 'model-1',
+        name: 'Model',
+        connectionBaseUrl: 'https://example.com/v1',
+        apiKey: null,
+        modelKey: 'model-key',
+        modelDisplayName: 'Model Key',
+        systemPrompt: 'Reply exactly.',
+        temperature: 0,
+        reasoning: 'on',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    }
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: createPayload,
+    })
+    expect(first.statusCode).toBe(201)
+    expect(first.json().session.id).toBe('AB23')
+
+    const duplicate = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: createPayload,
+    })
+    expect(duplicate.statusCode).toBe(409)
+    expect(duplicate.json().error.code).toBe('duplicate_session_id')
+
+    const invalid = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        ...createPayload,
+        sessionId: 'OOO1',
+      },
+    })
+    expect(invalid.statusCode).toBe(400)
+    expect(invalid.json().error.code).toBe('invalid_session_id')
+  })
+
   it('stores backend-owned LM connections, model configs, and MCP profiles', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
@@ -326,6 +377,255 @@ describe('backend foundation', () => {
     expect(traceBody.context.some((entry: { type: string }) => entry.type === 'assistant-reasoning')).toBe(false)
     expect(traceBody.parts.filter((part: { partType: string }) => part.partType === 'tool-call')).toHaveLength(6)
     expect(traceBody.parts.filter((part: { partType: string }) => part.partType === 'tool-result')).toHaveLength(6)
+  })
+
+  it('returns expected lookup payloads for session/turn/round/part on exported multi-turn tool baseline', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+    const baselineTrace = JSON.parse(
+      fs.readFileSync(
+        'exports/test-with-multiple-turns-and-tools.trace.json',
+        'utf8',
+      ),
+    ) as SessionTraceBundle
+
+    const importResponse = await app.inject({
+      method: 'POST',
+      url: '/api/traces/import',
+      payload: baselineTrace,
+    })
+    expect(importResponse.statusCode).toBe(201)
+    const importedSessionId = importResponse.json().session.id as string
+
+    const traceResponse = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${importedSessionId}/trace`,
+    })
+    expect(traceResponse.statusCode).toBe(200)
+    const traceBody = traceResponse.json()
+    const turns = [...traceBody.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+    const firstTurnId = turns[0].id as string
+    const secondTurnId = turns[1].id as string
+    const targetTurnId = turns[2]?.id as string
+    const rounds = traceBody.rounds as Array<{ id: string; turnId: string; roundIndex: number }>
+    const parts = traceBody.parts as Array<{
+      id: string
+      roundId: string | null
+      turnId: string | null
+      partType: string
+      payload: { json: Record<string, unknown> | null }
+    }>
+    const firstRoundId = rounds.find(round => round.turnId === firstTurnId && round.roundIndex === 0)?.id
+    const targetRound = rounds.find((round) => (
+      round.turnId === targetTurnId
+      && parts.filter(part => part.roundId === round.id && part.partType === 'tool-call').length > 0
+    )) ?? rounds.find((round) => (
+      parts.filter(part => part.roundId === round.id && part.partType === 'tool-call').length > 0
+    ))
+    expect(targetRound).toBeDefined()
+    expect(firstRoundId).toBeDefined()
+    const targetRoundId = targetRound!.id
+    const targetRoundTurnId = targetRound!.turnId
+    const toolCallPart = parts.find((part) =>
+      part.roundId === targetRoundId && part.partType === 'tool-call',
+    )
+    const toolCallPartId = toolCallPart?.id as string
+    const assistantContentPartId = parts.find((part) => part.roundId === targetRoundId && part.partType === 'assistant-content')?.id as string
+    const setupPartId = parts.find((part) => part.turnId === null && part.partType === 'system-prompt')?.id as string
+    const toolName = (toolCallPart?.payload.json?.toolName ?? toolCallPart?.payload.json?.name) as string | undefined
+    expect(setupPartId).toBeDefined()
+
+    const sessionSummary = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}?mode=summary` })
+    expect(sessionSummary.statusCode).toBe(200)
+    expect(sessionSummary.json()).toMatchObject({
+      id: importedSessionId,
+      type: 'session',
+      mode: 'summary',
+      parentIds: { sessionId: importedSessionId, turnId: null, roundId: null },
+      data: {
+        session: expect.objectContaining({ id: importedSessionId, title: expect.any(String) }),
+        turns: expect.arrayContaining([
+          expect.objectContaining({ id: firstTurnId, sequenceNumber: 1 }),
+          expect.objectContaining({ id: secondTurnId, sequenceNumber: 2 }),
+        ]),
+      },
+    })
+    expect(sessionSummary.json().data.session.modelProfileSnapshot).toBeUndefined()
+
+    const sessionFull = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}?mode=full` })
+    expect(sessionFull.statusCode).toBe(200)
+    expect(sessionFull.json()).toMatchObject({
+      id: importedSessionId,
+      type: 'session',
+      mode: 'full',
+      data: {
+        session: expect.objectContaining({ id: importedSessionId, modelProfileName: expect.any(String) }),
+      },
+    })
+    expect(sessionFull.json().data.session.modelProfileSnapshot).toBeUndefined()
+
+    const turnSummary = await app.inject({ method: 'GET', url: `/api/lookup/${firstTurnId}?mode=summary` })
+    expect(turnSummary.statusCode).toBe(200)
+    expect(turnSummary.json()).toMatchObject({
+      id: firstTurnId,
+      type: 'turn',
+      mode: 'summary',
+      parentIds: { sessionId: importedSessionId, turnId: firstTurnId, roundId: null },
+      data: {
+        turn: expect.objectContaining({ id: firstTurnId, sequenceNumber: 1 }),
+        rounds: expect.arrayContaining([
+          expect.objectContaining({ id: expect.any(String), roundIndex: 0 }),
+        ]),
+      },
+    })
+    expect(turnSummary.json().data.turn.usage).toBeUndefined()
+
+    const turnFull = await app.inject({ method: 'GET', url: `/api/lookup/${firstTurnId}?mode=full` })
+    expect(turnFull.statusCode).toBe(200)
+    expect(turnFull.json()).toMatchObject({
+      id: firstTurnId,
+      type: 'turn',
+      mode: 'full',
+      parentIds: { sessionId: importedSessionId, turnId: firstTurnId, roundId: null },
+      data: {
+        turn: expect.objectContaining({ id: firstTurnId, usage: expect.any(Object) }),
+      },
+    })
+    expect(turnFull.json().data.rounds.length).toBeGreaterThan(0)
+
+    const roundSummary = await app.inject({ method: 'GET', url: `/api/lookup/${targetRoundId}?mode=summary` })
+    expect(roundSummary.statusCode).toBe(200)
+    expect(roundSummary.json()).toMatchObject({
+      id: targetRoundId,
+      type: 'round',
+      mode: 'summary',
+      parentIds: { sessionId: importedSessionId, turnId: expect.any(String), roundId: targetRoundId },
+      data: {
+        parts: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool_call',
+            toolName: expect.any(String),
+            preview: expect.any(String),
+          }),
+        ]),
+      },
+    })
+    const roundSummaryTool = roundSummary.json().data.parts.find((p: { kind: string }) => p.kind === 'tool_call')
+    expect(roundSummaryTool.toolCallPayload).toBeUndefined()
+    expect(roundSummaryTool.toolResponsePayload).toBeUndefined()
+
+    const roundFull = await app.inject({ method: 'GET', url: `/api/lookup/${targetRoundId}?mode=full` })
+    expect(roundFull.statusCode).toBe(200)
+    expect(roundFull.json()).toMatchObject({
+      id: targetRoundId,
+      type: 'round',
+      mode: 'full',
+      parentIds: { sessionId: importedSessionId, turnId: expect.any(String), roundId: targetRoundId },
+      data: {
+        parts: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool_call',
+            toolName: expect.any(String),
+            toolCallPayload: expect.any(Object),
+            toolResponsePayload: expect.anything(),
+          }),
+        ]),
+      },
+    })
+    expect(roundFull.json().data.round.requestPayloadJson).toBeUndefined()
+    expect(roundFull.json().data.round.responseTraceJson).toBeUndefined()
+    expect(roundFull.json().data.parts.length).toBeGreaterThan(0)
+    expect(roundFull.json().data.parts.some((part: { kind: string }) => part.kind === 'setup')).toBe(false)
+
+    const partSummary = await app.inject({ method: 'GET', url: `/api/lookup/${toolCallPartId}?mode=summary` })
+    expect(partSummary.statusCode).toBe(200)
+    expect(partSummary.json()).toMatchObject({
+      id: toolCallPartId,
+      type: 'part',
+      mode: 'summary',
+      parentIds: { sessionId: importedSessionId, turnId: targetRoundTurnId, roundId: targetRoundId },
+      data: {
+        part: expect.objectContaining({
+          kind: 'tool_call',
+          ...(toolName ? { toolName } : {}),
+          preview: expect.any(String),
+        }),
+      },
+    })
+    expect(partSummary.json().data.part.toolCallPayload).toBeUndefined()
+    expect(partSummary.json().data.part.toolResponsePayload).toBeUndefined()
+
+    const partFull = await app.inject({ method: 'GET', url: `/api/lookup/${toolCallPartId}?mode=full` })
+    expect(partFull.statusCode).toBe(200)
+    expect(partFull.json()).toMatchObject({
+      id: toolCallPartId,
+      type: 'part',
+      mode: 'full',
+      parentIds: { sessionId: importedSessionId, turnId: targetRoundTurnId, roundId: targetRoundId },
+      data: {
+        part: expect.objectContaining({
+          kind: 'tool_call',
+          ...(toolName ? { toolName } : {}),
+          toolCallPayload: expect.any(Object),
+          toolResponsePayload: expect.anything(),
+        }),
+      },
+    })
+
+    if (assistantContentPartId) {
+      const assistantPartSummary = await app.inject({ method: 'GET', url: `/api/lookup/${assistantContentPartId}?mode=summary` })
+      expect(assistantPartSummary.statusCode).toBe(200)
+      expect(assistantPartSummary.json().data.part.content).toBeUndefined()
+
+      const assistantPartFull = await app.inject({ method: 'GET', url: `/api/lookup/${assistantContentPartId}?mode=full` })
+      expect(assistantPartFull.statusCode).toBe(200)
+      expect(assistantPartFull.json().data.part.content).toEqual(
+        expect.objectContaining({ text: expect.any(String) }),
+      )
+    }
+
+    const setupPartSummary = await app.inject({ method: 'GET', url: `/api/lookup/${setupPartId}?mode=summary` })
+    expect(setupPartSummary.statusCode).toBe(200)
+    expect(setupPartSummary.json()).toMatchObject({
+      id: setupPartId,
+      type: 'part',
+      mode: 'summary',
+      parentIds: { sessionId: importedSessionId, turnId: null, roundId: null },
+      data: {
+        part: expect.objectContaining({
+          id: setupPartId,
+          kind: 'setup',
+          label: 'system-prompt',
+          setupType: 'system-prompt',
+          preview: 'Model system prompt',
+        }),
+      },
+    })
+    expect(setupPartSummary.json().data.part.content).toBeUndefined()
+
+    const setupPartFull = await app.inject({ method: 'GET', url: `/api/lookup/${setupPartId}?mode=full` })
+    expect(setupPartFull.statusCode).toBe(200)
+    expect(setupPartFull.json()).toMatchObject({
+      id: setupPartId,
+      type: 'part',
+      mode: 'full',
+      parentIds: { sessionId: importedSessionId, turnId: null, roundId: null },
+      data: {
+        part: expect.objectContaining({
+          id: setupPartId,
+          kind: 'setup',
+          type: 'system-prompt',
+          setupType: 'system-prompt',
+          summary: 'Model system prompt',
+        }),
+      },
+    })
+    expect(setupPartFull.json().data.part.content).toBeUndefined()
+    expect(JSON.stringify(setupPartFull.json())).not.toContain('You are an analyst agent for Home Assistant data.')
+
+    const invalidLookup = await app.inject({ method: 'GET', url: '/api/lookup/not-an-id?mode=summary' })
+    expect(invalidLookup.statusCode).toBe(400)
   })
 
   it('streams model-only turn events as deltas followed by committed parts', async () => {

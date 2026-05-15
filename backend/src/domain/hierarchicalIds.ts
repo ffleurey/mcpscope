@@ -1,0 +1,126 @@
+export const SESSION_ID_LENGTH = 4
+export const SESSION_ID_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+export const SESSION_ID_REGEX = /^[A-HJ-NP-Z2-9]{4}$/
+
+export type HierarchicalIdType = 'session' | 'turn' | 'round' | 'part'
+
+export interface ParsedHierarchicalId {
+  raw: string
+  type: HierarchicalIdType
+  sessionId: string
+  turnNumber: number | null
+  roundNumber: number | null
+  partNumber: number | null
+}
+
+export function isValidSessionId(value: string): boolean {
+  return SESSION_ID_REGEX.test(value)
+}
+
+export function generateSessionIdCandidate(random: () => number = Math.random): string {
+  let value = ''
+  for (let i = 0; i < SESSION_ID_LENGTH; i += 1) {
+    const index = Math.floor(random() * SESSION_ID_CHARSET.length)
+    value += SESSION_ID_CHARSET[index] ?? SESSION_ID_CHARSET[0]
+  }
+  return value
+}
+
+export function generateUniqueSessionId(
+  exists: (sessionId: string) => boolean,
+  maxAttempts = 3,
+  random: () => number = Math.random,
+): string | null {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const candidate = generateSessionIdCandidate(random)
+    if (!exists(candidate)) {
+      return candidate
+    }
+  }
+  return null
+}
+
+export function formatTurnId(sessionId: string, turnNumber: number): string {
+  return `${sessionId}.${turnNumber}`
+}
+
+export function formatRoundId(sessionId: string, turnNumber: number, roundNumber: number): string {
+  return `${sessionId}.${turnNumber}.${roundNumber}`
+}
+
+export function formatPartId(sessionId: string, turnNumber: number, roundNumber: number, partNumber: number): string {
+  return `${sessionId}.${turnNumber}.${roundNumber}.${partNumber}`
+}
+
+export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+
+  const segments = trimmed.split('.')
+  if (segments.length < 1 || segments.length > 4) {
+    return null
+  }
+
+  const sessionId = segments[0] ?? ''
+  if (!isValidSessionId(sessionId)) {
+    return null
+  }
+
+  const parseNumber = (value: string): number | null => {
+    if (!/^\d+$/.test(value)) return null
+    const parsed = Number(value)
+    if (!Number.isSafeInteger(parsed)) return null
+    return parsed
+  }
+
+  if (segments.length === 1) {
+    return {
+      raw: trimmed,
+      type: 'session',
+      sessionId,
+      turnNumber: null,
+      roundNumber: null,
+      partNumber: null,
+    }
+  }
+
+  const turnNumber = parseNumber(segments[1] ?? '')
+  if (turnNumber == null || turnNumber < 0) return null
+
+  if (segments.length === 2) {
+    return {
+      raw: trimmed,
+      type: 'turn',
+      sessionId,
+      turnNumber,
+      roundNumber: null,
+      partNumber: null,
+    }
+  }
+
+  const roundNumber = parseNumber(segments[2] ?? '')
+  if (roundNumber == null || roundNumber < 0) return null
+
+  if (segments.length === 3) {
+    return {
+      raw: trimmed,
+      type: 'round',
+      sessionId,
+      turnNumber,
+      roundNumber,
+      partNumber: null,
+    }
+  }
+
+  const partNumber = parseNumber(segments[3] ?? '')
+  if (partNumber == null || partNumber < 1) return null
+
+  return {
+    raw: trimmed,
+    type: 'part',
+    sessionId,
+    turnNumber,
+    roundNumber,
+    partNumber,
+  }
+}

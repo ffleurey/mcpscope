@@ -8,7 +8,9 @@ import type {
 } from '../domain/model.js'
 import { buildApiMessages, buildLmToolDefinitions, deriveContextEntries, deriveTranscriptEntries } from '../domain/selectors.js'
 import {
+  getNextPreludePartSequence,
   getNextPartOrdinal,
+  getNextRoundPartSequence,
   getNextTurnSequenceNumber,
   getSessionRecord,
   insertPartRecord,
@@ -24,6 +26,7 @@ import {
   updateSessionRecord,
   updateTurnRecord,
 } from '../persistence/repository.js'
+import { formatPartId, formatRoundId, formatTurnId } from '../domain/hierarchicalIds.js'
 import type { LmStudioGateway, RuntimeTurnResult } from './modelTurns.js'
 import type { ApiMessage } from '../domain/selectors.js'
 import type { McpRawExchange, McpToolCallResult, McpToolsListResult } from '../services/mcp/httpClient.js'
@@ -428,6 +431,7 @@ export async function ensureMcpContext(
 
   const tx = database.connection.transaction(() => {
     let ordinal = getNextPartOrdinal(database.connection, session.id)
+    let preludePartNumber = getNextPreludePartSequence(database.connection, session.id)
 
     insertRawExchangeRecord(
       database.connection,
@@ -448,7 +452,7 @@ export async function ensureMcpContext(
 
     if (!hasInstructions && initialized.instructions) {
       insertPartRecord(database.connection, {
-        id: createUuid(),
+        id: formatPartId(session.id, 0, 0, preludePartNumber++),
         sessionId: session.id,
         turnId: null,
         roundId: null,
@@ -485,7 +489,7 @@ export async function ensureMcpContext(
 
     if (!hasToolDefinitions) {
       insertPartRecord(database.connection, {
-        id: createUuid(),
+        id: formatPartId(session.id, 0, 0, preludePartNumber),
         sessionId: session.id,
         turnId: null,
         roundId: null,
@@ -529,9 +533,17 @@ export async function ensureMcpContext(
   }
 }
 
-function createUserPart(session: SessionRecord, turnId: string, roundId: string, ordinal: number, userContent: string, createdAt: number): PartRecord {
+function createUserPart(
+  session: SessionRecord,
+  partId: string,
+  turnId: string,
+  roundId: string,
+  ordinal: number,
+  userContent: string,
+  createdAt: number,
+): PartRecord {
   return {
-    id: createUuid(),
+    id: partId,
     sessionId: session.id,
     turnId,
     roundId,
@@ -568,6 +580,7 @@ function createUserPart(session: SessionRecord, turnId: string, roundId: string,
 
 function createToolCallPart(
   session: SessionRecord,
+  partId: string,
   turnId: string,
   roundId: string,
   ordinal: number,
@@ -575,7 +588,7 @@ function createToolCallPart(
   createdAt: number,
 ): PartRecord {
   return {
-    id: createUuid(),
+    id: partId,
     sessionId: session.id,
     turnId,
     roundId,
@@ -616,6 +629,7 @@ function createToolCallPart(
 
 function createToolResultPart(
   session: SessionRecord,
+  partId: string,
   turnId: string,
   roundId: string,
   ordinal: number,
@@ -625,7 +639,7 @@ function createToolResultPart(
   createdAt: number,
 ): PartRecord {
   return {
-    id: createUuid(),
+    id: partId,
     sessionId: session.id,
     turnId,
     roundId,
@@ -886,12 +900,13 @@ export async function createToolEnabledTurn(
   const lmTools = buildLmToolDefinitions(sessionParts)
 
   const startedAt = now()
-  const turnId = createUuid()
-  const userRoundId = createUuid()
+  const turnSequenceNumber = getNextTurnSequenceNumber(database.connection, session.id)
+  const turnId = formatTurnId(session.id, turnSequenceNumber)
+  const userRoundId = formatRoundId(session.id, turnSequenceNumber, 0)
   const turn: TurnRecord = {
     id: turnId,
     sessionId: session.id,
-    sequenceNumber: getNextTurnSequenceNumber(database.connection, session.id),
+    sequenceNumber: turnSequenceNumber,
     status: 'streaming',
     createdAt: startedAt,
     completedAt: null,
@@ -925,7 +940,15 @@ export async function createToolEnabledTurn(
     responseTraceJson: null,
   }
 
-  const userPart = createUserPart(session, turnId, userRoundId, getNextPartOrdinal(database.connection, session.id), input.userContent, startedAt)
+  const userPart = createUserPart(
+    session,
+    formatPartId(session.id, turnSequenceNumber, 0, getNextRoundPartSequence(database.connection, userRoundId)),
+    turnId,
+    userRoundId,
+    getNextPartOrdinal(database.connection, session.id),
+    input.userContent,
+    startedAt,
+  )
   const initializeTx = database.connection.transaction(() => {
     insertTurnRecord(database.connection, turn)
     insertRoundRecord(database.connection, initialRound)
@@ -1067,6 +1090,7 @@ export async function createToolEnabledTurn(
       const toolResultParts: PartRecord[] = []
       const assistantMessageParts: PartRecord[] = []
       let ordinal = getNextPartOrdinal(database.connection, session.id)
+      let partNumber = getNextRoundPartSequence(database.connection, currentRound.id)
 
       for (const segment of streamedCompletion.segments) {
         if (segment.kind === 'reasoning') {
@@ -1074,6 +1098,7 @@ export async function createToolEnabledTurn(
           if (!part) {
             continue
           }
+          part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex, partNumber++)
           part.ordinal = ordinal++
           assistantMessageParts.push(part)
           continue
@@ -1084,6 +1109,7 @@ export async function createToolEnabledTurn(
           if (!part) {
             continue
           }
+          part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex, partNumber++)
           part.ordinal = ordinal++
           assistantMessageParts.push(part)
           continue
@@ -1094,7 +1120,15 @@ export async function createToolEnabledTurn(
           continue
         }
 
-        const toolCallPart = createToolCallPart(session, turnId, currentRound.id, ordinal++, toolCall, completedAt)
+        const toolCallPart = createToolCallPart(
+          session,
+          formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex, partNumber++),
+          turnId,
+          currentRound.id,
+          ordinal++,
+          toolCall,
+          completedAt,
+        )
         toolCallPartsByIndex.set(segment.toolCallIndex, toolCallPart)
         assistantMessageParts.push(toolCallPart)
       }
@@ -1120,6 +1154,7 @@ export async function createToolEnabledTurn(
         )
         const toolResultPart = createToolResultPart(
           session,
+          formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex, partNumber++),
           turnId,
           currentRound.id,
           toolResultOrdinal++,
@@ -1185,7 +1220,7 @@ export async function createToolEnabledTurn(
       }
 
       currentRound = {
-        id: createUuid(),
+        id: formatRoundId(session.id, turnSequenceNumber, currentRound.roundIndex + 1),
         turnId,
         roundIndex: currentRound.roundIndex + 1,
         status: 'streaming',
@@ -1241,6 +1276,7 @@ export async function createToolEnabledTurn(
     const assistantContentPartsQueue = [...assistantContentParts]
     const assistantParts: PartRecord[] = []
     let ordinal = getNextPartOrdinal(database.connection, session.id)
+    let partNumber = getNextRoundPartSequence(database.connection, currentRound.id)
 
     for (const segment of streamedCompletion.segments) {
       if (segment.kind === 'reasoning') {
@@ -1248,6 +1284,7 @@ export async function createToolEnabledTurn(
         if (!part) {
           continue
         }
+        part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex, partNumber++)
         part.ordinal = ordinal++
         assistantParts.push(part)
         continue
@@ -1258,6 +1295,7 @@ export async function createToolEnabledTurn(
         if (!part) {
           continue
         }
+        part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex, partNumber++)
         part.ordinal = ordinal++
         assistantParts.push(part)
       }
@@ -1333,7 +1371,12 @@ export async function createToolEnabledTurn(
   turn.outcome = `tool-loop-limit:${input.maxToolRounds}`
 
   const diagnosticNote: PartRecord = {
-    id: createUuid(),
+    id: formatPartId(
+      session.id,
+      turnSequenceNumber,
+      currentRound.roundIndex,
+      getNextRoundPartSequence(database.connection, currentRound.id),
+    ),
     sessionId: session.id,
     turnId,
     roundId: currentRound.id,
