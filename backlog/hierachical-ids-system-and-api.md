@@ -20,10 +20,10 @@ The ID format should be hierarchical and encode ancestry directly.
 
 Target shape:
 
-- `SSS` -> session
-- `SSS.T` -> turn
-- `SSS.T.R` -> round
-- `SSS.T.R.P` -> part
+- `AB12` -> session
+- `AB12.3` -> turn
+- `AB12.3.3` -> round
+- `AB12.3.3.1` -> part
 
 The exact formatting of each segment can be refined, but the important properties are:
 
@@ -32,6 +32,131 @@ The exact formatting of each segment can be refined, but the important propertie
 - easy to copy
 - unambiguous
 - enough to determine object type from segment count
+
+## ID format decision
+
+The current preferred format is:
+
+- **session ID**: short random 4-character uppercase alphanumeric token
+- **turn ID**: `SESSION.<turnNumber>`
+- **round ID**: `SESSION.<turnNumber>.<roundNumber>`
+- **part ID**: `SESSION.<turnNumber>.<roundNumber>.<partNumber>`
+
+Example:
+
+- `I8TS`
+- `I8TS.3`
+- `I8TS.3.3`
+- `I8TS.3.3.1`
+
+### Session ID charset
+
+The allowed session ID characters should be:
+
+- uppercase letters
+- digits
+
+with the following characters excluded to avoid ambiguity:
+
+- `0`
+- `O`
+- `1`
+- `I`
+
+### Session ID creation rules
+
+- on session creation, generate a random 4-character ID by default
+- check whether it already exists
+- if it exists, generate another one
+- fail after **3 attempts**
+
+This only applies at session creation time.
+
+The UI may also allow the user to provide the session ID explicitly. If the user or a future agent provides an ID, the system should:
+
+- validate it immediately
+- fail immediately if it already exists
+- not silently rewrite it
+
+### Numbering inside a session
+
+Turn, round, and part numbers should be sequence numbers within their parent.
+
+The current direction is to use **0-based numbering** for those sequence numbers. This keeps the mapping simple if internal indexing is already zero-based, and it is still understandable for developers and coding agents.
+
+The important rule is not whether the numbers start at 0 or 1, but that they are:
+
+- stable
+- predictable
+- not renumbered later
+
+## Rationale
+
+### Why a short random session ID
+
+The session ID should be short because:
+
+- users may need to read, say, or type it
+- coding agents may refer to it repeatedly in prompts and commands
+- this is a local tool, so the total number of sessions is expected to stay relatively small
+
+For that reason, the current direction is to prefer a **short 4-character ID** over a longer identifier, and simply check for collisions when creating a session.
+
+If a collision happens, the backend should generate a new candidate until it finds a free one, up to the defined retry limit.
+
+This keeps the ID compact without giving up correctness.
+
+### Why sequence numbers inside a session
+
+Turns, rounds, and parts should use simple sequence numbers within their parent.
+
+This gives:
+
+- stable ordering
+- easy human understanding
+- easy parsing
+- easy navigation in UI and CLI
+
+It also means the canonical ID stays compact and readable.
+
+### Why the session ID should be separate from the session name
+
+The session ID should not try to replace user naming.
+
+Users and coding agents should remain free to give sessions meaningful names for their own workflow, while the canonical ID provides a short, stable reference for lookup and collaboration.
+
+This is an important benefit of the design:
+
+- **name** = meaningful label for humans or agents
+- **ID** = short stable reference for the system
+
+### Parallel parts
+
+Parallel execution inside a round does not prevent this numbering scheme from working.
+
+Part numbers should represent the stable persisted order of parts inside the round. Even if multiple operations happened concurrently, each part still gets a single immutable sequence number.
+
+If we later need richer concurrency information, that should be represented in additional fields, not in the ID format itself.
+
+## Object model returned by lookup
+
+The lookup API should return only the meaningful structured content needed by the UI and future CLI. It should not expose low-level LM Studio transport details or other raw technical exchange data.
+
+The relevant part kinds to expose are:
+
+- **setup**
+- **user_prompt**
+- **reasoning**
+- **tool_call**
+- **assistant_answer**
+
+Expected payload by part kind:
+
+- **setup** -> setup-specific summary plus token sizes
+- **user_prompt** -> text content and token size
+- **reasoning** -> text content and token size
+- **tool_call** -> tool name, tool call payload, tool response payload, token size
+- **assistant_answer** -> text content and token size
 
 ## Required backend capability
 
@@ -51,6 +176,8 @@ The backend should parse the ID, infer the target type, resolve the object, and 
 - parent IDs as relevant
 - object data
 
+Invalid ID format and not-found IDs should return clear error codes and JSON error payloads.
+
 ## Summary mode
 
 The lookup operation should support a summary mode so callers can navigate cheaply before fetching details.
@@ -59,15 +186,40 @@ Summary mode should return:
 
 - the target object's key metadata
 - the list of child IDs or child summaries needed to navigate deeper
+- for nested parts, summary information without full text or full tool payloads
 
 Examples:
 
 - session summary -> turn IDs
 - turn summary -> round IDs
 - round summary -> part IDs
-- part summary -> metadata/preview only
+- part summary -> part type, name/tool name as relevant, token size, preview metadata only
 
 This allows an agent to discover nested IDs without loading the full session tree.
+
+### Summary vs full mode
+
+**Summary mode** should include enough information to navigate and understand structure without loading the full content.
+
+For sub-parts, that means including relevant summary fields such as:
+
+- part type
+- part label/name
+- tool name when the part is a tool call
+- token size
+
+but **not**:
+
+- full reasoning text
+- full user prompt text
+- full assistant answer text
+- full tool request/response payloads
+
+**Full mode** should include the full content relevant to the target object:
+
+- full text for prompt / reasoning / assistant answer
+- full payloads for tool calls and tool responses
+- the structured data needed by the UI and future CLI
 
 ## API shape
 
@@ -89,6 +241,20 @@ Required UI outcomes:
 - show IDs for sessions, turns, rounds, and parts
 - make IDs easy to copy
 - make the hierarchy visible enough that humans can reference objects confidently
+- start in Inspect mode first
+
+The initial UI affordance can be simple:
+
+- show the ID as a tag in Inspect mode
+- clicking the tag copies the ID
+
+To exercise the new API directly from the frontend, Inspect mode should also expose buttons that:
+
+- fetch the selected object by ID in **summary** mode
+- fetch the selected object by ID in **full** mode
+- show the returned JSON in the existing JSON dialog
+
+This gives us a simple way to validate the API from the UI before the CLI exists, and may later replace some existing Inspect-mode actions.
 
 This is valuable even before the CLI is implemented because it improves human-to-human and human-to-agent collaboration.
 
@@ -113,6 +279,7 @@ If this is in place first, the CLI can be mostly a thin client over already prov
 - return JSON only
 - expose IDs in the UI
 - support easy copy of IDs in the UI
+- add Inspect-mode buttons to fetch by ID in summary/full mode
 
 ## Non-goals
 
@@ -123,13 +290,43 @@ If this is in place first, the CLI can be mostly a thin client over already prov
 
 ## Plan
 
-1. Define the exact ID format and rules.
-2. Implement backend parsing and resolution for hierarchical IDs.
-3. Implement JSON lookup response shape for summary and full modes.
-4. Add tests for session / turn / round / part lookup.
-5. Expose IDs in the UI.
-6. Add copy-friendly UI affordances.
-7. Validate the workflow in the UI before starting CLI implementation.
+1. Finalize the exact session ID charset, numbering rules, collision handling, and validation rules.
+2. Implement session ID generation and explicit-ID validation at session creation time.
+3. Implement backend parsing and generic resolution for hierarchical IDs.
+4. Implement JSON lookup response shapes for summary and full modes.
+5. Add basic automated tests for:
+   - session creation ID generation / collision handling
+   - lookup by ID at session level
+   - lookup by ID at turn level
+   - lookup by ID at round level
+   - lookup by ID at part level
+6. Expose IDs in the UI Inspect mode.
+7. Add copy-on-click ID tags in Inspect mode.
+8. Add Inspect-mode buttons to fetch summary/full JSON via the new API and show the results in the existing JSON dialog.
+9. Do manual UI smoke testing of the full workflow before starting CLI implementation.
+
+## Testing approach
+
+Keep the first automated coverage simple and focused.
+
+### Automated tests
+
+- session creation with random ID generation
+- collision handling and retry behavior
+- explicit provided ID validation
+- generic lookup by hierarchical ID for:
+  - session
+  - turn
+  - round
+  - part
+
+### Manual UI smoke tests
+
+- ID tags are visible in Inspect mode
+- clicking an ID copies it
+- summary fetch button returns the expected JSON shape
+- full fetch button returns the expected JSON shape
+- the JSON dialog allows the API to be inspected end to end from the frontend
 
 ## Dependency
 
