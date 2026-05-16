@@ -2,6 +2,7 @@
   import type { PartRecord } from '../backendTypes'
   import type { StreamingRoundState } from '../traceStreaming'
   import { looksLikeMarkdown } from '../markdownRender'
+  import IdBadge from './IdBadge.svelte'
   import JsonDialog from './JsonDialog.svelte'
   import MarkdownPreviewDialog from './MarkdownPreviewDialog.svelte'
   import StreamingRoundDeltaBlock from './StreamingRoundDeltaBlock.svelte'
@@ -10,6 +11,7 @@
   interface Props {
     parts: PartRecord[]
     roundStream?: StreamingRoundState | null
+    inspectMode?: boolean
   }
 
   type CompactItem =
@@ -35,7 +37,7 @@
         part: PartRecord
       }
 
-  const { parts, roundStream = null }: Props = $props()
+  const { parts, roundStream = null, inspectMode = false }: Props = $props()
 
   let showDialog = $state(false)
   let dialogTitle = $state('')
@@ -185,6 +187,9 @@
           <div class="assistant-text">{assistantText}</div>
         {/if}
         <div class="message-meta">
+          {#if inspectMode}
+            <IdBadge id={item.part.id} />
+          {/if}
           {#if item.part.tokens.count !== null}
             <span class="token-pill">{item.part.tokens.count.toLocaleString()} tokens</span>
           {/if}
@@ -200,6 +205,9 @@
         <summary class="collapsed-summary">
           <span class="row-label">Reasoning</span>
           <span class="summary-meta">
+            {#if inspectMode}
+              <IdBadge id={item.part.id} />
+            {/if}
             {#if item.part.tokens.count !== null}
               <span class="token-pill">{item.part.tokens.count.toLocaleString()} tokens</span>
             {/if}
@@ -223,6 +231,9 @@
         <summary class="collapsed-summary">
           <span class="row-label">Tool · {toolName}</span>
           <span class="summary-meta">
+            {#if inspectMode && item.toolCall}
+              <IdBadge id={item.toolCall.id} />
+            {/if}
             {#if isToolWaiting(item.toolCall, item.results)}
               <span class="status-pill">waiting</span>
             {/if}
@@ -266,7 +277,7 @@
         </div>
       </details>
     {:else}
-      <TracePartBlock part={item.part} mode="compact" />
+      <TracePartBlock part={item.part} mode={inspectMode ? 'inspect' : 'compact'} />
     {/if}
   {/each}
 

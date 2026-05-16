@@ -758,7 +758,10 @@ describe('backend foundation', () => {
       data: {
         id: setupId,
         parts: expect.arrayContaining([
-          expect.objectContaining({ type: 'system_prompt' }),
+          expect.objectContaining({
+            type: 'system_prompt',
+            content: expect.objectContaining({ text: expect.any(String) }),
+          }),
         ]),
       },
     })

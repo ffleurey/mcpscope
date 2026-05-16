@@ -238,7 +238,7 @@
 
         <div class="compact-round-parts">
           {#if roundParts.length > 0 || roundStream}
-            <CompactRoundContent parts={roundParts} {roundStream} />
+          <CompactRoundContent parts={roundParts} {roundStream} inspectMode={mode === 'inspect'} />
           {:else if round.status === 'streaming'}
             <div class="round-streaming-hint">Waiting for streamed output…</div>
           {/if}

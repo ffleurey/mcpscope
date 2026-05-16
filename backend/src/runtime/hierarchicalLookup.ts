@@ -128,11 +128,11 @@ function buildSetupNode(
   sessionId: string,
   setupParts: PartRecord[],
   mode: LookupMode,
-  isDirectLookup: boolean,
+  _isDirectLookup: boolean,
 ): object {
   const parts = setupParts
     .filter(p => isPublicPartType(p.partType))
-    .map(p => buildPartNode(p, [], mode, isDirectLookup))
+    .map(p => buildPartNode(p, [], mode, mode === 'full'))
     .filter((n): n is object => n !== null)
 
   return { id: formatSetupId(sessionId), parts }

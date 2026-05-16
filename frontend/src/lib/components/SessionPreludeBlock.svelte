@@ -71,7 +71,7 @@
   {#if !canCollapse || !chatCollapsed}
     <div class="compact-setup-parts">
       {#each sortedParts as part (part.id)}
-        <TracePartBlock {part} mode="compact" />
+        <TracePartBlock {part} mode={mode === 'inspect' ? 'inspect' : 'compact'} />
       {/each}
       {#if isInitializing && sortedParts.length === 0}
         <div class="setup-empty-hint">Setting up session…</div>
