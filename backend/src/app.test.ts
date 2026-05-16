@@ -39,14 +39,6 @@ function parseSseEvents(body: string): Array<{ event: string; data: Record<strin
     })
 }
 
-type LookupAuditEntry = {
-  label: string
-  method: 'GET' | 'POST'
-  url: string
-  statusCode: number
-  requestPayload?: unknown
-  responsePayload: unknown
-}
 
 describe('backend foundation', () => {
   let app: FastifyInstance | undefined
@@ -393,7 +385,6 @@ describe('backend foundation', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config)
-    const auditEntries: LookupAuditEntry[] = []
     let importedSessionId = 'pending-import'
     const baselineTrace = JSON.parse(
       fs.readFileSync(
@@ -408,54 +399,12 @@ describe('backend foundation', () => {
       })
       expect(importResponse.statusCode).toBe(201)
       importedSessionId = importResponse.json().session.id as string
-      auditEntries.push({
-        label: 'import-trace',
-        method: 'POST',
-        url: '/api/traces/import',
-        requestPayload: {
-          sourceFixture: 'exports/test-with-multiple-turns-and-tools.trace.json',
-          session: baselineTrace.session.id,
-          turns: baselineTrace.turns.length,
-          rounds: baselineTrace.rounds.length,
-          parts: baselineTrace.parts.length,
-          rawExchanges: baselineTrace.rawExchanges.length,
-          transcript: baselineTrace.transcript.length,
-          context: baselineTrace.context.length,
-        },
-        statusCode: importResponse.statusCode,
-        responsePayload: importResponse.json(),
-      })
-
       const traceResponse = await app.inject({
         method: 'GET',
         url: `/api/sessions/${importedSessionId}/trace`,
       })
       expect(traceResponse.statusCode).toBe(200)
       const traceBody = traceResponse.json()
-      auditEntries.push({
-        label: 'get-trace',
-        method: 'GET',
-        url: `/api/sessions/${importedSessionId}/trace`,
-        statusCode: traceResponse.statusCode,
-        responsePayload: {
-          session: traceBody.session,
-          counts: {
-            turns: traceBody.turns.length,
-            rounds: traceBody.rounds.length,
-            parts: traceBody.parts.length,
-            rawExchanges: traceBody.rawExchanges.length,
-            transcript: traceBody.transcript.length,
-            context: traceBody.context.length,
-          },
-          derivedIds: {
-            turnIds: traceBody.turns.map((turn: { id: string }) => turn.id),
-            roundIds: traceBody.rounds.map((round: { id: string }) => round.id),
-            preludePartIds: traceBody.parts
-              .filter((part: { turnId: string | null }) => part.turnId === null)
-              .map((part: { id: string }) => part.id),
-          },
-        },
-      })
       const turns = [...traceBody.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
       const firstTurnId = turns[0].id as string
       const secondTurnId = turns[1].id as string
@@ -491,13 +440,6 @@ describe('backend foundation', () => {
 
     const sessionSummary = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}?mode=summary` })
     expect(sessionSummary.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'session-summary',
-      method: 'GET',
-      url: `/api/lookup/${importedSessionId}?mode=summary`,
-      statusCode: sessionSummary.statusCode,
-      responsePayload: sessionSummary.json(),
-    })
     expect(sessionSummary.json()).toMatchObject({
       id: importedSessionId,
       type: 'session',
@@ -518,13 +460,6 @@ describe('backend foundation', () => {
 
     const sessionFull = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}?mode=full` })
     expect(sessionFull.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'session-full',
-      method: 'GET',
-      url: `/api/lookup/${importedSessionId}?mode=full`,
-      statusCode: sessionFull.statusCode,
-      responsePayload: sessionFull.json(),
-    })
     expect(sessionFull.json()).toMatchObject({
       id: importedSessionId,
       type: 'session',
@@ -542,13 +477,6 @@ describe('backend foundation', () => {
 
     const turnSummary = await app.inject({ method: 'GET', url: `/api/lookup/${firstTurnId}?mode=summary` })
     expect(turnSummary.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'turn-summary',
-      method: 'GET',
-      url: `/api/lookup/${firstTurnId}?mode=summary`,
-      statusCode: turnSummary.statusCode,
-      responsePayload: turnSummary.json(),
-    })
     expect(turnSummary.json()).toMatchObject({
       id: firstTurnId,
       type: 'turn',
@@ -566,13 +494,6 @@ describe('backend foundation', () => {
 
     const turnFull = await app.inject({ method: 'GET', url: `/api/lookup/${firstTurnId}?mode=full` })
     expect(turnFull.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'turn-full',
-      method: 'GET',
-      url: `/api/lookup/${firstTurnId}?mode=full`,
-      statusCode: turnFull.statusCode,
-      responsePayload: turnFull.json(),
-    })
     expect(turnFull.json()).toMatchObject({
       id: firstTurnId,
       type: 'turn',
@@ -590,13 +511,6 @@ describe('backend foundation', () => {
 
     const firstRoundSummary = await app.inject({ method: 'GET', url: `/api/lookup/${firstRoundId}?mode=summary` })
     expect(firstRoundSummary.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'first-round-summary',
-      method: 'GET',
-      url: `/api/lookup/${firstRoundId}?mode=summary`,
-      statusCode: firstRoundSummary.statusCode,
-      responsePayload: firstRoundSummary.json(),
-    })
     expect(firstRoundSummary.json().data.parts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'user_prompt', token_count: expect.anything() }),
@@ -605,13 +519,6 @@ describe('backend foundation', () => {
 
     const roundSummary = await app.inject({ method: 'GET', url: `/api/lookup/${targetRoundId}?mode=summary` })
     expect(roundSummary.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'round-summary',
-      method: 'GET',
-      url: `/api/lookup/${targetRoundId}?mode=summary`,
-      statusCode: roundSummary.statusCode,
-      responsePayload: roundSummary.json(),
-    })
     expect(roundSummary.json()).toMatchObject({
       id: targetRoundId,
       type: 'round',
@@ -628,13 +535,6 @@ describe('backend foundation', () => {
 
     const roundFull = await app.inject({ method: 'GET', url: `/api/lookup/${targetRoundId}?mode=full` })
     expect(roundFull.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'round-full',
-      method: 'GET',
-      url: `/api/lookup/${targetRoundId}?mode=full`,
-      statusCode: roundFull.statusCode,
-      responsePayload: roundFull.json(),
-    })
     expect(roundFull.json()).toMatchObject({
       id: targetRoundId,
       type: 'round',
@@ -655,13 +555,6 @@ describe('backend foundation', () => {
 
     const partSummary = await app.inject({ method: 'GET', url: `/api/lookup/${toolCallPartId}?mode=summary` })
     expect(partSummary.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'tool-call-part-summary',
-      method: 'GET',
-      url: `/api/lookup/${toolCallPartId}?mode=summary`,
-      statusCode: partSummary.statusCode,
-      responsePayload: partSummary.json(),
-    })
     expect(partSummary.json()).toMatchObject({
       id: toolCallPartId,
       type: 'part',
@@ -679,13 +572,6 @@ describe('backend foundation', () => {
 
     const partFull = await app.inject({ method: 'GET', url: `/api/lookup/${toolCallPartId}?mode=full` })
     expect(partFull.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'tool-call-part-full',
-      method: 'GET',
-      url: `/api/lookup/${toolCallPartId}?mode=full`,
-      statusCode: partFull.statusCode,
-      responsePayload: partFull.json(),
-    })
     expect(partFull.json()).toMatchObject({
       id: toolCallPartId,
       type: 'part',
@@ -703,24 +589,10 @@ describe('backend foundation', () => {
     if (assistantContentPartId) {
       const assistantPartSummary = await app.inject({ method: 'GET', url: `/api/lookup/${assistantContentPartId}?mode=summary` })
       expect(assistantPartSummary.statusCode).toBe(200)
-      auditEntries.push({
-        label: 'assistant-answer-part-summary',
-        method: 'GET',
-        url: `/api/lookup/${assistantContentPartId}?mode=summary`,
-        statusCode: assistantPartSummary.statusCode,
-        responsePayload: assistantPartSummary.json(),
-      })
       expect(assistantPartSummary.json().data.content).toBeUndefined()
 
       const assistantPartFull = await app.inject({ method: 'GET', url: `/api/lookup/${assistantContentPartId}?mode=full` })
       expect(assistantPartFull.statusCode).toBe(200)
-      auditEntries.push({
-        label: 'assistant-answer-part-full',
-        method: 'GET',
-        url: `/api/lookup/${assistantContentPartId}?mode=full`,
-        statusCode: assistantPartFull.statusCode,
-        responsePayload: assistantPartFull.json(),
-      })
       expect(assistantPartFull.json().data.content).toEqual(
         expect.objectContaining({ text: expect.any(String) }),
       )
@@ -728,13 +600,6 @@ describe('backend foundation', () => {
 
     const userPromptPartSummary = await app.inject({ method: 'GET', url: `/api/lookup/${userPromptPartId}?mode=summary` })
     expect(userPromptPartSummary.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'user-prompt-part-summary',
-      method: 'GET',
-      url: `/api/lookup/${userPromptPartId}?mode=summary`,
-      statusCode: userPromptPartSummary.statusCode,
-      responsePayload: userPromptPartSummary.json(),
-    })
     expect(userPromptPartSummary.json().data).toEqual(
       expect.objectContaining({ type: 'user_prompt', token_count: expect.anything() }),
     )
@@ -744,13 +609,6 @@ describe('backend foundation', () => {
     const setupId = `${importedSessionId}.S`
     const setupNodeFull = await app.inject({ method: 'GET', url: `/api/lookup/${setupId}?mode=full` })
     expect(setupNodeFull.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'setup-node-full',
-      method: 'GET',
-      url: `/api/lookup/${setupId}?mode=full`,
-      statusCode: setupNodeFull.statusCode,
-      responsePayload: setupNodeFull.json(),
-    })
     expect(setupNodeFull.json()).toMatchObject({
       id: setupId,
       type: 'setup',
@@ -768,13 +626,6 @@ describe('backend foundation', () => {
 
     const setupPartSummary = await app.inject({ method: 'GET', url: `/api/lookup/${setupPartId}?mode=summary` })
     expect(setupPartSummary.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'setup-part-summary',
-      method: 'GET',
-      url: `/api/lookup/${setupPartId}?mode=summary`,
-      statusCode: setupPartSummary.statusCode,
-      responsePayload: setupPartSummary.json(),
-    })
     expect(setupPartSummary.json()).toMatchObject({
       id: setupPartId,
       type: 'part',
@@ -791,13 +642,6 @@ describe('backend foundation', () => {
 
     const setupPartFull = await app.inject({ method: 'GET', url: `/api/lookup/${setupPartId}?mode=full` })
     expect(setupPartFull.statusCode).toBe(200)
-    auditEntries.push({
-      label: 'setup-part-full',
-      method: 'GET',
-      url: `/api/lookup/${setupPartId}?mode=full`,
-      statusCode: setupPartFull.statusCode,
-      responsePayload: setupPartFull.json(),
-    })
     expect(setupPartFull.json()).toMatchObject({
       id: setupPartId,
       type: 'part',
@@ -813,13 +657,6 @@ describe('backend foundation', () => {
 
     const invalidLookup = await app.inject({ method: 'GET', url: '/api/lookup/not-an-id?mode=summary' })
     expect(invalidLookup.statusCode).toBe(400)
-    auditEntries.push({
-      label: 'invalid-id-summary',
-      method: 'GET',
-      url: '/api/lookup/not-an-id?mode=summary',
-      statusCode: invalidLookup.statusCode,
-      responsePayload: invalidLookup.json(),
-    })
   })
 
   it('streams model-only turn events as deltas followed by committed parts', async () => {
