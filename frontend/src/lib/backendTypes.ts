@@ -324,13 +324,8 @@ export const createSessionResponseSchema = z.object({
 
 export const hierarchicalLookupResponseSchema = z.object({
   id: z.string(),
-  type: z.enum(['session', 'turn', 'round', 'part']),
+  type: z.enum(['session', 'setup', 'turn', 'round', 'part']),
   mode: z.enum(['summary', 'full']),
-  parentIds: z.object({
-    sessionId: z.string(),
-    turnId: z.string().nullable(),
-    roundId: z.string().nullable(),
-  }),
   data: z.unknown(),
 })
 

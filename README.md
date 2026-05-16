@@ -4,9 +4,12 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 
 ## Documentation map
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - canonical system design, runtime vocabulary, and API surface
+- [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
+- [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
 - [PLAN.md](PLAN.md) - current product state and near-term focus
+- [backlog/hierachical-ids-system-and-api.md](backlog/hierachical-ids-system-and-api.md) - active lookup/inspect cleanup task and payload examples
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
+- [FRONTEND-TEST.md](FRONTEND-TEST.md) - optional manual browser-based UI checks with agent-browser
 - [RELEASING.md](RELEASING.md) - release workflow and GHCR image publishing
 - [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) - reference workflow used to evaluate MCP analysis scenarios
 - [`research/`](research/) - archived payload studies and superseded design research kept for context

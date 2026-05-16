@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
-import type { PartRecord, RoundRecord } from '../domain/model.js'
-import { parseHierarchicalId } from '../domain/hierarchicalIds.js'
+import type { PartRecord, RoundRecord, TurnRecord } from '../domain/model.js'
+import { formatSetupId, parseHierarchicalId } from '../domain/hierarchicalIds.js'
 import {
   getPartRecord,
   getRoundRecord,
@@ -17,13 +17,8 @@ type LookupSuccess = {
   status: 'ok'
   payload: {
     id: string
-    type: 'session' | 'turn' | 'round' | 'part'
+    type: 'session' | 'setup' | 'turn' | 'round' | 'part'
     mode: LookupMode
-    parentIds: {
-      sessionId: string
-      turnId: string | null
-      roundId: string | null
-    }
     data: unknown
   }
 }
@@ -31,6 +26,188 @@ type LookupSuccess = {
 type LookupFailure =
   | { status: 'invalid'; message: string }
   | { status: 'not_found'; message: string }
+
+// ─── Canonical type mapping ───────────────────────────────────────────────────
+
+const CANONICAL_PART_TYPE: Record<string, string> = {
+  'system-prompt': 'system_prompt',
+  'mcp-instructions': 'mcp_instructions',
+  'tool-definitions': 'tool_definitions',
+  'user-message': 'user_prompt',
+  'assistant-reasoning': 'reasoning',
+  'assistant-content': 'assistant_answer',
+  'tool-call': 'tool_call',
+}
+
+const CANONICAL_CONTEXT_STATE: Record<string, string> = {
+  'included': 'included',
+  'excluded': 'excluded',
+  'stripped': 'stripped',
+  'historical-only': 'historical_only',
+  'round-only': 'round_only',
+}
+
+function canonicalPartType(partType: string): string | null {
+  return CANONICAL_PART_TYPE[partType] ?? null
+}
+
+function canonicalContextState(state: string): string {
+  return CANONICAL_CONTEXT_STATE[state] ?? state
+}
+
+// ─── Part helpers ─────────────────────────────────────────────────────────────
+
+function isPublicPartType(partType: string): boolean {
+  return partType !== 'diagnostic-note' && partType !== 'tool-result'
+}
+
+function extractToolName(part: PartRecord): string | null {
+  if (part.partType !== 'tool-call') return null
+  const json = part.payload.json as { name?: string; toolName?: string } | null
+  return String(json?.name ?? json?.toolName ?? part.payload.summary ?? 'unknown')
+}
+
+function mergedToolCallTokens(callPart: PartRecord, resultParts: PartRecord[]): number | null {
+  const all = [callPart, ...resultParts]
+  if (all.every(p => p.tokens.count == null)) return null
+  return all.reduce((sum, p) => sum + (p.tokens.count ?? 0), 0)
+}
+
+function buildPartNode(
+  part: PartRecord,
+  resultParts: PartRecord[],
+  mode: LookupMode,
+  isDirectPartLookup: boolean,
+): object | null {
+  const publicType = canonicalPartType(part.partType)
+  if (!publicType) return null
+
+  const isToolCall = part.partType === 'tool-call'
+  const tokenCount = isToolCall ? mergedToolCallTokens(part, resultParts) : (part.tokens.count ?? null)
+  const contextState = canonicalContextState(part.context.state)
+
+  const base: Record<string, unknown> = {
+    id: part.id,
+    type: publicType,
+    token_count: tokenCount,
+    context_state: contextState,
+  }
+
+  if (isToolCall) {
+    base.tool_name = extractToolName(part)
+  }
+
+  if (mode === 'full') {
+    if (isToolCall && isDirectPartLookup) {
+      const callJson = part.payload.json as { arguments?: string } | null
+      let parsedArgs: Record<string, unknown> = {}
+      try { parsedArgs = JSON.parse(callJson?.arguments ?? '{}') as Record<string, unknown> } catch { /* empty */ }
+      const result = resultParts[0]
+      const toolResult: Record<string, unknown> = result
+        ? (result.payload.text != null ? { text: result.payload.text } : result.payload.json != null ? { json: result.payload.json } : {})
+        : {}
+      base.tool_payload = { call: parsedArgs, result: toolResult }
+    } else if (!isToolCall) {
+      const includeContent = isDirectPartLookup
+        || part.partType === 'user-message'
+        || part.partType === 'assistant-content'
+      if (includeContent && part.payload.text != null) {
+        base.content = { text: part.payload.text }
+      } else if (isDirectPartLookup && part.partType === 'tool-definitions' && part.payload.json != null) {
+        base.content = { json: part.payload.json }
+      }
+    }
+  }
+
+  return base
+}
+
+// ─── Setup node builder ───────────────────────────────────────────────────────
+
+function buildSetupNode(
+  sessionId: string,
+  setupParts: PartRecord[],
+  mode: LookupMode,
+  _isDirectLookup: boolean,
+): object {
+  const parts = setupParts
+    .filter(p => isPublicPartType(p.partType))
+    .map(p => buildPartNode(p, [], mode, mode === 'full'))
+    .filter((n): n is object => n !== null)
+
+  return { id: formatSetupId(sessionId), parts }
+}
+
+// ─── Turn/round builders ──────────────────────────────────────────────────────
+
+function buildToolResultIndex(allParts: PartRecord[]): Map<string, PartRecord[]> {
+  const map = new Map<string, PartRecord[]>()
+  for (const p of allParts) {
+    if (p.partType === 'tool-result' && p.parentPartId) {
+      map.set(p.parentPartId, [...(map.get(p.parentPartId) ?? []), p])
+    }
+  }
+  return map
+}
+
+function buildRoundPartNodes(
+  parts: PartRecord[],
+  toolResultsByParent: Map<string, PartRecord[]>,
+  mode: LookupMode,
+  isDirectPartLookup: boolean,
+): object[] {
+  const nodes: object[] = []
+  for (const part of parts) {
+    if (part.partType === 'tool-result') continue
+    const resultParts = part.partType === 'tool-call' ? (toolResultsByParent.get(part.id) ?? []) : []
+    const node = buildPartNode(part, resultParts, mode, isDirectPartLookup)
+    if (node) nodes.push(node)
+  }
+  return nodes
+}
+
+function buildRoundNode(
+  round: RoundRecord,
+  roundParts: PartRecord[],
+  toolResultsByParent: Map<string, PartRecord[]>,
+  mode: LookupMode,
+): object {
+  const parts = buildRoundPartNodes(roundParts, toolResultsByParent, mode, false)
+  return {
+    id: round.id,
+    number: round.roundIndex + 1,
+    ...(round.status ? { status: round.status } : {}),
+    parts,
+  }
+}
+
+function buildTurnNode(
+  turn: TurnRecord,
+  rounds: RoundRecord[],
+  allParts: PartRecord[],
+  mode: LookupMode,
+): object {
+  const toolResultsByParent = buildToolResultIndex(allParts)
+  const roundNodes = rounds.map(round => {
+    const roundParts = allParts
+      .filter(p => p.roundId === round.id && isPublicPartType(p.partType))
+      .sort((a, b) => a.ordinal - b.ordinal)
+    return buildRoundNode(round, roundParts, toolResultsByParent, mode)
+  })
+  return {
+    id: turn.id,
+    number: turn.sequenceNumber,
+    ...(turn.status ? { status: turn.status } : {}),
+    rounds: roundNodes,
+  }
+}
+
+function deriveContextWindowUsed(turns: TurnRecord[]): number | null {
+  const completed = turns.filter(t => t.status === 'complete').sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+  return completed.at(-1)?.contextTokensAtTurnEnd ?? null
+}
+
+// ─── Main resolver ────────────────────────────────────────────────────────────
 
 export function resolveHierarchicalId(
   connection: Database.Database,
@@ -42,350 +219,111 @@ export function resolveHierarchicalId(
     return { status: 'invalid', message: `Invalid hierarchical ID: ${rawId}` }
   }
 
+  // ─── Session ───────────────────────────────────────────────────────────────
   if (parsed.type === 'session') {
     const session = getSessionRecord(connection, parsed.sessionId)
     if (!session) return { status: 'not_found', message: `Session not found: ${parsed.sessionId}` }
 
     const turns = listTurnRecordsBySession(connection, session.id)
-    return {
-      status: 'ok',
-      payload: {
-        id: session.id,
-        type: 'session',
-        mode,
-        parentIds: { sessionId: session.id, turnId: null, roundId: null },
-        data: mode === 'summary'
-          ? {
-              session: {
-                id: session.id,
-                title: session.title,
-                status: session.status,
-                initStatus: session.initStatus,
-                createdAt: session.createdAt,
-                updatedAt: session.updatedAt,
-                isContextExhausted: session.isContextExhausted,
-              },
-              turns: turns.map(turn => ({
-                id: turn.id,
-                sequenceNumber: turn.sequenceNumber,
-                status: turn.status,
-              })),
-            }
-          : {
-              session: {
-                id: session.id,
-                title: session.title,
-                status: session.status,
-                initStatus: session.initStatus,
-                createdAt: session.createdAt,
-                updatedAt: session.updatedAt,
-                isContextExhausted: session.isContextExhausted,
-                modelProfileName: session.modelProfileSnapshot.name,
-                modelKey: session.modelProfileSnapshot.modelKey,
-                mcpProfileName: session.mcpProfileSnapshot?.name ?? null,
-                loadedContextLength: session.loadedContextLength,
-                compactionStrategy: session.compactionStrategy,
-              },
-              turns: turns.map(turn => ({
-                id: turn.id,
-                sequenceNumber: turn.sequenceNumber,
-                status: turn.status,
-                outcome: turn.outcome,
-                usage: turn.usage,
-                createdAt: turn.createdAt,
-                completedAt: turn.completedAt,
-              })),
-            },
+      .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+    const allParts = listPartRecordsBySession(connection, session.id)
+    const setupParts = allParts.filter(p => p.turnId === null).sort((a, b) => a.ordinal - b.ordinal)
+    const allRounds = listRoundRecordsBySession(connection, session.id)
+
+    const turnNodes = turns.map(turn => {
+      const turnRounds = allRounds
+        .filter(r => r.turnId === turn.id)
+        .sort((a, b) => a.roundIndex - b.roundIndex)
+      return buildTurnNode(turn, turnRounds, allParts, mode)
+    })
+
+    const data: Record<string, unknown> = {
+      id: session.id,
+      title: session.title,
+      model: {
+        name: session.modelProfileSnapshot.name,
+        key: session.modelProfileSnapshot.modelKey,
       },
+      context_window: {
+        available: session.loadedContextLength ?? null,
+        used: deriveContextWindowUsed(turns),
+      },
+      setup: buildSetupNode(session.id, setupParts, mode, false),
+      turns: turnNodes,
     }
+
+    if (session.mcpProfileSnapshot) {
+      data.mcp = { name: session.mcpProfileSnapshot.name }
+    }
+
+    return { status: 'ok', payload: { id: session.id, type: 'session', mode, data } }
   }
 
+  // ─── Setup ─────────────────────────────────────────────────────────────────
+  if (parsed.type === 'setup') {
+    const session = getSessionRecord(connection, parsed.sessionId)
+    if (!session) return { status: 'not_found', message: `Session not found for setup: ${rawId}` }
+
+    const allParts = listPartRecordsBySession(connection, session.id)
+    const setupParts = allParts.filter(p => p.turnId === null).sort((a, b) => a.ordinal - b.ordinal)
+    const setupId = formatSetupId(session.id)
+    const data = buildSetupNode(session.id, setupParts, mode, false)
+
+    return { status: 'ok', payload: { id: setupId, type: 'setup', mode, data } }
+  }
+
+  // ─── Turn ──────────────────────────────────────────────────────────────────
   if (parsed.type === 'turn') {
     const turn = getTurnRecord(connection, parsed.raw)
     if (!turn) return { status: 'not_found', message: `Turn not found: ${parsed.raw}` }
-    const session = getSessionRecord(connection, turn.sessionId)
-    if (!session) return { status: 'not_found', message: `Session not found: ${turn.sessionId}` }
 
-    const rounds = listRoundRecordsBySession(connection, turn.sessionId)
-      .filter(round => round.turnId === turn.id)
-    return {
-      status: 'ok',
-      payload: {
-        id: turn.id,
-        type: 'turn',
-        mode,
-        parentIds: { sessionId: turn.sessionId, turnId: turn.id, roundId: null },
-        data: mode === 'summary'
-          ? {
-              turn: {
-                id: turn.id,
-                sequenceNumber: turn.sequenceNumber,
-                status: turn.status,
-                outcome: turn.outcome,
-              },
-              rounds: rounds.map(round => ({
-                id: round.id,
-                roundIndex: round.roundIndex,
-                status: round.status,
-                finishReason: round.finishReason,
-              })),
-            }
-          : {
-              turn: {
-                id: turn.id,
-                sequenceNumber: turn.sequenceNumber,
-                status: turn.status,
-                outcome: turn.outcome,
-                usage: turn.usage,
-                createdAt: turn.createdAt,
-                completedAt: turn.completedAt,
-                contextTokensAtTurnEnd: turn.contextTokensAtTurnEnd,
-                contextTokensAfterCompaction: turn.contextTokensAfterCompaction,
-                compactionApplied: turn.compactionApplied,
-                compactionTokensRemoved: turn.compactionTokensRemoved,
-              },
-              rounds: rounds.map(round => ({
-                id: round.id,
-                roundIndex: round.roundIndex,
-                status: round.status,
-                finishReason: round.finishReason,
-                startedAt: round.startedAt,
-                completedAt: round.completedAt,
-                usage: round.usage,
-              })),
-              session: {
-                id: session.id,
-                title: session.title,
-              },
-            },
-      },
-    }
+    const allParts = listPartRecordsBySession(connection, turn.sessionId)
+    const allRounds = listRoundRecordsBySession(connection, turn.sessionId)
+      .filter(r => r.turnId === turn.id)
+      .sort((a, b) => a.roundIndex - b.roundIndex)
+
+    const data = buildTurnNode(turn, allRounds, allParts, mode)
+
+    return { status: 'ok', payload: { id: turn.id, type: 'turn', mode, data } }
   }
 
+  // ─── Round ─────────────────────────────────────────────────────────────────
   if (parsed.type === 'round') {
     const round = getRoundRecord(connection, parsed.raw)
     if (!round) return { status: 'not_found', message: `Round not found: ${parsed.raw}` }
-    const turn = getTurnRecord(connection, round.turnId)
-    if (!turn) return { status: 'not_found', message: `Turn not found: ${round.turnId}` }
-    const parts = listPartRecordsBySession(connection, turn.sessionId)
-      .filter(part => part.roundId === round.id)
-      .sort((a, b) => a.ordinal - b.ordinal)
-    const logicalParts = toLogicalParts(parts)
 
-    return {
-      status: 'ok',
-      payload: {
-        id: round.id,
-        type: 'round',
-        mode,
-        parentIds: { sessionId: turn.sessionId, turnId: turn.id, roundId: round.id },
-        data: mode === 'summary'
-          ? {
-              round: toLookupRound(round),
-              parts: logicalParts.map(logical => ({
-                id: logical.id,
-                kind: logical.kind,
-                label: logical.label,
-                toolName: logical.toolName,
-                tokenCount: logical.tokenCount,
-                preview: logical.preview,
-              })),
-            }
-          : {
-              round: toLookupRound(round),
-              parts: logicalParts.map(logical => logical.full),
-            },
-      },
-    }
+    const turn = getTurnRecord(connection, round.turnId)
+    if (!turn) return { status: 'not_found', message: `Turn not found for round: ${parsed.raw}` }
+
+    const sessionParts = listPartRecordsBySession(connection, turn.sessionId)
+    const roundParts = sessionParts
+      .filter(p => p.roundId === round.id && isPublicPartType(p.partType))
+      .sort((a, b) => a.ordinal - b.ordinal)
+
+    const toolResultsByParent = buildToolResultIndex(sessionParts)
+    const data = buildRoundNode(round, roundParts, toolResultsByParent, mode)
+
+    return { status: 'ok', payload: { id: round.id, type: 'round', mode, data } }
   }
 
+  // ─── Part ──────────────────────────────────────────────────────────────────
   const part = getPartRecord(connection, parsed.raw)
   if (!part) return { status: 'not_found', message: `Part not found: ${parsed.raw}` }
+
   const sessionParts = listPartRecordsBySession(connection, part.sessionId)
-  const logicalPart = toLogicalPart(part, sessionParts)
+  const toolResultsByParent = buildToolResultIndex(sessionParts)
 
-  return {
-    status: 'ok',
-    payload: {
-      id: part.id,
-      type: 'part',
-      mode,
-      parentIds: {
-        sessionId: part.sessionId,
-        turnId: part.turnId,
-        roundId: part.roundId,
-      },
-      data: mode === 'summary'
-        ? {
-            part: {
-              id: logicalPart.id,
-              kind: logicalPart.kind,
-              label: logicalPart.label,
-              toolName: logicalPart.toolName,
-              tokenCount: logicalPart.tokenCount,
-              preview: logicalPart.preview,
-              ...(logicalPart.kind === 'setup'
-                ? {
-                    setupType: logicalPart.setupType,
-                    toolCount: logicalPart.toolCount,
-                    toolNames: logicalPart.toolNames,
-                  }
-                : {}),
-            },
-          }
-        : { part: logicalPart.full },
-    },
-  }
-}
-
-function mapPartKind(partType: PartRecord['partType']): 'setup' | 'user_prompt' | 'reasoning' | 'tool_call' | 'assistant_answer' {
-  if (partType === 'user-message') return 'user_prompt'
-  if (partType === 'assistant-reasoning') return 'reasoning'
-  if (partType === 'assistant-content') return 'assistant_answer'
-  if (partType === 'tool-call' || partType === 'tool-result') return 'tool_call'
-  return 'setup'
-}
-
-function toLogicalParts(parts: PartRecord[]) {
-  const byId = new Map(parts.map(part => [part.id, part]))
-  const toolResultsByParent = new Map<string, PartRecord[]>()
-  for (const part of parts) {
-    if (part.partType !== 'tool-result' || !part.parentPartId) continue
-    toolResultsByParent.set(part.parentPartId, [...(toolResultsByParent.get(part.parentPartId) ?? []), part])
-  }
-
-  const logical: ReturnType<typeof toLogicalPart>[] = []
-  for (const part of parts) {
-    if (part.partType === 'tool-result' && part.parentPartId && byId.has(part.parentPartId)) {
-      continue
-    }
-    logical.push(toLogicalPart(part, parts, toolResultsByParent.get(part.id) ?? []))
-  }
-  return logical
-}
-
-function toLogicalPart(
-  part: PartRecord,
-  sessionParts: PartRecord[],
-  explicitToolResults: PartRecord[] | null = null,
-) {
-  const kind = mapPartKind(part.partType)
-  const setupSummary = kind === 'setup' ? summarizeSetupPart(part) : null
-  const toolResults = explicitToolResults
-    ?? (part.partType === 'tool-call'
-      ? sessionParts.filter(candidate => candidate.partType === 'tool-result' && candidate.parentPartId === part.id)
-      : part.partType === 'tool-result' && part.parentPartId
-        ? sessionParts.filter(candidate => candidate.id === part.parentPartId || candidate.parentPartId === part.parentPartId)
-        : [])
-  const toolCall = part.partType === 'tool-result' && part.parentPartId
-    ? sessionParts.find(candidate => candidate.id === part.parentPartId) ?? part
+  // If this is a tool-result, redirect to its parent tool-call
+  const effectivePart = (part.partType === 'tool-result' && part.parentPartId)
+    ? (getPartRecord(connection, part.parentPartId) ?? part)
     : part
-  const toolName = kind === 'tool_call'
-    ? String(
-        (toolCall.payload.json as { name?: string; toolName?: string } | null)?.name
-        ?? (toolCall.payload.json as { name?: string; toolName?: string } | null)?.toolName
-        ?? toolCall.payload.summary
-        ?? 'unknown',
-      )
-    : null
-  const mergedTokenCount = kind === 'tool_call'
-    ? [toolCall, ...toolResults].reduce((sum, candidate) => sum + (candidate.tokens.count ?? 0), 0)
-    : (part.tokens.count ?? null)
-  const preview = kind === 'tool_call'
-    ? toolName
-    : part.payload.summary ?? null
 
-  return {
-    id: toolCall.id,
-    kind,
-    label: part.partType,
-    toolName,
-    tokenCount: mergedTokenCount,
-    preview,
-    ...(kind === 'setup' && setupSummary
-      ? {
-          setupType: setupSummary.setupType,
-          toolCount: setupSummary.toolCount,
-          toolNames: setupSummary.toolNames,
-        }
-      : {}),
-    full: kind === 'tool_call'
-      ? {
-          id: toolCall.id,
-          kind,
-          type: toolCall.partType,
-          sessionId: toolCall.sessionId,
-          turnId: toolCall.turnId,
-          roundId: toolCall.roundId,
-          tokenCount: mergedTokenCount,
-          toolName,
-          toolCallPayload: toolCall.payload.json,
-          toolResponsePayload: toolResults.map(result => ({
-            id: result.id,
-            text: result.payload.text,
-            json: result.payload.json,
-            mimeType: result.payload.mimeType,
-          })),
-        }
-      : kind === 'setup' && setupSummary
-        ? {
-            id: part.id,
-            kind,
-            type: part.partType,
-            sessionId: part.sessionId,
-            turnId: part.turnId,
-            roundId: part.roundId,
-            tokenCount: part.tokens.count,
-            preview,
-            setupType: setupSummary.setupType,
-            summary: setupSummary.summary,
-            toolCount: setupSummary.toolCount,
-            toolNames: setupSummary.toolNames,
-          }
-      : {
-          id: part.id,
-          kind,
-          type: part.partType,
-          sessionId: part.sessionId,
-          turnId: part.turnId,
-          roundId: part.roundId,
-          tokenCount: part.tokens.count,
-          content: {
-            text: part.payload.text,
-            json: part.payload.json,
-            mimeType: part.payload.mimeType,
-            summary: part.payload.summary,
-          },
-        },
-  }
-}
-
-function summarizeSetupPart(part: PartRecord) {
-  const toolNames = part.partType === 'tool-definitions' && Array.isArray(part.payload.json)
-    ? part.payload.json
-      .map((value) => {
-        if (!value || typeof value !== 'object' || !('name' in value)) return null
-        return typeof value.name === 'string' ? value.name : null
-      })
-      .filter((name): name is string => name !== null)
+  const resultParts = effectivePart.partType === 'tool-call'
+    ? (toolResultsByParent.get(effectivePart.id) ?? [])
     : []
 
-  return {
-    setupType: part.partType,
-    summary: part.payload.summary ?? part.context.note ?? null,
-    toolCount: part.partType === 'tool-definitions' ? toolNames.length : null,
-    toolNames: part.partType === 'tool-definitions' ? toolNames : null,
-  }
-}
+  const node = buildPartNode(effectivePart, resultParts, mode, true)
+  if (!node) return { status: 'not_found', message: `Part not found: ${parsed.raw}` }
 
-function toLookupRound(round: RoundRecord) {
-  return {
-    id: round.id,
-    roundIndex: round.roundIndex,
-    status: round.status,
-    finishReason: round.finishReason,
-    startedAt: round.startedAt,
-    completedAt: round.completedAt,
-    usage: round.usage,
-  }
+  return { status: 'ok', payload: { id: effectivePart.id, type: 'part', mode, data: node } }
 }

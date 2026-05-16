@@ -14,9 +14,8 @@
   import type { StreamingRoundState } from '../traceStreaming'
   import { deriveContextSnapshotAtRound } from '../traceStreaming'
   import { patchSessionTitle } from '../api/backendClient'
-  import { lookupByHierarchicalId } from '../api/backendClient'
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
-  import JsonDialog from './JsonDialog.svelte'
+  import IdBadge from './IdBadge.svelte'
   import NewSessionPanel from './NewSessionPanel.svelte'
   import SessionPreludeBlock from './SessionPreludeBlock.svelte'
   import SessionTurnBlock from './SessionTurnBlock.svelte'
@@ -32,10 +31,6 @@
   let editingTitle = $state(false)
   let titleDraft = $state('')
   let titleInputEl = $state<HTMLInputElement | null>(null)
-  let showLookupDialog = $state(false)
-  let lookupDialogTitle = $state('')
-  let lookupDialogData = $state<unknown>(null)
-
   let session = $derived($activeSession)
   let visibleParts = $derived.by(() =>
     ($activeTrace?.parts ?? [])
@@ -68,14 +63,6 @@
     const m = new Map<string, typeof traceRounds>()
     for (const r of traceRounds) {
       m.set(r.turnId, [...(m.get(r.turnId) ?? []), r])
-    }
-    return m
-  })
-  let rawExchangesByTurn = $derived.by(() => {
-    const m = new Map<string, typeof traceRawExchanges>()
-    for (const x of traceRawExchanges) {
-      if (!x.turnId) continue
-      m.set(x.turnId, [...(m.get(x.turnId) ?? []), x])
     }
     return m
   })
@@ -213,13 +200,6 @@
     }
   }
 
-  async function showSessionLookup(mode: 'summary' | 'full'): Promise<void> {
-    if (!session) return
-    const payload = await lookupByHierarchicalId(session.id, mode)
-    lookupDialogTitle = `${session.id} (${mode})`
-    lookupDialogData = payload
-    showLookupDialog = true
-  }
 </script>
 
 <div class="chat-view">
@@ -229,11 +209,7 @@
   {:else}
     <!-- ── Active session ────────────────────────────────────────────────── -->
     <div class="chat-header">
-      <span class="session-id-tag">{session.id}</span>
-      {#if viewMode === 'inspect'}
-        <button class="header-btn" onclick={() => showSessionLookup('summary')}>Summary</button>
-        <button class="header-btn" onclick={() => showSessionLookup('full')}>Full</button>
-      {/if}
+      <IdBadge id={session.id} />
       {#if editingTitle}
         <input
           class="chat-title-input"
@@ -262,9 +238,6 @@
         >Inspect</button>
       </div>
 
-      {#if showLookupDialog}
-        <JsonDialog title={lookupDialogTitle} data={lookupDialogData} onClose={() => { showLookupDialog = false }} />
-      {/if}
       {#if $activeTrace}
         <button class="btn btn-ghost export-btn" onclick={exportActiveTrace} title="Export session trace as JSON">
           ⬇ Export
@@ -293,7 +266,6 @@
             {turn}
             rounds={roundsByTurn.get(turn.id) ?? []}
             parts={partsByTurn.get(turn.id) ?? []}
-            rawExchanges={rawExchangesByTurn.get(turn.id) ?? []}
             roundStreams={roundStreamsByTurn.get(turn.id) ?? []}
             mode={viewMode}
             {contextSnapshotsByRound}
@@ -389,31 +361,6 @@
     text-align: left;
     cursor: text;
     border-radius: 4px;
-  }
-
-  .session-id-tag {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    border: 1px solid var(--border-subtle);
-    border-radius: 999px;
-    padding: 0.1rem 0.45rem;
-    flex-shrink: 0;
-  }
-
-  .header-btn {
-    background: none;
-    border: 1px solid var(--border-subtle);
-    border-radius: 4px;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 0.7rem;
-    padding: 0.12rem 0.45rem;
-  }
-
-  .header-btn:hover {
-    border-color: var(--border);
-    color: var(--text);
   }
 
   .chat-title:hover {

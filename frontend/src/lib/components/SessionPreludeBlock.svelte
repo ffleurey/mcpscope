@@ -2,6 +2,7 @@
   import type { PartRecord } from '../backendTypes'
   import { deriveContextEntries } from '../traceStreaming'
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
+  import IdBadge from './IdBadge.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
 
   interface Props {
@@ -31,6 +32,10 @@
   const contextEntries = $derived(deriveContextEntries(parts))
   const statusLabel = $derived(isInitializing ? 'initializing' : 'complete')
   const canCollapse = $derived(mode === 'chat' && !isInitializing)
+  const setupId = $derived.by(() => {
+    const sid = parts[0]?.sessionId
+    return sid ? `${sid}.S` : null
+  })
 </script>
 
 <!-- Same compact layout for both modes; chat can collapse after init completes -->
@@ -57,13 +62,16 @@
       {:else if totalTokens > 0}
         <span class="compact-setup-tokens">{totalTokens.toLocaleString()} tokens</span>
       {/if}
+      {#if mode === 'inspect' && setupId}
+        <IdBadge id={setupId} />
+      {/if}
     {/if}
   </div>
 
   {#if !canCollapse || !chatCollapsed}
     <div class="compact-setup-parts">
       {#each sortedParts as part (part.id)}
-        <TracePartBlock {part} mode="compact" />
+        <TracePartBlock {part} mode={mode === 'inspect' ? 'inspect' : 'compact'} />
       {/each}
       {#if isInitializing && sortedParts.length === 0}
         <div class="setup-empty-hint">Setting up session…</div>

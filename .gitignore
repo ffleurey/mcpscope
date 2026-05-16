@@ -16,6 +16,7 @@ backend-data/*
 !backend-data/test-artifacts/
 backend-data/test-artifacts/*
 .tmp-test-data
+test-results/
 .env.dev
 *.db
 *.db-shm

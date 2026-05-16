@@ -10,6 +10,7 @@ import type { SessionTraceBundle } from '../domain/trace.js'
 import {
   formatPartId,
   formatRoundId,
+  formatSetupPartId,
   formatTurnId,
   generateUniqueSessionId,
 } from '../domain/hierarchicalIds.js'
@@ -41,7 +42,7 @@ export function importTraceBundle(
   const roundIdBySource = new Map(trace.rounds.map(round => {
     const mappedTurn = trace.turns.find(turn => turn.id === round.turnId)
     const turnSequence = mappedTurn?.sequenceNumber ?? 0
-    return [round.id, formatRoundId(sessionId, turnSequence, round.roundIndex)] as const
+    return [round.id, formatRoundId(sessionId, turnSequence, round.roundIndex + 1)] as const
   }))
 
   const partIdBySource = new Map<string, string>()
@@ -49,7 +50,7 @@ export function importTraceBundle(
     .filter(part => part.turnId === null)
     .sort((a, b) => a.ordinal - b.ordinal)
   preludeParts.forEach((part, index) => {
-    partIdBySource.set(part.id, formatPartId(sessionId, 0, 0, index + 1))
+    partIdBySource.set(part.id, formatSetupPartId(sessionId, index + 1, part.partType))
   })
 
   const roundPartsBySource = new Map<string, typeof trace.parts>()
@@ -66,7 +67,7 @@ export function importTraceBundle(
     parts
       .sort((a, b) => a.ordinal - b.ordinal)
       .forEach((part, index) => {
-        partIdBySource.set(part.id, formatPartId(sessionId, turnSequence, roundIndex, index + 1))
+        partIdBySource.set(part.id, formatPartId(sessionId, turnSequence, roundIndex + 1, index + 1, part.partType))
       })
   }
 
@@ -83,13 +84,13 @@ export function importTraceBundle(
 
   const rounds: RoundRecord[] = trace.rounds.map(round => ({
     ...round,
-    id: roundIdBySource.get(round.id) ?? formatRoundId(sessionId, 0, round.roundIndex),
+    id: roundIdBySource.get(round.id) ?? formatRoundId(sessionId, 0, round.roundIndex + 1),
     turnId: turnIdBySource.get(round.turnId) ?? formatTurnId(sessionId, 0),
   }))
 
   const parts: PartRecord[] = trace.parts.map(part => ({
     ...part,
-    id: partIdBySource.get(part.id) ?? formatPartId(sessionId, 0, 0, 1),
+    id: partIdBySource.get(part.id) ?? formatPartId(sessionId, 0, 0, 1, part.partType),
     sessionId,
     turnId: part.turnId ? (turnIdBySource.get(part.turnId) ?? null) : null,
     roundId: part.roundId ? (roundIdBySource.get(part.roundId) ?? null) : null,

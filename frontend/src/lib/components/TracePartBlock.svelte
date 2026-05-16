@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PartRecord } from '../backendTypes'
   import JsonDialog from './JsonDialog.svelte'
-  import { lookupByHierarchicalId } from '../api/backendClient'
+  import IdBadge from './IdBadge.svelte'
 
   interface McpTool {
     name: string
@@ -21,9 +21,6 @@
   const { part, mode = 'inspect' }: Props = $props()
 
   let showJson = $state(false)
-  let lookupDialogTitle = $state('')
-  let lookupDialogData = $state<unknown>(null)
-  let showLookupDialog = $state(false)
 
   const labels: Record<PartRecord['partType'], string> = {
     'system-prompt': 'System prompt',
@@ -93,28 +90,12 @@
     return normalized.length > 0 ? normalized : null
   }
 
-  async function copyId(id: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(id)
-    } catch {
-      // Clipboard API unavailable in some contexts.
-    }
-  }
-
-  async function showLookup(id: string, mode: 'summary' | 'full'): Promise<void> {
-    const payload = await lookupByHierarchicalId(id, mode)
-    lookupDialogTitle = `${id} (${mode})`
-    lookupDialogData = payload
-    showLookupDialog = true
-  }
 </script>
 
 <div class="part-block" class:user={part.partType === 'user-message'} class:compact={mode === 'compact'}>
   {#if mode === 'inspect'}
     <div class="part-id-row">
-      <button class="id-pill" onclick={() => copyId(part.id)} title="Copy part ID">{part.id}</button>
-      <button class="raw-btn" onclick={() => showLookup(part.id, 'summary')}>Summary</button>
-      <button class="raw-btn" onclick={() => showLookup(part.id, 'full')}>Full</button>
+      <IdBadge id={part.id} />
     </div>
   {/if}
   {#if mode === 'compact' && part.partType === 'user-message'}
@@ -240,14 +221,6 @@
   />
 {/if}
 
-{#if showLookupDialog}
-  <JsonDialog
-    title={lookupDialogTitle}
-    data={lookupDialogData}
-    onClose={() => { showLookupDialog = false }}
-  />
-{/if}
-
 <style>
   .part-block {
     padding: 0.75rem 0;
@@ -259,26 +232,6 @@
     align-items: center;
     gap: 0.35rem;
     margin: 0 0 0.35rem;
-  }
-
-  .id-pill {
-    max-width: 260px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    background: none;
-    border: 1px solid var(--border-subtle);
-    border-radius: 999px;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 0.68rem;
-    font-family: var(--mono);
-    padding: 0.08rem 0.45rem;
-  }
-
-  .id-pill:hover {
-    border-color: var(--border);
-    color: var(--text);
   }
 
   .part-block.compact {

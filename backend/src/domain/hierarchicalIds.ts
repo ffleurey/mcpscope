@@ -2,7 +2,7 @@ export const SESSION_ID_LENGTH = 4
 export const SESSION_ID_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 export const SESSION_ID_REGEX = /^[A-HJ-NP-Z2-9]{4}$/
 
-export type HierarchicalIdType = 'session' | 'turn' | 'round' | 'part'
+export type HierarchicalIdType = 'session' | 'setup' | 'turn' | 'round' | 'part'
 
 export interface ParsedHierarchicalId {
   raw: string
@@ -11,6 +11,20 @@ export interface ParsedHierarchicalId {
   turnNumber: number | null
   roundNumber: number | null
   partNumber: number | null
+  isSetupPart: boolean
+}
+
+/** Maps internal PartRecord partType values to their canonical 2-3-letter ID suffix. */
+export const PART_TYPE_SUFFIX: Record<string, string> = {
+  'system-prompt': 'SP',
+  'mcp-instructions': 'MI',
+  'tool-definitions': 'TD',
+  'user-message': 'U',
+  'assistant-reasoning': 'R',
+  'assistant-content': 'A',
+  'tool-call': 'T',
+  'tool-result': 'TR',
+  'diagnostic-note': 'DN',
 }
 
 export function isValidSessionId(value: string): boolean {
@@ -40,6 +54,16 @@ export function generateUniqueSessionId(
   return null
 }
 
+
+export function formatSetupId(sessionId: string): string {
+  return `${sessionId}.S`
+}
+
+export function formatSetupPartId(sessionId: string, partNumber: number, partType: string): string {
+  const suffix = PART_TYPE_SUFFIX[partType]
+  return suffix ? `${sessionId}.S.${partNumber}-${suffix}` : `${sessionId}.S.${partNumber}`
+}
+
 export function formatTurnId(sessionId: string, turnNumber: number): string {
   return `${sessionId}.${turnNumber}`
 }
@@ -48,23 +72,22 @@ export function formatRoundId(sessionId: string, turnNumber: number, roundNumber
   return `${sessionId}.${turnNumber}.${roundNumber}`
 }
 
-export function formatPartId(sessionId: string, turnNumber: number, roundNumber: number, partNumber: number): string {
-  return `${sessionId}.${turnNumber}.${roundNumber}.${partNumber}`
+/** partType is optional; when provided, appends the canonical type suffix (e.g. -U, -T, -A). */
+export function formatPartId(
+  sessionId: string,
+  turnNumber: number,
+  roundNumber: number,
+  partNumber: number,
+  partType?: string,
+): string {
+  const suffix = partType ? PART_TYPE_SUFFIX[partType] : undefined
+  const base = `${sessionId}.${turnNumber}.${roundNumber}.${partNumber}`
+  return suffix ? `${base}-${suffix}` : base
 }
 
 export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
   const trimmed = raw.trim()
   if (!trimmed) return null
-
-  const segments = trimmed.split('.')
-  if (segments.length < 1 || segments.length > 4) {
-    return null
-  }
-
-  const sessionId = segments[0] ?? ''
-  if (!isValidSessionId(sessionId)) {
-    return null
-  }
 
   const parseNumber = (value: string): number | null => {
     if (!/^\d+$/.test(value)) return null
@@ -73,54 +96,52 @@ export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
     return parsed
   }
 
+  /** Strip optional -XX suffix from a segment and return the numeric part. */
+  const parseNumberWithSuffix = (value: string): number | null => {
+    const dashIndex = value.indexOf('-')
+    const numStr = dashIndex >= 0 ? value.slice(0, dashIndex) : value
+    return parseNumber(numStr)
+  }
+
+  const segments = trimmed.split('.')
+  if (segments.length < 1 || segments.length > 4) return null
+
+  const sessionId = segments[0] ?? ''
+  if (!isValidSessionId(sessionId)) return null
+
   if (segments.length === 1) {
-    return {
-      raw: trimmed,
-      type: 'session',
-      sessionId,
-      turnNumber: null,
-      roundNumber: null,
-      partNumber: null,
+    return { raw: trimmed, type: 'session', sessionId, turnNumber: null, roundNumber: null, partNumber: null, isSetupPart: false }
+  }
+
+  // Setup node: AB12.S or setup part: AB12.S.n[-XX]
+  if (segments[1] === 'S') {
+    if (segments.length === 2) {
+      return { raw: trimmed, type: 'setup', sessionId, turnNumber: null, roundNumber: null, partNumber: null, isSetupPart: false }
     }
+    if (segments.length === 3) {
+      const partNumber = parseNumberWithSuffix(segments[2] ?? '')
+      if (partNumber == null || partNumber < 1) return null
+      return { raw: trimmed, type: 'part', sessionId, turnNumber: null, roundNumber: null, partNumber, isSetupPart: true }
+    }
+    return null
   }
 
   const turnNumber = parseNumber(segments[1] ?? '')
   if (turnNumber == null || turnNumber < 0) return null
 
   if (segments.length === 2) {
-    return {
-      raw: trimmed,
-      type: 'turn',
-      sessionId,
-      turnNumber,
-      roundNumber: null,
-      partNumber: null,
-    }
+    return { raw: trimmed, type: 'turn', sessionId, turnNumber, roundNumber: null, partNumber: null, isSetupPart: false }
   }
 
   const roundNumber = parseNumber(segments[2] ?? '')
   if (roundNumber == null || roundNumber < 0) return null
 
   if (segments.length === 3) {
-    return {
-      raw: trimmed,
-      type: 'round',
-      sessionId,
-      turnNumber,
-      roundNumber,
-      partNumber: null,
-    }
+    return { raw: trimmed, type: 'round', sessionId, turnNumber, roundNumber, partNumber: null, isSetupPart: false }
   }
 
-  const partNumber = parseNumber(segments[3] ?? '')
+  const partNumber = parseNumberWithSuffix(segments[3] ?? '')
   if (partNumber == null || partNumber < 1) return null
 
-  return {
-    raw: trimmed,
-    type: 'part',
-    sessionId,
-    turnNumber,
-    roundNumber,
-    partNumber,
-  }
+  return { raw: trimmed, type: 'part', sessionId, turnNumber, roundNumber, partNumber, isSetupPart: false }
 }
