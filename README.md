@@ -21,10 +21,6 @@ npm run dev:backend      # backend only (tsx watch)
 npm run dev:frontend     # frontend only (vite)
 ```
 
-With the backend running, the generated API reference is available at **`/reference/`** and exposes the OpenAPI document at **`/reference/openapi.json`**.
-
-To refresh the real lookup examples shown there, re-run the lookup regression documented in [TESTING.md](TESTING.md).
-
 ### Seeding dev data
 
 ```bash

@@ -1,10 +1,4 @@
 import { z } from 'zod'
-import {
-  lmStudioConnectionSchema,
-  mcpServerProfileSchema,
-  modelConfigSchema,
-} from './configuration.js'
-import { sessionRecordSchema } from './model.js'
 
 export const healthResponseSchema = z.object({
   status: z.literal('ok'),
@@ -48,24 +42,4 @@ export const createSessionInputSchema = z.object({
 
 export const createTurnInputSchema = z.object({
   userContent: z.string().min(1),
-})
-
-export const createSessionResponseSchema = z.object({
-  session: sessionRecordSchema,
-})
-
-export const listSessionsResponseSchema = z.object({
-  sessions: z.array(sessionRecordSchema),
-})
-
-export const listLmConnectionsResponseSchema = z.object({
-  lmConnections: z.array(lmStudioConnectionSchema),
-})
-
-export const listModelConfigsResponseSchema = z.object({
-  modelConfigs: z.array(modelConfigSchema),
-})
-
-export const listMcpProfilesResponseSchema = z.object({
-  mcpProfiles: z.array(mcpServerProfileSchema),
 })

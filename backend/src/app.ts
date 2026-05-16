@@ -1,6 +1,5 @@
 import cors from '@fastify/cors'
 import staticFiles from '@fastify/static'
-import ScalarApiReference from '@scalar/fastify-api-reference'
 import Fastify from 'fastify'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -65,7 +64,6 @@ import { createToolEnabledTurn, type McpGateway } from './runtime/toolTurns.js'
 import { importTraceBundle } from './runtime/traceImport.js'
 import { runSessionInitialization } from './runtime/sessionInit.js'
 import { resolveHierarchicalId } from './runtime/hierarchicalLookup.js'
-import { buildOpenApiDocument } from './openapi.js'
 
 interface RuntimeDependencies {
   lmStudioGateway: LmStudioGateway
@@ -126,16 +124,6 @@ export async function buildBackendApp(
 
   const database = openBackendDatabase(config.sqlitePath)
   app.decorate('backendDb', database)
-
-  await app.register(ScalarApiReference, {
-    routePrefix: '/reference',
-    configuration: {
-      pageTitle: 'mcpscope API Reference',
-      title: 'mcpscope API',
-      theme: 'purple',
-      content: () => buildOpenApiDocument(config.appVersion ?? 'dev'),
-    },
-  })
 
   app.get('/api/health', async () => {
     return healthResponseSchema.parse({

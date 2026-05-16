@@ -30,23 +30,6 @@ Deterministic tests around the backend runtime and API surface:
 
 Keep these few and surgical.
 
-The hierarchical lookup regression in `backend/src/app.test.ts` also regenerates inspectable payload artifacts in `test-results/` on each run:
-
-- `test-results/lookup-api-payload-audit.md`
-- `test-results/lookup-api-payload-audit.json`
-
-These are intended for payload-contract review while iterating on the lookup API.
-
-The backend API reference at `/reference/` also reads those lookup audit artifacts to populate real OpenAPI examples for the lookup endpoint.
-
-To refresh those examples after changing the lookup contract, run:
-
-```bash
-npm test -- backend/src/app.test.ts -t "returns expected lookup payloads for session/turn/round/part on exported multi-turn tool baseline"
-```
-
-That command rewrites the audit files in `test-results/`, and `/reference/` will then show the updated examples on the next backend reload.
-
 ### 3. Trace replay tests
 
 This is the main regression path for backend workflow behavior.

@@ -2,6 +2,8 @@
 
 mcpscope needs one compact canonical reference system for sessions, turns, rounds, and logical parts, together with one generic JSON lookup operation.
 
+This is **not** a greenfield feature anymore. A partial implementation already exists, but it reflects an older and now superseded direction. This task must therefore **correct, simplify, and clean up** that existing work so the backend, UI, and docs all converge on the model defined in [DATA-MODEL.md](../DATA-MODEL.md).
+
 This is a foundational task for:
 
 - backend consistency
@@ -10,6 +12,33 @@ This is a foundational task for:
 - human/agent collaboration
 
 The same ID must let a human and a coding agent refer to the same object without ambiguity.
+
+## Correction and cleanup of the current implementation
+
+The current codebase already contains hierarchical lookup work, but the code audit shows that it still carries outdated choices that should be treated as provisional rather than preserved.
+
+This task should explicitly clean up and replace the earlier approach in the following areas:
+
+- the lookup payload shape still reflects the old contract and must be rewritten to match the canonical runtime tree from [DATA-MODEL.md](../DATA-MODEL.md)
+- obsolete payload fields such as duplicated context arrays, previews, labels, and other transitional fields should be removed rather than adapted
+- the previous setup-as-prelude/turn-0 approach should be replaced by the explicit `Setup` node model
+- lookup examples and tests should validate the new canonical payloads directly, not preserve compatibility with the old response shape
+- frontend types and inspect-mode lookup usage should be updated to the cleaned-up contract rather than carrying compatibility layers
+- the current API reference tooling around lookup should be reduced to the minimum needed or removed if it no longer pulls its weight after the simplification
+
+### API documentation tooling cleanup
+
+The current implementation includes extra machinery around lookup documentation and payload auditing, including:
+
+- backend OpenAPI schema generation dedicated to the old lookup payload shape
+- `/reference/` integration for browsing those generated docs
+- test-generated lookup payload audit artifacts under `test-results/`
+
+After the contract simplification, this should be reassessed aggressively:
+
+- keep only the minimum documentation tooling that is clearly useful
+- prefer the canonical examples in this task spec over large generated payload-audit machinery
+- if the OpenAPI/reference path is no longer providing enough value for its complexity, remove it
 
 ## Core principles
 
