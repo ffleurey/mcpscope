@@ -1,357 +1,523 @@
-# Hierachical IDs System and API
+# Hierarchical IDs and Lookup API
 
-mcpscope should introduce a canonical hierarchical ID system for sessions, turns, rounds, and parts, together with a generic JSON API operation that resolves any such ID.
+mcpscope needs one compact canonical reference system for sessions, turns, rounds, and logical parts, together with one generic JSON lookup operation.
 
-This is a foundational task for human/agent collaboration and a prerequisite for the CLI work.
+This is a foundational task for:
 
-## Goal
-
-Create a shared reference system that works consistently across:
-
-- backend
-- Web UI
+- backend consistency
+- Web UI inspect workflows
 - future `mcpscope-cli`
+- human/agent collaboration
 
-The same ID should let a human and a coding agent talk about the same object without ambiguity.
+The same ID must let a human and a coding agent refer to the same object without ambiguity.
 
-## Core idea
+## Core principles
 
-The ID format should be hierarchical and encode ancestry directly.
+- IDs must be stable, human-readable, easy to copy, and easy to parse.
+- The public lookup model must follow **mcpscope's canonical runtime model** defined in [DATA-MODEL.md](../DATA-MODEL.md), not LM Studio transport details.
+- The lookup API must be **compact** and must not duplicate large parts of the trace in multiple shapes.
+- **Summary** and **full** mode must return the **same tree structure**. The difference is content inclusion, not a different object model.
+- The API must be JSON-only. Rendering for UI or CLI is a client concern.
 
-Target shape:
+## Canonical model reference
 
-- `AB12` -> session
-- `AB12.3` -> turn
-- `AB12.3.3` -> round
-- `AB12.3.3.1` -> part
+The canonical tree, public part taxonomy, public node properties, and canonical ID rules are defined in [DATA-MODEL.md](../DATA-MODEL.md).
 
-The exact formatting of each segment can be refined, but the important properties are:
+This task should implement the lookup API and UI behavior against that model instead of redefining it here.
 
-- stable
-- human-readable
-- easy to copy
-- unambiguous
-- enough to determine object type from segment count
+## ID format
 
-## ID format decision
+Implement the hierarchical ID system defined in [DATA-MODEL.md](../DATA-MODEL.md), including explicit setup IDs and typed part suffixes.
 
-The current preferred format is:
+## Lookup API
 
-- **session ID**: short random 4-character uppercase alphanumeric token
-- **turn ID**: `SESSION.<turnNumber>`
-- **round ID**: `SESSION.<turnNumber>.<roundNumber>`
-- **part ID**: `SESSION.<turnNumber>.<roundNumber>.<partNumber>`
-
-Example:
-
-- `I8TS`
-- `I8TS.3`
-- `I8TS.3.3`
-- `I8TS.3.3.1`
-
-### Session ID charset
-
-The allowed session ID characters should be:
-
-- uppercase letters
-- digits
-
-with the following characters excluded to avoid ambiguity:
-
-- `0`
-- `O`
-- `1`
-- `I`
-
-### Session ID creation rules
-
-- on session creation, generate a random 4-character ID by default
-- check whether it already exists
-- if it exists, generate another one
-- fail after **3 attempts**
-
-This only applies at session creation time.
-
-The UI may also allow the user to provide the session ID explicitly. If the user or a future agent provides an ID, the system should:
-
-- validate it immediately
-- fail immediately if it already exists
-- not silently rewrite it
-
-### Numbering inside a session
-
-Turn, round, and part numbers should be sequence numbers within their parent.
-
-The current direction is to use **0-based numbering** for those sequence numbers. This keeps the mapping simple if internal indexing is already zero-based, and it is still understandable for developers and coding agents.
-
-The important rule is not whether the numbers start at 0 or 1, but that they are:
-
-- stable
-- predictable
-- not renumbered later
-
-## Rationale
-
-### Why a short random session ID
-
-The session ID should be short because:
-
-- users may need to read, say, or type it
-- coding agents may refer to it repeatedly in prompts and commands
-- this is a local tool, so the total number of sessions is expected to stay relatively small
-
-For that reason, the current direction is to prefer a **short 4-character ID** over a longer identifier, and simply check for collisions when creating a session.
-
-If a collision happens, the backend should generate a new candidate until it finds a free one, up to the defined retry limit.
-
-This keeps the ID compact without giving up correctness.
-
-### Why sequence numbers inside a session
-
-Turns, rounds, and parts should use simple sequence numbers within their parent.
-
-This gives:
-
-- stable ordering
-- easy human understanding
-- easy parsing
-- easy navigation in UI and CLI
-
-It also means the canonical ID stays compact and readable.
-
-### Why the session ID should be separate from the session name
-
-The session ID should not try to replace user naming.
-
-Users and coding agents should remain free to give sessions meaningful names for their own workflow, while the canonical ID provides a short, stable reference for lookup and collaboration.
-
-This is an important benefit of the design:
-
-- **name** = meaningful label for humans or agents
-- **ID** = short stable reference for the system
-
-### Parallel parts
-
-Parallel execution inside a round does not prevent this numbering scheme from working.
-
-Part numbers should represent the stable persisted order of parts inside the round. Even if multiple operations happened concurrently, each part still gets a single immutable sequence number.
-
-If we later need richer concurrency information, that should be represented in additional fields, not in the ID format itself.
-
-## Object model returned by lookup
-
-The lookup API should return only the meaningful structured content needed by the UI and future CLI. It should not expose low-level LM Studio transport details or other raw technical exchange data.
-
-The relevant part kinds to expose are:
-
-- **setup**
-- **user_prompt**
-- **reasoning**
-- **tool_call**
-- **assistant_answer**
-
-Expected payload by part kind:
-
-- **setup** -> setup-specific summary plus token sizes
-- **user_prompt** -> text content and token size
-- **reasoning** -> text content and token size
-- **tool_call** -> tool name, tool call payload, tool response payload, token size
-- **assistant_answer** -> text content and token size
-
-## Required backend capability
-
-Add one generic lookup operation that accepts a hierarchical ID and returns the object represented by that ID.
+Add one generic lookup operation that accepts a hierarchical ID and resolves the represented object.
 
 Examples:
 
-- session ID -> return that session
-- turn ID -> return that turn
-- round ID -> return that round
-- part ID -> return that part
+- session ID -> return that session subtree
+- turn ID -> return that turn subtree
+- round ID -> return that round subtree
+- part ID -> return that logical part
 
-The backend should parse the ID, infer the target type, resolve the object, and return a JSON response that includes:
+The backend should:
+
+- parse the ID
+- infer the target type
+- resolve the target object
+- return structured JSON
+- return clear errors for invalid IDs and not-found IDs
+
+The response envelope should stay simple:
 
 - `id`
 - `type`
-- parent IDs as relevant
-- object data
+- `mode`
+- `data`
 
-Invalid ID format and not-found IDs should return clear error codes and JSON error payloads.
+No redundant `parentIds` object is needed because ancestry is already encoded in the ID.
 
-## Summary mode
+## Payload contract
 
-The lookup operation should support a summary mode so callers can navigate cheaply before fetching details.
+Lookup payloads should be compact, tree-shaped, and should follow the public node properties defined in [DATA-MODEL.md](../DATA-MODEL.md).
 
-Summary mode should return:
+Lookup payloads must **not** include:
 
-- the target object's key metadata
-- the list of child IDs or child summaries needed to navigate deeper
-- for nested parts, summary information without full text or full tool payloads
+- raw LM Studio transport blobs
+- duplicated context arrays
+- preview snippets
+- ambiguous display-only attributes such as `label` unless they have a clear semantic role
+
+### Summary vs full
+
+The difference between the modes should be narrow and predictable:
+
+- **summary** -> same tree and same node properties, but without variable-size content
+- **full** -> same tree and same node properties, with the allowed content fields populated
+
+This is the key rule: full mode adds content; it should not invent a different payload shape.
+
+### Content rules
+
+- For session / turn / round lookups, full mode additionally includes full text for `user_prompt` and `assistant_answer`.
+- For direct part lookups, full mode may include the full payload appropriate to that part type.
+- `tool_call` full mode should include the tool name plus tool request and tool response payloads.
+- `tool_definitions` full mode should include the actual tool definitions payload.
+
+### Field presence rules
+
+- Omit a property when it does not apply to the current node type.
+- Omit a property when it is pruned by `summary` mode.
+- Use `null` only when a property applies but its value is genuinely unknown or unavailable.
 
 Examples:
 
-- session summary -> turn IDs
-- turn summary -> round IDs
-- round summary -> part IDs
-- part summary -> part type, name/tool name as relevant, token size, preview metadata only
+- omit `tool_name` on non-`tool_call` parts
+- omit `content` in `summary` mode
+- omit `tool_payload` except on direct `tool_call` full lookups
+- allow `token_count: null` when token attribution is unknown
 
-This allows an agent to discover nested IDs without loading the full session tree.
+## Session payload requirements
 
-### Summary vs full mode
+Session lookup is the most important case because it is the main navigation entry point for UI and CLI.
 
-**Summary mode** should include enough information to navigate and understand structure without loading the full content.
+Both summary and full mode should include the `Session` properties defined in [DATA-MODEL.md](../DATA-MODEL.md), including setup, turns, model metadata, and context-window totals.
 
-For sub-parts, that means including relevant summary fields such as:
+Summary mode exists so a client can cheaply obtain the full ID tree before deciding which deeper content to fetch.
 
-- part type
-- part label/name
-- tool name when the part is a tool call
-- token size
+## Context-related metadata
 
-but **not**:
+Parts should include the metadata needed to understand:
 
-- full reasoning text
-- full user prompt text
-- full assistant answer text
-- full tool request/response payloads
+- token counts
+- whether the part remains in model-visible context or not
 
-**Full mode** should include the full content relevant to the target object:
+That information belongs on the relevant tree nodes. The lookup API should not also dump a separate flattened context snapshot array into the same payload.
 
-- full text for prompt / reasoning / assistant answer
-- full payloads for tool calls and tool responses
-- the structured data needed by the UI and future CLI
+## UI scope
 
-## API shape
+The Web UI should adopt the ID system before the CLI exists.
 
-This API should be **JSON-only**.
+Required outcomes:
 
-The backend should not try to produce CLI-friendly text formatting. That is a client concern.
-
-The Web UI and future CLI should both consume structured JSON and render it differently:
-
-- UI -> visual rendering
-- CLI -> text or JSON output depending on mode
-
-## UI work
-
-The UI should adopt the ID system before the CLI exists.
-
-Required UI outcomes:
-
-- show IDs for sessions, turns, rounds, and parts
+- show IDs for sessions, turns, rounds, and parts in Inspect mode
 - make IDs easy to copy
-- make the hierarchy visible enough that humans can reference objects confidently
-- start in Inspect mode first
-
-The initial UI affordance can be simple:
-
-- show the ID as a tag in Inspect mode
-- clicking the tag copies the ID
-
-To exercise the new API directly from the frontend, Inspect mode should also expose buttons that:
-
-- fetch the selected object by ID in **summary** mode
-- fetch the selected object by ID in **full** mode
+- make the hierarchy clear enough that humans can reference objects confidently
+- expose actions to fetch lookup JSON in summary and full mode
 - show the returned JSON in the existing JSON dialog
 
-This gives us a simple way to validate the API from the UI before the CLI exists, and may later replace some existing Inspect-mode actions.
-
-This is valuable even before the CLI is implemented because it improves human-to-human and human-to-agent collaboration.
-
-## Why do this before the CLI
-
-This task de-risks the CLI by validating:
-
-- the ID model
-- lookup semantics
-- persistence and stability
-- how useful IDs are in actual UI workflows
-- whether summary-mode navigation is sufficient
-
-If this is in place first, the CLI can be mostly a thin client over already proven backend and UI concepts.
+This is enough to validate the contract end to end before the CLI is implemented.
 
 ## Scope
 
-- define the canonical hierarchical ID format
+- implement the canonical hierarchical ID format from [DATA-MODEL.md](../DATA-MODEL.md)
 - make IDs stable and available across the model
-- add generic hierarchical lookup by ID
-- support summary mode and full mode
-- return JSON only
-- expose IDs in the UI
-- support easy copy of IDs in the UI
-- add Inspect-mode buttons to fetch by ID in summary/full mode
+- implement generic hierarchical lookup by ID
+- return compact tree-shaped JSON matching [DATA-MODEL.md](../DATA-MODEL.md)
+- support summary and full mode with the same structure and node properties
+- expose IDs and lookup actions in the UI
 
 ## Non-goals
 
 - full CLI implementation
-- auth concerns
-- final command naming for the CLI
-- broad backend API redesign beyond the few additions needed for generic lookup
+- CLI-oriented text formatting in the backend
+- exposing raw LM Studio transport structures through the lookup contract
+- broad API redesign beyond what is needed for the canonical lookup model
 
-## Plan
+## Acceptance criteria
 
-1. Finalize the exact session ID charset, numbering rules, collision handling, and validation rules.
-2. Implement session ID generation and explicit-ID validation at session creation time.
-3. Implement backend parsing and generic resolution for hierarchical IDs.
-4. Implement JSON lookup response shapes for summary and full modes.
-5. Add basic automated tests for:
-   - session creation ID generation / collision handling
-   - lookup by ID at session level
-   - lookup by ID at turn level
-   - lookup by ID at round level
-   - lookup by ID at part level
-6. Expose IDs in the UI Inspect mode.
-7. Add copy-on-click ID tags in Inspect mode.
-8. Add Inspect-mode buttons to fetch summary/full JSON via the new API and show the results in the existing JSON dialog.
-9. Do manual UI smoke testing of the full workflow before starting CLI implementation.
-
-## Testing approach
-
-Keep the first automated coverage simple and focused.
-
-### Automated tests
-
-- session creation with random ID generation
-- collision handling and retry behavior
-- explicit provided ID validation
-- generic lookup by hierarchical ID for:
-  - session
-  - turn
-  - round
-  - part
-
-### Manual UI smoke tests
-
-- ID tags are visible in Inspect mode
-- clicking an ID copies it
-- summary fetch button returns the expected JSON shape
-- full fetch button returns the expected JSON shape
-- the JSON dialog allows the API to be inspected end to end from the frontend
-
-## Status update
-
-### Done
-
-- canonical hierarchical IDs are implemented for sessions, turns, rounds, and parts
-- explicit session IDs are supported and validated
-- `GET /api/lookup/:id?mode=summary|full` is implemented
-- IDs are shown in the UI and can be copied in Inspect mode
-- Inspect mode can fetch lookup JSON for session, turn, round, and part IDs
-- automated backend regression coverage now uses a real exported multi-turn trace with tool calls
-- lookup regression tests now assert summary/full payloads for session, turn, round, and part
-- setup/system-prompt content is now blocked from leaking through direct part lookup payloads
-- round lookup no longer exposes low-level `requestPayloadJson` / `responseTraceJson` blobs
-
-### Remaining QA / adjustment work
-
-- manual UI smoke testing is still needed for the Inspect-mode lookup buttons and JSON dialog payloads
-- we should verify that turn/round/part lookups in the UI never show session-prelude/setup content unless a setup part is explicitly requested
-- lookup payloads still need a field-by-field audit across every node type (session / turn / round / part) and for every exposed event/content kind to confirm we return exactly the intended structured data
-- summary-mode payloads should be reviewed once more in the UI to ensure they stay lightweight and do not include full text or full tool payloads
-- full-mode payloads still need additional QA to confirm they include the right fields for each node type without leaking extra conversation state
-- the placement and visibility of the Inspect-mode lookup buttons in the UI still need follow-up work
-- frontend-specific automated coverage for the Inspect-mode lookup actions is still missing
+- humans and agents can refer to sessions, turns, rounds, and logical parts with one stable canonical ID system
+- part IDs encode part kind
+- setup / prelude nodes are addressable within the same reference system
+- lookup returns one compact tree-shaped contract for session / turn / round / part
+- summary and full mode share the same structure
+- session lookup gives the full ID tree without embedding unnecessary duplicated payloads
+- direct tool-call part lookup can return full request/response payloads in full mode
+- the UI can display, copy, and exercise the IDs through the lookup API
 
 ## Dependency
 
 This task should be completed before implementing `mcpscope-cli`.
+
+The examples below are simplified subsets based on `exports/test-with-multiple-turns-and-tools.trace.json`.
+
+## Example: session summary
+
+```json
+{
+  "id": "QGWA",
+  "type": "session",
+  "mode": "summary",
+  "data": {
+    "id": "QGWA",
+    "title": "Test with multiple turns and tools",
+    "model": {
+      "name": "Gemma 4 (lms1)",
+      "key": "google/gemma-4-e4b"
+    },
+    "mcp": {
+      "name": "HA Sanzay",
+      "strategy": "per-turn"
+    },
+    "context_window": {
+      "available": 65496,
+      "used": 16466
+    },
+    "setup": {
+      "id": "QGWA.S",
+      "parts": [
+        {
+          "id": "QGWA.S.1-SP",
+          "type": "system_prompt",
+          "token_count": 167,
+          "context_state": "included"
+        },
+        {
+          "id": "QGWA.S.2-MI",
+          "type": "mcp_instructions",
+          "token_count": 373,
+          "context_state": "included"
+        },
+        {
+          "id": "QGWA.S.3-TD",
+          "type": "tool_definitions",
+          "token_count": 4175,
+          "context_state": "included"
+        }
+      ]
+    },
+    "turns": [
+      {
+        "id": "QGWA.1",
+        "number": 1,
+        "status": "complete",
+        "rounds": [
+          {
+            "id": "QGWA.1.1",
+            "number": 1,
+            "status": "complete",
+            "parts": [
+              {
+                "id": "QGWA.1.1.1-U",
+                "type": "user_prompt",
+                "token_count": 21,
+                "context_state": "included"
+              },
+              {
+                "id": "QGWA.1.1.2-T",
+                "type": "tool_call",
+                "token_count": 106,
+                "context_state": "historical_only",
+                "tool_name": "ha_history_get_current_time"
+              }
+            ]
+          },
+          {
+            "id": "QGWA.1.2",
+            "number": 2,
+            "status": "complete",
+            "parts": [
+              {
+                "id": "QGWA.1.2.1-A",
+                "type": "assistant_answer",
+                "token_count": 32,
+                "context_state": "included"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Example: session full
+
+```json
+{
+  "id": "QGWA",
+  "type": "session",
+  "mode": "full",
+  "data": {
+    "id": "QGWA",
+    "title": "Test with multiple turns and tools",
+    "model": {
+      "name": "Gemma 4 (lms1)",
+      "key": "google/gemma-4-e4b"
+    },
+    "mcp": {
+      "name": "HA Sanzay",
+      "strategy": "per-turn"
+    },
+    "context_window": {
+      "available": 65496,
+      "used": 16466
+    },
+    "setup": {
+      "id": "QGWA.S",
+      "parts": [
+        {
+          "id": "QGWA.S.1-SP",
+          "type": "system_prompt",
+          "token_count": 167,
+          "context_state": "included"
+        },
+        {
+          "id": "QGWA.S.2-MI",
+          "type": "mcp_instructions",
+          "token_count": 373,
+          "context_state": "included"
+        },
+        {
+          "id": "QGWA.S.3-TD",
+          "type": "tool_definitions",
+          "token_count": 4175,
+          "context_state": "included"
+        }
+      ]
+    },
+    "turns": [
+      {
+        "id": "QGWA.1",
+        "number": 1,
+        "status": "complete",
+        "rounds": [
+          {
+            "id": "QGWA.1.1",
+            "number": 1,
+            "status": "complete",
+            "parts": [
+              {
+                "id": "QGWA.1.1.1-U",
+                "type": "user_prompt",
+                "token_count": 21,
+                "context_state": "included",
+                "content": {
+                  "text": "Hello! how are you doing? Can you give me that time and date?"
+                }
+              },
+              {
+                "id": "QGWA.1.1.2-T",
+                "type": "tool_call",
+                "token_count": 106,
+                "context_state": "historical_only",
+                "tool_name": "ha_history_get_current_time"
+              }
+            ]
+          },
+          {
+            "id": "QGWA.1.2",
+            "number": 2,
+            "status": "complete",
+            "parts": [
+              {
+                "id": "QGWA.1.2.1-A",
+                "type": "assistant_answer",
+                "token_count": 32,
+                "context_state": "included",
+                "content": {
+                  "text": "The current time in Sanzay is 12:32 PM on Friday, May 15, 2026."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Example: direct tool-call part full
+
+```json
+{
+  "id": "QGWA.1.1.2-T",
+  "type": "part",
+  "mode": "full",
+  "data": {
+    "id": "QGWA.1.1.2-T",
+    "type": "tool_call",
+    "token_count": 106,
+    "context_state": "historical_only",
+    "tool_name": "ha_history_get_current_time",
+    "tool_payload": {
+      "call": {},
+      "result": {
+        "text": "Current time:  2026-05-15T12:32:31+02:00\nDate:          Friday 15 May 2026\nUTC offset:    +02:00\nWeek:          20 of 2026\nHome:          Sanzay"
+      }
+    }
+  }
+}
+```
+
+## Example: setup full
+
+```json
+{
+  "id": "QGWA.S",
+  "type": "setup",
+  "mode": "full",
+  "data": {
+    "id": "QGWA.S",
+    "parts": [
+      {
+        "id": "QGWA.S.1-SP",
+        "type": "system_prompt",
+        "token_count": 167,
+        "context_state": "included"
+      },
+      {
+        "id": "QGWA.S.2-MI",
+        "type": "mcp_instructions",
+        "token_count": 373,
+        "context_state": "included"
+      },
+      {
+        "id": "QGWA.S.3-TD",
+        "type": "tool_definitions",
+        "token_count": 4175,
+        "context_state": "included"
+      }
+    ]
+  }
+}
+```
+
+## Example: direct system-prompt part full
+
+```json
+{
+  "id": "QGWA.S.1-SP",
+  "type": "part",
+  "mode": "full",
+  "data": {
+    "id": "QGWA.S.1-SP",
+    "type": "system_prompt",
+    "token_count": 167,
+    "context_state": "included",
+    "content": {
+      "text": "You are an analyst agent for Home Assistant data.\n\nUse the available tools to find answers. Do not guess when a tool can verify the fact."
+    }
+  }
+}
+```
+
+## Example: direct mcp-instructions part full
+
+```json
+{
+  "id": "QGWA.S.2-MI",
+  "type": "part",
+  "mode": "full",
+  "data": {
+    "id": "QGWA.S.2-MI",
+    "type": "mcp_instructions",
+    "token_count": 373,
+    "context_state": "included",
+    "content": {
+      "text": "[MCP Server Instructions]\nYou are a data analyst for Sanzay home automation data.\n\n## Responding\n- Always state what was measured: which sensor, what period, and what aggregation.\n- Give the finding with its basis."
+    }
+  }
+}
+```
+
+## Example: direct tool-definitions part full
+
+```json
+{
+  "id": "QGWA.S.3-TD",
+  "type": "part",
+  "mode": "full",
+  "data": {
+    "id": "QGWA.S.3-TD",
+    "type": "tool_definitions",
+    "token_count": 4175,
+    "context_state": "included",
+    "content": {
+      "json": [
+        {
+          "name": "ha_history_get_current_time",
+          "description": "Returns the current date and time from the Home Assistant server (Sanzay). Call this before making any time-based query when the user uses a relative or named time expression.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        },
+        {
+          "name": "ha_history_get_sensor_stats",
+          "description": "Computes statistics for a Sanzay sensor measuring instantaneous values such as temperature, humidity, CO2, pressure, illuminance, or power draw in Watts.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "entity": {
+                "type": "string",
+                "description": "Exact entity_id from ha_history_list_entities."
+              },
+              "aggregation": {
+                "type": "string",
+                "enum": ["mean", "min", "max", "median", "count"]
+              },
+              "start_time": {
+                "type": "string"
+              },
+              "end_time": {
+                "type": "string"
+              }
+            },
+            "required": ["entity", "aggregation"]
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+## Example: errors
+
+Invalid ID:
+
+```json
+{
+  "error": {
+    "type": "validation",
+    "message": "Invalid hierarchical ID: not-an-id",
+    "code": "invalid_hierarchical_id"
+  }
+}
+```
+
+Not found:
+
+```json
+{
+  "error": {
+    "type": "not_found",
+    "message": "Part not found: QGWA.9.9.9-T",
+    "code": "hierarchical_id_not_found"
+  }
+}
+```

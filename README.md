@@ -4,7 +4,8 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 
 ## Documentation map
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - canonical system design, runtime vocabulary, and API surface
+- [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
+- [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
 - [PLAN.md](PLAN.md) - current product state and near-term focus
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
 - [RELEASING.md](RELEASING.md) - release workflow and GHCR image publishing
@@ -19,6 +20,10 @@ npm run dev              # backend + frontend together
 npm run dev:backend      # backend only (tsx watch)
 npm run dev:frontend     # frontend only (vite)
 ```
+
+With the backend running, the generated API reference is available at **`/reference/`** and exposes the OpenAPI document at **`/reference/openapi.json`**.
+
+To refresh the real lookup examples shown there, re-run the lookup regression documented in [TESTING.md](TESTING.md).
 
 ### Seeding dev data
 
