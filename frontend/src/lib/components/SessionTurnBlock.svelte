@@ -9,8 +9,8 @@
   import type { StreamingRoundState } from '../traceStreaming'
   import CompactRoundContent from './CompactRoundContent.svelte'
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
+  import IdBadge from './IdBadge.svelte'
   import JsonDialog from './JsonDialog.svelte'
-  import { lookupByHierarchicalId } from '../api/backendClient'
   import TracePartBlock from './TracePartBlock.svelte'
   import { highlightMarkdown } from '../markdownHighlight'
   import { looksLikeMarkdown } from '../markdownRender'
@@ -92,19 +92,6 @@
     dialogTitle = title
     dialogData = data
     showDialog = true
-  }
-
-  async function showLookup(id: string, lookupMode: 'summary' | 'full'): Promise<void> {
-    const payload = await lookupByHierarchicalId(id, lookupMode)
-    openDialog(`${id} (${lookupMode})`, payload)
-  }
-
-  async function copyId(id: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(id)
-    } catch {
-      // Clipboard API unavailable in some contexts.
-    }
   }
 
   function openMarkdownPreview(text: string): void {
@@ -215,9 +202,7 @@
         <!-- Round meta header: inspect mode only -->
         {#if mode === 'inspect'}
           <div class="inspect-id-row">
-            <button class="meta-btn id-btn" onclick={() => copyId(turn.id)} title="Copy turn ID">{turn.id}</button>
-            <button class="meta-btn" onclick={() => showLookup(turn.id, 'summary')}>Summary</button>
-            <button class="meta-btn" onclick={() => showLookup(turn.id, 'full')}>Full</button>
+            <IdBadge id={turn.id} />
           </div>
           <div class="compact-round-meta">
             <span class="compact-round-label">Round {round.roundIndex + 1}</span>
@@ -226,9 +211,7 @@
               <span class="compact-round-tokens">{round.usage.totalTokens.toLocaleString()} total</span>
             {/if}
             <div class="compact-round-actions">
-              <button class="meta-btn id-btn" onclick={() => copyId(round.id)} title="Copy round ID">{round.id}</button>
-              <button class="meta-btn" onclick={() => showLookup(round.id, 'summary')}>Summary</button>
-              <button class="meta-btn" onclick={() => showLookup(round.id, 'full')}>Full</button>
+              <IdBadge id={round.id} />
               <button class="meta-btn" onclick={() => openDialog(`Round ${round.roundIndex + 1}`, round)}>
                 Round
               </button>
@@ -369,14 +352,6 @@
     align-items: center;
     gap: 0.35rem;
     margin-bottom: 0.2rem;
-  }
-
-  .id-btn {
-    font-family: var(--mono);
-    max-width: 230px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .compact-round-label,
