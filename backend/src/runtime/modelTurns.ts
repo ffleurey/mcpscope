@@ -207,7 +207,7 @@ export async function createModelOnlyTurn(
   const startedAt = now()
   const turnSequenceNumber = getNextTurnSequenceNumber(database.connection, session.id)
   const turnId = formatTurnId(session.id, turnSequenceNumber)
-  const roundId = formatRoundId(session.id, turnSequenceNumber, 0)
+  const roundId = formatRoundId(session.id, turnSequenceNumber, 1)
   const turn: TurnRecord = {
     id: turnId,
     sessionId: session.id,
@@ -259,7 +259,7 @@ export async function createModelOnlyTurn(
   const initialOrdinal = getNextPartOrdinal(database.connection, session.id)
   const initialPartNumber = getNextRoundPartSequence(database.connection, roundId)
   const userPart: PartRecord = {
-    id: formatPartId(session.id, turnSequenceNumber, 0, initialPartNumber),
+    id: formatPartId(session.id, turnSequenceNumber, 1, initialPartNumber, 'user-message'),
     sessionId: session.id,
     turnId,
     roundId,
@@ -452,7 +452,7 @@ export async function createModelOnlyTurn(
       }
       const tokenMetadata = reasoningTokenMetadata.shift()
       assistantParts.push({
-        id: formatPartId(session.id, turnSequenceNumber, 0, nextPartNumber++),
+        id: formatPartId(session.id, turnSequenceNumber, 1, nextPartNumber++, 'assistant-reasoning'),
         sessionId: session.id,
         turnId,
         roundId,
@@ -495,7 +495,7 @@ export async function createModelOnlyTurn(
       }
       const tokenMetadata = assistantContentTokenMetadata.shift()
       assistantParts.push({
-        id: formatPartId(session.id, turnSequenceNumber, 0, nextPartNumber++),
+        id: formatPartId(session.id, turnSequenceNumber, 1, nextPartNumber++, 'assistant-content'),
         sessionId: session.id,
         turnId,
         roundId,

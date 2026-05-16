@@ -503,16 +503,18 @@ describe('backend foundation', () => {
       type: 'session',
       mode: 'summary',
       data: {
-        session: expect.objectContaining({ id: importedSessionId, title: expect.any(String) }),
+        id: importedSessionId,
+        title: expect.any(String),
+        model: { name: expect.any(String), key: expect.any(String) },
+        context_window: { available: expect.anything() },
+        setup: { id: expect.any(String), parts: expect.any(Array) },
         turns: expect.arrayContaining([
-          expect.objectContaining({ id: firstTurnId, sequenceNumber: 1 }),
-          expect.objectContaining({ id: secondTurnId, sequenceNumber: 2 }),
+          expect.objectContaining({ id: firstTurnId, number: 1 }),
+          expect.objectContaining({ id: secondTurnId, number: 2 }),
         ]),
       },
     })
     expect(sessionSummary.json().parentIds).toBeUndefined()
-    expect(sessionSummary.json().data.session.createdAt).toBeUndefined()
-    expect(sessionSummary.json().data.session.modelProfileSnapshot).toBeUndefined()
 
     const sessionFull = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}?mode=full` })
     expect(sessionFull.statusCode).toBe(200)
@@ -528,16 +530,15 @@ describe('backend foundation', () => {
       type: 'session',
       mode: 'full',
       data: {
-        session: expect.objectContaining({ id: importedSessionId, modelProfileName: expect.any(String) }),
-        context: expect.arrayContaining([
-          expect.objectContaining({ id: expect.any(String), kind: expect.any(String), state: expect.any(String) }),
-        ]),
+        id: importedSessionId,
+        model: { name: expect.any(String) },
+        setup: { parts: expect.any(Array) },
+        turns: expect.any(Array),
       },
     })
     expect(sessionFull.json().parentIds).toBeUndefined()
-    expect(sessionFull.json().data.session.createdAt).toBeUndefined()
-    expect(sessionFull.json().data.session.loadedContextLength).toBeUndefined()
-    expect(sessionFull.json().data.session.modelProfileSnapshot).toBeUndefined()
+    expect(sessionFull.json().data.session).toBeUndefined()
+    expect(sessionFull.json().data.context).toBeUndefined()
 
     const turnSummary = await app.inject({ method: 'GET', url: `/api/lookup/${firstTurnId}?mode=summary` })
     expect(turnSummary.statusCode).toBe(200)
@@ -553,14 +554,15 @@ describe('backend foundation', () => {
       type: 'turn',
       mode: 'summary',
       data: {
-        turn: expect.objectContaining({ id: firstTurnId, sequenceNumber: 1 }),
+        id: firstTurnId,
+        number: 1,
         rounds: expect.arrayContaining([
-          expect.objectContaining({ id: expect.any(String), roundIndex: 0 }),
+          expect.objectContaining({ id: expect.any(String), number: 1 }),
         ]),
       },
     })
     expect(turnSummary.json().parentIds).toBeUndefined()
-    expect(turnSummary.json().data.turn.usage).toBeUndefined()
+    expect(turnSummary.json().data.turn).toBeUndefined()
 
     const turnFull = await app.inject({ method: 'GET', url: `/api/lookup/${firstTurnId}?mode=full` })
     expect(turnFull.statusCode).toBe(200)
@@ -576,19 +578,15 @@ describe('backend foundation', () => {
       type: 'turn',
       mode: 'full',
       data: {
-        turn: expect.objectContaining({ id: firstTurnId, usage: expect.any(Object) }),
-        context: expect.arrayContaining([
-          expect.objectContaining({ id: expect.any(String), kind: expect.any(String), state: expect.any(String) }),
-        ]),
+        id: firstTurnId,
+        number: 1,
+        rounds: expect.any(Array),
       },
     })
     expect(turnFull.json().parentIds).toBeUndefined()
+    expect(turnFull.json().data.turn).toBeUndefined()
+    expect(turnFull.json().data.context).toBeUndefined()
     expect(turnFull.json().data.rounds.length).toBeGreaterThan(0)
-    expect(turnFull.json().data.turn.createdAt).toBeUndefined()
-    expect(turnFull.json().data.turn.completedAt).toBeUndefined()
-    expect(turnFull.json().data.turn.contextTokensAtTurnEnd).toBeUndefined()
-    expect(turnFull.json().data.turn.contextTokensAfterCompaction).toBeUndefined()
-    expect(turnFull.json().data.turn.compactionTokensRemoved).toBeUndefined()
 
     const firstRoundSummary = await app.inject({ method: 'GET', url: `/api/lookup/${firstRoundId}?mode=summary` })
     expect(firstRoundSummary.statusCode).toBe(200)
@@ -601,10 +599,7 @@ describe('backend foundation', () => {
     })
     expect(firstRoundSummary.json().data.parts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'user_prompt',
-          preview: expect.any(String),
-        }),
+        expect.objectContaining({ type: 'user_prompt', token_count: expect.anything() }),
       ]),
     )
 
@@ -623,18 +618,13 @@ describe('backend foundation', () => {
       mode: 'summary',
       data: {
         parts: expect.arrayContaining([
-          expect.objectContaining({
-            kind: 'tool_call',
-            toolName: expect.any(String),
-            preview: expect.any(String),
-          }),
+          expect.objectContaining({ type: 'tool_call', tool_name: expect.any(String) }),
         ]),
       },
     })
     expect(roundSummary.json().parentIds).toBeUndefined()
-    const roundSummaryTool = roundSummary.json().data.parts.find((p: { kind: string }) => p.kind === 'tool_call')
-    expect(roundSummaryTool.toolCallPayload).toBeUndefined()
-    expect(roundSummaryTool.toolResponsePayload).toBeUndefined()
+    const roundSummaryTool = roundSummary.json().data.parts.find((p: { type: string }) => p.type === 'tool_call')
+    expect(roundSummaryTool.tool_payload).toBeUndefined()
 
     const roundFull = await app.inject({ method: 'GET', url: `/api/lookup/${targetRoundId}?mode=full` })
     expect(roundFull.statusCode).toBe(200)
@@ -650,26 +640,18 @@ describe('backend foundation', () => {
       type: 'round',
       mode: 'full',
       data: {
-        context: expect.arrayContaining([
-          expect.objectContaining({ id: expect.any(String), kind: expect.any(String), state: expect.any(String) }),
-        ]),
         parts: expect.arrayContaining([
-          expect.objectContaining({
-            kind: 'tool_call',
-            toolName: expect.any(String),
-            toolCallPayload: expect.any(Object),
-            toolResponsePayload: expect.anything(),
-          }),
+          expect.objectContaining({ type: 'tool_call', tool_name: expect.any(String) }),
         ]),
       },
     })
     expect(roundFull.json().parentIds).toBeUndefined()
-    expect(roundFull.json().data.round.requestPayloadJson).toBeUndefined()
-    expect(roundFull.json().data.round.responseTraceJson).toBeUndefined()
-    expect(roundFull.json().data.round.startedAt).toBeUndefined()
-    expect(roundFull.json().data.round.completedAt).toBeUndefined()
     expect(roundFull.json().data.parts.length).toBeGreaterThan(0)
-    expect(roundFull.json().data.parts.some((part: { kind: string }) => part.kind === 'setup')).toBe(false)
+    // tool_payload only on direct part lookup, not at round level
+    const roundFullTool = roundFull.json().data.parts.find((p: { type: string }) => p.type === 'tool_call')
+    expect(roundFullTool.tool_payload).toBeUndefined()
+    // no setup-type parts appear in round parts
+    expect(roundFull.json().data.parts.some((p: { type: string }) => p.type === 'setup')).toBe(false)
 
     const partSummary = await app.inject({ method: 'GET', url: `/api/lookup/${toolCallPartId}?mode=summary` })
     expect(partSummary.statusCode).toBe(200)
@@ -684,17 +666,16 @@ describe('backend foundation', () => {
       id: toolCallPartId,
       type: 'part',
       mode: 'summary',
-      data: {
-        part: expect.objectContaining({
-          kind: 'tool_call',
-          ...(toolName ? { toolName } : {}),
-          preview: expect.any(String),
-        }),
-      },
+      data: expect.objectContaining({
+        id: toolCallPartId,
+        type: 'tool_call',
+        ...(toolName ? { tool_name: toolName } : {}),
+        token_count: expect.anything(),
+        context_state: expect.any(String),
+      }),
     })
     expect(partSummary.json().parentIds).toBeUndefined()
-    expect(partSummary.json().data.part.toolCallPayload).toBeUndefined()
-    expect(partSummary.json().data.part.toolResponsePayload).toBeUndefined()
+    expect(partSummary.json().data.tool_payload).toBeUndefined()
 
     const partFull = await app.inject({ method: 'GET', url: `/api/lookup/${toolCallPartId}?mode=full` })
     expect(partFull.statusCode).toBe(200)
@@ -709,15 +690,13 @@ describe('backend foundation', () => {
       id: toolCallPartId,
       type: 'part',
       mode: 'full',
-      data: {
-        part: expect.objectContaining({
-          kind: 'tool_call',
-          ...(toolName ? { toolName } : {}),
-          context: expect.objectContaining({ state: expect.any(String) }),
-          toolCallPayload: expect.any(Object),
-          toolResponsePayload: expect.anything(),
-        }),
-      },
+      data: expect.objectContaining({
+        id: toolCallPartId,
+        type: 'tool_call',
+        ...(toolName ? { tool_name: toolName } : {}),
+        context_state: expect.any(String),
+        tool_payload: expect.objectContaining({ call: expect.any(Object) }),
+      }),
     })
     expect(partFull.json().parentIds).toBeUndefined()
 
@@ -731,7 +710,7 @@ describe('backend foundation', () => {
         statusCode: assistantPartSummary.statusCode,
         responsePayload: assistantPartSummary.json(),
       })
-      expect(assistantPartSummary.json().data.part.content).toBeUndefined()
+      expect(assistantPartSummary.json().data.content).toBeUndefined()
 
       const assistantPartFull = await app.inject({ method: 'GET', url: `/api/lookup/${assistantContentPartId}?mode=full` })
       expect(assistantPartFull.statusCode).toBe(200)
@@ -742,7 +721,7 @@ describe('backend foundation', () => {
         statusCode: assistantPartFull.statusCode,
         responsePayload: assistantPartFull.json(),
       })
-      expect(assistantPartFull.json().data.part.content).toEqual(
+      expect(assistantPartFull.json().data.content).toEqual(
         expect.objectContaining({ text: expect.any(String) }),
       )
     }
@@ -756,13 +735,33 @@ describe('backend foundation', () => {
       statusCode: userPromptPartSummary.statusCode,
       responsePayload: userPromptPartSummary.json(),
     })
-    expect(userPromptPartSummary.json().data.part).toEqual(
-      expect.objectContaining({
-        kind: 'user_prompt',
-        preview: expect.any(String),
-      }),
+    expect(userPromptPartSummary.json().data).toEqual(
+      expect.objectContaining({ type: 'user_prompt', token_count: expect.anything() }),
     )
-    expect(userPromptPartSummary.json().data.part.content).toBeUndefined()
+    expect(userPromptPartSummary.json().data.content).toBeUndefined()
+
+    // Setup node lookup
+    const setupId = `${importedSessionId}.S`
+    const setupNodeFull = await app.inject({ method: 'GET', url: `/api/lookup/${setupId}?mode=full` })
+    expect(setupNodeFull.statusCode).toBe(200)
+    auditEntries.push({
+      label: 'setup-node-full',
+      method: 'GET',
+      url: `/api/lookup/${setupId}?mode=full`,
+      statusCode: setupNodeFull.statusCode,
+      responsePayload: setupNodeFull.json(),
+    })
+    expect(setupNodeFull.json()).toMatchObject({
+      id: setupId,
+      type: 'setup',
+      mode: 'full',
+      data: {
+        id: setupId,
+        parts: expect.arrayContaining([
+          expect.objectContaining({ type: 'system_prompt' }),
+        ]),
+      },
+    })
 
     const setupPartSummary = await app.inject({ method: 'GET', url: `/api/lookup/${setupPartId}?mode=summary` })
     expect(setupPartSummary.statusCode).toBe(200)
@@ -777,18 +776,15 @@ describe('backend foundation', () => {
       id: setupPartId,
       type: 'part',
       mode: 'summary',
-      data: {
-        part: expect.objectContaining({
-          id: setupPartId,
-          kind: 'setup',
-          label: 'system-prompt',
-          setupType: 'system-prompt',
-          preview: 'Model system prompt',
-        }),
-      },
+      data: expect.objectContaining({
+        id: setupPartId,
+        type: 'system_prompt',
+        token_count: expect.anything(),
+        context_state: expect.any(String),
+      }),
     })
     expect(setupPartSummary.json().parentIds).toBeUndefined()
-    expect(setupPartSummary.json().data.part.content).toBeUndefined()
+    expect(setupPartSummary.json().data.content).toBeUndefined()
 
     const setupPartFull = await app.inject({ method: 'GET', url: `/api/lookup/${setupPartId}?mode=full` })
     expect(setupPartFull.statusCode).toBe(200)
@@ -803,20 +799,14 @@ describe('backend foundation', () => {
       id: setupPartId,
       type: 'part',
       mode: 'full',
-      data: {
-        part: expect.objectContaining({
-          id: setupPartId,
-          kind: 'setup',
-          type: 'system-prompt',
-          context: expect.objectContaining({ state: expect.any(String) }),
-          setupType: 'system-prompt',
-          summary: 'Model system prompt',
-        }),
-      },
+      data: expect.objectContaining({
+        id: setupPartId,
+        type: 'system_prompt',
+        context_state: expect.any(String),
+        content: expect.objectContaining({ text: expect.any(String) }),
+      }),
     })
     expect(setupPartFull.json().parentIds).toBeUndefined()
-    expect(setupPartFull.json().data.part.content).toBeUndefined()
-    expect(JSON.stringify(setupPartFull.json())).not.toContain('You are an analyst agent for Home Assistant data.')
 
     const invalidLookup = await app.inject({ method: 'GET', url: '/api/lookup/not-an-id?mode=summary' })
     expect(invalidLookup.statusCode).toBe(400)

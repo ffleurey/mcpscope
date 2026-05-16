@@ -1,5 +1,5 @@
 import type { PartRecord, SessionRecord } from '../domain/model.js'
-import { formatPartId } from '../domain/hierarchicalIds.js'
+import { formatSetupPartId } from '../domain/hierarchicalIds.js'
 import { deriveExactDeltaTokenMetadata } from '../domain/tokenAccounting.js'
 import { updatePartRecord, updateSessionRecord } from '../persistence/repository.js'
 import type { BackendDatabase } from '../persistence/db.js'
@@ -24,7 +24,7 @@ export function createSystemPromptPart(
   }
 
   return {
-    id: formatPartId(session.id, 0, 0, preludePartNumber),
+    id: formatSetupPartId(session.id, preludePartNumber, 'system-prompt'),
     sessionId: session.id,
     turnId: null,
     roundId: null,
