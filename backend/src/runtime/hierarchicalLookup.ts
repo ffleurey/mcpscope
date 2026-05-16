@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import type { PartRecord, RoundRecord } from '../domain/model.js'
+import type { PartRecord, RoundRecord, TurnRecord } from '../domain/model.js'
 import { parseHierarchicalId } from '../domain/hierarchicalIds.js'
 import {
   getPartRecord,
@@ -19,11 +19,6 @@ type LookupSuccess = {
     id: string
     type: 'session' | 'turn' | 'round' | 'part'
     mode: LookupMode
-    parentIds: {
-      sessionId: string
-      turnId: string | null
-      roundId: string | null
-    }
     data: unknown
   }
 }
@@ -47,13 +42,13 @@ export function resolveHierarchicalId(
     if (!session) return { status: 'not_found', message: `Session not found: ${parsed.sessionId}` }
 
     const turns = listTurnRecordsBySession(connection, session.id)
+    const sessionParts = listPartRecordsBySession(connection, session.id)
     return {
       status: 'ok',
       payload: {
         id: session.id,
         type: 'session',
         mode,
-        parentIds: { sessionId: session.id, turnId: null, roundId: null },
         data: mode === 'summary'
           ? {
               session: {
@@ -61,8 +56,6 @@ export function resolveHierarchicalId(
                 title: session.title,
                 status: session.status,
                 initStatus: session.initStatus,
-                createdAt: session.createdAt,
-                updatedAt: session.updatedAt,
                 isContextExhausted: session.isContextExhausted,
               },
               turns: turns.map(turn => ({
@@ -77,23 +70,19 @@ export function resolveHierarchicalId(
                 title: session.title,
                 status: session.status,
                 initStatus: session.initStatus,
-                createdAt: session.createdAt,
-                updatedAt: session.updatedAt,
                 isContextExhausted: session.isContextExhausted,
                 modelProfileName: session.modelProfileSnapshot.name,
                 modelKey: session.modelProfileSnapshot.modelKey,
                 mcpProfileName: session.mcpProfileSnapshot?.name ?? null,
-                loadedContextLength: session.loadedContextLength,
                 compactionStrategy: session.compactionStrategy,
               },
+              context: buildCurrentSessionContext(sessionParts),
               turns: turns.map(turn => ({
                 id: turn.id,
                 sequenceNumber: turn.sequenceNumber,
                 status: turn.status,
                 outcome: turn.outcome,
                 usage: turn.usage,
-                createdAt: turn.createdAt,
-                completedAt: turn.completedAt,
               })),
             },
       },
@@ -108,13 +97,15 @@ export function resolveHierarchicalId(
 
     const rounds = listRoundRecordsBySession(connection, turn.sessionId)
       .filter(round => round.turnId === turn.id)
+      .sort((a, b) => a.roundIndex - b.roundIndex)
+    const sessionParts = listPartRecordsBySession(connection, turn.sessionId)
+    const sessionTurns = listTurnRecordsBySession(connection, turn.sessionId)
     return {
       status: 'ok',
       payload: {
         id: turn.id,
         type: 'turn',
         mode,
-        parentIds: { sessionId: turn.sessionId, turnId: turn.id, roundId: null },
         data: mode === 'summary'
           ? {
               turn: {
@@ -137,20 +128,14 @@ export function resolveHierarchicalId(
                 status: turn.status,
                 outcome: turn.outcome,
                 usage: turn.usage,
-                createdAt: turn.createdAt,
-                completedAt: turn.completedAt,
-                contextTokensAtTurnEnd: turn.contextTokensAtTurnEnd,
-                contextTokensAfterCompaction: turn.contextTokensAfterCompaction,
                 compactionApplied: turn.compactionApplied,
-                compactionTokensRemoved: turn.compactionTokensRemoved,
               },
+              context: buildTurnContext(rounds, sessionParts, sessionTurns),
               rounds: rounds.map(round => ({
                 id: round.id,
                 roundIndex: round.roundIndex,
                 status: round.status,
                 finishReason: round.finishReason,
-                startedAt: round.startedAt,
-                completedAt: round.completedAt,
                 usage: round.usage,
               })),
               session: {
@@ -167,7 +152,9 @@ export function resolveHierarchicalId(
     if (!round) return { status: 'not_found', message: `Round not found: ${parsed.raw}` }
     const turn = getTurnRecord(connection, round.turnId)
     if (!turn) return { status: 'not_found', message: `Turn not found: ${round.turnId}` }
-    const parts = listPartRecordsBySession(connection, turn.sessionId)
+    const sessionParts = listPartRecordsBySession(connection, turn.sessionId)
+    const sessionTurns = listTurnRecordsBySession(connection, turn.sessionId)
+    const parts = sessionParts
       .filter(part => part.roundId === round.id)
       .sort((a, b) => a.ordinal - b.ordinal)
     const logicalParts = toLogicalParts(parts)
@@ -178,7 +165,6 @@ export function resolveHierarchicalId(
         id: round.id,
         type: 'round',
         mode,
-        parentIds: { sessionId: turn.sessionId, turnId: turn.id, roundId: round.id },
         data: mode === 'summary'
           ? {
               round: toLookupRound(round),
@@ -193,6 +179,7 @@ export function resolveHierarchicalId(
             }
           : {
               round: toLookupRound(round),
+              context: buildRoundContext(round, sessionParts, sessionTurns),
               parts: logicalParts.map(logical => logical.full),
             },
       },
@@ -210,11 +197,6 @@ export function resolveHierarchicalId(
       id: part.id,
       type: 'part',
       mode,
-      parentIds: {
-        sessionId: part.sessionId,
-        turnId: part.turnId,
-        roundId: part.roundId,
-      },
       data: mode === 'summary'
         ? {
             part: {
@@ -293,7 +275,7 @@ function toLogicalPart(
     : (part.tokens.count ?? null)
   const preview = kind === 'tool_call'
     ? toolName
-    : part.payload.summary ?? null
+    : part.payload.summary ?? summarizeTextPreview(part.payload.text)
 
   return {
     id: toolCall.id,
@@ -314,11 +296,9 @@ function toLogicalPart(
           id: toolCall.id,
           kind,
           type: toolCall.partType,
-          sessionId: toolCall.sessionId,
-          turnId: toolCall.turnId,
-          roundId: toolCall.roundId,
           tokenCount: mergedTokenCount,
           toolName,
+          context: toPartContext(toolCall),
           toolCallPayload: toolCall.payload.json,
           toolResponsePayload: toolResults.map(result => ({
             id: result.id,
@@ -332,11 +312,9 @@ function toLogicalPart(
             id: part.id,
             kind,
             type: part.partType,
-            sessionId: part.sessionId,
-            turnId: part.turnId,
-            roundId: part.roundId,
             tokenCount: part.tokens.count,
             preview,
+            context: toPartContext(part),
             setupType: setupSummary.setupType,
             summary: setupSummary.summary,
             toolCount: setupSummary.toolCount,
@@ -346,10 +324,8 @@ function toLogicalPart(
           id: part.id,
           kind,
           type: part.partType,
-          sessionId: part.sessionId,
-          turnId: part.turnId,
-          roundId: part.roundId,
           tokenCount: part.tokens.count,
+          context: toPartContext(part),
           content: {
             text: part.payload.text,
             json: part.payload.json,
@@ -384,8 +360,66 @@ function toLookupRound(round: RoundRecord) {
     roundIndex: round.roundIndex,
     status: round.status,
     finishReason: round.finishReason,
-    startedAt: round.startedAt,
-    completedAt: round.completedAt,
     usage: round.usage,
   }
+}
+
+function toPartContext(part: PartRecord) {
+  return {
+    state: part.context.state,
+    note: part.context.note,
+  }
+}
+
+function summarizeTextPreview(text: string | null, maxLength = 140) {
+  if (!text) return null
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (!normalized) return null
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 3)}...`
+}
+
+function buildCurrentSessionContext(parts: PartRecord[]) {
+  return buildContextEntries(
+    parts.filter(part => part.context.state === 'included' || part.context.state === 'round-only'),
+  )
+}
+
+function buildTurnContext(rounds: RoundRecord[], parts: PartRecord[], turns: TurnRecord[]) {
+  const lastRound = rounds.at(-1)
+  if (!lastRound) return []
+  return buildRoundContext(lastRound, parts, turns)
+}
+
+function buildRoundContext(round: RoundRecord, allParts: PartRecord[], allTurns: TurnRecord[]) {
+  const sorted = [...allParts].sort((a, b) => a.ordinal - b.ordinal)
+  const roundParts = sorted.filter(part => part.roundId === round.id)
+  if (roundParts.length === 0) return []
+
+  const maxOrdinal = roundParts.at(-1)?.ordinal ?? 0
+  const turnSeqById = new Map(allTurns.map(turn => [turn.id, turn.sequenceNumber]))
+  const roundTurnSeq = turnSeqById.get(round.turnId) ?? -1
+
+  return buildContextEntries(sorted.filter((part) => {
+    if (part.ordinal > maxOrdinal) return false
+    if (part.context.state === 'included') return true
+    if (part.context.state === 'round-only') return part.roundId === round.id
+    if (part.context.state === 'stripped') {
+      const strippedAt = part.context.strippedByCompactionAtTurnId
+      if (strippedAt === null) return true
+      const strippedAtSeq = turnSeqById.get(strippedAt) ?? -1
+      return roundTurnSeq <= strippedAtSeq
+    }
+    return false
+  }))
+}
+
+function buildContextEntries(parts: PartRecord[]) {
+  return parts.map(part => ({
+    id: part.id,
+    kind: mapPartKind(part.partType),
+    label: part.partType,
+    tokenCount: part.tokens.count,
+    state: part.context.state,
+    preview: part.payload.summary ?? summarizeTextPreview(part.payload.text),
+  }))
 }
