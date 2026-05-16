@@ -2,7 +2,6 @@
   import type {
     ContextEntry,
     PartRecord,
-    RawExchangeRecord,
     RoundRecord,
     TurnRecord,
   } from '../backendTypes'
@@ -10,17 +9,15 @@
   import CompactRoundContent from './CompactRoundContent.svelte'
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import IdBadge from './IdBadge.svelte'
-  import JsonDialog from './JsonDialog.svelte'
+  import MarkdownPreviewDialog from './MarkdownPreviewDialog.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
   import { highlightMarkdown } from '../markdownHighlight'
   import { looksLikeMarkdown } from '../markdownRender'
-  import MarkdownPreviewDialog from './MarkdownPreviewDialog.svelte'
 
   interface Props {
     turn: TurnRecord
     rounds: RoundRecord[]
     parts: PartRecord[]
-    rawExchanges: RawExchangeRecord[]
     roundStreams: StreamingRoundState[]
     /** chat: clean chat view; inspect: full detail with round headers + buttons */
     mode?: 'chat' | 'inspect'
@@ -32,16 +29,12 @@
     turn,
     rounds,
     parts,
-    rawExchanges,
     roundStreams,
     mode = 'chat',
     contextSnapshotsByRound,
     loadedContextLength = null,
   }: Props = $props()
 
-  let showDialog = $state(false)
-  let dialogTitle = $state('')
-  let dialogData = $state<unknown>(null)
   let showMarkdownPreview = $state(false)
   let markdownPreviewSource = $state('')
   /** Chat mode: collapsed = show only answers; expanded = show full round detail */
@@ -58,14 +51,6 @@
     for (const p of sortedParts) {
       if (!p.roundId) continue
       m.set(p.roundId, [...(m.get(p.roundId) ?? []), p])
-    }
-    return m
-  })
-  const rawExchangesByRound = $derived.by(() => {
-    const m = new Map<string, RawExchangeRecord[]>()
-    for (const x of rawExchanges) {
-      if (!x.roundId) continue
-      m.set(x.roundId, [...(m.get(x.roundId) ?? []), x])
     }
     return m
   })
@@ -86,12 +71,6 @@
     if (!text) return null
     const normalized = text.replace(/^(?:[ \t]*\n)+/, '').replace(/(?:\n[ \t]*)+$/, '')
     return normalized.length > 0 ? normalized : null
-  }
-
-  function openDialog(title: string, data: unknown): void {
-    dialogTitle = title
-    dialogData = data
-    showDialog = true
   }
 
   function openMarkdownPreview(text: string): void {
@@ -194,7 +173,6 @@
     <!-- ── Chat (in-progress) OR Inspect (always): all rounds shown ──── -->
     {#each sortedRounds as round (round.id)}
       {@const roundParts = (partsByRound.get(round.id) ?? []).filter((p) => p.id !== userPart?.id)}
-      {@const roundExchanges = rawExchangesByRound.get(round.id) ?? []}
       {@const roundStream = roundStreamsByRound.get(round.id) ?? null}
       {@const roundSnapshot = contextSnapshotsByRound?.get(round.id) ?? null}
       <section class="compact-round">
@@ -212,26 +190,6 @@
             {/if}
             <div class="compact-round-actions">
               <IdBadge id={round.id} />
-              <button class="meta-btn" onclick={() => openDialog(`Round ${round.roundIndex + 1}`, round)}>
-                Round
-              </button>
-              {#if round.requestPayloadJson !== null}
-                <button class="meta-btn" onclick={() => openDialog(`Round ${round.roundIndex + 1} request`, round.requestPayloadJson)}>
-                  Request
-                </button>
-              {/if}
-              {#if round.responseTraceJson !== null}
-                <button class="meta-btn" onclick={() => openDialog(`Round ${round.roundIndex + 1} response`, round.responseTraceJson)}>
-                  Response
-                </button>
-              {/if}
-              <button
-                class="meta-btn"
-                disabled={roundExchanges.length === 0}
-                onclick={() => openDialog(`Round ${round.roundIndex + 1} raw exchanges`, roundExchanges)}
-              >
-                Raw{roundExchanges.length > 0 ? ` (${roundExchanges.length})` : ''}
-              </button>
             </div>
           </div>
         {/if}
@@ -292,27 +250,7 @@
     {/if}
   {/if}
 
-  <!-- Compaction note: inspect mode only -->
-  {#if mode === 'inspect' && turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
-    <div class="compaction-summary">
-      {#if turn.compactionTokensRemoved !== null && turn.compactionTokensRemoved > 0}
-        <span class="compaction-label">↓ {turn.compactionApplied}</span>
-        <span class="compaction-tokens">−{turn.compactionTokensRemoved.toLocaleString()} tokens</span>
-        {#if turn.contextTokensAtTurnEnd !== null && turn.contextTokensAfterCompaction !== null}
-          <span class="compaction-range">{turn.contextTokensAtTurnEnd.toLocaleString()} → {turn.contextTokensAfterCompaction.toLocaleString()}</span>
-        {/if}
-      {:else}
-        <span class="compaction-label">↓ {turn.compactionApplied}</span>
-        <span class="compaction-tokens">no tokens removed</span>
-      {/if}
-    </div>
-  {/if}
-
 </section>
-
-{#if showDialog}
-  <JsonDialog title={dialogTitle} data={dialogData} onClose={() => { showDialog = false }} />
-{/if}
 
 {#if showMarkdownPreview}
   <MarkdownPreviewDialog source={markdownPreviewSource} onClose={() => { showMarkdownPreview = false }} />
@@ -553,18 +491,4 @@
   .compaction-label { color: var(--text-muted); }
   .compaction-tokens { color: var(--color-warning, #b45309); font-variant-numeric: tabular-nums; }
   .compaction-range { color: var(--text-muted); font-variant-numeric: tabular-nums; }
-
-  /* ── Shared button ──────────────────────────────────────────────────── */
-  .meta-btn {
-    background: none;
-    border: 1px solid var(--border-subtle);
-    border-radius: 4px;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 0.72rem;
-    padding: 0.2rem 0.5rem;
-  }
-
-  .meta-btn:hover:enabled { color: var(--text); border-color: var(--border); }
-  .meta-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 </style>
