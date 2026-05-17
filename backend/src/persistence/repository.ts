@@ -481,6 +481,51 @@ export function deleteMcpServerProfile(connection: Database.Database, id: string
   return deleteJsonRecord(connection, 'mcp_server_profiles', id)
 }
 
+export interface SessionCreationDefaults {
+  defaultModelConfigId: string | null
+  defaultMcpProfileId: string | null
+  updatedAt: number
+}
+
+export function getSessionCreationDefaults(connection: Database.Database): SessionCreationDefaults {
+  const row = connection.prepare(`
+    SELECT default_model_config_id, default_mcp_profile_id, updated_at
+    FROM session_creation_defaults
+    WHERE id = 1
+  `).get() as {
+    default_model_config_id: string | null
+    default_mcp_profile_id: string | null
+    updated_at: number
+  } | undefined
+
+  if (!row) {
+    return { defaultModelConfigId: null, defaultMcpProfileId: null, updatedAt: 0 }
+  }
+
+  return {
+    defaultModelConfigId: row.default_model_config_id,
+    defaultMcpProfileId: row.default_mcp_profile_id,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function upsertSessionCreationDefaults(
+  connection: Database.Database,
+  defaults: SessionCreationDefaults,
+): void {
+  connection.prepare(`
+    UPDATE session_creation_defaults
+    SET default_model_config_id = @defaultModelConfigId,
+        default_mcp_profile_id  = @defaultMcpProfileId,
+        updated_at              = @updatedAt
+    WHERE id = 1
+  `).run({
+    defaultModelConfigId: defaults.defaultModelConfigId,
+    defaultMcpProfileId: defaults.defaultMcpProfileId,
+    updatedAt: defaults.updatedAt,
+  })
+}
+
 export function insertTurnRecord(connection: Database.Database, turn: TurnRecord): void {
   connection.prepare(`
     INSERT INTO turns (

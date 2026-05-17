@@ -15,7 +15,7 @@ import {
   turnStatusValues,
 } from '../domain/model.js'
 
-const SQLITE_SCHEMA_VERSION = 4
+const SQLITE_SCHEMA_VERSION = 5
 
 function sqlEnum(values: readonly string[]): string {
   return values.map(value => `'${value}'`).join(', ')
@@ -170,6 +170,16 @@ export function initializeBackendSchema(connection: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_parts_round_id ON parts(round_id);
     CREATE INDEX IF NOT EXISTS idx_raw_exchanges_session_id ON raw_exchanges(session_id);
     CREATE INDEX IF NOT EXISTS idx_raw_exchanges_round_id ON raw_exchanges(round_id);
+
+    CREATE TABLE IF NOT EXISTS session_creation_defaults (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      default_model_config_id TEXT,
+      default_mcp_profile_id TEXT,
+      updated_at INTEGER NOT NULL
+    );
+
+    INSERT OR IGNORE INTO session_creation_defaults (id, default_model_config_id, default_mcp_profile_id, updated_at)
+    VALUES (1, NULL, NULL, 0);
   `)
 
   const upsertMeta = connection.prepare(`

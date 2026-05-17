@@ -9,6 +9,7 @@ import {
   preludeStreamEventSchema,
   turnStreamEventSchema,
   sessionTraceBundleSchema,
+  sessionCreationDefaultsResponseSchema,
   upsertLmConnectionResponseSchema,
   upsertMcpProfileResponseSchema,
   upsertModelConfigResponseSchema,
@@ -18,6 +19,7 @@ import {
   type ModelConfig,
   type ModelProfileSnapshot,
   type PreludeStreamEvent,
+  type SessionCreationDefaults,
   type SessionTraceBundle,
   type HierarchicalLookupResponse,
   type TurnStreamEvent,
@@ -442,5 +444,22 @@ export function preflightSession(input: {
     method: 'POST',
     body: input,
     schema: preflightResponseSchema,
+  })
+}
+
+export function getSessionCreationDefaults() {
+  return request('/api/session-creation-defaults', {
+    schema: sessionCreationDefaultsResponseSchema,
+  })
+}
+
+export function putSessionCreationDefaults(input: {
+  defaultModelConfigId: string | null
+  defaultMcpProfileId: string | null
+}): Promise<{ sessionCreationDefaults: SessionCreationDefaults }> {
+  return request('/api/session-creation-defaults', {
+    method: 'PUT',
+    body: input,
+    schema: sessionCreationDefaultsResponseSchema,
   })
 }

@@ -1,13 +1,15 @@
-import { writable } from 'svelte/store'
-import type { LmStudioConnection, ModelConfig, McpServerProfile } from './types'
+import { get, writable } from 'svelte/store'
+import type { LmStudioConnection, ModelConfig, McpServerProfile, SessionCreationDefaults } from './types'
 import {
   deleteLmConnection,
   deleteMcpProfile,
   deleteModelConfig,
   fetchHealth,
+  getSessionCreationDefaults,
   listLmConnections,
   listMcpProfiles,
   listModelConfigs,
+  putSessionCreationDefaults,
   upsertLmConnection,
   upsertMcpProfile as upsertBackendMcpProfile,
   upsertModelConfig as upsertBackendModelConfig,
@@ -72,6 +74,46 @@ export async function removeMcpProfile(id: string): Promise<void> {
   mcpProfiles.update(list => list.filter(x => x.id !== id))
 }
 
+// Session creation defaults
+export const sessionCreationDefaults = writable<SessionCreationDefaults | null>(null)
+
+export async function fetchSessionCreationDefaults(): Promise<void> {
+  const { sessionCreationDefaults: defaults } = await getSessionCreationDefaults()
+  sessionCreationDefaults.set(defaults)
+}
+
+export async function updateSessionCreationDefaults(input: {
+  defaultModelConfigId: string | null
+  defaultMcpProfileId: string | null
+}): Promise<void> {
+  const { sessionCreationDefaults: updated } = await putSessionCreationDefaults(input)
+  sessionCreationDefaults.set(updated)
+}
+
+export async function setDefaultModelConfig(defaultModelConfigId: string | null): Promise<void> {
+  const current = getStoreDefaults()
+  await updateSessionCreationDefaults({
+    defaultModelConfigId,
+    defaultMcpProfileId: current.defaultMcpProfileId,
+  })
+}
+
+export async function setDefaultMcpProfile(defaultMcpProfileId: string | null): Promise<void> {
+  const current = getStoreDefaults()
+  await updateSessionCreationDefaults({
+    defaultModelConfigId: current.defaultModelConfigId,
+    defaultMcpProfileId,
+  })
+}
+
+function getStoreDefaults(): SessionCreationDefaults {
+  return get(sessionCreationDefaults) ?? {
+    defaultModelConfigId: null,
+    defaultMcpProfileId: null,
+    updatedAt: 0,
+  }
+}
+
 export async function initConnectionStore(): Promise<void> {
   try {
     const [health, connectionsResponse, modelConfigsResponse, mcpProfilesResponse] = await Promise.all([
@@ -86,5 +128,15 @@ export async function initConnectionStore(): Promise<void> {
     mcpProfiles.set(sortByUpdatedAtDesc(mcpProfilesResponse.mcpProfiles))
   } catch (e) {
     backendError.set(e instanceof Error ? e.message : String(e))
+    return
+  }
+
+  // Fetch defaults separately so a failure here doesn't break the main store init
+  try {
+    const defaultsResponse = await getSessionCreationDefaults()
+    sessionCreationDefaults.set(defaultsResponse.sessionCreationDefaults)
+  } catch {
+    // Defaults endpoint may not be available yet (e.g. backend not restarted after upgrade)
+    sessionCreationDefaults.set(null)
   }
 }

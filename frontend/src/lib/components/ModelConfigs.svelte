@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { modelConfigs, lmConnections, upsertModelConfig, removeModelConfig } from '../connectionStore'
+  import { modelConfigs, lmConnections, upsertModelConfig, removeModelConfig, sessionCreationDefaults, setDefaultModelConfig } from '../connectionStore'
   import { listModels, loadModel, unloadModel } from '../services/lmstudio'
   import type { LmStudioModel } from '../services/lmstudio'
   import type { ModelConfig } from '../types'
@@ -130,6 +130,15 @@
     }
   }
 
+  async function handleSetDefault(id: string) {
+    try {
+      await setDefaultModelConfig(id)
+      saveError = null
+    } catch (e) {
+      saveError = toAppError(e)
+    }
+  }
+
   function connectionName(connectionId: string): string {
     return $lmConnections.find(c => c.id === connectionId)?.name ?? connectionId
   }
@@ -168,10 +177,16 @@
       {@const live = liveModel(config)}
       {@const busy = cardBusy.get(config.id)}
       {@const err = cardError.get(config.id)}
-      <div class="profile-card">
+      {@const isDefault = $sessionCreationDefaults?.defaultModelConfigId === config.id}
+      <div class="profile-card" class:is-default={isDefault}>
         <div class="card-header">
           <div class="card-title-group">
-            <span class="card-name">{config.name}</span>
+            <div class="card-name-row">
+              <span class="card-name">{config.name}</span>
+              {#if isDefault}
+                <span class="default-badge">Default for new sessions</span>
+              {/if}
+            </div>
             <span class="card-model">{config.modelDisplayName}</span>
           </div>
           <div class="card-actions">
@@ -187,6 +202,9 @@
               </button>
             {/if}
             <button class="btn btn-sm" onclick={() => openDetails(config)}>Details</button>
+            {#if !isDefault}
+              <button class="btn btn-sm btn-accent" onclick={() => handleSetDefault(config.id)}>Set as default</button>
+            {/if}
             <button class="btn btn-sm" onclick={() => startEdit(config.id)}>Edit</button>
             <button class="btn btn-sm btn-danger" onclick={() => handleDelete(config.id)}>Delete</button>
           </div>
@@ -252,6 +270,9 @@
     padding: 1rem 1.25rem;
     margin-bottom: 1rem;
   }
+  .profile-card.is-default {
+    border-color: var(--color-accent);
+  }
   .card-header {
     display: flex;
     align-items: flex-start;
@@ -265,8 +286,25 @@
     gap: 0.2rem;
     min-width: 0;
   }
+  .card-name-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
   .card-name { font-weight: 600; font-size: 0.95rem; color: var(--text); }
   .card-model { font-size: 0.8rem; color: var(--text-muted); }
+  .default-badge {
+    display: inline-block;
+    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+    color: var(--color-accent);
+    border-radius: 3px;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
   .card-actions { display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
   .badge-loaded { font-size: 0.75rem; color: #4ade80; font-weight: 500; }
   .badge-unloaded { font-size: 0.75rem; color: var(--text-muted); }
@@ -290,6 +328,14 @@
     padding: 0 0.3rem;
     font-size: 0.78rem;
     color: var(--text-muted);
+  }
+  .btn-accent {
+    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+    color: var(--color-accent);
+  }
+  .btn-accent:hover {
+    background: color-mix(in srgb, var(--color-accent) 25%, transparent);
   }
   code { font-family: var(--mono); font-size: 0.8rem; }
 </style>

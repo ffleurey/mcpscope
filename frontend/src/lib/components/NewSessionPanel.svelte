@@ -1,17 +1,44 @@
 <script lang="ts">
   import { highlightJson } from '../jsonHighlight'
-  import { lmConnections, modelConfigs, mcpProfiles } from '../connectionStore'
+  import { lmConnections, modelConfigs, mcpProfiles, sessionCreationDefaults } from '../connectionStore'
   import { sessionError, sessionErrorSurface, isStartingSession, startSession } from '../sessionStore'
 
   let selectedConfigId = $state('')
   let selectedMcpProfileId = $state('')
   let compactionStrategy = $state<'strip-reasoning' | 'none'>('strip-reasoning')
   let sessionId = $state('')
+  let hasInitializedModelSelection = $state(false)
+  let hasInitializedMcpSelection = $state(false)
 
-  // Auto-select the first model config when available
   $effect(() => {
-    if (!$modelConfigs.some(c => c.id === selectedConfigId)) {
-      selectedConfigId = $modelConfigs[0]?.id ?? ''
+    const defaultId = $sessionCreationDefaults?.defaultModelConfigId ?? null
+    const hasDefault = defaultId != null && $modelConfigs.some(c => c.id === defaultId)
+    const currentIsValid = $modelConfigs.some(c => c.id === selectedConfigId)
+
+    if (!hasInitializedModelSelection) {
+      selectedConfigId = hasDefault ? defaultId : ($modelConfigs[0]?.id ?? '')
+      hasInitializedModelSelection = true
+      return
+    }
+
+    if (!currentIsValid) {
+      selectedConfigId = hasDefault ? defaultId : ($modelConfigs[0]?.id ?? '')
+    }
+  })
+
+  $effect(() => {
+    const defaultId = $sessionCreationDefaults?.defaultMcpProfileId ?? null
+    const hasDefault = defaultId != null && $mcpProfiles.some(p => p.id === defaultId)
+    const currentIsValid = selectedMcpProfileId === '' || $mcpProfiles.some(p => p.id === selectedMcpProfileId)
+
+    if (!hasInitializedMcpSelection) {
+      selectedMcpProfileId = hasDefault ? defaultId : ''
+      hasInitializedMcpSelection = true
+      return
+    }
+
+    if (!currentIsValid) {
+      selectedMcpProfileId = hasDefault ? defaultId : ''
     }
   })
 
@@ -70,7 +97,7 @@
       {:else}
         <select id="model-select" class="field-select" bind:value={selectedConfigId} disabled={$isStartingSession}>
           {#each $modelConfigs as c (c.id)}
-            <option value={c.id}>{c.name}</option>
+            <option value={c.id}>{c.name}{$sessionCreationDefaults?.defaultModelConfigId === c.id ? ' (default)' : ''}</option>
           {/each}
         </select>
       {/if}
@@ -81,7 +108,7 @@
       <select id="mcp-select" class="field-select" bind:value={selectedMcpProfileId} disabled={$isStartingSession}>
         <option value="">None</option>
         {#each $mcpProfiles as p (p.id)}
-          <option value={p.id}>{p.name}</option>
+          <option value={p.id}>{p.name}{$sessionCreationDefaults?.defaultMcpProfileId === p.id ? ' (default)' : ''}</option>
         {/each}
       </select>
     </div>
