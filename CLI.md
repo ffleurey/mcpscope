@@ -1,112 +1,39 @@
 # mcpscope CLI
 
-The `mcpscope` CLI is an in-repo tool for reading and inspecting sessions from the backend. It talks exclusively to the backend API — it never reads SQLite directly.
+In-repo tool for reading and inspecting sessions. Talks to the backend API only.
 
 ## Connection
 
-```bash
-mcpscope --url http://host:3030 <command>   # explicit URL
-MCPSCOPE_URL=http://host:3030 mcpscope <command>  # env var
-mcpscope <command>                          # default: http://localhost:3030
+```
+mcpscope --url http://host:3030 <command>    # explicit
+MCPSCOPE_URL=http://host:3030 mcpscope …    # env var
+mcpscope …                                  # default: http://localhost:3030
 ```
 
-Priority: `--url` flag > `MCPSCOPE_URL` env var > default.
+## Commands
 
-## Output flags (apply to all commands)
+### `mcpscope sessions list [--json]`
 
-| Flag     | Effect                                    |
-|----------|-------------------------------------------|
-| `--json` | Emit clean JSON to stdout instead of text |
-| `--short`| Return summary only (no part content)     |
+Lists all sessions. Text output is a columnar table (ID, title, status, model, updated).  
+`--json` → `{ api_version: 1, sessions: [...] }`.
 
-Default: text output, full content.
+### `mcpscope inspect <id> [--short] [--json]`
 
-Color: ANSI highlighting is applied when stdout is a TTY. Suppressed by `NO_COLOR` env var; forced by `FORCE_COLOR`.
+Inspects any object by hierarchical ID. Calls `GET /api/lookup/:id`.
 
----
+| ID format       | Type    | Example        |
+|-----------------|---------|----------------|
+| `SSS`           | session | `QGWA`         |
+| `SSS.S`         | setup   | `QGWA.S`       |
+| `SSS.N`         | turn    | `QGWA.1`       |
+| `SSS.N.N`       | round   | `QGWA.1.2`     |
+| `SSS.N.N.N-X`  | part    | `QGWA.1.2.3-U` |
 
-## `mcpscope sessions list`
+`--short` omits part content (token counts only). Parts always return full content regardless of `--short`.
 
-List all sessions from the backend.
+`tool_definitions` parts always show tool names; inspect the part ID directly for full schemas.
 
-```bash
-mcpscope sessions list [--json] [--url <url>]
-```
-
-**Default (text):** columnar table — ID, title, status, model, last updated.
-
-**`--json`:** `{ api_version: 1, sessions: [...] }` — full session summary objects from `GET /api/sessions`.
-
----
-
-## `mcpscope inspect <id>`
-
-Inspect any object by its hierarchical ID.
-
-```bash
-mcpscope inspect <id> [--short] [--json] [--url <url>]
-```
-
-Accepts: session ID, setup ID, turn ID, round ID, or part ID.  
-Calls: `GET /api/lookup/:id?mode=summary|full` (`--short` maps to `summary`).
-
-### ID formats (from DATA-MODEL.md)
-
-| Type    | Format            | Example        |
-|---------|-------------------|----------------|
-| session | `SSS`             | `QGWA`         |
-| setup   | `SSS.S`           | `QGWA.S`       |
-| turn    | `SSS.N`           | `QGWA.1`       |
-| round   | `SSS.N.N`         | `QGWA.1.2`     |
-| part    | `SSS.N.N.N-X`     | `QGWA.1.2.3-T` |
-
-### What each type returns
-
-#### Session
-
-**Default (full):**
-- session metadata: id, title, model, MCP profile, context window usage, compaction strategy
-- setup parts with token counts; `tool_definitions` part shows tool names (not full schemas)
-- all turns flattened to their parts, with full text content for `user_prompt` and `assistant_answer`
-
-**`--short`:**
-- same metadata
-- setup parts with token counts only (no content)
-- turn parts with token counts only (no content)
-
-#### Setup (`SSS.S`)
-
-**Default (full):**
-- all setup parts with token counts and full text content
-- `tool_definitions`: tool names only (use direct part lookup for full schemas)
-
-**`--short`:**
-- setup parts with token counts only
-
-#### Turn (`SSS.N`)
-
-**Default (full):**
-- all parts across all rounds, with full text content for `user_prompt` and `assistant_answer`
-
-**`--short`:**
-- all parts across all rounds, token counts only
-
-#### Round (`SSS.N.N`)
-
-**Default (full):**
-- all parts in the round with full content and tool call/result payloads
-
-**`--short`:**
-- all parts in the round, token counts only
-
-#### Part (`SSS.N.N.N-X`)
-
-Always returns full content regardless of `--short`.  
-`tool_definitions` parts return the complete tool schema array.
-
-### Text output format
-
-Parts are rendered one per line, ID-first:
+**Text output** — parts rendered ID-first, turns separated by blank lines:
 
 ```
 QGWA.S.1-SP  system_prompt  (167 tokens)
@@ -121,33 +48,25 @@ QGWA.1.1.2-A  assistant_answer  (112 tokens)
   The current outdoor temperature is 14°C.
 
 QGWA.1.1.3-T  tool_call  ha_history_list_entities  (824 tokens)
-QGWA.1.1.4-T  tool_call  ha_history_get  (310 tokens)
 ```
 
-Token counts are dimmed when the terminal supports color.  
-`user_prompt` and `assistant_answer` content is bold.  
-Stripped context parts are annotated: `(N tokens - stripped)`.  
-Turns are separated by blank lines.
+Token counts are dimmed on TTY. `user_prompt` / `assistant_answer` content is bold.  
+Stripped parts: `(N tokens - stripped)`.
 
-### JSON output
+**JSON output** passes through the raw lookup response: `{ id, type, mode, data }`.
 
-Passes through the raw `GET /api/lookup/:id` response:
+## Flags
 
-```json
-{
-  "id": "QGWA",
-  "type": "session",
-  "mode": "full",
-  "data": { ... }
-}
-```
-
----
+| Flag          | Applies to  | Effect                              |
+|---------------|-------------|-------------------------------------|
+| `--json`      | all         | emit JSON instead of text           |
+| `--short`     | `inspect`   | token counts only, no content       |
+| `--url <url>` | all         | backend URL (overrides MCPSCOPE_URL)|
 
 ## Exit codes
 
-| Code | Meaning           |
-|------|-------------------|
-| 0    | success           |
-| 1    | runtime error     |
-| 2    | usage / bad args  |
+| Code | Meaning          |
+|------|------------------|
+| 0    | success          |
+| 1    | runtime error    |
+| 2    | usage / bad args |

@@ -28,11 +28,11 @@ For the canonical runtime model and lookup vocabulary, use [DATA-MODEL.md](DATA-
 The next active implementation track is the in-repo CLI.
 
 - keep the CLI backend-driven and aligned with the same session model and canonical IDs as the UI
-- v1 is now complete: CLI skeleton + `mcpscope sessions list`
-- current focus is v2: one universal `mcpscope inspect <id>` command, built on `GET /api/lookup/:id`, with `--json` for JSON output and `--short` for summary mode
+- v1 complete: `mcpscope sessions list`
+- v2 complete: `mcpscope inspect <id>` — universal lookup by hierarchical ID, `--json`, `--short`
 - CLI command reference: [CLI.md](CLI.md)
-- add session creation only after the CLI skeleton and read-only inspection flow are in place
-- defer true async turn lifecycle work until the backend contract for start/status/follow is specified
+- next: session creation, once read-only inspection is validated in use
+- defer async turn lifecycle work until the backend contract for start/status/follow is specified
 
 The active task description and rollout plan live in [backlog/cli-for-llm-in-the-loop-test.md](backlog/cli-for-llm-in-the-loop-test.md).
 
