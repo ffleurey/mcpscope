@@ -26,19 +26,11 @@ export const yellow  = (t: string): string => ansi('33', '39', t)
 export const magenta = (t: string): string => ansi('35', '39', t)
 export const gray    = (t: string): string => ansi('90', '39', t)
 
-// Part type → color
-const PART_TYPE_COLOR: Record<string, (t: string) => string> = {
-  user_prompt:       cyan,
-  assistant_answer:  green,
-  tool_call:         yellow,
-  reasoning:         magenta,
-  system_prompt:     gray,
-  mcp_instructions:  gray,
-  tool_definitions:  gray,
-}
+// Part type: only the conversational parts get emphasis; everything else is plain
+const BOLD_PART_TYPES = new Set(['user_prompt', 'assistant_answer'])
 
 export function colorPartType(type: string): string {
-  return (PART_TYPE_COLOR[type] ?? ((t: string) => t))(type)
+  return BOLD_PART_TYPES.has(type) ? bold(type) : type
 }
 
 // Token annotation: dim for included, yellow for non-included states
