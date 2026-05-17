@@ -62,27 +62,16 @@ function renderPart(part: AnyRecord, indent: string): void {
   renderPartContent(part, indent + '  ')
 }
 
-// ─── Round ────────────────────────────────────────────────────────────────────
+// ─── Flatten helpers ──────────────────────────────────────────────────────────
 
-function renderRound(round: AnyRecord, indent: string): void {
-  const id = String(round['id'] ?? '')
-  const status = round['status'] ? `  ${round['status']}` : ''
-  out(`${indent}${id}${status}`)
-  const parts = round['parts'] as AnyRecord[] | undefined
-  if (parts) {
-    for (const part of parts) renderPart(part, indent + '  ')
-  }
-}
-
-// ─── Turn ─────────────────────────────────────────────────────────────────────
-
-function renderTurn(turn: AnyRecord, indent: string): void {
-  const id = String(turn['id'] ?? '')
-  const status = turn['status'] ? `  ${turn['status']}` : ''
-  out(`${indent}${id}${status}`)
+function renderTurnParts(turn: AnyRecord): void {
   const rounds = turn['rounds'] as AnyRecord[] | undefined
-  if (rounds) {
-    for (const round of rounds) renderRound(round, indent + '  ')
+  if (!rounds) return
+  for (const round of rounds) {
+    const parts = round['parts'] as AnyRecord[] | undefined
+    if (parts) {
+      for (const part of parts) renderPart(part, '')
+    }
   }
 }
 
@@ -105,10 +94,9 @@ function renderSessionText(data: AnyRecord): void {
   const setup = data['setup'] as AnyRecord | undefined
   if (setup) {
     out('')
-    out(String(setup['id'] ?? ''))
     const parts = setup['parts'] as AnyRecord[] | undefined
     if (parts) {
-      for (const part of parts) renderPart(part, '  ')
+      for (const part of parts) renderPart(part, '')
     }
   }
 
@@ -116,24 +104,26 @@ function renderSessionText(data: AnyRecord): void {
   if (turns && turns.length > 0) {
     for (const turn of turns) {
       out('')
-      renderTurn(turn, '')
+      renderTurnParts(turn)
     }
   }
 }
 
 function renderTurnText(data: AnyRecord): void {
-  renderTurn(data, '')
+  renderTurnParts(data)
 }
 
 function renderRoundText(data: AnyRecord): void {
-  renderRound(data, '')
+  const parts = data['parts'] as AnyRecord[] | undefined
+  if (parts) {
+    for (const part of parts) renderPart(part, '')
+  }
 }
 
 function renderSetupText(data: AnyRecord): void {
-  out(String(data['id'] ?? ''))
   const parts = data['parts'] as AnyRecord[] | undefined
   if (parts) {
-    for (const part of parts) renderPart(part, '  ')
+    for (const part of parts) renderPart(part, '')
   }
 }
 
