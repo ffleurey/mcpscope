@@ -4,8 +4,8 @@ import { bold, colorTokens } from '../colors.js'
 export interface InspectOptions {
   url: string
   id: string
-  format: 'text' | 'json'
-  mode: 'summary' | 'full'
+  json: boolean
+  short: boolean
 }
 
 function out(line: string): void {
@@ -15,8 +15,6 @@ function out(line: string): void {
 type AnyRecord = Record<string, unknown>
 
 // ─── Part ─────────────────────────────────────────────────────────────────────
-
-const HIGHLIGHTED_CONTENT_TYPES = new Set(['user_prompt', 'assistant_answer'])
 
 function renderPartLine(part: AnyRecord, indent: string): void {
   const id = String(part['id'] ?? '')
@@ -33,6 +31,8 @@ function renderTextBlock(text: string, indent: string, highlight = false): void 
   }
 }
 
+const HIGHLIGHTED_CONTENT_TYPES = new Set(['user_prompt', 'assistant_answer'])
+
 function renderPartContent(part: AnyRecord, indent: string): void {
   const type = String(part['type'] ?? '')
   const highlight = HIGHLIGHTED_CONTENT_TYPES.has(type)
@@ -43,6 +43,12 @@ function renderPartContent(part: AnyRecord, indent: string): void {
     } else if (Array.isArray(content['json'])) {
       renderTextBlock(JSON.stringify(content['json'], null, 2), indent)
     }
+  }
+
+  // tool_definitions: render tool names as comma-separated list
+  const tools = part['tools'] as string[] | undefined
+  if (tools && tools.length > 0) {
+    out(`${indent}${tools.join(', ')}`)
   }
 
   const toolPayload = part['tool_payload'] as AnyRecord | undefined
@@ -139,9 +145,10 @@ function renderPartText(data: AnyRecord): void {
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 export async function runInspect(opts: InspectOptions): Promise<void> {
-  const result = await lookupById(opts.url, opts.id, opts.mode)
+  const mode = opts.short ? 'summary' : 'full'
+  const result = await lookupById(opts.url, opts.id, mode)
 
-  if (opts.format === 'json') {
+  if (opts.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n')
     return
   }
@@ -166,7 +173,6 @@ export async function runInspect(opts: InspectOptions): Promise<void> {
       renderPartText(d)
       break
     default:
-      // Unknown type: fall back to compact JSON
       process.stdout.write(JSON.stringify(result, null, 2) + '\n')
   }
   out('')
@@ -178,16 +184,16 @@ export function printInspectHelp(): void {
 Inspect a session, turn, round, or part by its hierarchical ID.
 
 Arguments:
-  <id>               Hierarchical ID (e.g. QGWA, QGWA.1, QGWA.1.1, QGWA.1.1.2-T)
+  <id>           Hierarchical ID (e.g. QGWA, QGWA.1, QGWA.1.1, QGWA.1.1.2-T)
 
 Options:
-  --format <fmt>     Output format: text (default) or json
-  --mode <mode>      Detail level: summary (default) or full
-  --url <url>        Backend URL (overrides MCPSCOPE_URL env var)
-  -h, --help         Show this help
+  --short        Return summary only (no content); default returns full content
+  --json         Output as JSON instead of text
+  --url <url>    Backend URL (overrides MCPSCOPE_URL env var)
+  -h, --help     Show this help
 
 Environment:
-  MCPSCOPE_URL       Backend URL (default: http://localhost:3030)
+  MCPSCOPE_URL   Backend URL (default: http://localhost:3030)
 `)
 }
 
@@ -195,8 +201,8 @@ export function parseInspectArgs(
   args: string[],
 ): { opts: InspectOptions } | { help: true } | { error: string } {
   let url: string | undefined
-  let format: 'text' | 'json' = 'text'
-  let mode: 'summary' | 'full' = 'summary'
+  let json = false
+  let short = false
   let id: string | undefined
 
   for (let i = 0; i < args.length; i++) {
@@ -205,14 +211,10 @@ export function parseInspectArgs(
     if (arg === '--url') {
       url = args[++i]
       if (!url) return { error: '--url requires a value' }
-    } else if (arg === '--format') {
-      const fmt = args[++i]
-      if (fmt !== 'text' && fmt !== 'json') return { error: `--format must be "text" or "json"` }
-      format = fmt
-    } else if (arg === '--mode') {
-      const m = args[++i]
-      if (m !== 'summary' && m !== 'full') return { error: `--mode must be "summary" or "full"` }
-      mode = m
+    } else if (arg === '--json') {
+      json = true
+    } else if (arg === '--short') {
+      short = true
     } else if (!arg.startsWith('-')) {
       if (id !== undefined) return { error: 'Too many arguments: only one ID is allowed' }
       id = arg
@@ -223,5 +225,5 @@ export function parseInspectArgs(
 
   if (!id) return { error: 'Missing required argument: <id>' }
 
-  return { opts: { url: url ?? '', format, mode, id } }
+  return { opts: { url: url ?? '', json, short, id } }
 }

@@ -2,7 +2,7 @@ import { listSessions } from '../../apiClient.js'
 
 export interface SessionsListOptions {
   url: string
-  format: 'text' | 'json'
+  json: boolean
 }
 
 function formatDate(epochMs: number): string {
@@ -17,7 +17,7 @@ export async function runSessionsList(opts: SessionsListOptions): Promise<void> 
   const result = await listSessions(opts.url)
   const sessions = result.sessions
 
-  if (opts.format === 'json') {
+  if (opts.json) {
     process.stdout.write(
       JSON.stringify({ api_version: 1, sessions }, null, 2) + '\n',
     )
@@ -52,12 +52,12 @@ export function printSessionsListHelp(): void {
 List all sessions from the backend.
 
 Options:
-  --url <url>        Backend URL (overrides MCPSCOPE_URL env var)
-  --format <fmt>     Output format: text (default) or json
-  -h, --help         Show this help
+  --url <url>    Backend URL (overrides MCPSCOPE_URL env var)
+  --json         Output as JSON instead of text
+  -h, --help     Show this help
 
 Environment:
-  MCPSCOPE_URL       Backend URL (default: http://localhost:3030)
+  MCPSCOPE_URL   Backend URL (default: http://localhost:3030)
 `)
 }
 
@@ -65,7 +65,7 @@ export function parseSessionsListArgs(
   args: string[],
 ): { opts: SessionsListOptions } | { help: true } | { error: string } {
   let url: string | undefined
-  let format: 'text' | 'json' = 'text'
+  let json = false
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i] ?? ''
@@ -73,14 +73,12 @@ export function parseSessionsListArgs(
     if (arg === '--url') {
       url = args[++i]
       if (!url) return { error: '--url requires a value' }
-    } else if (arg === '--format') {
-      const fmt = args[++i]
-      if (fmt !== 'text' && fmt !== 'json') return { error: `--format must be "text" or "json"` }
-      format = fmt
+    } else if (arg === '--json') {
+      json = true
     } else {
       return { error: `Unknown option: ${arg}` }
     }
   }
 
-  return { opts: { url: url ?? '', format } }
+  return { opts: { url: url ?? '', json } }
 }

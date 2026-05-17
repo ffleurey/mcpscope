@@ -637,6 +637,28 @@ describe('backend foundation', () => {
         ]),
       },
     })
+    // tool_definitions in setup direct lookup must expose tool names, not full content
+    const setupNodeParts: { type: string; tools?: string[]; content?: unknown }[] = setupNodeFull.json().data.parts
+    const toolDefInSetup = setupNodeParts.find(p => p.type === 'tool_definitions')
+    if (toolDefInSetup) {
+      expect(Array.isArray(toolDefInSetup.tools)).toBe(true)
+      expect(toolDefInSetup.content).toBeUndefined()
+    }
+
+    // tool_definitions part lookup directly must return full content (json)
+    const toolDefPartId = parts.find((part) => part.turnId === null && part.partType === 'tool-definitions')?.id
+    if (toolDefPartId) {
+      const toolDefPartFull = await app.inject({ method: 'GET', url: `/api/lookup/${toolDefPartId}?mode=full` })
+      expect(toolDefPartFull.statusCode).toBe(200)
+      expect(toolDefPartFull.json()).toMatchObject({
+        type: 'part',
+        mode: 'full',
+        data: expect.objectContaining({
+          type: 'tool_definitions',
+          content: expect.objectContaining({ json: expect.any(Array) }),
+        }),
+      })
+    }
 
     const setupPartSummary = await app.inject({ method: 'GET', url: `/api/lookup/${setupPartId}?mode=summary` })
     expect(setupPartSummary.statusCode).toBe(200)

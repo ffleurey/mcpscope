@@ -78,11 +78,13 @@ function buildPartNode(
   resultParts: PartRecord[],
   mode: LookupMode,
   isDirectPartLookup: boolean,
+  isPartLevelLookup: boolean = false,
 ): object | null {
   const publicType = canonicalPartType(part.partType)
   if (!publicType) return null
 
   const isToolCall = part.partType === 'tool-call'
+  const isToolDefinitions = part.partType === 'tool-definitions'
   const tokenCount = isToolCall ? mergedToolCallTokens(part, resultParts) : (part.tokens.count ?? null)
   const contextState = canonicalContextState(part.context.state)
 
@@ -95,6 +97,19 @@ function buildPartNode(
 
   if (isToolCall) {
     base.tool_name = extractToolName(part)
+  }
+
+  // tool_definitions: full content only on direct part-level lookup; tool names in all other contexts
+  if (isToolDefinitions) {
+    if (isPartLevelLookup && part.payload.json != null) {
+      base.content = { json: part.payload.json }
+    } else {
+      const toolsJson = part.payload.json as Array<{ name: string }> | null
+      if (toolsJson) {
+        base.tools = toolsJson.map(t => t.name)
+      }
+    }
+    return base
   }
 
   if (mode === 'full') {
@@ -113,8 +128,6 @@ function buildPartNode(
         || part.partType === 'assistant-content'
       if (includeContent && part.payload.text != null) {
         base.content = { text: part.payload.text }
-      } else if (isDirectPartLookup && part.partType === 'tool-definitions' && part.payload.json != null) {
-        base.content = { json: part.payload.json }
       }
     }
   }
@@ -325,7 +338,7 @@ export function resolveHierarchicalId(
     ? (toolResultsByParent.get(effectivePart.id) ?? [])
     : []
 
-  const node = buildPartNode(effectivePart, resultParts, 'full', true)
+  const node = buildPartNode(effectivePart, resultParts, 'full', true, true)
   if (!node) return { status: 'not_found', message: `Part not found: ${parsed.raw}` }
 
   return { status: 'ok', payload: { id: effectivePart.id, type: 'part', mode: 'full', data: node } }
