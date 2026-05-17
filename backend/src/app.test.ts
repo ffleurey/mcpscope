@@ -385,24 +385,23 @@ describe('backend foundation', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config)
-    let importedSessionId = 'pending-import'
     const baselineTrace = JSON.parse(
       fs.readFileSync(
         'exports/test-with-multiple-turns-and-tools.trace.json',
         'utf8',
       ),
     ) as SessionTraceBundle
-      const importResponse = await app.inject({
-        method: 'POST',
-        url: '/api/traces/import',
-        payload: baselineTrace,
-      })
-      expect(importResponse.statusCode).toBe(201)
-      importedSessionId = importResponse.json().session.id as string
-      const traceResponse = await app.inject({
-        method: 'GET',
-        url: `/api/sessions/${importedSessionId}/trace`,
-      })
+    const importResponse = await app.inject({
+      method: 'POST',
+      url: '/api/traces/import',
+      payload: baselineTrace,
+    })
+    expect(importResponse.statusCode).toBe(201)
+    const importedSessionId = importResponse.json().session.id as string
+    const traceResponse = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${importedSessionId}/trace`,
+    })
       expect(traceResponse.statusCode).toBe(200)
       const traceBody = traceResponse.json()
       const turns = [...traceBody.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
@@ -1224,32 +1223,21 @@ describe('backend foundation', () => {
       'assistant-content',
     ])
 
-    const transcriptResponse = await app.inject({
-      method: 'GET',
-      url: `/api/sessions/${createdSessionId}/transcript`,
-    })
-    expect(transcriptResponse.statusCode).toBe(200)
-    expect(transcriptResponse.json().transcript).toHaveLength(3)
-
-    const contextResponse = await app.inject({
-      method: 'GET',
-      url: `/api/sessions/${createdSessionId}/context`,
-    })
-    expect(contextResponse.statusCode).toBe(200)
-    expect(contextResponse.json().context.map((entry: { type: string }) => entry.type)).toEqual([
-      'system-prompt',
-      'user-message',
-      'assistant-content',
-    ])
-
     const traceResponse = await app.inject({
       method: 'GET',
       url: `/api/sessions/${createdSessionId}/trace`,
     })
     expect(traceResponse.statusCode).toBe(200)
-    expect(traceResponse.json().turns).toHaveLength(1)
-    expect(traceResponse.json().rounds).toHaveLength(1)
-    expect(traceResponse.json().rawExchanges.map((exchange: { kind: string }) => exchange.kind)).toEqual(
+    const traceBody = traceResponse.json()
+    expect(traceBody.transcript).toHaveLength(3)
+    expect(traceBody.context.map((entry: { type: string }) => entry.type)).toEqual([
+      'system-prompt',
+      'user-message',
+      'assistant-content',
+    ])
+    expect(traceBody.turns).toHaveLength(1)
+    expect(traceBody.rounds).toHaveLength(1)
+    expect(traceBody.rawExchanges.map((exchange: { kind: string }) => exchange.kind)).toEqual(
       expect.arrayContaining([
         'lmstudio-probe-request',
         'lmstudio-probe-response',
@@ -1520,13 +1508,14 @@ describe('backend foundation', () => {
     expect(body.parts[2].tokens.count).toBeTypeOf('number')
     expect(body.parts[3].tokens.count).toBeTypeOf('number')
 
-    const contextResponse = await app.inject({
+    const traceResponse = await app.inject({
       method: 'GET',
-      url: `/api/sessions/${sessionId}/context`,
+      url: `/api/sessions/${sessionId}/trace`,
     })
-    expect(contextResponse.statusCode).toBe(200)
+    expect(traceResponse.statusCode).toBe(200)
+    const traceBody = traceResponse.json()
     expect(
-      contextResponse.json().context.filter((entry: { type: string }) => (
+      traceBody.context.filter((entry: { type: string }) => (
         entry.type === 'system-prompt'
         || entry.type === 'mcp-instructions'
         || entry.type === 'tool-definitions'
@@ -1536,15 +1525,9 @@ describe('backend foundation', () => {
       expect.objectContaining({ type: 'mcp-instructions', tokens: expect.objectContaining({ count: 5 }) }),
       expect.objectContaining({ type: 'tool-definitions', tokens: expect.objectContaining({ count: 7 }) }),
     ])
-
-    const traceResponse = await app.inject({
-      method: 'GET',
-      url: `/api/sessions/${sessionId}/trace`,
-    })
-    expect(traceResponse.statusCode).toBe(200)
-    expect(traceResponse.json().turns).toHaveLength(1)
-    expect(traceResponse.json().rounds).toHaveLength(2)
-    expect(traceResponse.json().rawExchanges.map((exchange: { kind: string }) => exchange.kind)).toEqual(
+    expect(traceBody.turns).toHaveLength(1)
+    expect(traceBody.rounds).toHaveLength(2)
+    expect(traceBody.rawExchanges.map((exchange: { kind: string }) => exchange.kind)).toEqual(
       expect.arrayContaining([
         'lmstudio-request',
         'lmstudio-response',

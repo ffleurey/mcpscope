@@ -152,9 +152,7 @@ The goal is not to force fake exactness where the upstream API does not provide 
 
 **Session inspection:**
 
-- `GET /api/sessions/:sessionId/transcript`
-- `GET /api/sessions/:sessionId/context`
-- `GET /api/sessions/:sessionId/trace` — canonical full diagnostic payload
+- `GET /api/sessions/:sessionId/trace` — canonical full diagnostic payload, including derived transcript and context views
 - `GET /api/lookup/:id` — compact lookup by canonical hierarchical ID
 
 **Configuration (backend-owned CRUD):**

@@ -23,17 +23,20 @@ For the canonical runtime model and lookup vocabulary, use [DATA-MODEL.md](DATA-
 
 ## Main unresolved product work
 
-### 1. Lookup/API contract convergence
+### 1. CLI incremental rollout
 
-This is the main active handoff task.
+The next active implementation track is the standalone CLI.
 
-- align the lookup endpoint and frontend inspect flow with the canonical model in [DATA-MODEL.md](DATA-MODEL.md)
-- finish the cleanup of the earlier overbuilt hierarchical lookup implementation
-- keep the payload shape compact and avoid rebuilding extra documentation tooling around it
+- keep the CLI backend-driven and aligned with the same session model and canonical IDs as the UI
+- start with read-only commands backed by the existing API
+- add session creation only after the CLI skeleton and read-only inspection flow are in place
+- defer true async turn lifecycle work until the backend contract for start/status/follow is specified
+
+The active task description and rollout plan live in [backlog/cli-for-llm-in-the-loop-test.md](backlog/cli-for-llm-in-the-loop-test.md).
 
 ### 2. Token and context trust hardening
 
-This remains the main quality gap beyond the lookup cleanup.
+This remains the main quality gap beyond the CLI work.
 
 - verify token attribution against captured traces and live sessions
 - ensure the context bar is driven by the same canonical state as trace export

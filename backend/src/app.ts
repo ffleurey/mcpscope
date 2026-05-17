@@ -469,34 +469,6 @@ export async function buildBackendApp(
     return { ok: true }
   })
 
-  app.get('/api/sessions/:sessionId/transcript', async (request, reply) => {
-    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
-    const session = getSessionRecord(database.connection, sessionId)
-    if (!session) {
-      reply.code(404)
-      return apiError('not_found', 'Session not found')
-    }
-    const parts = listPartRecordsBySession(database.connection, sessionId)
-    return {
-      session,
-      transcript: deriveTranscriptEntries(parts),
-    }
-  })
-
-  app.get('/api/sessions/:sessionId/context', async (request, reply) => {
-    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
-    const session = getSessionRecord(database.connection, sessionId)
-    if (!session) {
-      reply.code(404)
-      return apiError('not_found', 'Session not found')
-    }
-    const parts = listPartRecordsBySession(database.connection, sessionId)
-    return {
-      session,
-      context: deriveContextEntries(parts),
-    }
-  })
-
   app.get('/api/sessions/:sessionId/trace', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     const session = getSessionRecord(database.connection, sessionId)

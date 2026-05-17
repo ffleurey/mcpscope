@@ -7,7 +7,8 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 - [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
 - [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
 - [PLAN.md](PLAN.md) - current product state and near-term focus
-- [backlog/hierachical-ids-system-and-api.md](backlog/hierachical-ids-system-and-api.md) - active lookup/inspect cleanup task and payload examples
+- [backlog/cli-for-llm-in-the-loop-test.md](backlog/cli-for-llm-in-the-loop-test.md) - active CLI task description and incremental rollout plan
+- [backlog/done/hierachical-ids-system-and-api.md](backlog/done/hierachical-ids-system-and-api.md) - completed hierarchical ID and lookup groundwork the CLI builds on
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
 - [FRONTEND-TEST.md](FRONTEND-TEST.md) - optional manual browser-based UI checks with agent-browser
 - [RELEASING.md](RELEASING.md) - release workflow and GHCR image publishing
@@ -76,3 +77,4 @@ See [TESTING.md](TESTING.md) for the test strategy and how to add regressions.
 
 - `backend-data/` is local runtime state and live integration output; only its README is tracked.
 - `research/` contains reference material and archived investigations, not active implementation specs.
+- `backlog/` contains active implementation tasks; `backlog/done/` contains completed specs kept for historical context.
