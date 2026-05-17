@@ -92,19 +92,27 @@ export async function updateSessionCreationDefaults(input: {
 
 export async function initConnectionStore(): Promise<void> {
   try {
-    const [health, connectionsResponse, modelConfigsResponse, mcpProfilesResponse, defaultsResponse] = await Promise.all([
+    const [health, connectionsResponse, modelConfigsResponse, mcpProfilesResponse] = await Promise.all([
       fetchHealth(),
       listLmConnections(),
       listModelConfigs(),
       listMcpProfiles(),
-      getSessionCreationDefaults(),
     ])
     appVersion.set(health.version)
     lmConnections.set(sortByUpdatedAtDesc(connectionsResponse.lmConnections))
     modelConfigs.set(sortByUpdatedAtDesc(modelConfigsResponse.modelConfigs))
     mcpProfiles.set(sortByUpdatedAtDesc(mcpProfilesResponse.mcpProfiles))
-    sessionCreationDefaults.set(defaultsResponse.sessionCreationDefaults)
   } catch (e) {
     backendError.set(e instanceof Error ? e.message : String(e))
+    return
+  }
+
+  // Fetch defaults separately so a failure here doesn't break the main store init
+  try {
+    const defaultsResponse = await getSessionCreationDefaults()
+    sessionCreationDefaults.set(defaultsResponse.sessionCreationDefaults)
+  } catch {
+    // Defaults endpoint may not be available yet (e.g. backend not restarted after upgrade)
+    sessionCreationDefaults.set(null)
   }
 }

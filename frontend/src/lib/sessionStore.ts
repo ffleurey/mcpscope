@@ -195,7 +195,6 @@ export async function deleteChat(sessionId: string): Promise<void> {
 
 export async function startSession(input: {
   sessionId?: string
-  title?: string
   modelConfig: ModelConfig
   connection: LmStudioConnection
   mcpProfile: McpServerProfile | null
@@ -218,7 +217,6 @@ export async function startSession(input: {
 
     const { session } = await createSession({
       sessionId: input.sessionId,
-      title: input.title,
       modelProfileSnapshot: buildModelProfileSnapshot(input.modelConfig, input.connection),
       mcpProfileSnapshot: mcpSnapshot,
       compactionStrategy: input.compactionStrategy,
