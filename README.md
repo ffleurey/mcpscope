@@ -60,6 +60,7 @@ See [RELEASING.md](RELEASING.md) for released-image usage and the full release w
 ```bash
 npm run build            # build frontend (vite)
 npm run build:backend    # compile backend TypeScript
+npm run build:cli        # compile CLI TypeScript
 npm run start:backend    # run compiled backend
 ```
 
@@ -69,6 +70,8 @@ npm run start:backend    # run compiled backend
 npm test                 # deterministic local tests (pure logic, runtime, app, replay)
 npm run check            # svelte-check + frontend TypeScript
 npm run check:backend    # backend TypeScript check
+npm run check:cli        # CLI TypeScript check
+npm run lint:cli         # CLI lint
 npm run test:integration # live LM Studio + MCP validation (requires running LM Studio + MCP server)
 ```
 

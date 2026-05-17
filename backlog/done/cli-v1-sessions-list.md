@@ -39,4 +39,7 @@ After this increment, the project has:
 
 ## Follow-up
 
-The next increment is tracked in [../cli-for-llm-in-the-loop-test.md](../cli-for-llm-in-the-loop-test.md) and should focus on read-only fetch/show commands for sessions, turns, rounds, and parts using the existing APIs.
+The next increments are tracked in:
+
+- [cli-v2-inspect-command.md](cli-v2-inspect-command.md)
+- [../cli-for-llm-in-the-loop-test.md](../cli-for-llm-in-the-loop-test.md)

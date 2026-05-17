@@ -1,16 +1,17 @@
-# CLI for LLM-in-the-Loop Testing — v2 inspect command
+# CLI for LLM-in-the-Loop Testing — v3 session creation
 
 This file now tracks the **next active CLI increment**.
 
 The completed first increment is recorded in:
 
 - [backlog/done/cli-v1-sessions-list.md](done/cli-v1-sessions-list.md)
+- [backlog/done/cli-v2-inspect-command.md](done/cli-v2-inspect-command.md)
 
 For the current CLI command reference, see [CLI.md](../CLI.md).
 
 ## Goal
 
-Build the next read-only CLI increment on top of the shipped CLI skeleton so an agent can inspect any existing session object from its ID without loading the UI.
+Build the next CLI increment for **session creation**, so an agent can create and initialize a session without manually constructing backend snapshot payloads.
 
 ## Foundation
 
@@ -20,6 +21,8 @@ This increment builds on two completed prerequisites:
    - [backlog/done/hierachical-ids-system-and-api.md](done/hierachical-ids-system-and-api.md)
 2. CLI skeleton + `sessions list`:
    - [backlog/done/cli-v1-sessions-list.md](done/cli-v1-sessions-list.md)
+3. universal inspect command:
+   - [backlog/done/cli-v2-inspect-command.md](done/cli-v2-inspect-command.md)
 
 The CLI remains:
 
@@ -28,64 +31,68 @@ The CLI remains:
 - installed and versioned with the backend
 - rooted in the top-level `cli/` folder
 
-## Current API surface for this increment
+## Current API reality
 
-This increment should use the existing API surface only:
+The shipped read-only CLI is now:
 
-- `GET /api/sessions`
-- `GET /api/lookup/:id`
+- `mcpscope sessions list`
+- `mcpscope inspect <id>`
 
-No backend API work should be needed for this step.
+Session creation remains the next gap.
+
+Current backend state:
+
+- `POST /api/sessions` still requires full inline snapshots
+- session initialization is still a separate step:
+  - `POST /api/sessions/:sessionId/initialize`
+- preflight support exists through:
+  - `POST /api/sessions/preflight`
+
+That means the next increment may require backend API work, unlike v2.
 
 ## Active scope
 
-Implement one universal read-only inspect command for:
+Design and implement the first session-creation command:
 
-- a session
-- a turn
-- a round
-- a part
+- `mcpscope sessions create`
 
-using the existing lookup API.
+The command should let the caller create a usable session without manually assembling `modelProfileSnapshot` and `mcpProfileSnapshot` objects.
 
-## Proposed command set for v2
+## Preferred direction
 
-1. `mcpscope inspect <id>`
+The preferred CLI contract is ID-based, not snapshot-based.
 
-Expected API mapping:
+Desired caller experience:
 
-- `mcpscope sessions list`:
-  - finds available session IDs using `GET /api/sessions`
-- `mcpscope inspect <id>`:
-  - direct targeted lookup via `GET /api/lookup/:id`
-  - should work for session / turn / round / part IDs
-  - should support both summary and full lookup modes
+- choose a model config by ID
+- optionally choose an MCP profile by ID
+- create the session
+- initialize it as part of the same command flow
+- fail clearly if dependencies are unavailable
 
-## Output expectations
+The CLI should not require the user to know backend snapshot internals.
 
-Keep the CLI summary-first and script-friendly.
+## Error handling expectations
 
-At minimum:
+Session creation should be **blocking** from the CLI perspective.
 
-- text output should stay compact and useful for humans/agents
-- JSON output should remain stable and clean
-- structured modes must not mix text with JSON on stdout
+If initialization fails:
 
-The existing conventions from v1 should carry forward:
+- the command should fail
+- the error should be explicit and actionable
+- no dead or half-created session should be left behind
 
-- `--url`
-- `MCPSCOPE_URL`
+Structured error information should remain agent-friendly and include at least:
 
-Output format flags (boolean, opt-in):
-
-- `--json`: output JSON instead of text (default: text)
-- `--short`: return summary only, no content (default: full content)
+- `code`
+- `stage`
+- `retryable`
+- `suggestion`
 
 ## What should not be included yet
 
 Still out of scope for this increment:
 
-- session creation
 - turn execution
 - replay
 - compare
@@ -93,28 +100,42 @@ Still out of scope for this increment:
 - cancellation
 - broad configuration management
 
-## Notes on API intent
+## Candidate command shape
 
-The API should now be treated as consolidated:
+The likely command shape is:
 
-- `/trace` is the canonical **full session** payload
-- `/lookup/:id` is the canonical **targeted object inspection** payload
-- removed standalone `/transcript` and `/context` session endpoints should not be reintroduced
+1. `mcpscope sessions create --model-config <id> [--mcp-profile <id>] [--session-id <id>]`
 
-For this increment specifically, `inspect <id>` should be enough after `sessions list`. We do not need separate read-only fetch commands for sessions, turns, rounds, or parts.
+Exact flag naming can still be refined, but the command should remain:
+
+- explicit
+- non-interactive by default
+- scriptable
+- aligned with the backend-owned configuration model
 
 ## Increment plan
 
-### 1. Targeted inspect command
+### 1. Decide backend contract
 
-- implement `mcpscope inspect <id>`
-- support session / turn / round / part IDs
-- use lookup as the primary targeted inspection API
-- `--json` flag for JSON output (default: text)
-- `--short` flag for summary mode (default: full content)
+- decide whether to add a new backend endpoint that accepts config/profile IDs directly
+- or decide whether the CLI should fetch existing configs and compose snapshots itself
 
-### 2. Final consistency pass
+The preferred option is a backend-supported ID-based creation flow.
 
-- keep help text, command naming, and examples aligned
-- confirm no accidental backend/API drift was introduced
+### 2. Define command contract
+
+- settle the `sessions create` flags
+- define text and JSON success output
+- define initialization failure output
+
+### 3. Implement creation flow
+
+- add backend support if needed
+- implement CLI command
+- keep help text and examples aligned
+
+### 4. Final consistency pass
+
+- keep docs/specs aligned with the shipped behavior
+- confirm no accidental API drift was introduced
 - keep the repo green
