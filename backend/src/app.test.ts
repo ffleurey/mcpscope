@@ -88,11 +88,11 @@ describe('backend foundation', () => {
       entities: ['session', 'turn', 'round', 'part', 'raw-exchange'],
     })
     expect(body.schema.tables).toEqual(
-      expect.arrayContaining(['sessions', 'turns', 'rounds', 'parts', 'raw_exchanges'])
+      expect.arrayContaining(['sessions', 'turns', 'rounds', 'parts', 'raw_exchanges', 'session_creation_defaults'])
     )
     expect(body.schema.meta).toMatchObject({
       domain_model_version: '1',
-      sqlite_schema_version: '4',
+      sqlite_schema_version: '5',
     })
   })
 
@@ -1773,3 +1773,178 @@ describe('error handling contract', () => {
     })
   })
 })
+
+describe('session-creation-defaults API', () => {
+  let app: FastifyInstance | undefined
+  let dataDir: string | undefined
+
+  afterEach(async () => {
+    await app?.close()
+    app = undefined
+    if (dataDir) {
+      fs.rmSync(dataDir, { recursive: true, force: true })
+      dataDir = undefined
+    }
+  })
+
+  it('returns null defaults on fresh database', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const response = await app.inject({ method: 'GET', url: '/api/session-creation-defaults' })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().sessionCreationDefaults).toMatchObject({
+      defaultModelConfigId: null,
+      defaultMcpProfileId: null,
+    })
+  })
+
+  it('sets and clears defaults', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const modelConfig = {
+      id: 'model-config-1', name: 'Primary', connectionId: 'lm-1',
+      modelKey: 'qwen', modelDisplayName: 'Qwen', systemPrompt: '',
+      temperature: 0, createdAt: 1, updatedAt: 1,
+    }
+    const mcpProfile = {
+      id: 'mcp-1', name: 'Local MCP',
+      url: 'http://localhost:3001/mcp', transport: 'streamable-http' as const,
+      authType: null, authValue: null, createdAt: 1, updatedAt: 1,
+    }
+
+    await app.inject({ method: 'PUT', url: '/api/model-configs/model-config-1', payload: modelConfig })
+    await app.inject({ method: 'PUT', url: '/api/mcp-profiles/mcp-1', payload: mcpProfile })
+
+    const putResponse = await app.inject({
+      method: 'PUT',
+      url: '/api/session-creation-defaults',
+      payload: { defaultModelConfigId: 'model-config-1', defaultMcpProfileId: 'mcp-1' },
+    })
+    expect(putResponse.statusCode).toBe(200)
+    expect(putResponse.json().sessionCreationDefaults).toMatchObject({
+      defaultModelConfigId: 'model-config-1',
+      defaultMcpProfileId: 'mcp-1',
+    })
+
+    const getResponse = await app.inject({ method: 'GET', url: '/api/session-creation-defaults' })
+    expect(getResponse.statusCode).toBe(200)
+    expect(getResponse.json().sessionCreationDefaults).toMatchObject({
+      defaultModelConfigId: 'model-config-1',
+      defaultMcpProfileId: 'mcp-1',
+    })
+
+    // Clear MCP profile default
+    const clearResponse = await app.inject({
+      method: 'PUT',
+      url: '/api/session-creation-defaults',
+      payload: { defaultModelConfigId: 'model-config-1', defaultMcpProfileId: null },
+    })
+    expect(clearResponse.statusCode).toBe(200)
+    expect(clearResponse.json().sessionCreationDefaults.defaultMcpProfileId).toBeNull()
+  })
+
+  it('rejects unknown model config ID', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/session-creation-defaults',
+      payload: { defaultModelConfigId: 'nonexistent', defaultMcpProfileId: null },
+    })
+    expect(response.statusCode).toBe(422)
+    expect(response.json().error.code).toBe('default_model_config_not_found')
+  })
+
+  it('rejects unknown MCP profile ID', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/session-creation-defaults',
+      payload: { defaultModelConfigId: null, defaultMcpProfileId: 'nonexistent' },
+    })
+    expect(response.statusCode).toBe(422)
+    expect(response.json().error.code).toBe('default_mcp_profile_not_found')
+  })
+
+  it('prevents deleting a model config that is set as default', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const modelConfig = {
+      id: 'model-config-1', name: 'Primary', connectionId: 'lm-1',
+      modelKey: 'qwen', modelDisplayName: 'Qwen', systemPrompt: '',
+      temperature: 0, createdAt: 1, updatedAt: 1,
+    }
+    await app.inject({ method: 'PUT', url: '/api/model-configs/model-config-1', payload: modelConfig })
+    await app.inject({
+      method: 'PUT',
+      url: '/api/session-creation-defaults',
+      payload: { defaultModelConfigId: 'model-config-1', defaultMcpProfileId: null },
+    })
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/api/model-configs/model-config-1',
+    })
+    expect(deleteResponse.statusCode).toBe(409)
+    expect(deleteResponse.json().error.code).toBe('default_model_config_in_use')
+  })
+
+  it('prevents deleting an MCP profile that is set as default', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const mcpProfile = {
+      id: 'mcp-1', name: 'Local MCP',
+      url: 'http://localhost:3001/mcp', transport: 'streamable-http' as const,
+      authType: null, authValue: null, createdAt: 1, updatedAt: 1,
+    }
+    await app.inject({ method: 'PUT', url: '/api/mcp-profiles/mcp-1', payload: mcpProfile })
+    await app.inject({
+      method: 'PUT',
+      url: '/api/session-creation-defaults',
+      payload: { defaultModelConfigId: null, defaultMcpProfileId: 'mcp-1' },
+    })
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/api/mcp-profiles/mcp-1',
+    })
+    expect(deleteResponse.statusCode).toBe(409)
+    expect(deleteResponse.json().error.code).toBe('default_mcp_profile_in_use')
+  })
+
+  it('allows deleting model config and MCP profile that are not defaults', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const modelConfig = {
+      id: 'model-config-1', name: 'Primary', connectionId: 'lm-1',
+      modelKey: 'qwen', modelDisplayName: 'Qwen', systemPrompt: '',
+      temperature: 0, createdAt: 1, updatedAt: 1,
+    }
+    const mcpProfile = {
+      id: 'mcp-1', name: 'Local MCP',
+      url: 'http://localhost:3001/mcp', transport: 'streamable-http' as const,
+      authType: null, authValue: null, createdAt: 1, updatedAt: 1,
+    }
+    await app.inject({ method: 'PUT', url: '/api/model-configs/model-config-1', payload: modelConfig })
+    await app.inject({ method: 'PUT', url: '/api/mcp-profiles/mcp-1', payload: mcpProfile })
+
+    expect((await app.inject({ method: 'DELETE', url: '/api/model-configs/model-config-1' })).statusCode).toBe(204)
+    expect((await app.inject({ method: 'DELETE', url: '/api/mcp-profiles/mcp-1' })).statusCode).toBe(204)
+  })
+})
+

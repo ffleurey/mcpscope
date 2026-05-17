@@ -357,6 +357,18 @@ export const upsertMcpProfileResponseSchema = z.object({
   mcpProfile: mcpServerProfileSchema,
 })
 
+export const sessionCreationDefaultsSchema = z.object({
+  defaultModelConfigId: z.string().nullable(),
+  defaultMcpProfileId: z.string().nullable(),
+  updatedAt: z.number().int().nonnegative(),
+})
+
+export const sessionCreationDefaultsResponseSchema = z.object({
+  sessionCreationDefaults: sessionCreationDefaultsSchema,
+})
+
+export type SessionCreationDefaults = z.infer<typeof sessionCreationDefaultsSchema>
+
 export type LmStudioConnection = z.infer<typeof lmStudioConnectionSchema>
 export type ModelConfig = z.infer<typeof modelConfigSchema>
 export type McpServerProfile = z.infer<typeof mcpServerProfileSchema>

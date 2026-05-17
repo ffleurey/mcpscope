@@ -31,4 +31,10 @@ export interface McpServerProfile {
   updatedAt: number
 }
 
+export interface SessionCreationDefaults {
+  defaultModelConfigId: string | null
+  defaultMcpProfileId: string | null
+  updatedAt: number
+}
+
 export type NavView = 'chats' | 'connections' | 'model-configs' | 'mcp-profiles'

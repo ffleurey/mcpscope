@@ -1,29 +1,39 @@
 <script lang="ts">
   import { highlightJson } from '../jsonHighlight'
-  import { lmConnections, modelConfigs, mcpProfiles } from '../connectionStore'
+  import { lmConnections, modelConfigs, mcpProfiles, sessionCreationDefaults } from '../connectionStore'
   import { sessionError, sessionErrorSurface, isStartingSession, startSession } from '../sessionStore'
+  import { derived } from 'svelte/store'
 
-  let selectedConfigId = $state('')
-  let selectedMcpProfileId = $state('')
   let compactionStrategy = $state<'strip-reasoning' | 'none'>('strip-reasoning')
+  let sessionTitle = $state('')
   let sessionId = $state('')
 
-  // Auto-select the first model config when available
-  $effect(() => {
-    if (!$modelConfigs.some(c => c.id === selectedConfigId)) {
-      selectedConfigId = $modelConfigs[0]?.id ?? ''
-    }
-  })
+  const defaultModelConfig = derived(
+    [modelConfigs, sessionCreationDefaults],
+    ([$modelConfigs, $defaults]) =>
+      $defaults?.defaultModelConfigId
+        ? $modelConfigs.find(c => c.id === $defaults.defaultModelConfigId) ?? null
+        : null,
+  )
+
+  const defaultMcpProfile = derived(
+    [mcpProfiles, sessionCreationDefaults],
+    ([$mcpProfiles, $defaults]) =>
+      $defaults?.defaultMcpProfileId
+        ? $mcpProfiles.find(p => p.id === $defaults.defaultMcpProfileId) ?? null
+        : null,
+  )
 
   async function handleStart() {
-    const config = $modelConfigs.find(c => c.id === selectedConfigId)
+    const config = $defaultModelConfig
     if (!config) return
     const connection = $lmConnections.find(c => c.id === config.connectionId)
     if (!connection) return
-    const mcpProfile = $mcpProfiles.find(p => p.id === selectedMcpProfileId) ?? null
+    const mcpProfile = $defaultMcpProfile
 
     await startSession({
       sessionId: sessionId.trim() ? sessionId.trim().toUpperCase() : undefined,
+      title: sessionTitle.trim() || undefined,
       modelConfig: config,
       connection,
       mcpProfile,
@@ -50,6 +60,19 @@
     {/if}
 
     <div class="field">
+      <label class="field-label" for="session-title">Title <span class="optional">(optional)</span></label>
+      <input
+        id="session-title"
+        class="field-select"
+        type="text"
+        maxlength="80"
+        placeholder="My session"
+        bind:value={sessionTitle}
+        disabled={$isStartingSession}
+      />
+    </div>
+
+    <div class="field">
       <label class="field-label" for="session-id">Session ID <span class="optional">(optional)</span></label>
       <input
         id="session-id"
@@ -61,29 +84,6 @@
         oninput={() => { sessionId = sessionId.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) }}
         disabled={$isStartingSession}
       />
-    </div>
-
-    <div class="field">
-      <label class="field-label" for="model-select">Model</label>
-      {#if $modelConfigs.length === 0}
-        <p class="field-hint">No model configs — create one in the sidebar first.</p>
-      {:else}
-        <select id="model-select" class="field-select" bind:value={selectedConfigId} disabled={$isStartingSession}>
-          {#each $modelConfigs as c (c.id)}
-            <option value={c.id}>{c.name}</option>
-          {/each}
-        </select>
-      {/if}
-    </div>
-
-    <div class="field">
-      <label class="field-label" for="mcp-select">MCP server <span class="optional">(optional)</span></label>
-      <select id="mcp-select" class="field-select" bind:value={selectedMcpProfileId} disabled={$isStartingSession}>
-        <option value="">None</option>
-        {#each $mcpProfiles as p (p.id)}
-          <option value={p.id}>{p.name}</option>
-        {/each}
-      </select>
     </div>
 
     <div class="field">
@@ -102,10 +102,36 @@
       </div>
     </div>
 
+    <div class="defaults-summary">
+      <span class="defaults-label">Defaults for this session</span>
+      <div class="defaults-row">
+        <span class="defaults-key">Model</span>
+        {#if $defaultModelConfig}
+          <span class="defaults-value">{$defaultModelConfig.name}</span>
+        {:else}
+          <span class="defaults-missing">None configured</span>
+        {/if}
+      </div>
+      <div class="defaults-row">
+        <span class="defaults-key">MCP server</span>
+        {#if $defaultMcpProfile}
+          <span class="defaults-value">{$defaultMcpProfile.name}</span>
+        {:else}
+          <span class="defaults-none">None</span>
+        {/if}
+      </div>
+    </div>
+
+    {#if !$defaultModelConfig}
+      <p class="hint-no-model">
+        No default model configured. Go to <strong>Model Configs</strong> and set one as default before creating a session.
+      </p>
+    {/if}
+
     <button
       class="start-btn"
       onclick={handleStart}
-      disabled={!selectedConfigId || $isStartingSession || $modelConfigs.length === 0}
+      disabled={!$defaultModelConfig || $isStartingSession}
     >
       {#if $isStartingSession}
         <span class="spinner" aria-hidden="true"></span>Starting…
@@ -229,12 +255,6 @@
     cursor: not-allowed;
   }
 
-  .field-hint {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin: 0;
-  }
-
   .radio-group {
     display: flex;
     flex-direction: column;
@@ -283,6 +303,64 @@
     font-size: 0.75rem;
     color: var(--text-muted);
     line-height: 1.3;
+  }
+
+  .defaults-summary {
+    background: var(--bg);
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .defaults-label {
+    font-size: 0.73rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.15rem;
+  }
+
+  .defaults-row {
+    display: flex;
+    gap: 0.6rem;
+    font-size: 0.83rem;
+    align-items: baseline;
+  }
+
+  .defaults-key {
+    color: var(--text-muted);
+    min-width: 80px;
+    flex-shrink: 0;
+  }
+
+  .defaults-value {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .defaults-missing {
+    color: var(--color-error);
+    font-style: italic;
+  }
+
+  .defaults-none {
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .hint-no-model {
+    font-size: 0.82rem;
+    color: var(--color-warning, #f59e0b);
+    background: color-mix(in srgb, var(--color-warning, #f59e0b) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-warning, #f59e0b) 30%, transparent);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    margin: 0;
+    line-height: 1.4;
   }
 
   .start-btn {

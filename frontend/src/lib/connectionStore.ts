@@ -1,13 +1,15 @@
 import { writable } from 'svelte/store'
-import type { LmStudioConnection, ModelConfig, McpServerProfile } from './types'
+import type { LmStudioConnection, ModelConfig, McpServerProfile, SessionCreationDefaults } from './types'
 import {
   deleteLmConnection,
   deleteMcpProfile,
   deleteModelConfig,
   fetchHealth,
+  getSessionCreationDefaults,
   listLmConnections,
   listMcpProfiles,
   listModelConfigs,
+  putSessionCreationDefaults,
   upsertLmConnection,
   upsertMcpProfile as upsertBackendMcpProfile,
   upsertModelConfig as upsertBackendModelConfig,
@@ -72,18 +74,36 @@ export async function removeMcpProfile(id: string): Promise<void> {
   mcpProfiles.update(list => list.filter(x => x.id !== id))
 }
 
+// Session creation defaults
+export const sessionCreationDefaults = writable<SessionCreationDefaults | null>(null)
+
+export async function fetchSessionCreationDefaults(): Promise<void> {
+  const { sessionCreationDefaults: defaults } = await getSessionCreationDefaults()
+  sessionCreationDefaults.set(defaults)
+}
+
+export async function updateSessionCreationDefaults(input: {
+  defaultModelConfigId: string | null
+  defaultMcpProfileId: string | null
+}): Promise<void> {
+  const { sessionCreationDefaults: updated } = await putSessionCreationDefaults(input)
+  sessionCreationDefaults.set(updated)
+}
+
 export async function initConnectionStore(): Promise<void> {
   try {
-    const [health, connectionsResponse, modelConfigsResponse, mcpProfilesResponse] = await Promise.all([
+    const [health, connectionsResponse, modelConfigsResponse, mcpProfilesResponse, defaultsResponse] = await Promise.all([
       fetchHealth(),
       listLmConnections(),
       listModelConfigs(),
       listMcpProfiles(),
+      getSessionCreationDefaults(),
     ])
     appVersion.set(health.version)
     lmConnections.set(sortByUpdatedAtDesc(connectionsResponse.lmConnections))
     modelConfigs.set(sortByUpdatedAtDesc(modelConfigsResponse.modelConfigs))
     mcpProfiles.set(sortByUpdatedAtDesc(mcpProfilesResponse.mcpProfiles))
+    sessionCreationDefaults.set(defaultsResponse.sessionCreationDefaults)
   } catch (e) {
     backendError.set(e instanceof Error ? e.message : String(e))
   }

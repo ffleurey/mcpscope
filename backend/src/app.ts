@@ -26,6 +26,8 @@ import {
   deleteSessionRecord,
   getSessionRecord,
   updateSessionRecord,
+  getSessionCreationDefaults,
+  upsertSessionCreationDefaults,
   listLmConnections,
   listMcpServerProfiles,
   listModelConfigs,
@@ -283,6 +285,13 @@ export async function buildBackendApp(
 
   app.delete('/api/model-configs/:modelConfigId', async (request, reply) => {
     const { modelConfigId } = z.object({ modelConfigId: z.string() }).parse(request.params)
+    const defaults = getSessionCreationDefaults(database.connection)
+    if (defaults.defaultModelConfigId === modelConfigId) {
+      reply.code(409)
+      return apiError('validation', 'Cannot delete this model config because it is currently set as the default for new sessions. Change or clear the default first.', {
+        code: 'default_model_config_in_use',
+      })
+    }
     const deleted = deleteModelConfig(database.connection, modelConfigId)
     if (!deleted) {
       reply.code(404)
@@ -311,6 +320,13 @@ export async function buildBackendApp(
 
   app.delete('/api/mcp-profiles/:mcpProfileId', async (request, reply) => {
     const { mcpProfileId } = z.object({ mcpProfileId: z.string() }).parse(request.params)
+    const defaults = getSessionCreationDefaults(database.connection)
+    if (defaults.defaultMcpProfileId === mcpProfileId) {
+      reply.code(409)
+      return apiError('validation', 'Cannot delete this MCP profile because it is currently set as the default for new sessions. Change or clear the default first.', {
+        code: 'default_mcp_profile_in_use',
+      })
+    }
     const deleted = deleteMcpServerProfile(database.connection, mcpProfileId)
     if (!deleted) {
       reply.code(404)
@@ -318,6 +334,48 @@ export async function buildBackendApp(
     }
     reply.code(204)
     return null
+  })
+
+  app.get('/api/session-creation-defaults', async () => {
+    const defaults = getSessionCreationDefaults(database.connection)
+    return { sessionCreationDefaults: defaults }
+  })
+
+  const sessionCreationDefaultsInputSchema = z.object({
+    defaultModelConfigId: z.string().nullable(),
+    defaultMcpProfileId: z.string().nullable(),
+  })
+
+  app.put('/api/session-creation-defaults', async (request, reply) => {
+    const { defaultModelConfigId, defaultMcpProfileId } = sessionCreationDefaultsInputSchema.parse(request.body)
+
+    if (defaultModelConfigId !== null) {
+      const modelConfigs = listModelConfigs(database.connection)
+      if (!modelConfigs.some(c => c.id === defaultModelConfigId)) {
+        reply.code(422)
+        return apiError('validation', `Model config "${defaultModelConfigId}" not found.`, {
+          code: 'default_model_config_not_found',
+        })
+      }
+    }
+
+    if (defaultMcpProfileId !== null) {
+      const mcpProfiles = listMcpServerProfiles(database.connection)
+      if (!mcpProfiles.some(p => p.id === defaultMcpProfileId)) {
+        reply.code(422)
+        return apiError('validation', `MCP profile "${defaultMcpProfileId}" not found.`, {
+          code: 'default_mcp_profile_not_found',
+        })
+      }
+    }
+
+    const updatedDefaults = {
+      defaultModelConfigId,
+      defaultMcpProfileId,
+      updatedAt: Date.now(),
+    }
+    upsertSessionCreationDefaults(database.connection, updatedDefaults)
+    return { sessionCreationDefaults: updatedDefaults }
   })
 
   app.post('/api/lm-connections/test', async (_request, reply) => {
