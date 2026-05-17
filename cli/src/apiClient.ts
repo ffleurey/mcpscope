@@ -15,8 +15,14 @@ async function request<T>(baseUrl: string, path: string): Promise<T> {
     throw new CliError(`Cannot reach backend at ${baseUrl}: ${message}`, 1)
   }
 
-  const text = await response.text()
-  const payload: unknown = text.length > 0 ? JSON.parse(text) : null
+  let payload: unknown
+  try {
+    const text = await response.text()
+    payload = text.length > 0 ? JSON.parse(text) : null
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause)
+    throw new CliError(`Backend returned invalid JSON: ${message}`, 1)
+  }
 
   if (!response.ok) {
     const errPayload = payload as ApiErrorPayload | null
@@ -56,4 +62,15 @@ export interface ListSessionsResponse {
 
 export function listSessions(baseUrl: string): Promise<ListSessionsResponse> {
   return request<ListSessionsResponse>(baseUrl, '/api/sessions')
+}
+
+export interface LookupResponse {
+  id: string
+  type: string
+  mode: string
+  data: Record<string, unknown>
+}
+
+export function lookupById(baseUrl: string, id: string, mode: 'summary' | 'full'): Promise<LookupResponse> {
+  return request<LookupResponse>(baseUrl, `/api/lookup/${encodeURIComponent(id)}?mode=${mode}`)
 }

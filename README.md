@@ -6,6 +6,7 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
 - [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
+- [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
 - [PLAN.md](PLAN.md) - current product state and near-term focus
 - [backlog/cli-for-llm-in-the-loop-test.md](backlog/cli-for-llm-in-the-loop-test.md) - active CLI task description and incremental rollout plan
 - [backlog/done/hierachical-ids-system-and-api.md](backlog/done/hierachical-ids-system-and-api.md) - completed hierarchical ID and lookup groundwork the CLI builds on
@@ -59,6 +60,7 @@ See [RELEASING.md](RELEASING.md) for released-image usage and the full release w
 ```bash
 npm run build            # build frontend (vite)
 npm run build:backend    # compile backend TypeScript
+npm run build:cli        # compile CLI TypeScript
 npm run start:backend    # run compiled backend
 ```
 
@@ -68,6 +70,8 @@ npm run start:backend    # run compiled backend
 npm test                 # deterministic local tests (pure logic, runtime, app, replay)
 npm run check            # svelte-check + frontend TypeScript
 npm run check:backend    # backend TypeScript check
+npm run check:cli        # CLI TypeScript check
+npm run lint:cli         # CLI lint
 npm run test:integration # live LM Studio + MCP validation (requires running LM Studio + MCP server)
 ```
 

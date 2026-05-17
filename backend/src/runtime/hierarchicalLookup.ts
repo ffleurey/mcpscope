@@ -78,11 +78,13 @@ function buildPartNode(
   resultParts: PartRecord[],
   mode: LookupMode,
   isDirectPartLookup: boolean,
+  isPartLevelLookup: boolean = false,
 ): object | null {
   const publicType = canonicalPartType(part.partType)
   if (!publicType) return null
 
   const isToolCall = part.partType === 'tool-call'
+  const isToolDefinitions = part.partType === 'tool-definitions'
   const tokenCount = isToolCall ? mergedToolCallTokens(part, resultParts) : (part.tokens.count ?? null)
   const contextState = canonicalContextState(part.context.state)
 
@@ -95,6 +97,19 @@ function buildPartNode(
 
   if (isToolCall) {
     base.tool_name = extractToolName(part)
+  }
+
+  // tool_definitions: full content only on direct part-level lookup; tool names in all other contexts
+  if (isToolDefinitions) {
+    if (isPartLevelLookup && part.payload.json != null) {
+      base.content = { json: part.payload.json }
+    } else {
+      const toolsJson = part.payload.json as Array<{ name: string }> | null
+      if (toolsJson) {
+        base.tools = toolsJson.map(t => t.name)
+      }
+    }
+    return base
   }
 
   if (mode === 'full') {
@@ -113,8 +128,6 @@ function buildPartNode(
         || part.partType === 'assistant-content'
       if (includeContent && part.payload.text != null) {
         base.content = { text: part.payload.text }
-      } else if (isDirectPartLookup && part.partType === 'tool-definitions' && part.payload.json != null) {
-        base.content = { json: part.payload.json }
       }
     }
   }
@@ -128,11 +141,11 @@ function buildSetupNode(
   sessionId: string,
   setupParts: PartRecord[],
   mode: LookupMode,
-  _isDirectLookup: boolean,
+  isDirectLookup: boolean,
 ): object {
   const parts = setupParts
     .filter(p => isPublicPartType(p.partType))
-    .map(p => buildPartNode(p, [], mode, mode === 'full'))
+    .map(p => buildPartNode(p, [], mode, isDirectLookup))
     .filter((n): n is object => n !== null)
 
   return { id: formatSetupId(sessionId), parts }
@@ -171,8 +184,9 @@ function buildRoundNode(
   roundParts: PartRecord[],
   toolResultsByParent: Map<string, PartRecord[]>,
   mode: LookupMode,
+  isDirectLookup: boolean,
 ): object {
-  const parts = buildRoundPartNodes(roundParts, toolResultsByParent, mode, false)
+  const parts = buildRoundPartNodes(roundParts, toolResultsByParent, mode, isDirectLookup)
   return {
     id: round.id,
     number: round.roundIndex + 1,
@@ -186,13 +200,14 @@ function buildTurnNode(
   rounds: RoundRecord[],
   allParts: PartRecord[],
   mode: LookupMode,
+  isDirectLookup: boolean,
 ): object {
   const toolResultsByParent = buildToolResultIndex(allParts)
   const roundNodes = rounds.map(round => {
     const roundParts = allParts
       .filter(p => p.roundId === round.id && isPublicPartType(p.partType))
       .sort((a, b) => a.ordinal - b.ordinal)
-    return buildRoundNode(round, roundParts, toolResultsByParent, mode)
+    return buildRoundNode(round, roundParts, toolResultsByParent, mode, isDirectLookup)
   })
   return {
     id: turn.id,
@@ -234,12 +249,13 @@ export function resolveHierarchicalId(
       const turnRounds = allRounds
         .filter(r => r.turnId === turn.id)
         .sort((a, b) => a.roundIndex - b.roundIndex)
-      return buildTurnNode(turn, turnRounds, allParts, mode)
+      return buildTurnNode(turn, turnRounds, allParts, mode, false)
     })
 
     const data: Record<string, unknown> = {
       id: session.id,
       title: session.title,
+      compaction_strategy: session.compactionStrategy,
       model: {
         name: session.modelProfileSnapshot.name,
         key: session.modelProfileSnapshot.modelKey,
@@ -267,7 +283,7 @@ export function resolveHierarchicalId(
     const allParts = listPartRecordsBySession(connection, session.id)
     const setupParts = allParts.filter(p => p.turnId === null).sort((a, b) => a.ordinal - b.ordinal)
     const setupId = formatSetupId(session.id)
-    const data = buildSetupNode(session.id, setupParts, mode, false)
+    const data = buildSetupNode(session.id, setupParts, mode, true)
 
     return { status: 'ok', payload: { id: setupId, type: 'setup', mode, data } }
   }
@@ -282,7 +298,7 @@ export function resolveHierarchicalId(
       .filter(r => r.turnId === turn.id)
       .sort((a, b) => a.roundIndex - b.roundIndex)
 
-    const data = buildTurnNode(turn, allRounds, allParts, mode)
+    const data = buildTurnNode(turn, allRounds, allParts, mode, false)
 
     return { status: 'ok', payload: { id: turn.id, type: 'turn', mode, data } }
   }
@@ -301,7 +317,7 @@ export function resolveHierarchicalId(
       .sort((a, b) => a.ordinal - b.ordinal)
 
     const toolResultsByParent = buildToolResultIndex(sessionParts)
-    const data = buildRoundNode(round, roundParts, toolResultsByParent, mode)
+    const data = buildRoundNode(round, roundParts, toolResultsByParent, mode, true)
 
     return { status: 'ok', payload: { id: round.id, type: 'round', mode, data } }
   }
@@ -322,8 +338,8 @@ export function resolveHierarchicalId(
     ? (toolResultsByParent.get(effectivePart.id) ?? [])
     : []
 
-  const node = buildPartNode(effectivePart, resultParts, mode, true)
+  const node = buildPartNode(effectivePart, resultParts, 'full', true, true)
   if (!node) return { status: 'not_found', message: `Part not found: ${parsed.raw}` }
 
-  return { status: 'ok', payload: { id: effectivePart.id, type: 'part', mode, data: node } }
+  return { status: 'ok', payload: { id: effectivePart.id, type: 'part', mode: 'full', data: node } }
 }
