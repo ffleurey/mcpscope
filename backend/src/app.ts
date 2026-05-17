@@ -32,7 +32,7 @@ import {
   listPartRecordsBySession,
   listRawExchangeRecordsBySession,
   listRoundRecordsBySession,
-  listSessionRecords,
+  listSessionSummaries,
   listTurnRecordsBySession,
   upsertLmConnection,
   upsertMcpServerProfile,
@@ -207,7 +207,7 @@ export async function buildBackendApp(
 
   app.get('/api/sessions', async () => {
     return {
-      sessions: listSessionRecords(database.connection),
+      sessions: listSessionSummaries(database.connection),
     }
   })
 

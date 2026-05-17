@@ -103,10 +103,30 @@ export default [
     },
   },
 
+  // CLI TypeScript files
+  {
+    files: ['cli/**/*.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { project: './cli/tsconfig.json' },
+      globals: { ...globals.node },
+    },
+    plugins: { '@typescript-eslint': ts },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
+      'no-console': 'warn',
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      'no-unused-vars': 'off',
+    },
+  },
+
   // Ignore build output and config files
   {
     ignores: [
       'backend/dist/**',
+      'cli/dist/**',
       'frontend/dist/**',
       'dist/**',
       'node_modules/**',

@@ -154,6 +154,22 @@ export const sessionRecordSchema = z.object({
   compactionStrategy: compactionStrategyWithFallbackSchema,
 })
 
+// Slim summary returned by GET /api/sessions.
+// Only includes fields needed for session listing and the sidebar UI.
+export const sessionSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: sessionStatusSchema,
+  initStatus: sessionInitStatusSchema,
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+  isContextExhausted: z.boolean(),
+  loadedContextLength: z.number().int().positive().nullable(),
+  compactionStrategy: compactionStrategyWithFallbackSchema,
+  modelProfileSnapshot: z.object({ name: z.string() }),
+  mcpProfileSnapshot: z.object({ name: z.string() }).nullable(),
+})
+
 export const turnRecordSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
@@ -303,7 +319,7 @@ export const preludeStreamEventSchema = z.discriminatedUnion('type', [
 ])
 
 export const listSessionsResponseSchema = z.object({
-  sessions: z.array(sessionRecordSchema),
+  sessions: z.array(sessionSummarySchema),
 })
 
 export const listLmConnectionsResponseSchema = z.object({
@@ -347,6 +363,7 @@ export type McpServerProfile = z.infer<typeof mcpServerProfileSchema>
 export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>
 export type SessionRecord = z.infer<typeof sessionRecordSchema>
+export type SessionSummary = z.infer<typeof sessionSummarySchema>
 export type TurnRecord = z.infer<typeof turnRecordSchema>
 export type RoundRecord = z.infer<typeof roundRecordSchema>
 export type PartRecord = z.infer<typeof partRecordSchema>

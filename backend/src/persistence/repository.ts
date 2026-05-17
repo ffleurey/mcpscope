@@ -5,6 +5,7 @@ import type {
   RawExchangeRecord,
   RoundRecord,
   SessionRecord,
+  SessionSummary,
   TurnRecord,
 } from '../domain/model.js'
 import type { McpProfileSnapshot } from '../domain/model.js'
@@ -331,6 +332,49 @@ export function deleteSessionRecord(connection: Database.Database, sessionId: st
   `).run(sessionId)
 
   return result.changes > 0
+}
+
+export function listSessionSummaries(connection: Database.Database): SessionSummary[] {
+  const rows = connection.prepare(`
+    SELECT
+      id, title, status, init_status, created_at, updated_at,
+      is_context_exhausted, loaded_context_length, compaction_strategy,
+      model_profile_snapshot_json, mcp_profile_snapshot_json
+    FROM sessions
+    ORDER BY updated_at DESC, created_at DESC
+  `).all() as Array<{
+    id: string
+    title: string
+    status: SessionSummary['status']
+    init_status: SessionSummary['initStatus']
+    created_at: number
+    updated_at: number
+    is_context_exhausted: number
+    loaded_context_length: number | null
+    compaction_strategy: SessionSummary['compactionStrategy']
+    model_profile_snapshot_json: string
+    mcp_profile_snapshot_json: string | null
+  }>
+
+  return rows.map(row => {
+    const modelSnapshot = JSON.parse(row.model_profile_snapshot_json) as { name: string }
+    const mcpSnapshot = row.mcp_profile_snapshot_json
+      ? (JSON.parse(row.mcp_profile_snapshot_json) as { name: string })
+      : null
+    return {
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      initStatus: row.init_status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      isContextExhausted: row.is_context_exhausted === 1,
+      loadedContextLength: row.loaded_context_length,
+      compactionStrategy: row.compaction_strategy,
+      modelProfileSnapshot: { name: modelSnapshot.name },
+      mcpProfileSnapshot: mcpSnapshot ? { name: mcpSnapshot.name } : null,
+    }
+  })
 }
 
 function upsertJsonRecord(
