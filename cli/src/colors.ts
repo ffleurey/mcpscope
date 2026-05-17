@@ -18,13 +18,9 @@ function ansi(open: string, close: string, text: string): string {
   return enabled() ? `\x1b[${open}m${text}\x1b[${close}m` : text
 }
 
-export const bold    = (t: string): string => ansi('1',  '22', t)
-export const dim     = (t: string): string => ansi('2',  '22', t)
-export const cyan    = (t: string): string => ansi('36', '39', t)
-export const green   = (t: string): string => ansi('32', '39', t)
-export const yellow  = (t: string): string => ansi('33', '39', t)
-export const magenta = (t: string): string => ansi('35', '39', t)
-export const gray    = (t: string): string => ansi('90', '39', t)
+export const bold = (t: string): string => ansi('1',  '22', t)
+export const dim  = (t: string): string => ansi('2',  '22', t)
+const yellow      = (t: string): string => ansi('33', '39', t)
 
 // Token annotation: dim for included, yellow for non-included states
 export function colorTokens(count: number | null | undefined, state: string | undefined): string {
