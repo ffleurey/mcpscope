@@ -473,6 +473,9 @@ describe('backend foundation', () => {
     expect(sessionFull.json().parentIds).toBeUndefined()
     expect(sessionFull.json().data.session).toBeUndefined()
     expect(sessionFull.json().data.context).toBeUndefined()
+    // Setup parts embedded in session full must not include content — only direct setup/part lookups do
+    const sessionFullSetupParts: { content?: unknown }[] = sessionFull.json().data.setup.parts
+    expect(sessionFullSetupParts.every(p => p.content === undefined)).toBe(true)
 
     const turnSummary = await app.inject({ method: 'GET', url: `/api/lookup/${firstTurnId}?mode=summary` })
     expect(turnSummary.statusCode).toBe(200)

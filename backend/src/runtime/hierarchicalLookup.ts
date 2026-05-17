@@ -128,11 +128,11 @@ function buildSetupNode(
   sessionId: string,
   setupParts: PartRecord[],
   mode: LookupMode,
-  _isDirectLookup: boolean,
+  isDirectLookup: boolean,
 ): object {
   const parts = setupParts
     .filter(p => isPublicPartType(p.partType))
-    .map(p => buildPartNode(p, [], mode, mode === 'full'))
+    .map(p => buildPartNode(p, [], mode, isDirectLookup))
     .filter((n): n is object => n !== null)
 
   return { id: formatSetupId(sessionId), parts }
@@ -267,7 +267,7 @@ export function resolveHierarchicalId(
     const allParts = listPartRecordsBySession(connection, session.id)
     const setupParts = allParts.filter(p => p.turnId === null).sort((a, b) => a.ordinal - b.ordinal)
     const setupId = formatSetupId(session.id)
-    const data = buildSetupNode(session.id, setupParts, mode, false)
+    const data = buildSetupNode(session.id, setupParts, mode, true)
 
     return { status: 'ok', payload: { id: setupId, type: 'setup', mode, data } }
   }
