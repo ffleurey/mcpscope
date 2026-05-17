@@ -24,7 +24,7 @@ function renderPartLine(part: AnyRecord, indent: string): void {
   const toolName = part['tool_name'] ? `  ${part['tool_name']}` : ''
   const state = String(part['context_state'] ?? '')
   const count = part['token_count'] != null ? Number(part['token_count']) : null
-  out(`${indent}${dim(id)}  ${type}${toolName}${colorTokens(count, state)}`)
+  out(`${indent}${id}  ${type}${toolName}${colorTokens(count, state)}`)
 }
 
 function renderTextBlock(text: string, indent: string, highlight = false): void {
