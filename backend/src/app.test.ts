@@ -446,6 +446,7 @@ describe('backend foundation', () => {
       data: {
         id: importedSessionId,
         title: expect.any(String),
+        compaction_strategy: expect.any(String),
         model: { name: expect.any(String), key: expect.any(String) },
         context_window: { available: expect.anything() },
         setup: { id: expect.any(String), parts: expect.any(Array) },

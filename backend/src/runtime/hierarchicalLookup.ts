@@ -240,6 +240,7 @@ export function resolveHierarchicalId(
     const data: Record<string, unknown> = {
       id: session.id,
       title: session.title,
+      compaction_strategy: session.compactionStrategy,
       model: {
         name: session.modelProfileSnapshot.name,
         key: session.modelProfileSnapshot.modelKey,
