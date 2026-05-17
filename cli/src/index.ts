@@ -5,7 +5,7 @@ import { parseSessionsListArgs, runSessionsList } from './commands/sessions/list
 import { parseInspectArgs, runInspect } from './commands/inspect.js'
 
 function printHelp(): void {
-  process.stdout.write(`Usage: mcpscope <command> [--url <url>]
+  process.stdout.write(`Usage: mcpscope <command> [--json] [--url <url>]
 
   sessions list
     list all sessions
