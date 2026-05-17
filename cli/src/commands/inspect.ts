@@ -1,5 +1,5 @@
 import { lookupById } from '../apiClient.js'
-import { bold, colorPartType, colorTokens, dim } from '../colors.js'
+import { bold, colorTokens, dim } from '../colors.js'
 
 export interface InspectOptions {
   url: string
@@ -16,26 +16,30 @@ type AnyRecord = Record<string, unknown>
 
 // ─── Part ─────────────────────────────────────────────────────────────────────
 
+const HIGHLIGHTED_CONTENT_TYPES = new Set(['user_prompt', 'assistant_answer'])
+
 function renderPartLine(part: AnyRecord, indent: string): void {
   const id = String(part['id'] ?? '')
   const type = String(part['type'] ?? '')
   const toolName = part['tool_name'] ? `  ${part['tool_name']}` : ''
   const state = String(part['context_state'] ?? '')
   const count = part['token_count'] != null ? Number(part['token_count']) : null
-  out(`${indent}${dim(id)}  ${colorPartType(type)}${toolName}${colorTokens(count, state)}`)
+  out(`${indent}${dim(id)}  ${type}${toolName}${colorTokens(count, state)}`)
 }
 
-function renderTextBlock(text: string, indent: string): void {
+function renderTextBlock(text: string, indent: string, highlight = false): void {
   for (const line of text.split('\n')) {
-    out(`${indent}${line}`)
+    out(`${indent}${highlight ? bold(line) : line}`)
   }
 }
 
 function renderPartContent(part: AnyRecord, indent: string): void {
+  const type = String(part['type'] ?? '')
+  const highlight = HIGHLIGHTED_CONTENT_TYPES.has(type)
   const content = part['content'] as AnyRecord | undefined
   if (content) {
     if (typeof content['text'] === 'string') {
-      renderTextBlock(content['text'], indent)
+      renderTextBlock(content['text'], indent, highlight)
     } else if (Array.isArray(content['json'])) {
       renderTextBlock(JSON.stringify(content['json'], null, 2), indent)
     }

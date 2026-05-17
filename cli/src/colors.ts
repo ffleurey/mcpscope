@@ -26,13 +26,6 @@ export const yellow  = (t: string): string => ansi('33', '39', t)
 export const magenta = (t: string): string => ansi('35', '39', t)
 export const gray    = (t: string): string => ansi('90', '39', t)
 
-// Part type: only the conversational parts get emphasis; everything else is plain
-const BOLD_PART_TYPES = new Set(['user_prompt', 'assistant_answer'])
-
-export function colorPartType(type: string): string {
-  return BOLD_PART_TYPES.has(type) ? bold(type) : type
-}
-
 // Token annotation: dim for included, yellow for non-included states
 export function colorTokens(count: number | null | undefined, state: string | undefined): string {
   if (count == null) return ''
