@@ -7,19 +7,19 @@ import { parseInspectArgs, runInspect } from './commands/inspect.js'
 function printHelp(): void {
   process.stdout.write(`Usage: mcpscope <command> [--url <url>]
 
-  sessions list [--json]
+  sessions list
     list all sessions
 
-  inspect <id> [--short] [--json]
+  inspect <id> [--short]
     inspect session / turn / round / part by hierarchical ID
     <id>      QGWA  /  QGWA.1  /  QGWA.1.2  /  QGWA.1.2.3-U
     --short   omit part content (token counts only)
-    --json    emit JSON instead of text
 
 Full mode includes content for user_prompt and assistant_answer.
 tool_definitions always shows tool names; use a part ID for full schemas.
 
---url <url>  or  MCPSCOPE_URL  (default: http://localhost:3030)
+--json        emit JSON instead of text
+--url <url>   or  MCPSCOPE_URL  (default: http://localhost:3030)
 `)
 }
 
