@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { modelConfigs, lmConnections, upsertModelConfig, removeModelConfig, sessionCreationDefaults, updateSessionCreationDefaults } from '../connectionStore'
+  import { modelConfigs, lmConnections, upsertModelConfig, removeModelConfig, sessionCreationDefaults, setDefaultModelConfig } from '../connectionStore'
   import { listModels, loadModel, unloadModel } from '../services/lmstudio'
   import type { LmStudioModel } from '../services/lmstudio'
   import type { ModelConfig } from '../types'
@@ -132,10 +132,7 @@
 
   async function handleSetDefault(id: string) {
     try {
-      await updateSessionCreationDefaults({
-        defaultModelConfigId: id,
-        defaultMcpProfileId: $sessionCreationDefaults?.defaultMcpProfileId ?? null,
-      })
+      await setDefaultModelConfig(id)
       saveError = null
     } catch (e) {
       saveError = toAppError(e)

@@ -1,6 +1,6 @@
 <script lang="ts">
   import InlineAppError from './InlineAppError.svelte'
-  import { mcpProfiles, upsertMcpProfile, removeMcpProfile, sessionCreationDefaults, updateSessionCreationDefaults } from '../connectionStore'
+  import { mcpProfiles, upsertMcpProfile, removeMcpProfile, sessionCreationDefaults, setDefaultMcpProfile } from '../connectionStore'
   import type { McpServerProfile } from '../types'
   import McpProfileForm from './McpProfileForm.svelte'
   import ConnectionTestDialog from './ConnectionTestDialog.svelte'
@@ -61,10 +61,7 @@
 
   async function handleSetDefault(id: string) {
     try {
-      await updateSessionCreationDefaults({
-        defaultModelConfigId: $sessionCreationDefaults?.defaultModelConfigId ?? null,
-        defaultMcpProfileId: id,
-      })
+      await setDefaultMcpProfile(id)
       saveError = null
     } catch (e) {
       saveError = toAppError(e)
@@ -73,10 +70,7 @@
 
   async function handleClearDefault() {
     try {
-      await updateSessionCreationDefaults({
-        defaultModelConfigId: $sessionCreationDefaults?.defaultModelConfigId ?? null,
-        defaultMcpProfileId: null,
-      })
+      await setDefaultMcpProfile(null)
       saveError = null
     } catch (e) {
       saveError = toAppError(e)

@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store'
+import { get, writable } from 'svelte/store'
 import type { LmStudioConnection, ModelConfig, McpServerProfile, SessionCreationDefaults } from './types'
 import {
   deleteLmConnection,
@@ -88,6 +88,30 @@ export async function updateSessionCreationDefaults(input: {
 }): Promise<void> {
   const { sessionCreationDefaults: updated } = await putSessionCreationDefaults(input)
   sessionCreationDefaults.set(updated)
+}
+
+export async function setDefaultModelConfig(defaultModelConfigId: string | null): Promise<void> {
+  const current = getStoreDefaults()
+  await updateSessionCreationDefaults({
+    defaultModelConfigId,
+    defaultMcpProfileId: current.defaultMcpProfileId,
+  })
+}
+
+export async function setDefaultMcpProfile(defaultMcpProfileId: string | null): Promise<void> {
+  const current = getStoreDefaults()
+  await updateSessionCreationDefaults({
+    defaultModelConfigId: current.defaultModelConfigId,
+    defaultMcpProfileId,
+  })
+}
+
+function getStoreDefaults(): SessionCreationDefaults {
+  return get(sessionCreationDefaults) ?? {
+    defaultModelConfigId: null,
+    defaultMcpProfileId: null,
+    updatedAt: 0,
+  }
 }
 
 export async function initConnectionStore(): Promise<void> {

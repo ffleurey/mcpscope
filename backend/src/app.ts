@@ -257,6 +257,14 @@ export async function buildBackendApp(
 
   app.delete('/api/lm-connections/:connectionId', async (request, reply) => {
     const { connectionId } = z.object({ connectionId: z.string() }).parse(request.params)
+    const referencedByModelConfig = listModelConfigs(database.connection)
+      .some(modelConfig => modelConfig.connectionId === connectionId)
+    if (referencedByModelConfig) {
+      reply.code(409)
+      return apiError('validation', 'Cannot delete this LM connection because one or more model configs still reference it. Delete those model configs first.', {
+        code: 'lm_connection_in_use',
+      })
+    }
     const deleted = deleteLmConnection(database.connection, connectionId)
     if (!deleted) {
       reply.code(404)

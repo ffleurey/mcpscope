@@ -7,24 +7,38 @@
   let selectedMcpProfileId = $state('')
   let compactionStrategy = $state<'strip-reasoning' | 'none'>('strip-reasoning')
   let sessionId = $state('')
+  let hasInitializedModelSelection = $state(false)
+  let hasInitializedMcpSelection = $state(false)
 
-  // Pre-select the default model config when defaults or configs change
   $effect(() => {
     const defaultId = $sessionCreationDefaults?.defaultModelConfigId ?? null
-    if (defaultId && $modelConfigs.some(c => c.id === defaultId)) {
-      selectedConfigId = defaultId
-    } else if (!$modelConfigs.some(c => c.id === selectedConfigId)) {
-      selectedConfigId = $modelConfigs[0]?.id ?? ''
+    const hasDefault = defaultId != null && $modelConfigs.some(c => c.id === defaultId)
+    const currentIsValid = $modelConfigs.some(c => c.id === selectedConfigId)
+
+    if (!hasInitializedModelSelection) {
+      selectedConfigId = hasDefault ? defaultId : ($modelConfigs[0]?.id ?? '')
+      hasInitializedModelSelection = true
+      return
+    }
+
+    if (!currentIsValid) {
+      selectedConfigId = hasDefault ? defaultId : ($modelConfigs[0]?.id ?? '')
     }
   })
 
-  // Pre-select the default MCP profile when defaults or profiles change
   $effect(() => {
     const defaultId = $sessionCreationDefaults?.defaultMcpProfileId ?? null
-    if (defaultId && $mcpProfiles.some(p => p.id === defaultId)) {
-      selectedMcpProfileId = defaultId
-    } else if (!$mcpProfiles.some(p => p.id === selectedMcpProfileId)) {
-      selectedMcpProfileId = ''
+    const hasDefault = defaultId != null && $mcpProfiles.some(p => p.id === defaultId)
+    const currentIsValid = selectedMcpProfileId === '' || $mcpProfiles.some(p => p.id === selectedMcpProfileId)
+
+    if (!hasInitializedMcpSelection) {
+      selectedMcpProfileId = hasDefault ? defaultId : ''
+      hasInitializedMcpSelection = true
+      return
+    }
+
+    if (!currentIsValid) {
+      selectedMcpProfileId = hasDefault ? defaultId : ''
     }
   })
 

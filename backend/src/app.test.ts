@@ -309,11 +309,11 @@ describe('backend foundation', () => {
 
     expect((await app.inject({
       method: 'DELETE',
-      url: '/api/lm-connections/lm-1',
+      url: '/api/model-configs/model-config-1',
     })).statusCode).toBe(204)
     expect((await app.inject({
       method: 'DELETE',
-      url: '/api/model-configs/model-config-1',
+      url: '/api/lm-connections/lm-1',
     })).statusCode).toBe(204)
     expect((await app.inject({
       method: 'DELETE',
@@ -1925,6 +1925,36 @@ describe('session-creation-defaults API', () => {
     expect(deleteResponse.json().error.code).toBe('default_mcp_profile_in_use')
   })
 
+  it('prevents deleting an LM connection that is still referenced by a model config', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const lmConnection = {
+      id: 'lm-1',
+      name: 'Local LM Studio',
+      baseUrl: 'https://example.com/v1',
+      apiKey: null,
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    const modelConfig = {
+      id: 'model-config-1', name: 'Primary', connectionId: 'lm-1',
+      modelKey: 'qwen', modelDisplayName: 'Qwen', systemPrompt: '',
+      temperature: 0, createdAt: 1, updatedAt: 1,
+    }
+
+    await app.inject({ method: 'PUT', url: '/api/lm-connections/lm-1', payload: lmConnection })
+    await app.inject({ method: 'PUT', url: '/api/model-configs/model-config-1', payload: modelConfig })
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/api/lm-connections/lm-1',
+    })
+    expect(deleteResponse.statusCode).toBe(409)
+    expect(deleteResponse.json().error.code).toBe('lm_connection_in_use')
+  })
+
   it('allows deleting model config and MCP profile that are not defaults', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
@@ -1947,4 +1977,3 @@ describe('session-creation-defaults API', () => {
     expect((await app.inject({ method: 'DELETE', url: '/api/mcp-profiles/mcp-1' })).statusCode).toBe(204)
   })
 })
-
