@@ -6,6 +6,8 @@ The completed first increment is recorded in:
 
 - [backlog/done/cli-v1-sessions-list.md](done/cli-v1-sessions-list.md)
 
+For the current CLI command reference, see [CLI.md](../CLI.md).
+
 ## Goal
 
 Build the next read-only CLI increment on top of the shipped CLI skeleton so an agent can inspect any existing session object from its ID without loading the UI.

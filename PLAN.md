@@ -30,6 +30,7 @@ The next active implementation track is the in-repo CLI.
 - keep the CLI backend-driven and aligned with the same session model and canonical IDs as the UI
 - v1 is now complete: CLI skeleton + `mcpscope sessions list`
 - current focus is v2: one universal `mcpscope inspect <id>` command, built on `GET /api/lookup/:id`, with `--json` for JSON output and `--short` for summary mode
+- CLI command reference: [CLI.md](CLI.md)
 - add session creation only after the CLI skeleton and read-only inspection flow are in place
 - defer true async turn lifecycle work until the backend contract for start/status/follow is specified
 

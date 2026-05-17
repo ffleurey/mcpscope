@@ -19,6 +19,7 @@ The value of the project depends on correctness and inspectability:
 ## Documentation boundaries
 
 - [DATA-MODEL.md](DATA-MODEL.md) — compact canonical runtime tree, public part taxonomy, canonical IDs, and lookup-model rules
+- [CLI.md](CLI.md) — CLI command reference: commands, flags, output format, exit codes
 - `ARCHITECTURE.md` — system design, persistence model, streaming model, replay model, and API overview
 
 ## Tech stack
