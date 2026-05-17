@@ -57,3 +57,14 @@ export interface ListSessionsResponse {
 export function listSessions(baseUrl: string): Promise<ListSessionsResponse> {
   return request<ListSessionsResponse>(baseUrl, '/api/sessions')
 }
+
+export interface LookupResponse {
+  id: string
+  type: string
+  mode: string
+  data: Record<string, unknown>
+}
+
+export function lookupById(baseUrl: string, id: string, mode: 'summary' | 'full'): Promise<LookupResponse> {
+  return request<LookupResponse>(baseUrl, `/api/lookup/${encodeURIComponent(id)}?mode=${mode}`)
+}

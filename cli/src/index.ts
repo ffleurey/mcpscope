@@ -2,12 +2,14 @@
 import { resolveBackendUrl } from './config.js'
 import { CliError, printError } from './errors.js'
 import { parseSessionsListArgs, printSessionsListHelp, runSessionsList } from './commands/sessions/list.js'
+import { parseInspectArgs, printInspectHelp, runInspect } from './commands/inspect.js'
 
 function printRootHelp(): void {
   process.stdout.write(`Usage: mcpscope <command> [options]
 
 Commands:
   sessions list      List sessions from the backend
+  inspect <id>       Inspect a session, turn, round, or part by ID
 
 Options:
   --url <url>        Backend URL (overrides MCPSCOPE_URL env var)
@@ -75,6 +77,25 @@ async function main(argv: string[]): Promise<void> {
     printError(`Unknown subcommand: sessions ${sub}`)
     printError('Run `mcpscope sessions --help` for usage.')
     process.exit(2)
+  }
+
+  if (cmd === 'inspect') {
+    const parsed = parseInspectArgs([sub, ...rest].filter(Boolean) as string[])
+
+    if ('help' in parsed) {
+      printInspectHelp()
+      return
+    }
+    if ('error' in parsed) {
+      printError(parsed.error)
+      printError('Run `mcpscope inspect --help` for usage.')
+      process.exit(2)
+    }
+
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runInspect({ ...opts, url: resolvedUrl })
+    return
   }
 
   printError(`Unknown command: ${cmd}`)
