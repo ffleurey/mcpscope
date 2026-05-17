@@ -63,7 +63,7 @@ Environment:
 
 export function parseSessionsListArgs(
   args: string[],
-): { opts: SessionsListOptions; url: string } | { help: true } | { error: string } {
+): { opts: SessionsListOptions } | { help: true } | { error: string } {
   let url: string | undefined
   let format: 'text' | 'json' = 'text'
 
@@ -82,5 +82,5 @@ export function parseSessionsListArgs(
     }
   }
 
-  return { opts: { url: url ?? '', format }, url: url ?? '' }
+  return { opts: { url: url ?? '', format } }
 }
