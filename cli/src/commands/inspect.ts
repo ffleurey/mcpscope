@@ -11,16 +11,19 @@ function formatDate(epochMs: number): string {
   return new Date(epochMs).toISOString().slice(0, 16).replace('T', ' ')
 }
 
-function truncate(s: string, max: number): string {
-  return s.length <= max ? s : `${s.slice(0, max - 1)}…`
-}
-
 function printKV(key: string, value: string): void {
   process.stdout.write(`  ${key.padEnd(18)} ${value}\n`)
 }
 
 function printSection(title: string): void {
   process.stdout.write(`\n${title}\n${'─'.repeat(title.length)}\n`)
+}
+
+function printBlock(label: string, text: string, indent: string): void {
+  process.stdout.write(`${indent}${label}\n`)
+  for (const line of text.split('\n')) {
+    process.stdout.write(`${indent}  ${line}\n`)
+  }
 }
 
 type AnyRecord = Record<string, unknown>
@@ -33,14 +36,12 @@ function renderPart(part: AnyRecord, indent = ''): void {
   const toolName = part['tool_name'] ? ` tool=${part['tool_name']}` : ''
   process.stdout.write(`${indent}${id}  type=${type}${tokens}${state}${toolName}\n`)
 
-  // In full mode, show content if present
   const content = part['content'] as AnyRecord | undefined
   if (content) {
     if (typeof content['text'] === 'string') {
-      const preview = truncate(content['text'].replace(/\n/g, ' '), 120)
-      process.stdout.write(`${indent}  content: ${preview}\n`)
+      printBlock('content:', content['text'], indent)
     } else if (Array.isArray(content['json'])) {
-      process.stdout.write(`${indent}  content: [${(content['json'] as unknown[]).length} items]\n`)
+      printBlock('content:', JSON.stringify(content['json'], null, 2), indent)
     }
   }
 
@@ -48,10 +49,11 @@ function renderPart(part: AnyRecord, indent = ''): void {
   if (toolPayload) {
     const call = toolPayload['call']
     const result = toolPayload['result'] as AnyRecord | undefined
-    const callStr = call && typeof call === 'object' ? JSON.stringify(call) : String(call ?? '')
-    process.stdout.write(`${indent}  call:    ${truncate(callStr, 100)}\n`)
+    printBlock('call:', JSON.stringify(call, null, 2), indent)
     if (result && typeof result['text'] === 'string') {
-      process.stdout.write(`${indent}  result:  ${truncate(result['text'].replace(/\n/g, ' '), 100)}\n`)
+      printBlock('result:', result['text'], indent)
+    } else if (result != null) {
+      printBlock('result:', JSON.stringify(result, null, 2), indent)
     }
   }
 }
