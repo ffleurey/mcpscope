@@ -1,4 +1,5 @@
 import { lookupById } from '../apiClient.js'
+import { bold, colorPartType, colorTokens, dim } from '../colors.js'
 
 export interface InspectOptions {
   url: string
@@ -20,9 +21,8 @@ function renderPartLine(part: AnyRecord, indent: string): void {
   const type = String(part['type'] ?? '')
   const toolName = part['tool_name'] ? `  ${part['tool_name']}` : ''
   const state = String(part['context_state'] ?? '')
-  const stateSuffix = state && state !== 'included' ? ` - ${state}` : ''
-  const tokens = part['token_count'] != null ? `  (${part['token_count']} tokens${stateSuffix})` : ''
-  out(`${indent}${id}  ${type}${toolName}${tokens}`)
+  const count = part['token_count'] != null ? Number(part['token_count']) : null
+  out(`${indent}${dim(id)}  ${colorPartType(type)}${toolName}${colorTokens(count, state)}`)
 }
 
 function renderTextBlock(text: string, indent: string): void {
@@ -82,13 +82,13 @@ function renderSessionText(data: AnyRecord): void {
   const mcp = data['mcp'] as AnyRecord | undefined
   const ctxWindow = data['context_window'] as AnyRecord | undefined
 
-  out(`${data['id'] ?? ''}  ${data['title'] ?? ''}`)
+  out(`${bold(String(data['id'] ?? ''))}  ${data['title'] ?? ''}`)
   if (model) {
-    const key = model['key'] ? `  ${model['key']}` : ''
+    const key = model['key'] ? `  ${dim(String(model['key']))}` : ''
     out(`  model       ${model['name'] ?? ''}${key}`)
   }
   if (mcp) out(`  mcp         ${mcp['name'] ?? ''}`)
-  if (ctxWindow) out(`  context     ${ctxWindow['used'] ?? '?'} / ${ctxWindow['available'] ?? '?'} tokens`)
+  if (ctxWindow) out(`  context     ${dim(`${ctxWindow['used'] ?? '?'} / ${ctxWindow['available'] ?? '?'} tokens`)}`)
   if (data['compaction_strategy']) out(`  compaction  ${data['compaction_strategy']}`)
 
   const setup = data['setup'] as AnyRecord | undefined
