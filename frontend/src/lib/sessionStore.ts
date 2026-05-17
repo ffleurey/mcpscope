@@ -12,6 +12,7 @@ import {
 import type {
   PreludeStreamEvent,
   SessionRecord,
+  SessionSummary,
   SessionTraceBundle,
   TurnStreamEvent,
 } from './backendTypes'
@@ -38,7 +39,7 @@ import type {
 
 export const sessionError = writable<AppError | null>(null)
 export const sessionErrorSurface = writable<'dialog' | 'new-session'>('dialog')
-export const chatSessions = writable<SessionRecord[]>([])
+export const chatSessions = writable<SessionSummary[]>([])
 export const activeChatId = writable<string | null>(null)
 export const activeTrace = writable<SessionTraceBundle | null>(null)
 export const activeTraceLoading = writable(false)
@@ -95,21 +96,38 @@ function buildMcpProfileSnapshot(mcpProfile: McpServerProfile) {
   }
 }
 
-async function refreshSessions(): Promise<SessionRecord[]> {
+async function refreshSessions(): Promise<SessionSummary[]> {
   const response = await listSessions()
   const sessions = sortByUpdatedAtDesc(response.sessions)
   chatSessions.set(sessions)
   return sessions
 }
 
-function upsertSessionSummary(session: SessionRecord): void {
+function toSessionSummary(record: SessionRecord): SessionSummary {
+  return {
+    id: record.id,
+    title: record.title,
+    status: record.status,
+    initStatus: record.initStatus,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    isContextExhausted: record.isContextExhausted,
+    loadedContextLength: record.loadedContextLength,
+    compactionStrategy: record.compactionStrategy,
+    modelProfileSnapshot: { name: record.modelProfileSnapshot.name },
+    mcpProfileSnapshot: record.mcpProfileSnapshot ? { name: record.mcpProfileSnapshot.name } : null,
+  }
+}
+
+function upsertSessionSummary(record: SessionRecord): void {
+  const summary = toSessionSummary(record)
   chatSessions.update((sessions) => sortByUpdatedAtDesc([
-    session,
-    ...sessions.filter((existing) => existing.id !== session.id),
+    summary,
+    ...sessions.filter((existing) => existing.id !== summary.id),
   ]))
 }
 
-function currentOrEmptyTrace(session: SessionRecord): SessionTraceBundle {
+function currentOrEmptyTrace(session: SessionSummary): SessionTraceBundle {
   return get(activeTrace) ?? createEmptyTrace(session)
 }
 
@@ -205,8 +223,9 @@ export async function startSession(input: {
     })
     // Show the chat view immediately (composer locked until initStatus = 'ready')
     activeChatId.set(session.id)
+    const summary = toSessionSummary(session)
     upsertSessionSummary(session)
-    activeTrace.set(createEmptyTrace(session))
+    activeTrace.set(createEmptyTrace(summary))
 
     // Stream the prelude initialization — parts and token probing appear in real-time
     await streamPreludeInit(session.id, (event) => applyPreludeStreamEvent(event))
@@ -254,11 +273,11 @@ export async function sendMessage(input: {
   isSendingTurn.set(true)
   activeTurnStream.set(null)
 
-  const sessionRecord = get(activeSession)
+  const sessionSummary = get(activeSession)
   let streamOutcome: 'committed' | 'failed' | null = null
 
   try {
-    if (!sessionRecord) {
+    if (!sessionSummary) {
       throw new Error('Active session is not available for streaming')
     }
 
@@ -271,7 +290,7 @@ export async function sendMessage(input: {
         streamOutcome = 'failed'
       }
 
-      applyTurnStreamEvent(sessionRecord as SessionRecord, userContent, event)
+      applyTurnStreamEvent(sessionSummary, userContent, event)
     })
 
     await refreshSessions()
@@ -324,7 +343,7 @@ export async function importTraceFile(file: File): Promise<void> {
 }
 
 function applyTurnStreamEvent(
-  session: SessionRecord,
+  session: SessionSummary,
   userContent: string,
   event: TurnStreamEvent,
 ): void {

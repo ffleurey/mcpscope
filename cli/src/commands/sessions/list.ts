@@ -38,10 +38,7 @@ export async function runSessionsList(opts: SessionsListOptions): Promise<void> 
     const id = truncate(session.id, 26)
     const title = truncate(session.title, 32)
     const status = truncate(session.status, 12)
-    const model = truncate(
-      session.modelProfileSnapshot.modelDisplayName ?? session.modelProfileSnapshot.modelKey,
-      28,
-    )
+    const model = truncate(session.modelProfileSnapshot.name, 28)
     const updated = formatDate(session.updatedAt)
     process.stdout.write(
       `${id.padEnd(26)}  ${title.padEnd(32)}  ${status.padEnd(12)}  ${model.padEnd(28)}  ${updated}\n`,

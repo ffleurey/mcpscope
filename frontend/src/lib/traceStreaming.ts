@@ -4,6 +4,7 @@ import type {
   PartRecord,
   RoundRecord,
   SessionRecord,
+  SessionSummary,
   SessionTraceBundle,
   TranscriptEntry,
   TurnRecord,
@@ -142,9 +143,12 @@ function withDerivedEntries(trace: SessionTraceBundle): SessionTraceBundle {
   }
 }
 
-export function createEmptyTrace(session: SessionRecord): SessionTraceBundle {
+// session is SessionSummary at creation time (from chatSessions); cast is safe because
+// this trace is a short-lived placeholder — it is replaced by the committed trace before
+// anything reads the full SessionRecord fields from activeTrace.session.
+export function createEmptyTrace(session: SessionSummary): SessionTraceBundle {
   return {
-    session,
+    session: session as unknown as SessionRecord,
     turns: [],
     rounds: [],
     parts: [],

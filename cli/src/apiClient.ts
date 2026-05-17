@@ -36,22 +36,22 @@ async function request<T>(baseUrl: string, path: string): Promise<T> {
   return payload as T
 }
 
-export interface SessionRecord {
+export interface SessionSummary {
   id: string
   title: string
   status: string
   initStatus: string
   createdAt: number
   updatedAt: number
-  modelProfileSnapshot: {
-    name: string
-    modelDisplayName?: string | null
-    modelKey: string
-  }
+  isContextExhausted: boolean
+  loadedContextLength: number | null
+  compactionStrategy: string
+  modelProfileSnapshot: { name: string }
+  mcpProfileSnapshot: { name: string } | null
 }
 
 export interface ListSessionsResponse {
-  sessions: SessionRecord[]
+  sessions: SessionSummary[]
 }
 
 export function listSessions(baseUrl: string): Promise<ListSessionsResponse> {

@@ -111,6 +111,22 @@ export const sessionRecordSchema = z.object({
   compactionStrategy: compactionStrategySchema,
 })
 
+// Slim summary returned by GET /api/sessions — only what the UI and CLI need for listing.
+// The full SessionRecord is available via GET /api/sessions/:sessionId/trace.
+export const sessionSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  status: sessionStatusSchema,
+  initStatus: sessionInitStatusSchema,
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+  isContextExhausted: z.boolean(),
+  loadedContextLength: z.number().int().positive().nullable(),
+  compactionStrategy: compactionStrategySchema,
+  modelProfileSnapshot: z.object({ name: z.string() }),
+  mcpProfileSnapshot: z.object({ name: z.string() }).nullable(),
+})
+
 export const usageSummarySchema = z.object({
   promptTokens: z.number().int().nonnegative().nullable(),
   completionTokens: z.number().int().nonnegative().nullable(),
@@ -185,6 +201,7 @@ export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>
 export type TokenMetadata = z.infer<typeof tokenMetadataSchema>
 export type CompactionStrategy = z.infer<typeof compactionStrategySchema>
 export type SessionRecord = z.infer<typeof sessionRecordSchema>
+export type SessionSummary = z.infer<typeof sessionSummarySchema>
 export type TurnRecord = z.infer<typeof turnRecordSchema>
 export type RoundRecord = z.infer<typeof roundRecordSchema>
 export type PartRecord = z.infer<typeof partRecordSchema>
