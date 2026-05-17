@@ -7,41 +7,36 @@ export interface InspectOptions {
   mode: 'summary' | 'full'
 }
 
-function formatDate(epochMs: number): string {
-  return new Date(epochMs).toISOString().slice(0, 16).replace('T', ' ')
-}
-
-function printKV(key: string, value: string): void {
-  process.stdout.write(`  ${key.padEnd(18)} ${value}\n`)
-}
-
-function printSection(title: string): void {
-  process.stdout.write(`\n${title}\n${'─'.repeat(title.length)}\n`)
-}
-
-function printBlock(label: string, text: string, indent: string): void {
-  process.stdout.write(`${indent}${label}\n`)
-  for (const line of text.split('\n')) {
-    process.stdout.write(`${indent}  ${line}\n`)
-  }
+function out(line: string): void {
+  process.stdout.write(line + '\n')
 }
 
 type AnyRecord = Record<string, unknown>
 
-function renderPart(part: AnyRecord, indent = ''): void {
+// ─── Part ─────────────────────────────────────────────────────────────────────
+
+function renderPartLine(part: AnyRecord, indent: string): void {
   const id = String(part['id'] ?? '')
   const type = String(part['type'] ?? '')
-  const tokens = part['token_count'] != null ? ` tokens=${part['token_count']}` : ''
-  const state = part['context_state'] ? ` [${part['context_state']}]` : ''
-  const toolName = part['tool_name'] ? ` tool=${part['tool_name']}` : ''
-  process.stdout.write(`${indent}${id}  type=${type}${tokens}${state}${toolName}\n`)
+  const tokens = part['token_count'] != null ? `  ${part['token_count']} tokens` : ''
+  const state = part['context_state'] ? `  [${part['context_state']}]` : ''
+  const toolName = part['tool_name'] ? `  ${part['tool_name']}` : ''
+  out(`${indent}${id}  ${type}${tokens}${state}${toolName}`)
+}
 
+function renderTextBlock(text: string, indent: string): void {
+  for (const line of text.split('\n')) {
+    out(`${indent}${line}`)
+  }
+}
+
+function renderPartContent(part: AnyRecord, indent: string): void {
   const content = part['content'] as AnyRecord | undefined
   if (content) {
     if (typeof content['text'] === 'string') {
-      printBlock('content:', content['text'], indent)
+      renderTextBlock(content['text'], indent)
     } else if (Array.isArray(content['json'])) {
-      printBlock('content:', JSON.stringify(content['json'], null, 2), indent)
+      renderTextBlock(JSON.stringify(content['json'], null, 2), indent)
     }
   }
 
@@ -49,99 +44,104 @@ function renderPart(part: AnyRecord, indent = ''): void {
   if (toolPayload) {
     const call = toolPayload['call']
     const result = toolPayload['result'] as AnyRecord | undefined
-    printBlock('call:', JSON.stringify(call, null, 2), indent)
-    if (result && typeof result['text'] === 'string') {
-      printBlock('result:', result['text'], indent)
-    } else if (result != null) {
-      printBlock('result:', JSON.stringify(result, null, 2), indent)
+    out(`${indent}call  ${JSON.stringify(call)}`)
+    if (result) {
+      out(`${indent}result`)
+      if (typeof result['text'] === 'string') {
+        renderTextBlock(result['text'], indent + '  ')
+      } else {
+        renderTextBlock(JSON.stringify(result, null, 2), indent + '  ')
+      }
     }
   }
 }
 
-function renderSetup(setup: AnyRecord): void {
-  printSection(`Setup  ${setup['id'] ?? ''}`)
-  const parts = setup['parts'] as AnyRecord[] | undefined
-  if (parts) {
-    for (const part of parts) renderPart(part, '  ')
-  }
+function renderPart(part: AnyRecord, indent: string): void {
+  renderPartLine(part, indent)
+  renderPartContent(part, indent + '  ')
 }
 
-function renderRound(round: AnyRecord): void {
+// ─── Round ────────────────────────────────────────────────────────────────────
+
+function renderRound(round: AnyRecord, indent: string): void {
   const id = String(round['id'] ?? '')
-  const status = round['status'] ? `  status=${round['status']}` : ''
-  process.stdout.write(`  Round ${round['number'] ?? '?'}  ${id}${status}\n`)
+  const status = round['status'] ? `  ${round['status']}` : ''
+  out(`${indent}${id}${status}`)
   const parts = round['parts'] as AnyRecord[] | undefined
   if (parts) {
-    for (const part of parts) renderPart(part, '    ')
+    for (const part of parts) renderPart(part, indent + '  ')
   }
 }
 
-function renderTurn(turn: AnyRecord): void {
+// ─── Turn ─────────────────────────────────────────────────────────────────────
+
+function renderTurn(turn: AnyRecord, indent: string): void {
   const id = String(turn['id'] ?? '')
-  const status = turn['status'] ? `  status=${turn['status']}` : ''
-  process.stdout.write(`Turn ${turn['number'] ?? '?'}  ${id}${status}\n`)
+  const status = turn['status'] ? `  ${turn['status']}` : ''
+  out(`${indent}${id}${status}`)
   const rounds = turn['rounds'] as AnyRecord[] | undefined
   if (rounds) {
-    for (const round of rounds) renderRound(round)
+    for (const round of rounds) renderRound(round, indent + '  ')
   }
 }
 
-function renderSessionText(data: AnyRecord, mode: 'summary' | 'full'): void {
+// ─── Type-specific text renderers ─────────────────────────────────────────────
+
+function renderSessionText(data: AnyRecord): void {
   const model = data['model'] as AnyRecord | undefined
   const mcp = data['mcp'] as AnyRecord | undefined
   const ctxWindow = data['context_window'] as AnyRecord | undefined
 
-  printSection(`Session  ${data['id'] ?? ''}  (${mode})`)
-  printKV('title:', String(data['title'] ?? ''))
-  if (model) printKV('model:', `${model['name'] ?? ''}  key=${model['key'] ?? ''}`)
-  if (mcp) printKV('mcp:', `${mcp['name'] ?? ''}  strategy=${mcp['strategy'] ?? ''}`)
-  if (ctxWindow) {
-    printKV('context_window:', `used=${ctxWindow['used'] ?? '?'}  available=${ctxWindow['available'] ?? '?'}`)
+  out(`${data['id'] ?? ''}  ${data['title'] ?? ''}`)
+  if (model) {
+    const key = model['key'] ? `  ${model['key']}` : ''
+    out(`  model       ${model['name'] ?? ''}${key}`)
   }
+  if (mcp) out(`  mcp         ${mcp['name'] ?? ''}`)
+  if (ctxWindow) out(`  context     ${ctxWindow['used'] ?? '?'} / ${ctxWindow['available'] ?? '?'} tokens`)
+  if (data['compaction_strategy']) out(`  compaction  ${data['compaction_strategy']}`)
 
   const setup = data['setup'] as AnyRecord | undefined
-  if (setup) renderSetup(setup)
+  if (setup) {
+    out('')
+    out(String(setup['id'] ?? ''))
+    const parts = setup['parts'] as AnyRecord[] | undefined
+    if (parts) {
+      for (const part of parts) renderPart(part, '  ')
+    }
+  }
 
   const turns = data['turns'] as AnyRecord[] | undefined
   if (turns && turns.length > 0) {
-    printSection(`Turns (${turns.length})`)
-    for (const turn of turns) renderTurn(turn)
+    for (const turn of turns) {
+      out('')
+      renderTurn(turn, '')
+    }
   }
 }
 
-function renderTurnText(data: AnyRecord, mode: 'summary' | 'full'): void {
-  printSection(`Turn ${data['number'] ?? '?'}  ${data['id'] ?? ''}  (${mode})`)
-  if (data['status']) printKV('status:', String(data['status']))
-  const rounds = data['rounds'] as AnyRecord[] | undefined
-  if (rounds && rounds.length > 0) {
-    for (const round of rounds) renderRound(round)
-  }
+function renderTurnText(data: AnyRecord): void {
+  renderTurn(data, '')
 }
 
-function renderRoundText(data: AnyRecord, mode: 'summary' | 'full'): void {
-  printSection(`Round ${data['number'] ?? '?'}  ${data['id'] ?? ''}  (${mode})`)
-  if (data['status']) printKV('status:', String(data['status']))
+function renderRoundText(data: AnyRecord): void {
+  renderRound(data, '')
+}
+
+function renderSetupText(data: AnyRecord): void {
+  out(String(data['id'] ?? ''))
   const parts = data['parts'] as AnyRecord[] | undefined
-  if (parts && parts.length > 0) {
-    process.stdout.write('\n')
+  if (parts) {
     for (const part of parts) renderPart(part, '  ')
   }
 }
 
-function renderSetupText(data: AnyRecord, mode: 'summary' | 'full'): void {
-  printSection(`Setup  ${data['id'] ?? ''}  (${mode})`)
-  renderSetup(data)
+function renderPartText(data: AnyRecord): void {
+  renderPartLine(data, '')
+  renderPartContent(data, '  ')
 }
 
-function renderPartText(data: AnyRecord, mode: 'summary' | 'full'): void {
-  printSection(`Part  ${data['id'] ?? ''}  (${mode})`)
-  renderPart(data, '  ')
-}
-
-function renderCreatedAt(data: AnyRecord): void {
-  const ts = data['createdAt'] ?? data['created_at']
-  if (typeof ts === 'number') printKV('created_at:', formatDate(ts))
-}
+// ─── Entry point ──────────────────────────────────────────────────────────────
 
 export async function runInspect(opts: InspectOptions): Promise<void> {
   const result = await lookupById(opts.url, opts.id, opts.mode)
@@ -151,32 +151,30 @@ export async function runInspect(opts: InspectOptions): Promise<void> {
     return
   }
 
-  const { type, data, mode } = result
+  const { type, data } = result
   const d = data as AnyRecord
-
-  renderCreatedAt(d)
 
   switch (type) {
     case 'session':
-      renderSessionText(d, mode as 'summary' | 'full')
+      renderSessionText(d)
       break
     case 'turn':
-      renderTurnText(d, mode as 'summary' | 'full')
+      renderTurnText(d)
       break
     case 'round':
-      renderRoundText(d, mode as 'summary' | 'full')
+      renderRoundText(d)
       break
     case 'setup':
-      renderSetupText(d, mode as 'summary' | 'full')
+      renderSetupText(d)
       break
     case 'part':
-      renderPartText(d, mode as 'summary' | 'full')
+      renderPartText(d)
       break
     default:
       // Unknown type: fall back to compact JSON
       process.stdout.write(JSON.stringify(result, null, 2) + '\n')
   }
-  process.stdout.write('\n')
+  out('')
 }
 
 export function printInspectHelp(): void {
