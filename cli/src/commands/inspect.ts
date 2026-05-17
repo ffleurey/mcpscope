@@ -179,21 +179,14 @@ export async function runInspect(opts: InspectOptions): Promise<void> {
 }
 
 export function printInspectHelp(): void {
-  process.stdout.write(`Usage: mcpscope inspect <id> [options]
+  process.stdout.write(`Usage: mcpscope inspect <id> [--short] [--json] [--url <url>]
 
-Inspect a session, turn, round, or part by its hierarchical ID.
+  <id>      QGWA  /  QGWA.1  /  QGWA.1.2  /  QGWA.1.2.3-U
+  --short   omit part content (token counts only)
+  --json    emit JSON instead of text
 
-Arguments:
-  <id>           Hierarchical ID (e.g. QGWA, QGWA.1, QGWA.1.1, QGWA.1.1.2-T)
-
-Options:
-  --short        Return summary only (no content); default returns full content
-  --json         Output as JSON instead of text
-  --url <url>    Backend URL (overrides MCPSCOPE_URL env var)
-  -h, --help     Show this help
-
-Environment:
-  MCPSCOPE_URL   Backend URL (default: http://localhost:3030)
+Full mode includes content for user_prompt and assistant_answer.
+tool_definitions always shows tool names; use a part ID for full schemas.
 `)
 }
 

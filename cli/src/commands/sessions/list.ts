@@ -47,17 +47,9 @@ export async function runSessionsList(opts: SessionsListOptions): Promise<void> 
 }
 
 export function printSessionsListHelp(): void {
-  process.stdout.write(`Usage: mcpscope sessions list [options]
+  process.stdout.write(`Usage: mcpscope sessions list [--json] [--url <url>]
 
-List all sessions from the backend.
-
-Options:
-  --url <url>    Backend URL (overrides MCPSCOPE_URL env var)
-  --json         Output as JSON instead of text
-  -h, --help     Show this help
-
-Environment:
-  MCPSCOPE_URL   Backend URL (default: http://localhost:3030)
+  --json    emit JSON instead of the default columnar text table
 `)
 }
 

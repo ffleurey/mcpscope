@@ -5,19 +5,12 @@ import { parseSessionsListArgs, printSessionsListHelp, runSessionsList } from '.
 import { parseInspectArgs, printInspectHelp, runInspect } from './commands/inspect.js'
 
 function printRootHelp(): void {
-  process.stdout.write(`Usage: mcpscope <command> [options]
+  process.stdout.write(`Usage: mcpscope <command> [-h] [--url <url>]
 
-Commands:
-  sessions list      List sessions from the backend
-  inspect <id>       Inspect a session, turn, round, or part by ID
+  sessions list    list all sessions
+  inspect <id>     inspect session / turn / round / part by hierarchical ID
 
-Options:
-  --url <url>        Backend URL (overrides MCPSCOPE_URL env var)
-  -h, --help         Show this help
-  --version          Show version
-
-Environment:
-  MCPSCOPE_URL       Backend URL (default: http://localhost:3030)
+--url <url>  or  MCPSCOPE_URL  (default: http://localhost:3030)
 `)
 }
 
