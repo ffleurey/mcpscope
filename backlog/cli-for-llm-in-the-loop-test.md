@@ -19,6 +19,21 @@ The hierarchical ID and lookup prerequisite is complete. The CLI should build on
 
 The CLI should reuse those primitives rather than redesigning them.
 
+## Implementation progress
+
+### ✅ Increment 1 — CLI skeleton + `sessions list` (complete)
+
+Delivered in branch `cli-sessions-list-v1`:
+
+- `cli/` folder created with TypeScript source, `tsconfig.json`, and build scripts
+- `mcpscope sessions list` implemented, calls `GET /api/sessions`
+- `--url` flag and `MCPSCOPE_URL` env var for backend URL resolution
+  (resolution order: `--url` > `MCPSCOPE_URL` > `http://localhost:3030`)
+- `--format text` (default table) and `--format json` (stable `{ api_version, sessions }`)
+- `bin.mcpscope` wired in `package.json` → `./cli/dist/index.js`
+- `build:cli`, `check:cli`, `dev:cli`, `lint:cli` npm scripts added
+- `GET /api/sessions` response slimmed to `SessionSummary` — drops `systemPrompt`, `apiKey`, `authValue`, and other unused fields from the list endpoint; full snapshot data remains available via `GET /api/sessions/:sessionId/trace`
+
 ## Core direction
 
 - the CLI is an in-repo mcpscope entrypoint exposed as **`mcpscope`**
