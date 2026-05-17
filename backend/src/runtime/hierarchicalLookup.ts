@@ -323,8 +323,8 @@ export function resolveHierarchicalId(
     ? (toolResultsByParent.get(effectivePart.id) ?? [])
     : []
 
-  const node = buildPartNode(effectivePart, resultParts, mode, true)
+  const node = buildPartNode(effectivePart, resultParts, 'full', true)
   if (!node) return { status: 'not_found', message: `Part not found: ${parsed.raw}` }
 
-  return { status: 'ok', payload: { id: effectivePart.id, type: 'part', mode, data: node } }
+  return { status: 'ok', payload: { id: effectivePart.id, type: 'part', mode: 'full', data: node } }
 }

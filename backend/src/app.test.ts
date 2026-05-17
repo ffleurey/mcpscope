@@ -561,17 +561,17 @@ describe('backend foundation', () => {
     expect(partSummary.json()).toMatchObject({
       id: toolCallPartId,
       type: 'part',
-      mode: 'summary',
+      mode: 'full',  // parts always return full regardless of requested mode
       data: expect.objectContaining({
         id: toolCallPartId,
         type: 'tool_call',
         ...(toolName ? { tool_name: toolName } : {}),
         token_count: expect.anything(),
         context_state: expect.any(String),
+        tool_payload: expect.objectContaining({ call: expect.any(Object) }),
       }),
     })
     expect(partSummary.json().parentIds).toBeUndefined()
-    expect(partSummary.json().data.tool_payload).toBeUndefined()
 
     const partFull = await app.inject({ method: 'GET', url: `/api/lookup/${toolCallPartId}?mode=full` })
     expect(partFull.statusCode).toBe(200)
@@ -592,7 +592,10 @@ describe('backend foundation', () => {
     if (assistantContentPartId) {
       const assistantPartSummary = await app.inject({ method: 'GET', url: `/api/lookup/${assistantContentPartId}?mode=summary` })
       expect(assistantPartSummary.statusCode).toBe(200)
-      expect(assistantPartSummary.json().data.content).toBeUndefined()
+      // parts always return full content regardless of requested mode
+      expect(assistantPartSummary.json().data.content).toEqual(
+        expect.objectContaining({ text: expect.any(String) }),
+      )
 
       const assistantPartFull = await app.inject({ method: 'GET', url: `/api/lookup/${assistantContentPartId}?mode=full` })
       expect(assistantPartFull.statusCode).toBe(200)
@@ -606,7 +609,10 @@ describe('backend foundation', () => {
     expect(userPromptPartSummary.json().data).toEqual(
       expect.objectContaining({ type: 'user_prompt', token_count: expect.anything() }),
     )
-    expect(userPromptPartSummary.json().data.content).toBeUndefined()
+    // parts always return full content regardless of requested mode
+    expect(userPromptPartSummary.json().data.content).toEqual(
+      expect.objectContaining({ text: expect.any(String) }),
+    )
 
     // Setup node lookup
     const setupId = `${importedSessionId}.S`
@@ -632,16 +638,16 @@ describe('backend foundation', () => {
     expect(setupPartSummary.json()).toMatchObject({
       id: setupPartId,
       type: 'part',
-      mode: 'summary',
+      mode: 'full',  // parts always return full regardless of requested mode
       data: expect.objectContaining({
         id: setupPartId,
         type: 'system_prompt',
         token_count: expect.anything(),
         context_state: expect.any(String),
+        content: expect.objectContaining({ text: expect.any(String) }),
       }),
     })
     expect(setupPartSummary.json().parentIds).toBeUndefined()
-    expect(setupPartSummary.json().data.content).toBeUndefined()
 
     const setupPartFull = await app.inject({ method: 'GET', url: `/api/lookup/${setupPartId}?mode=full` })
     expect(setupPartFull.statusCode).toBe(200)
