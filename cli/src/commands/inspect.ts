@@ -1,5 +1,5 @@
 import { lookupById } from '../apiClient.js'
-import { bold, colorTokens, dim } from '../colors.js'
+import { bold, colorTokens } from '../colors.js'
 
 export interface InspectOptions {
   url: string
@@ -86,13 +86,13 @@ function renderSessionText(data: AnyRecord): void {
   const mcp = data['mcp'] as AnyRecord | undefined
   const ctxWindow = data['context_window'] as AnyRecord | undefined
 
-  out(`${bold(String(data['id'] ?? ''))}  ${data['title'] ?? ''}`)
+  out(`${String(data['id'] ?? '')}  ${data['title'] ?? ''}`)
   if (model) {
-    const key = model['key'] ? `  ${dim(String(model['key']))}` : ''
+    const key = model['key'] ? `  ${String(model['key'])}` : ''
     out(`  model       ${model['name'] ?? ''}${key}`)
   }
   if (mcp) out(`  mcp         ${mcp['name'] ?? ''}`)
-  if (ctxWindow) out(`  context     ${dim(`${ctxWindow['used'] ?? '?'} / ${ctxWindow['available'] ?? '?'} tokens`)}`)
+  if (ctxWindow) out(`  context     ${ctxWindow['used'] ?? '?'} / ${ctxWindow['available'] ?? '?'} tokens`)
   if (data['compaction_strategy']) out(`  compaction  ${data['compaction_strategy']}`)
 
   const setup = data['setup'] as AnyRecord | undefined
