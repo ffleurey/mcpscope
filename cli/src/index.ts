@@ -15,9 +15,6 @@ function printHelp(): void {
     <id>      QGWA  /  QGWA.1  /  QGWA.1.2  /  QGWA.1.2.3-U
     --short   omit part content (token counts only)
 
-Full mode includes content for user_prompt and assistant_answer.
-tool_definitions always shows tool names; use a part ID for full schemas.
-
 --json        emit JSON instead of text
 --url <url>   or  MCPSCOPE_URL  (default: http://localhost:3030)
 `)
