@@ -285,7 +285,7 @@ export function resolveHierarchicalId(
       .filter(r => r.turnId === turn.id)
       .sort((a, b) => a.roundIndex - b.roundIndex)
 
-    const data = buildTurnNode(turn, allRounds, allParts, mode, true)
+    const data = buildTurnNode(turn, allRounds, allParts, mode, false)
 
     return { status: 'ok', payload: { id: turn.id, type: 'turn', mode, data } }
   }

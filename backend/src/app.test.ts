@@ -511,6 +511,11 @@ describe('backend foundation', () => {
     expect(turnFull.json().data.turn).toBeUndefined()
     expect(turnFull.json().data.context).toBeUndefined()
     expect(turnFull.json().data.rounds.length).toBeGreaterThan(0)
+    // turn full: like session — user_prompt/assistant_answer get content, tool_payload absent
+    const turnFullParts: { type: string; content?: unknown; tool_payload?: unknown }[] =
+      turnFull.json().data.rounds.flatMap((r: { parts: unknown[] }) => r.parts)
+    expect(turnFullParts.some(p => p.type === 'user_prompt' && p.content !== undefined)).toBe(true)
+    expect(turnFullParts.every(p => p.tool_payload === undefined)).toBe(true)
 
     const firstRoundSummary = await app.inject({ method: 'GET', url: `/api/lookup/${firstRoundId}?mode=summary` })
     expect(firstRoundSummary.statusCode).toBe(200)
