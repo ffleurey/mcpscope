@@ -178,18 +178,6 @@ export async function runInspect(opts: InspectOptions): Promise<void> {
   out('')
 }
 
-export function printInspectHelp(): void {
-  process.stdout.write(`Usage: mcpscope inspect <id> [--short] [--json] [--url <url>]
-
-  <id>      QGWA  /  QGWA.1  /  QGWA.1.2  /  QGWA.1.2.3-U
-  --short   omit part content (token counts only)
-  --json    emit JSON instead of text
-
-Full mode includes content for user_prompt and assistant_answer.
-tool_definitions always shows tool names; use a part ID for full schemas.
-`)
-}
-
 export function parseInspectArgs(
   args: string[],
 ): { opts: InspectOptions } | { help: true } | { error: string } {

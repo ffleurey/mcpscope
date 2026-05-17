@@ -1,14 +1,22 @@
 #!/usr/bin/env node
 import { resolveBackendUrl } from './config.js'
 import { CliError, printError } from './errors.js'
-import { parseSessionsListArgs, printSessionsListHelp, runSessionsList } from './commands/sessions/list.js'
-import { parseInspectArgs, printInspectHelp, runInspect } from './commands/inspect.js'
+import { parseSessionsListArgs, runSessionsList } from './commands/sessions/list.js'
+import { parseInspectArgs, runInspect } from './commands/inspect.js'
 
-function printRootHelp(): void {
-  process.stdout.write(`Usage: mcpscope <command> [-h] [--url <url>]
+function printHelp(): void {
+  process.stdout.write(`Usage: mcpscope <command> [--url <url>]
 
-  sessions list    list all sessions
-  inspect <id>     inspect session / turn / round / part by hierarchical ID
+  sessions list [--json]
+    list all sessions
+
+  inspect <id> [--short] [--json]
+    inspect session / turn / round / part by hierarchical ID
+    <id>      QGWA  /  QGWA.1  /  QGWA.1.2  /  QGWA.1.2.3-U
+    --short   omit part content (token counts only)
+
+Full mode includes content for user_prompt and assistant_answer.
+tool_definitions always shows tool names; use a part ID for full schemas.
 
 --url <url>  or  MCPSCOPE_URL  (default: http://localhost:3030)
 `)
@@ -32,7 +40,7 @@ async function main(argv: string[]): Promise<void> {
   const [cmd, sub, ...rest] = filteredArgs
 
   if (!cmd || cmd === '-h' || cmd === '--help') {
-    printRootHelp()
+    printHelp()
     return
   }
 
@@ -43,7 +51,7 @@ async function main(argv: string[]): Promise<void> {
 
   if (cmd === 'sessions') {
     if (!sub || sub === '-h' || sub === '--help') {
-      printSessionsListHelp()
+      printHelp()
       return
     }
 
@@ -51,12 +59,12 @@ async function main(argv: string[]): Promise<void> {
       const parsed = parseSessionsListArgs(rest)
 
       if ('help' in parsed) {
-        printSessionsListHelp()
+        printHelp()
         return
       }
       if ('error' in parsed) {
         printError(parsed.error)
-        printError('Run `mcpscope sessions list --help` for usage.')
+        printError('Run `mcpscope --help` for usage.')
         process.exit(2)
       }
 
@@ -68,7 +76,7 @@ async function main(argv: string[]): Promise<void> {
     }
 
     printError(`Unknown subcommand: sessions ${sub}`)
-    printError('Run `mcpscope sessions --help` for usage.')
+    printError('Run `mcpscope --help` for usage.')
     process.exit(2)
   }
 
@@ -76,12 +84,12 @@ async function main(argv: string[]): Promise<void> {
     const parsed = parseInspectArgs([sub, ...rest].filter(Boolean) as string[])
 
     if ('help' in parsed) {
-      printInspectHelp()
+      printHelp()
       return
     }
     if ('error' in parsed) {
       printError(parsed.error)
-      printError('Run `mcpscope inspect --help` for usage.')
+      printError('Run `mcpscope --help` for usage.')
       process.exit(2)
     }
 
@@ -104,3 +112,5 @@ main(process.argv).catch((err: unknown) => {
   printError(err instanceof Error ? err.message : String(err))
   process.exit(1)
 })
+
+

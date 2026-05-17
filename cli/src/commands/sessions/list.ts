@@ -46,13 +46,6 @@ export async function runSessionsList(opts: SessionsListOptions): Promise<void> 
   }
 }
 
-export function printSessionsListHelp(): void {
-  process.stdout.write(`Usage: mcpscope sessions list [--json] [--url <url>]
-
-  --json    emit JSON instead of the default columnar text table
-`)
-}
-
 export function parseSessionsListArgs(
   args: string[],
 ): { opts: SessionsListOptions } | { help: true } | { error: string } {
