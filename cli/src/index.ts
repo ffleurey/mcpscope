@@ -14,6 +14,7 @@ function printHelp(): void {
     inspect session / turn / round / part by hierarchical ID
     <id>      QGWA  /  QGWA.1  /  QGWA.1.2  /  QGWA.1.2.3-U
     --short   omit part content (token counts only)
+    --json    emit JSON instead of text
 
 Full mode includes content for user_prompt and assistant_answer.
 tool_definitions always shows tool names; use a part ID for full schemas.
