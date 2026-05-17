@@ -18,10 +18,11 @@ type AnyRecord = Record<string, unknown>
 function renderPartLine(part: AnyRecord, indent: string): void {
   const id = String(part['id'] ?? '')
   const type = String(part['type'] ?? '')
-  const tokens = part['token_count'] != null ? `  ${part['token_count']} tokens` : ''
-  const state = part['context_state'] ? `  [${part['context_state']}]` : ''
   const toolName = part['tool_name'] ? `  ${part['tool_name']}` : ''
-  out(`${indent}${id}  ${type}${tokens}${state}${toolName}`)
+  const state = String(part['context_state'] ?? '')
+  const stateSuffix = state && state !== 'included' ? ` - ${state}` : ''
+  const tokens = part['token_count'] != null ? `  (${part['token_count']} tokens${stateSuffix})` : ''
+  out(`${indent}${id}  ${type}${toolName}${tokens}`)
 }
 
 function renderTextBlock(text: string, indent: string): void {
