@@ -550,9 +550,9 @@ describe('backend foundation', () => {
     })
     expect(roundFull.json().parentIds).toBeUndefined()
     expect(roundFull.json().data.parts.length).toBeGreaterThan(0)
-    // tool_payload only on direct part lookup, not at round level
+    // tool_payload present on direct round full lookup
     const roundFullTool = roundFull.json().data.parts.find((p: { type: string }) => p.type === 'tool_call')
-    expect(roundFullTool.tool_payload).toBeUndefined()
+    expect(roundFullTool.tool_payload).toEqual(expect.objectContaining({ call: expect.any(Object) }))
     // no setup-type parts appear in round parts
     expect(roundFull.json().data.parts.some((p: { type: string }) => p.type === 'setup')).toBe(false)
 

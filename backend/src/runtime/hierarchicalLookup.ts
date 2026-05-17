@@ -171,8 +171,9 @@ function buildRoundNode(
   roundParts: PartRecord[],
   toolResultsByParent: Map<string, PartRecord[]>,
   mode: LookupMode,
+  isDirectLookup: boolean,
 ): object {
-  const parts = buildRoundPartNodes(roundParts, toolResultsByParent, mode, false)
+  const parts = buildRoundPartNodes(roundParts, toolResultsByParent, mode, isDirectLookup)
   return {
     id: round.id,
     number: round.roundIndex + 1,
@@ -186,13 +187,14 @@ function buildTurnNode(
   rounds: RoundRecord[],
   allParts: PartRecord[],
   mode: LookupMode,
+  isDirectLookup: boolean,
 ): object {
   const toolResultsByParent = buildToolResultIndex(allParts)
   const roundNodes = rounds.map(round => {
     const roundParts = allParts
       .filter(p => p.roundId === round.id && isPublicPartType(p.partType))
       .sort((a, b) => a.ordinal - b.ordinal)
-    return buildRoundNode(round, roundParts, toolResultsByParent, mode)
+    return buildRoundNode(round, roundParts, toolResultsByParent, mode, isDirectLookup)
   })
   return {
     id: turn.id,
@@ -234,7 +236,7 @@ export function resolveHierarchicalId(
       const turnRounds = allRounds
         .filter(r => r.turnId === turn.id)
         .sort((a, b) => a.roundIndex - b.roundIndex)
-      return buildTurnNode(turn, turnRounds, allParts, mode)
+      return buildTurnNode(turn, turnRounds, allParts, mode, false)
     })
 
     const data: Record<string, unknown> = {
@@ -283,7 +285,7 @@ export function resolveHierarchicalId(
       .filter(r => r.turnId === turn.id)
       .sort((a, b) => a.roundIndex - b.roundIndex)
 
-    const data = buildTurnNode(turn, allRounds, allParts, mode)
+    const data = buildTurnNode(turn, allRounds, allParts, mode, true)
 
     return { status: 'ok', payload: { id: turn.id, type: 'turn', mode, data } }
   }
@@ -302,7 +304,7 @@ export function resolveHierarchicalId(
       .sort((a, b) => a.ordinal - b.ordinal)
 
     const toolResultsByParent = buildToolResultIndex(sessionParts)
-    const data = buildRoundNode(round, roundParts, toolResultsByParent, mode)
+    const data = buildRoundNode(round, roundParts, toolResultsByParent, mode, true)
 
     return { status: 'ok', payload: { id: round.id, type: 'round', mode, data } }
   }
