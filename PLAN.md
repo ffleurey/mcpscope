@@ -30,11 +30,13 @@ The next active implementation track is the in-repo CLI.
 - keep the CLI backend-driven and aligned with the same session model and canonical IDs as the UI
 - v1 complete: `mcpscope sessions list`
 - v2 complete: `mcpscope inspect <id>` — universal lookup by hierarchical ID, `--json`, `--short`
+- v3 now adds the non-streaming lifecycle loop: `list`, `create`, `send`, `status`
 - CLI command reference: [CLI.md](CLI.md)
-- next: session creation with an agent-friendly command that avoids manual snapshot construction
-- defer async turn lifecycle work until the backend contract for start/status/follow is specified
+- session creation now uses backend-owned defaults rather than CLI-side snapshot construction
+- detached turn start and pollable session status are now part of the documented backend contract
+- next: keep the docs/help aligned and defer streaming, interactive mode, and richer follow/cancel workflows
 
-The active task description and rollout plan live in [backlog/cli-for-llm-in-the-loop-test.md](backlog/cli-for-llm-in-the-loop-test.md).
+The next CLI task description now lives in [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md).
 
 ### 2. Token and context trust hardening
 
