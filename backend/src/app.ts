@@ -16,6 +16,7 @@ import {
   modelConfigSchema,
 } from './domain/configuration.js'
 import { getDomainModelSummary } from './domain/model.js'
+import type { TurnRecord } from './domain/model.js'
 import { deriveContextEntries, deriveTranscriptEntries } from './domain/selectors.js'
 import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from './domain/trace.js'
 import { openBackendDatabase } from './persistence/db.js'
@@ -36,9 +37,12 @@ import {
   listRoundRecordsBySession,
   listSessionSummaries,
   listTurnRecordsBySession,
+  getNextTurnSequenceNumber,
+  insertTurnRecord,
   upsertLmConnection,
   upsertMcpServerProfile,
   upsertModelConfig,
+  updateTurnRecord,
 } from './persistence/repository.js'
 import {
   createChatCompletion,
@@ -63,6 +67,7 @@ import {
   type LmStudioGateway,
 } from './runtime/modelTurns.js'
 import { createToolEnabledTurn, type McpGateway } from './runtime/toolTurns.js'
+import { formatTurnId } from './domain/hierarchicalIds.js'
 import { importTraceBundle } from './runtime/traceImport.js'
 import { runSessionInitialization } from './runtime/sessionInit.js'
 import { resolveHierarchicalId } from './runtime/hierarchicalLookup.js'
@@ -189,6 +194,270 @@ export async function buildBackendApp(
     }
     reply.code(201)
     return { session }
+  })
+
+  app.post('/api/sessions/from-defaults', async (request, reply) => {
+    const { title, sessionId, compactionStrategy } = z.object({
+      title: z.string().min(1).max(200).optional(),
+      sessionId: z.string().optional(),
+      compactionStrategy: z.enum(['none', 'strip-reasoning']).optional(),
+    }).parse(request.body)
+
+    const defaults = getSessionCreationDefaults(database.connection)
+
+    if (!defaults.defaultModelConfigId) {
+      reply.code(422)
+      return apiError('validation', 'No default model config is configured for new sessions.', {
+        code: 'default_model_not_configured',
+      })
+    }
+
+    const modelConfigs = listModelConfigs(database.connection)
+    const modelConfig = modelConfigs.find(c => c.id === defaults.defaultModelConfigId)
+    if (!modelConfig) {
+      reply.code(422)
+      return apiError('validation', `Default model config "${defaults.defaultModelConfigId}" no longer exists.`, {
+        code: 'default_model_config_not_found',
+      })
+    }
+
+    const lmConnections = listLmConnections(database.connection)
+    const lmConnection = lmConnections.find(c => c.id === modelConfig.connectionId)
+    if (!lmConnection) {
+      reply.code(422)
+      return apiError('validation', `LM connection "${modelConfig.connectionId}" referenced by the default model config no longer exists.`, {
+        code: 'default_lm_connection_not_found',
+      })
+    }
+
+    let mcpProfileSnapshot = null
+    if (defaults.defaultMcpProfileId) {
+      const mcpProfiles = listMcpServerProfiles(database.connection)
+      const mcpProfile = mcpProfiles.find(p => p.id === defaults.defaultMcpProfileId)
+      if (!mcpProfile) {
+        reply.code(422)
+        return apiError('validation', `Default MCP profile "${defaults.defaultMcpProfileId}" no longer exists.`, {
+          code: 'default_mcp_profile_not_found',
+        })
+      }
+      mcpProfileSnapshot = {
+        id: mcpProfile.id,
+        name: mcpProfile.name,
+        url: mcpProfile.url,
+        transport: mcpProfile.transport,
+        authType: mcpProfile.authType ?? null,
+        authValue: mcpProfile.authValue ?? null,
+        createdAt: mcpProfile.createdAt,
+        updatedAt: mcpProfile.updatedAt,
+      }
+    }
+
+    const modelProfileSnapshot = {
+      id: modelConfig.id,
+      name: modelConfig.name,
+      connectionBaseUrl: lmConnection.baseUrl,
+      apiKey: lmConnection.apiKey ?? null,
+      modelKey: modelConfig.modelKey,
+      modelDisplayName: modelConfig.modelDisplayName,
+      systemPrompt: modelConfig.systemPrompt,
+      temperature: modelConfig.temperature,
+      reasoning: modelConfig.reasoning ?? null,
+      createdAt: modelConfig.createdAt,
+      updatedAt: modelConfig.updatedAt,
+    }
+
+    let session
+    try {
+      session = createSession(database, {
+        sessionId,
+        title,
+        modelProfileSnapshot,
+        mcpProfileSnapshot,
+        compactionStrategy: compactionStrategy ?? 'strip-reasoning',
+      })
+    } catch (error) {
+      if (error instanceof SessionIdInputError) {
+        reply.code(400)
+        return apiError('validation', error.message, { code: 'invalid_session_id' })
+      }
+      if (error instanceof SessionIdConflictError) {
+        reply.code(409)
+        return apiError('validation', error.message, { code: 'duplicate_session_id' })
+      }
+      if (error instanceof SessionIdGenerationError) {
+        reply.code(409)
+        return apiError('validation', error.message, { code: 'session_id_generation_failed' })
+      }
+      throw error
+    }
+
+    // Fire off initialization in the background (detached — caller polls via /status)
+    const sessionId_ = session.id
+    runSessionInitialization(database, dependencies.lmStudioGateway, dependencies.mcpGateway, sessionId_, () => {}).catch((err: unknown) => {
+      app.log.error({ sessionId: sessionId_, err: err instanceof Error ? err.message : String(err) }, 'Detached session initialization failed')
+      const s = getSessionRecord(database.connection, sessionId_)
+      if (s && (s.initStatus === 'initializing' || s.initStatus === 'pending')) {
+        s.initStatus = 'error'
+        s.updatedAt = Date.now()
+        updateSessionRecord(database.connection, s)
+      }
+    })
+
+    reply.code(201)
+    return {
+      session: {
+        id: session.id,
+        title: session.title,
+        status: session.status,
+        initStatus: session.initStatus,
+        model: { id: modelConfig.id, name: modelConfig.name },
+        mcp: mcpProfileSnapshot ? { id: mcpProfileSnapshot.id, name: mcpProfileSnapshot.name } : null,
+        compactionStrategy: session.compactionStrategy,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+      },
+    }
+  })
+
+  app.get('/api/sessions/:sessionId/status', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return apiError('not_found', 'Session not found', { code: 'session_not_found' })
+    }
+
+    const turns = listTurnRecordsBySession(database.connection, sessionId)
+    const activeTurn = [...turns]
+      .reverse()
+      .find(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
+      ?? null
+    const latestTurn = turns.at(-1) ?? null
+
+    let state: 'initializing' | 'ready' | 'running' | 'error'
+    if (session.initStatus === 'error' || session.status === 'error' || latestTurn?.status === 'error') {
+      state = 'error'
+    } else if (session.initStatus === 'pending' || session.initStatus === 'initializing') {
+      state = 'initializing'
+    } else if (activeTurn) {
+      state = 'running'
+    } else {
+      state = 'ready'
+    }
+
+    const relevantTurn = state === 'running'
+      ? activeTurn
+      : state === 'error'
+        ? latestTurn
+        : null
+
+    return {
+      session: { id: session.id, state },
+      activeTurn: relevantTurn
+        ? {
+            id: relevantTurn.id,
+            status: relevantTurn.status,
+          }
+        : null,
+    }
+  })
+
+  app.post('/api/sessions/:sessionId/turns/start', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const { userContent } = z.object({ userContent: z.string().min(1) }).parse(request.body)
+
+    const reserveTurn = database.connection.transaction(() => {
+      const session = getSessionRecord(database.connection, sessionId)
+      if (!session) {
+        return { kind: 'not_found' } as const
+      }
+
+      if (session.initStatus !== 'ready') {
+        return { kind: 'not_initialized' } as const
+      }
+
+      const hasActiveTurn = listTurnRecordsBySession(database.connection, sessionId)
+        .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
+      if (hasActiveTurn) {
+        return { kind: 'turn_in_progress' } as const
+      }
+
+      const createdAt = Date.now()
+      const nextSeq = getNextTurnSequenceNumber(database.connection, sessionId)
+      const turn: TurnRecord = {
+        id: formatTurnId(sessionId, nextSeq),
+        sessionId,
+        sequenceNumber: nextSeq,
+        status: 'streaming',
+        createdAt,
+        completedAt: null,
+        outcome: null,
+        usage: {
+          promptTokens: null,
+          completionTokens: null,
+          reasoningTokens: null,
+          totalTokens: null,
+        },
+        contextTokensAtTurnEnd: null,
+        contextTokensAfterCompaction: null,
+        compactionApplied: null,
+        compactionTokensRemoved: null,
+      }
+
+      insertTurnRecord(database.connection, turn)
+      return { kind: 'reserved', session, turn } as const
+    })
+
+    const reservation = reserveTurn()
+    if (reservation.kind === 'not_found') {
+      reply.code(404)
+      return apiError('not_found', 'Session not found', { code: 'session_not_found' })
+    }
+
+    if (reservation.kind === 'not_initialized') {
+      reply.code(409)
+      return apiError('validation', 'Session is still initializing or has not reached a ready state. Nothing was queued.', {
+        code: 'session_not_initialized',
+      })
+    }
+
+    if (reservation.kind === 'turn_in_progress') {
+      reply.code(409)
+      return apiError('validation', 'A turn is already in progress for this session. Nothing was queued.', {
+        code: 'turn_in_progress',
+      })
+    }
+
+    const { session, turn } = reservation
+    const runTurn = session.mcpProfileSnapshot
+      ? createToolEnabledTurn(database, dependencies.lmStudioGateway, dependencies.mcpGateway, {
+          sessionId,
+          userContent,
+          maxToolRounds: config.maxToolRounds,
+          reservedTurn: turn,
+        })
+      : createModelOnlyTurn(database, dependencies.lmStudioGateway, {
+          sessionId,
+          userContent,
+          reservedTurn: turn,
+        })
+
+    runTurn.catch((err: unknown) => {
+      app.log.error({ sessionId, turnId: turn.id, err: err instanceof Error ? err.message : String(err) }, 'Detached turn failed')
+      const failedTurn = listTurnRecordsBySession(database.connection, sessionId).find(existing => existing.id === turn.id)
+      if (failedTurn && (failedTurn.status === 'draft' || failedTurn.status === 'streaming' || failedTurn.status === 'awaiting-tools')) {
+        failedTurn.status = 'error'
+        failedTurn.completedAt = Date.now()
+        failedTurn.outcome = failedTurn.outcome ?? 'detached-failure'
+        updateTurnRecord(database.connection, failedTurn)
+      }
+    })
+
+    reply.code(202)
+    return {
+      sessionId,
+      turn: { id: turn.id, status: 'running' },
+    }
   })
 
   app.get('/api/lookup/:id', async (request, reply) => {

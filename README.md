@@ -8,7 +8,7 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 - [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
 - [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
 - [PLAN.md](PLAN.md) - current product state and near-term focus
-- [backlog/cli-for-llm-in-the-loop-test.md](backlog/cli-for-llm-in-the-loop-test.md) - active CLI task description and incremental rollout plan
+- [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md) - next CLI increment after the shipped lifecycle MVP
 - [backlog/done/hierachical-ids-system-and-api.md](backlog/done/hierachical-ids-system-and-api.md) - completed hierarchical ID and lookup groundwork the CLI builds on
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
 - [FRONTEND-TEST.md](FRONTEND-TEST.md) - optional manual browser-based UI checks with agent-browser

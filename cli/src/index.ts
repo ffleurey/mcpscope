@@ -3,20 +3,22 @@ import { resolveBackendUrl } from './config.js'
 import { CliError, printError } from './errors.js'
 import { parseSessionsListArgs, runSessionsList } from './commands/sessions/list.js'
 import { parseInspectArgs, runInspect } from './commands/inspect.js'
+import { parseCreateArgs, runCreate } from './commands/create.js'
+import { parseSendArgs, runSend } from './commands/send.js'
+import { parseStatusArgs, runStatus } from './commands/status.js'
 
 function printHelp(): void {
-  process.stdout.write(`Usage: mcpscope <command> [--json] [--url <url>]
+  process.stdout.write(`Usage: mcpscope <command> [options]
 
-  sessions list
-    list all sessions
+  mcpscope list [--json]
+  mcpscope create <title> [--id <session-id>] [--compaction strip-reasoning|none] [--json]
+  mcpscope send <session-id> <prompt> [--json]
+  mcpscope status <session-id> [--json]
+  mcpscope inspect <id> [--short] [--json]
 
-  inspect <id> [--short]
-    inspect session / turn / round / part by hierarchical ID
-    <id>      QGWA  /  QGWA.1  /  QGWA.1.2  /  QGWA.1.2.3-U
-    --short   omit part content (token counts only)
-
---json        emit JSON instead of text
---url <url>   or  MCPSCOPE_URL  (default: http://localhost:3030)
+Options:
+  --json        emit JSON instead of text
+  --url <url>   backend URL  (default: http://localhost:3030, or MCPSCOPE_URL)
 `)
 }
 
@@ -44,6 +46,46 @@ async function main(argv: string[]): Promise<void> {
 
   if (cmd === '--version') {
     process.stdout.write('mcpscope\n')
+    return
+  }
+
+  if (cmd === 'list') {
+    const parsed = parseSessionsListArgs([sub, ...rest].filter(Boolean) as string[])
+    if ('help' in parsed) { printHelp(); return }
+    if ('error' in parsed) { printError(parsed.error); printError('Run `mcpscope --help` for usage.'); process.exit(2) }
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runSessionsList({ ...opts, url: resolvedUrl })
+    return
+  }
+
+  if (cmd === 'create') {
+    const parsed = parseCreateArgs([sub, ...rest].filter(Boolean) as string[])
+    if ('help' in parsed) { printHelp(); return }
+    if ('error' in parsed) { printError(parsed.error); printError('Run `mcpscope --help` for usage.'); process.exit(2) }
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runCreate({ ...opts, url: resolvedUrl })
+    return
+  }
+
+  if (cmd === 'send') {
+    const parsed = await parseSendArgs([sub, ...rest].filter(Boolean) as string[])
+    if ('help' in parsed) { printHelp(); return }
+    if ('error' in parsed) { printError(parsed.error); printError('Run `mcpscope --help` for usage.'); process.exit(2) }
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runSend({ ...opts, url: resolvedUrl })
+    return
+  }
+
+  if (cmd === 'status') {
+    const parsed = parseStatusArgs([sub, ...rest].filter(Boolean) as string[])
+    if ('help' in parsed) { printHelp(); return }
+    if ('error' in parsed) { printError(parsed.error); printError('Run `mcpscope --help` for usage.'); process.exit(2) }
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runStatus({ ...opts, url: resolvedUrl })
     return
   }
 
@@ -110,5 +152,4 @@ main(process.argv).catch((err: unknown) => {
   printError(err instanceof Error ? err.message : String(err))
   process.exit(1)
 })
-
 

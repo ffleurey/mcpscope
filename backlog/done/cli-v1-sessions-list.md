@@ -42,4 +42,5 @@ After this increment, the project has:
 The next increments are tracked in:
 
 - [cli-v2-inspect-command.md](cli-v2-inspect-command.md)
-- [../cli-for-llm-in-the-loop-test.md](../cli-for-llm-in-the-loop-test.md)
+- [cli-v3-session-lifecycle-mvp.md](cli-v3-session-lifecycle-mvp.md)
+- [../cli-next-iteration.md](../cli-next-iteration.md)
