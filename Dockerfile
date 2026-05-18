@@ -14,6 +14,7 @@ RUN npm ci
 COPY . .
 RUN npm run build          # Vite → frontend/dist/
 RUN npm run build:backend  # tsc  → backend/dist/
+RUN npm run build:cli      # tsc  → cli/dist/
 
 # ─── Stage 2: Production image ────────────────────────────────────────────────
 FROM node:22-alpine AS production
@@ -30,7 +31,10 @@ COPY --from=builder /app/node_modules ./node_modules
 
 # Copy compiled artefacts
 COPY --from=builder /app/backend/dist  ./backend/dist
+COPY --from=builder /app/cli/dist      ./cli/dist
 COPY --from=builder /app/frontend/dist ./frontend/dist
+COPY docker/mcpscope-cli /usr/local/bin/mcpscope
+RUN chmod +x /usr/local/bin/mcpscope
 
 # Data directory — mount a volume here for SQLite persistence
 RUN mkdir -p /data
