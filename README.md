@@ -9,7 +9,7 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 - [TUTORIAL.md](TUTORIAL.md) - quick-start tutorial for the developer + coding-agent workflow
 - [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
 - [PLAN.md](PLAN.md) - current product state and near-term focus
-- [backlog/cli-packaging-and-tutorial.md](backlog/cli-packaging-and-tutorial.md) - active Docker CLI packaging task
+- [backlog/done/cli-packaging-and-tutorial.md](backlog/done/cli-packaging-and-tutorial.md) - completed Docker CLI packaging and tutorial task
 - [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md) - next CLI increment after the shipped lifecycle MVP
 - [backlog/done/hierachical-ids-system-and-api.md](backlog/done/hierachical-ids-system-and-api.md) - completed hierarchical ID and lookup groundwork the CLI builds on
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
