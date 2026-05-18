@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import { buildBackendApp } from './app.js'
 import type { SessionTraceBundle } from './domain/trace.js'
+import { getSessionRecord, updateSessionRecord } from './persistence/repository.js'
 import {
   capturedReasoningThreeBatchParts,
   capturedReasoningThreeBatchRounds,
@@ -37,6 +38,16 @@ function parseSseEvents(body: string): Array<{ event: string; data: Record<strin
         data: JSON.parse(dataLine?.slice(5).trim() ?? '{}') as Record<string, unknown>,
       }
     })
+}
+
+function createDeferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
 }
 
 
@@ -2211,7 +2222,7 @@ describe('CLI session lifecycle endpoints', () => {
       payload: { userContent: 'Hello' },
     })
     expect(startRes.statusCode).toBe(409)
-    expect(startRes.json().error.code).toBe('session_not_ready')
+    expect(startRes.json().error.code).toBe('session_not_initialized')
   })
 
   it('POST /api/sessions/:sessionId/turns/start returns turn ID immediately', async () => {
@@ -2247,5 +2258,126 @@ describe('CLI session lifecycle endpoints', () => {
     expect(body.sessionId).toBe(sessionId)
     expect(body.turn.id).toMatch(new RegExp(`^${sessionId}\\.\\d+$`))
     expect(body.turn.status).toBe('running')
+  })
+
+  it('POST /api/sessions/:sessionId/turns/start rejects with turn_in_progress when another turn is active', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+
+    const releaseCompletion = createDeferred<void>()
+    app = await buildBackendApp(config, {
+      ...baseGateway,
+      lmStudioGateway: {
+        ...baseGateway.lmStudioGateway,
+        async streamChatCompletion(_baseUrl, _apiKey, _body, callbacks) {
+          callbacks?.onDelta?.({ kind: 'content', textDelta: 'Hello' })
+          await releaseCompletion.promise
+          return {
+            completion: {
+              id: 'cmpl-1', model: 'model-key', created: 1,
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'Hello' } }],
+              usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+            },
+            segments: [{ kind: 'content' as const, text: 'Hello' }],
+            rawResponseBody: 'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n',
+            chunks: [],
+          }
+        },
+      },
+    })
+
+    const sessionRes = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        title: 'Active Turn Test',
+        modelProfileSnapshot: {
+          id: 'model-1', name: 'Model', connectionBaseUrl: 'https://example.com/v1',
+          apiKey: null, modelKey: 'model-key', modelDisplayName: 'Model Key',
+          systemPrompt: 'Be helpful.', temperature: 0, reasoning: null,
+          createdAt: 1, updatedAt: 1,
+        },
+      },
+    })
+    const sessionId = sessionRes.json().session.id as string
+    await app.inject({ method: 'POST', url: `/api/sessions/${sessionId}/initialize` })
+
+    const firstStart = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/turns/start`,
+      payload: { userContent: 'Hello' },
+    })
+    expect(firstStart.statusCode).toBe(202)
+
+    const secondStart = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/turns/start`,
+      payload: { userContent: 'Again' },
+    })
+    expect(secondStart.statusCode).toBe(409)
+    expect(secondStart.json().error.code).toBe('turn_in_progress')
+
+    releaseCompletion.resolve()
+    await new Promise(resolve => setTimeout(resolve, 0))
+  })
+
+  it('POST /api/sessions/:sessionId/turns/start reserves a unique turn under concurrent requests', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+
+    const releaseProbe = createDeferred<void>()
+    app = await buildBackendApp(config, {
+      ...baseGateway,
+      lmStudioGateway: {
+        ...baseGateway.lmStudioGateway,
+        async probePromptTokensDetailed(baseUrl, apiKey, body) {
+          await releaseProbe.promise
+          return baseGateway.lmStudioGateway.probePromptTokensDetailed(baseUrl, apiKey, body)
+        },
+      },
+    })
+
+    const sessionRes = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        title: 'Concurrent Start Test',
+        modelProfileSnapshot: {
+          id: 'model-1', name: 'Model', connectionBaseUrl: 'https://example.com/v1',
+          apiKey: null, modelKey: 'model-key', modelDisplayName: 'Model Key',
+          systemPrompt: 'Be helpful.', temperature: 0, reasoning: null,
+          createdAt: 1, updatedAt: 1,
+        },
+      },
+    })
+    const sessionId = sessionRes.json().session.id as string
+    const session = getSessionRecord(app.backendDb.connection, sessionId)
+    if (!session) {
+      throw new Error('session not found in test setup')
+    }
+    session.initStatus = 'ready'
+    session.updatedAt = Date.now()
+    updateSessionRecord(app.backendDb.connection, session)
+
+    const [firstStart, secondStart] = await Promise.all([
+      app.inject({
+        method: 'POST',
+        url: `/api/sessions/${sessionId}/turns/start`,
+        payload: { userContent: 'Hello' },
+      }),
+      app.inject({
+        method: 'POST',
+        url: `/api/sessions/${sessionId}/turns/start`,
+        payload: { userContent: 'Again' },
+      }),
+    ])
+
+    const responses = [firstStart, secondStart]
+    expect(responses.filter(response => response.statusCode === 202)).toHaveLength(1)
+    expect(responses.filter(response => response.statusCode === 409)).toHaveLength(1)
+    expect(responses.find(response => response.statusCode === 409)?.json().error.code).toBe('turn_in_progress')
+
+    releaseProbe.resolve()
+    await new Promise(resolve => setTimeout(resolve, 0))
   })
 })

@@ -93,6 +93,7 @@ export interface CreateSessionInput {
 export interface CreateTurnInput {
   sessionId: string
   userContent: string
+  reservedTurn?: TurnRecord | undefined
 }
 
 export interface RuntimeTurnResult {
@@ -204,29 +205,33 @@ export async function createModelOnlyTurn(
     listPartRecordsBySession(database.connection, session.id),
   )
   const requestMessages = buildModelMessages(session, existingParts, input.userContent)
-  const startedAt = now()
-  const turnSequenceNumber = getNextTurnSequenceNumber(database.connection, session.id)
-  const turnId = formatTurnId(session.id, turnSequenceNumber)
+  const startedAt = input.reservedTurn?.createdAt ?? now()
+  const turnSequenceNumber = input.reservedTurn?.sequenceNumber
+    ?? getNextTurnSequenceNumber(database.connection, session.id)
+  const turnId = input.reservedTurn?.id
+    ?? formatTurnId(session.id, turnSequenceNumber)
   const roundId = formatRoundId(session.id, turnSequenceNumber, 1)
-  const turn: TurnRecord = {
-    id: turnId,
-    sessionId: session.id,
-    sequenceNumber: turnSequenceNumber,
-    status: 'streaming',
-    createdAt: startedAt,
-    completedAt: null,
-    outcome: null,
-    usage: {
-      promptTokens: null,
-      completionTokens: null,
-      reasoningTokens: null,
-      totalTokens: null,
-    },
-    contextTokensAtTurnEnd: null,
-    contextTokensAfterCompaction: null,
-    compactionApplied: null,
-    compactionTokensRemoved: null,
-  }
+  const turn: TurnRecord = input.reservedTurn
+    ? { ...input.reservedTurn }
+    : {
+        id: turnId,
+        sessionId: session.id,
+        sequenceNumber: turnSequenceNumber,
+        status: 'streaming',
+        createdAt: startedAt,
+        completedAt: null,
+        outcome: null,
+        usage: {
+          promptTokens: null,
+          completionTokens: null,
+          reasoningTokens: null,
+          totalTokens: null,
+        },
+        contextTokensAtTurnEnd: null,
+        contextTokensAfterCompaction: null,
+        compactionApplied: null,
+        compactionTokensRemoved: null,
+      }
   const round: RoundRecord = {
     id: roundId,
     turnId,
@@ -294,7 +299,9 @@ export async function createModelOnlyTurn(
   }
 
   const persistInitialState = database.connection.transaction(() => {
-    insertTurnRecord(database.connection, turn)
+    if (!input.reservedTurn) {
+      insertTurnRecord(database.connection, turn)
+    }
     insertRoundRecord(database.connection, round)
     insertPartRecord(database.connection, userPart)
   })

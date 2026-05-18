@@ -16,6 +16,7 @@ import {
   modelConfigSchema,
 } from './domain/configuration.js'
 import { getDomainModelSummary } from './domain/model.js'
+import type { TurnRecord } from './domain/model.js'
 import { deriveContextEntries, deriveTranscriptEntries } from './domain/selectors.js'
 import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from './domain/trace.js'
 import { openBackendDatabase } from './persistence/db.js'
@@ -37,9 +38,11 @@ import {
   listSessionSummaries,
   listTurnRecordsBySession,
   getNextTurnSequenceNumber,
+  insertTurnRecord,
   upsertLmConnection,
   upsertMcpServerProfile,
   upsertModelConfig,
+  updateTurnRecord,
 } from './persistence/repository.js'
 import {
   createChatCompletion,
@@ -325,10 +328,14 @@ export async function buildBackendApp(
     }
 
     const turns = listTurnRecordsBySession(database.connection, sessionId)
-    const activeTurn = turns.find(t => t.status === 'streaming' || t.status === 'awaiting-tools') ?? null
+    const activeTurn = [...turns]
+      .reverse()
+      .find(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
+      ?? null
+    const latestTurn = turns.at(-1) ?? null
 
     let state: 'initializing' | 'ready' | 'running' | 'error'
-    if (session.initStatus === 'error' || session.status === 'error') {
+    if (session.initStatus === 'error' || session.status === 'error' || latestTurn?.status === 'error') {
       state = 'error'
     } else if (session.initStatus === 'pending' || session.initStatus === 'initializing') {
       state = 'initializing'
@@ -338,10 +345,19 @@ export async function buildBackendApp(
       state = 'ready'
     }
 
+    const relevantTurn = state === 'running'
+      ? activeTurn
+      : state === 'error'
+        ? latestTurn
+        : null
+
     return {
       session: { id: session.id, state },
-      activeTurn: activeTurn
-        ? { id: activeTurn.id, status: activeTurn.status }
+      activeTurn: relevantTurn
+        ? {
+            id: relevantTurn.id,
+            status: relevantTurn.status,
+          }
         : null,
     }
   })
@@ -350,54 +366,102 @@ export async function buildBackendApp(
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     const { userContent } = z.object({ userContent: z.string().min(1) }).parse(request.body)
 
-    const session = getSessionRecord(database.connection, sessionId)
-    if (!session) {
+    const reserveTurn = database.connection.transaction(() => {
+      const session = getSessionRecord(database.connection, sessionId)
+      if (!session) {
+        return { kind: 'not_found' } as const
+      }
+
+      if (session.initStatus !== 'ready') {
+        return { kind: 'not_initialized' } as const
+      }
+
+      const hasActiveTurn = listTurnRecordsBySession(database.connection, sessionId)
+        .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
+      if (hasActiveTurn) {
+        return { kind: 'turn_in_progress' } as const
+      }
+
+      const createdAt = Date.now()
+      const nextSeq = getNextTurnSequenceNumber(database.connection, sessionId)
+      const turn: TurnRecord = {
+        id: formatTurnId(sessionId, nextSeq),
+        sessionId,
+        sequenceNumber: nextSeq,
+        status: 'streaming',
+        createdAt,
+        completedAt: null,
+        outcome: null,
+        usage: {
+          promptTokens: null,
+          completionTokens: null,
+          reasoningTokens: null,
+          totalTokens: null,
+        },
+        contextTokensAtTurnEnd: null,
+        contextTokensAfterCompaction: null,
+        compactionApplied: null,
+        compactionTokensRemoved: null,
+      }
+
+      insertTurnRecord(database.connection, turn)
+      return { kind: 'reserved', session, turn } as const
+    })
+
+    const reservation = reserveTurn()
+    if (reservation.kind === 'not_found') {
       reply.code(404)
       return apiError('not_found', 'Session not found', { code: 'session_not_found' })
     }
 
-    if (session.initStatus !== 'ready') {
+    if (reservation.kind === 'not_initialized') {
       reply.code(409)
-      return apiError('validation', 'Session is not ready. Nothing was queued.', { code: 'session_not_ready' })
+      return apiError('validation', 'Session is still initializing or has not reached a ready state. Nothing was queued.', {
+        code: 'session_not_initialized',
+      })
     }
 
-    const turns = listTurnRecordsBySession(database.connection, sessionId)
-    const hasActiveTurn = turns.some(t => t.status === 'streaming' || t.status === 'awaiting-tools')
-    if (hasActiveTurn) {
+    if (reservation.kind === 'turn_in_progress') {
       reply.code(409)
-      return apiError('validation', 'A turn is already in progress for this session. Nothing was queued.', { code: 'session_not_ready' })
+      return apiError('validation', 'A turn is already in progress for this session. Nothing was queued.', {
+        code: 'turn_in_progress',
+      })
     }
 
-    // Pre-compute the turn ID before firing the async execution
-    const nextSeq = getNextTurnSequenceNumber(database.connection, sessionId)
-    const turnId = formatTurnId(sessionId, nextSeq)
-
-    // Fire the turn in the background — Node.js single-threaded guarantee ensures
-    // getNextTurnSequenceNumber inside the turn function gets the same nextSeq
-    // after the async gap (no other turn can be inserted until this event loop tick ends)
+    const { session, turn } = reservation
     const runTurn = session.mcpProfileSnapshot
       ? createToolEnabledTurn(database, dependencies.lmStudioGateway, dependencies.mcpGateway, {
           sessionId,
           userContent,
           maxToolRounds: config.maxToolRounds,
+          reservedTurn: turn,
         })
       : createModelOnlyTurn(database, dependencies.lmStudioGateway, {
           sessionId,
           userContent,
+          reservedTurn: turn,
         })
 
     runTurn.catch((err: unknown) => {
-      app.log.error({ sessionId, turnId, err: err instanceof Error ? err.message : String(err) }, 'Detached turn failed')
+      app.log.error({ sessionId, turnId: turn.id, err: err instanceof Error ? err.message : String(err) }, 'Detached turn failed')
+      const failedTurn = listTurnRecordsBySession(database.connection, sessionId).find(existing => existing.id === turn.id)
+      if (failedTurn && (failedTurn.status === 'draft' || failedTurn.status === 'streaming' || failedTurn.status === 'awaiting-tools')) {
+        failedTurn.status = 'error'
+        failedTurn.completedAt = Date.now()
+        failedTurn.outcome = failedTurn.outcome ?? 'detached-failure'
+        updateTurnRecord(database.connection, failedTurn)
+      }
     })
 
     reply.code(202)
     return {
       sessionId,
-      turn: { id: turnId, status: 'running' },
+      turn: { id: turn.id, status: 'running' },
     }
   })
 
-  app.get('/api/lookup/:id', async (request, reply) => {    const { id } = z.object({ id: z.string() }).parse(request.params)
+  app.get('/api/lookup/:id', async (request, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params)
     const { mode } = z.object({ mode: z.enum(['summary', 'full']).optional() }).parse(request.query)
 
     const resolved = resolveHierarchicalId(database.connection, id, mode ?? 'summary')

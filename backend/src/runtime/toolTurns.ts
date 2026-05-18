@@ -874,7 +874,7 @@ export async function createToolEnabledTurn(
   database: BackendDatabase,
   lmStudioGateway: LmStudioGateway,
   mcpGateway: McpGateway,
-  input: { sessionId: string; userContent: string; maxToolRounds: number },
+  input: { sessionId: string; userContent: string; maxToolRounds: number; reservedTurn?: TurnRecord | undefined },
   emitEvent?: TurnStreamEventSink,
 ): Promise<RuntimeTurnResult> {
   if (input.maxToolRounds < 1) {
@@ -899,29 +899,33 @@ export async function createToolEnabledTurn(
   const baseMessages = buildApiMessages(session, sessionParts, input.userContent)
   const lmTools = buildLmToolDefinitions(sessionParts)
 
-  const startedAt = now()
-  const turnSequenceNumber = getNextTurnSequenceNumber(database.connection, session.id)
-  const turnId = formatTurnId(session.id, turnSequenceNumber)
+  const startedAt = input.reservedTurn?.createdAt ?? now()
+  const turnSequenceNumber = input.reservedTurn?.sequenceNumber
+    ?? getNextTurnSequenceNumber(database.connection, session.id)
+  const turnId = input.reservedTurn?.id
+    ?? formatTurnId(session.id, turnSequenceNumber)
   const userRoundId = formatRoundId(session.id, turnSequenceNumber, 1)
-  const turn: TurnRecord = {
-    id: turnId,
-    sessionId: session.id,
-    sequenceNumber: turnSequenceNumber,
-    status: 'streaming',
-    createdAt: startedAt,
-    completedAt: null,
-    outcome: null,
-    usage: {
-      promptTokens: null,
-      completionTokens: null,
-      reasoningTokens: null,
-      totalTokens: null,
-    },
-    contextTokensAtTurnEnd: null,
-    contextTokensAfterCompaction: null,
-    compactionApplied: null,
-    compactionTokensRemoved: null,
-  }
+  const turn: TurnRecord = input.reservedTurn
+    ? { ...input.reservedTurn }
+    : {
+        id: turnId,
+        sessionId: session.id,
+        sequenceNumber: turnSequenceNumber,
+        status: 'streaming',
+        createdAt: startedAt,
+        completedAt: null,
+        outcome: null,
+        usage: {
+          promptTokens: null,
+          completionTokens: null,
+          reasoningTokens: null,
+          totalTokens: null,
+        },
+        contextTokensAtTurnEnd: null,
+        contextTokensAfterCompaction: null,
+        compactionApplied: null,
+        compactionTokensRemoved: null,
+      }
   const initialRound: RoundRecord = {
     id: userRoundId,
     turnId,
@@ -950,7 +954,9 @@ export async function createToolEnabledTurn(
     startedAt,
   )
   const initializeTx = database.connection.transaction(() => {
-    insertTurnRecord(database.connection, turn)
+    if (!input.reservedTurn) {
+      insertTurnRecord(database.connection, turn)
+    }
     insertRoundRecord(database.connection, initialRound)
     insertPartRecord(database.connection, userPart)
   })

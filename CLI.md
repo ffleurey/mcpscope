@@ -54,6 +54,13 @@ The session must be fully initialized (`status` = `ready`) before sending. The t
 **Text output** — prints session ID, turn ID, and polling hint.  
 **JSON output** — `{ api_version: 1, session_id, turn: { id, status: "running" } }`.
 
+**Error codes in JSON**:
+| code | meaning |
+|------|---------|
+| `session_not_found` | session ID does not exist |
+| `session_not_initialized` | session has not finished initialization yet |
+| `turn_in_progress` | another turn is already active for the session |
+
 ### `mcpscope status <session-id> [--json]`
 
 Returns the current lifecycle state of a session.
@@ -68,6 +75,11 @@ Returns the current lifecycle state of a session.
 
 **Text output** — always shows session ID and state; when `running`, also shows the active turn ID; when `ready`, suggests the next `send` command.  
 **JSON output** — `{ api_version: 1, session: { id, state }, active_turn: { id, status } | null }`.
+
+**Error codes in JSON**:
+| code | meaning |
+|------|---------|
+| `session_not_found` | session ID does not exist |
 
 ### `mcpscope inspect <id> [--short] [--json]`
 
