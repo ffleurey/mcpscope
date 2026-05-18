@@ -8,33 +8,17 @@ import { parseSendArgs, runSend } from './commands/send.js'
 import { parseStatusArgs, runStatus } from './commands/status.js'
 
 function printHelp(): void {
-  process.stdout.write(`Usage: mcpscope <command> [--json] [--url <url>]
+  process.stdout.write(`Usage: mcpscope <command> [options]
 
-  list
-    list all sessions (alias for 'sessions list')
+  mcpscope list [--json]
+  mcpscope create <title> [--id <session-id>] [--compaction strip-reasoning|none] [--json]
+  mcpscope send <session-id> <prompt> [--json]
+  mcpscope status <session-id> [--json]
+  mcpscope inspect <id> [--short] [--json]
 
-  create <title> [--id <session-id>] [--compaction <strategy>]
-    create a session using backend defaults
-    <title>                 session title (required)
-    --id <session-id>       optional 4-char session ID override
-    --compaction <strategy> 'strip-reasoning' (default) or 'none'
-
-  send <session-id> <prompt>
-    start a turn for an existing session (prompt can be piped via stdin)
-
-  status <session-id>
-    poll the lifecycle state of a session
-
-  inspect <id> [--short]
-    inspect session / turn / round / part by hierarchical ID
-    <id>      QGWA  /  QGWA.1  /  QGWA.1.2  /  QGWA.1.2.3-U
-    --short   omit part content (token counts only)
-
-  sessions list
-    list all sessions (legacy form)
-
---json        emit JSON instead of text
---url <url>   or  MCPSCOPE_URL  (default: http://localhost:3030)
+Options:
+  --json        emit JSON instead of text
+  --url <url>   backend URL  (default: http://localhost:3030, or MCPSCOPE_URL)
 `)
 }
 
