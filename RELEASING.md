@@ -65,12 +65,24 @@ docker login ghcr.io -u YOUR_GITHUB_USERNAME --password YOUR_PAT
 docker pull ghcr.io/ffleurey/mcpscope:latest
 ```
 
-Run without docker-compose:
+Run a quick local instance without persistence:
 ```bash
-docker run -d -p 3030:3030 -v mcpscope-data:/data ghcr.io/ffleurey/mcpscope:latest
+docker run -d --name mcpscope-app -p 3030:3030 ghcr.io/ffleurey/mcpscope:latest
 ```
 
-Or with docker-compose (recommended — handles the volume automatically):
+Run with persistent local data:
+```bash
+docker run -d --name mcpscope-app -p 3030:3030 -v mcpscope-data:/data ghcr.io/ffleurey/mcpscope:latest
+```
+
+The image also includes the CLI, so you can run commands inside the same container:
+
+```bash
+docker exec -i mcpscope-app mcpscope list
+docker exec -i mcpscope-app mcpscope create "test session"
+```
+
+Or with docker-compose (optional convenience):
 ```bash
 # Edit docker-compose.yml to use the GHCR image instead of building locally:
 #   image: ghcr.io/ffleurey/mcpscope:latest

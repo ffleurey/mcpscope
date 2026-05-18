@@ -2,6 +2,26 @@
 
 In-repo tool for driving and inspecting sessions. Talks to the backend API only.
 
+## Running from Docker
+
+The packaged MVP path is to run the CLI **inside the mcpscope container**:
+
+```bash
+docker exec -i mcpscope-app mcpscope list
+docker exec -i mcpscope-app mcpscope create "test session"
+docker exec -i mcpscope-app mcpscope send ABCD "hello"
+```
+
+Inside the container, `mcpscope` defaults to `http://127.0.0.1:3030`.
+
+If you want a shorter host command, define an alias or shell function:
+
+```bash
+mcpscope() {
+  docker exec -i mcpscope-app mcpscope "$@"
+}
+```
+
 ## Connection
 
 ```

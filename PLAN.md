@@ -23,20 +23,21 @@ For the canonical runtime model and lookup vocabulary, use [DATA-MODEL.md](DATA-
 
 ## Main unresolved product work
 
-### 1. CLI incremental rollout
+### 1. CLI packaging and next rollout
 
-The next active implementation track is the in-repo CLI.
+The CLI lifecycle MVP is now shipped, and the immediate packaging work is making that CLI usable directly from the Docker image.
 
 - keep the CLI backend-driven and aligned with the same session model and canonical IDs as the UI
 - v1 complete: `mcpscope sessions list`
 - v2 complete: `mcpscope inspect <id>` — universal lookup by hierarchical ID, `--json`, `--short`
 - v3 now adds the non-streaming lifecycle loop: `list`, `create`, `send`, `status`
+- the Docker image now packages the CLI and supports the one-container `docker run` + `docker exec` workflow
 - CLI command reference: [CLI.md](CLI.md)
 - session creation now uses backend-owned defaults rather than CLI-side snapshot construction
 - detached turn start and pollable session status are now part of the documented backend contract
-- next: keep the docs/help aligned and defer streaming, interactive mode, and richer follow/cancel workflows
+- next: improve follow/help UX and defer streaming, interactive mode, and richer follow/cancel workflows
 
-The next CLI task description now lives in [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md).
+The completed Docker CLI packaging task lives in [backlog/done/cli-packaging-and-tutorial.md](backlog/done/cli-packaging-and-tutorial.md). The next CLI feature task lives in [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md).
 
 ### 2. Token and context trust hardening
 

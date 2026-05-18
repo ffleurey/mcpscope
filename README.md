@@ -6,8 +6,10 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
 - [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
+- [TUTORIAL.md](TUTORIAL.md) - quick-start tutorial for the developer + coding-agent workflow
 - [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
 - [PLAN.md](PLAN.md) - current product state and near-term focus
+- [backlog/done/cli-packaging-and-tutorial.md](backlog/done/cli-packaging-and-tutorial.md) - completed Docker CLI packaging and tutorial task
 - [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md) - next CLI increment after the shipped lifecycle MVP
 - [backlog/done/hierachical-ids-system-and-api.md](backlog/done/hierachical-ids-system-and-api.md) - completed hierarchical ID and lookup groundwork the CLI builds on
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
@@ -35,22 +37,32 @@ npm run seed:dev-data      # both of the above
 
 ## Docker
 
-The easiest way to run the app is via Docker — no Node.js install required.
+The easiest packaged path is Docker — no Node.js install and no host CLI install required.
 
 ```bash
-docker compose up          # build image and start (first run ~2 min)
-docker compose up -d       # same, detached
-docker compose down        # stop
+docker build -t mcpscope .
+docker run -d --name mcpscope-app -p 3030:3030 mcpscope
 ```
 
 Then open **http://localhost:3030**.
 
-Session data (SQLite) is persisted in a named Docker volume (`mcpscope-data`) and survives container restarts and image upgrades.
+Run the CLI inside the same container:
+
+```bash
+docker exec -i mcpscope-app mcpscope list
+```
+
+For persistent local data, add a volume:
+
+```bash
+docker run -d --name mcpscope-app -p 3030:3030 -v mcpscope-data:/data mcpscope
+```
+
+`docker compose` remains available as a convenience wrapper around the same image.
 
 To rebuild the image after pulling changes:
 ```bash
-docker compose build
-docker compose up -d
+docker build -t mcpscope .
 ```
 
 See [RELEASING.md](RELEASING.md) for released-image usage and the full release workflow.

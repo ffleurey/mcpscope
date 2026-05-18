@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+export MCPSCOPE_URL="${MCPSCOPE_URL:-http://127.0.0.1:3030}"
+
+exec node /app/cli/dist/index.js "$@"
