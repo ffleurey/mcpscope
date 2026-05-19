@@ -2736,5 +2736,57 @@ describe('CLI session lifecycle endpoints', () => {
       })
       expect(startRes.statusCode).toBe(202)
     })
+
+    it('concurrent: session creation is blocked while turns/stream is in flight', async () => {
+      // This test proves the lock is actually held during the async gap inside turns/stream.
+      // The gateway probe is blocked mid-turn so that the event loop can run a concurrent
+      // session-creation request. The pre-inserted turn record must be visible to
+      // findActiveSession at that point, causing the creation to return 409.
+      const releaseProbe = createDeferred<void>()
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, {
+        ...baseGateway,
+        lmStudioGateway: {
+          ...baseGateway.lmStudioGateway,
+          async probePromptTokensDetailed(baseUrl, apiKey, body) {
+            await releaseProbe.promise
+            return baseGateway.lmStudioGateway.probePromptTokensDetailed(baseUrl, apiKey, body)
+          },
+        },
+      })
+
+      // Create and initialize session A
+      const sessionAId = await createReadySession(app, 'Session A')
+
+      // Start the stream request without awaiting — it will block at the deferred probe.
+      // The handler runs synchronously up to createModelOnlyTurn's first await, which means
+      // the reservation transaction (and turn insertion) completes before yielding.
+      const streamPromise = app.inject({
+        method: 'POST',
+        url: `/api/sessions/${sessionAId}/turns/stream`,
+        payload: { userContent: 'Hello, take your time' },
+      })
+
+      // Yield the event loop enough times for the stream handler to reach the blocked probe.
+      await new Promise(r => setImmediate(r))
+      await new Promise(r => setImmediate(r))
+
+      // Now try to create a new session. The pre-inserted turn should make findActiveSession
+      // find session A as "running", blocking the creation with 409.
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Should Be Blocked', modelProfileSnapshot: minimalModelProfile },
+      })
+
+      // Release the probe so the stream can finish, then clean up.
+      releaseProbe.resolve()
+      await streamPromise
+
+      expect(createRes.statusCode).toBe(409)
+      expect(createRes.json().error.code).toBe('another_session_active')
+      expect(createRes.json().error.active_session.id).toBe(sessionAId)
+    }, 15_000)
   })
 })
