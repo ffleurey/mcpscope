@@ -48,7 +48,7 @@ Or use the GitHub web UI: **Releases → Draft a new release → choose the tag*
 
 The workflow in `.github/workflows/release.yml` triggers automatically. It pushes:
 
-- `ghcr.io/ffleurey/mcpscope:v1.2.3` — exact version
+- `ghcr.io/ffleurey/mcpscope:1.2.3` — exact version
 - `ghcr.io/ffleurey/mcpscope:1.2` — major.minor
 - `ghcr.io/ffleurey/mcpscope:latest` — always points to the latest release
 
@@ -62,17 +62,17 @@ Users need a GitHub personal access token (PAT) with `read:packages` scope.
 
 ```bash
 docker login ghcr.io -u YOUR_GITHUB_USERNAME --password YOUR_PAT
-docker pull ghcr.io/ffleurey/mcpscope:latest
+docker pull ghcr.io/ffleurey/mcpscope:0.9.0
 ```
 
 Run a quick local instance without persistence:
 ```bash
-docker run -d --name mcpscope-app -p 3030:3030 ghcr.io/ffleurey/mcpscope:latest
+docker run -d --name mcpscope-app -p 3030:3030 ghcr.io/ffleurey/mcpscope:0.9.0
 ```
 
 Run with persistent local data:
 ```bash
-docker run -d --name mcpscope-app -p 3030:3030 -v mcpscope-data:/data ghcr.io/ffleurey/mcpscope:latest
+docker run -d --name mcpscope-app -p 3030:3030 -v mcpscope-data:/data ghcr.io/ffleurey/mcpscope:0.9.0
 ```
 
 The image also includes the CLI, so you can run commands inside the same container:

@@ -2,6 +2,16 @@
 
 mcpscope is a **local-first runtime analysis tool for MCP server development**.
 
+## Audience
+
+This tutorial is for **users/testers running mcpscope as a packaged tool**, typically from the published Docker image.
+
+If you are developing **mcpscope itself**, use [README.md](README.md) instead. The repository/developer workflow is:
+
+- checkout the repo
+- run `npm ci`
+- run mcpscope from source with `npm run dev`
+
 It is built for a specific loop:
 
 1. a developer configures the model and MCP server in the Web UI
@@ -70,6 +80,28 @@ Use mcpscope like this:
 
 The defaults matter because `mcpscope create` does **not** ask the CLI user to build session snapshots manually.
 
+## Sequential execution is the right model
+
+Run experiments and sessions **sequentially**, one after the other.
+
+Do **not** try to fan out many sessions in parallel.
+
+Why:
+
+- mcpscope is intended to evaluate one experiment in flight at a time
+- in practice there is usually only **one LLM backend** behind those sessions
+- overlapping sessions compete for the same model runtime
+- alternating rounds across multiple sessions makes everything slower and harder to interpret
+- finishing one full turn or one full session before starting the next gives cleaner traces and more stable evaluation results
+
+The best workflow is:
+
+1. create one session
+2. wait until it is ready
+3. run one prompt or one small prompt sequence
+4. inspect the result
+5. only then move on to the next experiment
+
 ## 1. Run mcpscope with Docker
 
 The packaged MVP path is:
@@ -78,30 +110,75 @@ The packaged MVP path is:
 2. open the Web UI in the browser
 3. run the CLI inside that same container with `docker exec`
 
-### Quick evaluation mode
+The backend serves the Web UI and API on the **same container port: `3030`**.
+
+This is why the examples use:
+
+```bash
+-p 3030:3030
+```
+
+After the container starts, open:
+
+```text
+http://localhost:3030
+```
+
+### Recommended: use the released image
+
+If you are using a published release from GHCR, authenticate first.
+
+You need a GitHub personal access token with `read:packages`.
+
+```bash
+docker login ghcr.io -u YOUR_GITHUB_USERNAME --password YOUR_PAT
+```
+
+Then pull a released image.
+
+Important: the published Docker tags are **`0.9.0` style**, not `v0.9.0`.
+
+```bash
+docker pull ghcr.io/ffleurey/mcpscope:0.9.0
+```
+
+Or use the moving latest tag:
+
+```bash
+docker pull ghcr.io/ffleurey/mcpscope:latest
+```
+
+#### Quick evaluation mode
 
 For a short testing round, you do **not** need a Docker volume:
+
+```bash
+docker run -d --name mcpscope-app -p 3030:3030 ghcr.io/ffleurey/mcpscope:0.9.0
+```
+
+This is enough if you only need a temporary environment.
+
+#### Persistent local mode
+
+If you want data to survive container replacement, add a volume:
+
+```bash
+docker run -d --name mcpscope-app -p 3030:3030 -v mcpscope-data:/data ghcr.io/ffleurey/mcpscope:0.9.0
+```
+
+### Alternative: build the image locally
+
+If you are working from a local checkout and want to build the image yourself:
 
 ```bash
 docker build -t mcpscope .
 docker run -d --name mcpscope-app -p 3030:3030 mcpscope
 ```
 
-This is enough if you only need a temporary environment.
-
-### Persistent local mode
-
-If you want data to survive container replacement, add a volume:
+For local-build persistence:
 
 ```bash
-docker build -t mcpscope .
 docker run -d --name mcpscope-app -p 3030:3030 -v mcpscope-data:/data mcpscope
-```
-
-mcpscope will be available at:
-
-```text
-http://localhost:3030
 ```
 
 To stop the container:
@@ -193,7 +270,40 @@ mcpscope list
 
 Inside the container, the CLI defaults to `http://127.0.0.1:3030`, so no explicit `--url` is needed for the common packaged workflow.
 
-## 5. First end-to-end evaluation run
+## 5. Prefer text output first
+
+For coding-agent workflows, prefer the default **text output** unless you specifically need machine parsing.
+
+Why text is usually better:
+
+- it is much more compact
+- it is easier to read directly
+- it uses fewer tokens when passed back through a coding agent
+- it is often fully sufficient for `list`, `create`, `status`, `send`, and many `inspect` flows
+
+Use `--json` only when:
+
+- you need to parse fields programmatically
+- you need exact structured data
+- the text output is not sufficient for the automation step you are doing
+
+Recommended default:
+
+```bash
+mcpscope create "ha-temperature-eval"
+mcpscope status ABCD
+mcpscope send ABCD "..."
+mcpscope inspect ABCD.1
+```
+
+Only switch to JSON when needed:
+
+```bash
+mcpscope status ABCD --json
+mcpscope inspect ABCD.1 --json
+```
+
+## 6. First end-to-end evaluation run
 
 Create a session:
 
@@ -241,12 +351,10 @@ Useful inspection targets:
 - `ABCD.1.1` — first round of the first turn
 - `ABCD.1.1.3-T` — a specific tool call part
 
-For automation, prefer JSON:
+Only use JSON when the text output is not sufficient:
 
 ```bash
-mcpscope create "ha-temperature-eval" --json
 mcpscope status ABCD --json
-mcpscope send ABCD "..." --json
 mcpscope inspect ABCD.1 --json
 ```
 
@@ -259,7 +367,7 @@ docker exec -i mcpscope-app mcpscope send ABCD "..."
 docker exec -i mcpscope-app mcpscope inspect ABCD.1
 ```
 
-## 6. How the developer and coding agent should work together
+## 7. How the developer and coding agent should work together
 
 ### Developer responsibilities
 
@@ -276,14 +384,16 @@ Use the Web UI to:
 Use the CLI to:
 
 - create fresh sessions for each evaluation run
+- run those sessions sequentially, not in parallel
 - send a fixed prompt set
 - collect session IDs and turn IDs
 - inspect results by canonical ID
 - report where the model failed to choose tools correctly or use outputs effectively
+- prefer text output first and use `--json` only when structured parsing is truly needed
 
 This split works well because both are using the same backend-owned runtime state.
 
-## 7. A practical evaluation loop
+## 8. A practical evaluation loop
 
 For each MCP server change:
 
@@ -303,7 +413,13 @@ For each MCP server change:
 
 The important practice is to use **fresh sessions** when evaluating changes to setup or defaults, so the run reflects the new configuration snapshot.
 
-## 8. Choosing good evaluation prompts
+Also keep the runs **strictly sequential**:
+
+- do not initialize multiple sessions at once
+- do not start prompts in different sessions at the same time
+- finish the current run before starting the next one
+
+## 9. Choosing good evaluation prompts
 
 A good evaluation prompt should:
 
@@ -319,7 +435,7 @@ Examples for the Home Assistant statistics domain:
 - "When was humidity highest yesterday?"
 - "Show whether evening motion events correlate with lighting activity."
 
-## 9. What to look at during inspection
+## 10. What to look at during inspection
 
 When a run is weak, inspect in this order:
 
@@ -343,17 +459,17 @@ When a run is weak, inspect in this order:
 
 mcpscope is especially useful when the answer is wrong but the reason is not obvious from the final assistant text alone.
 
-## 10. Suggested prompt for a coding agent
+## 11. Suggested prompt for a coding agent
 
 You can give a coding agent instructions like this:
 
-> Use mcpscope at `http://localhost:3030`. Create a new session for each prompt. Wait for initialization before sending. Run the evaluation prompts, inspect the resulting turn and tool calls, and report whether the MCP server helped the model solve the task correctly. Focus on tool choice, argument quality, returned payload usefulness, and any obvious context bloat.
+> Use mcpscope at `http://localhost:3030`. Create a new session for each prompt. Wait for initialization before sending. Run sessions sequentially, one after the other. Prefer the default text output and only use `--json` when you need structured parsing. Inspect the resulting turn and tool calls, and report whether the MCP server helped the model solve the task correctly. Focus on tool choice, argument quality, returned payload usefulness, and any obvious context bloat.
 
 If you want structured output, add:
 
 > Use `--json` where possible and summarize each run with session ID, turn ID, tools used, failure mode, and recommended MCP/tool-description changes.
 
-## 11. Known limits of the current MVP
+## 12. Known limits of the current MVP
 
 The current CLI intentionally does **not** yet provide:
 
@@ -371,7 +487,7 @@ The current best workflow is:
 - execute with the CLI
 - inspect in both the CLI and Web UI
 
-## 12. Where to go next
+## 13. Where to go next
 
 - [CLI.md](CLI.md) — exact CLI command reference
 - [ARCHITECTURE.md](ARCHITECTURE.md) — product and backend design

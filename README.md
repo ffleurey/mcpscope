@@ -4,10 +4,11 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 
 ## Documentation map
 
+- [README.md](README.md) - repository/developer entrypoint for working on mcpscope itself
+- [TUTORIAL.md](TUTORIAL.md) - packaged user/tester tutorial for running released mcpscope in Docker
+- [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
 - [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
 - [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
-- [TUTORIAL.md](TUTORIAL.md) - quick-start tutorial for the developer + coding-agent workflow
-- [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
 - [PLAN.md](PLAN.md) - current product state and near-term focus
 - [backlog/done/cli-packaging-and-tutorial.md](backlog/done/cli-packaging-and-tutorial.md) - completed Docker CLI packaging and tutorial task
 - [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md) - next CLI increment after the shipped lifecycle MVP
@@ -19,15 +20,37 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 - [`research/`](research/) - archived payload studies and superseded design research kept for context
 - [`backend-data/README.md`](backend-data/README.md) - local runtime data and live-test artifact policy
 
-## Development
+## Audience
+
+This file is for **developers working on mcpscope itself**.
+
+If you want to **use** a released mcpscope build to evaluate an MCP server, start with:
+
+- [TUTORIAL.md](TUTORIAL.md) for the Docker/user workflow
+- [RELEASING.md](RELEASING.md) for GHCR image usage and tags
+
+## Developer setup
+
+Clone the repo, install dependencies, then run mcpscope locally from source:
 
 ```bash
-npm run dev              # backend + frontend together
+npm ci
+npm run dev
+```
+
+That starts:
+
+- the backend on `http://localhost:3030`
+- the frontend served from the same app during normal local development flow
+
+Useful variants:
+
+```bash
 npm run dev:backend      # backend only (tsx watch)
 npm run dev:frontend     # frontend only (vite)
 ```
 
-### Seeding dev data
+## Development helpers
 
 ```bash
 npm run seed:dev-config    # seed LM connections, model configs, MCP profiles
@@ -35,9 +58,21 @@ npm run seed:dev-sessions  # seed captured session fixtures
 npm run seed:dev-data      # both of the above
 ```
 
-## Docker
+## Packaged user workflow
 
-The easiest packaged path is Docker — no Node.js install and no host CLI install required.
+The released/product workflow is Docker — no Node.js install and no host CLI install required.
+
+For the published GHCR image, authenticate first with a GitHub PAT that has `read:packages`:
+
+```bash
+docker login ghcr.io -u YOUR_GITHUB_USERNAME --password YOUR_PAT
+docker pull ghcr.io/ffleurey/mcpscope:0.9.0
+docker run -d --name mcpscope-app -p 3030:3030 ghcr.io/ffleurey/mcpscope:0.9.0
+```
+
+The Web UI and API are both exposed through **`http://localhost:3030`**.
+
+If you prefer to build locally instead:
 
 ```bash
 docker build -t mcpscope .
@@ -60,12 +95,7 @@ docker run -d --name mcpscope-app -p 3030:3030 -v mcpscope-data:/data mcpscope
 
 `docker compose` remains available as a convenience wrapper around the same image.
 
-To rebuild the image after pulling changes:
-```bash
-docker build -t mcpscope .
-```
-
-See [RELEASING.md](RELEASING.md) for released-image usage and the full release workflow.
+For the full user/tester walkthrough, use [TUTORIAL.md](TUTORIAL.md).
 
 ## Build
 
