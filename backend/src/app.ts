@@ -927,27 +927,72 @@ export async function buildBackendApp(
   app.post('/api/sessions/:sessionId/turns', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     const input = createTurnInputSchema.parse(request.body)
-    const session = getSessionRecord(database.connection, sessionId)
-    if (!session) {
+
+    // Reserve the turn atomically before any async work. Without this, the global
+    // lock check and the actual turn insertion would be non-atomic: another request
+    // could slip through the lock check during the async gap between the check and
+    // the turn being written to the DB by createModelOnlyTurn/createToolEnabledTurn.
+    type ReserveResult =
+      | { kind: 'not_found' }
+      | { kind: 'another_session_active'; active: ActiveSessionInfo }
+      | { kind: 'turn_in_progress' }
+      | { kind: 'reserved'; session: SessionRecord; turn: TurnRecord }
+
+    const reservation: ReserveResult = database.connection.transaction((): ReserveResult => {
+      const session = getSessionRecord(database.connection, sessionId)
+      if (!session) return { kind: 'not_found' }
+
+      const active = findActiveSession(database.connection, sessionId)
+      if (active) return { kind: 'another_session_active', active }
+
+      const hasActiveTurn = listTurnRecordsBySession(database.connection, sessionId)
+        .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
+      if (hasActiveTurn) return { kind: 'turn_in_progress' }
+
+      const createdAt = Date.now()
+      const nextSeq = getNextTurnSequenceNumber(database.connection, sessionId)
+      const turn: TurnRecord = {
+        id: formatTurnId(sessionId, nextSeq),
+        sessionId,
+        sequenceNumber: nextSeq,
+        status: 'streaming',
+        createdAt,
+        completedAt: null,
+        outcome: null,
+        usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+        contextTokensAtTurnEnd: null,
+        contextTokensAfterCompaction: null,
+        compactionApplied: null,
+        compactionTokensRemoved: null,
+      }
+      insertTurnRecord(database.connection, turn)
+      return { kind: 'reserved', session, turn }
+    })()
+
+    if (reservation.kind === 'not_found') {
       reply.code(404)
       return apiError('not_found', 'Session not found')
     }
-
-    const active = findActiveSession(database.connection, sessionId)
-    if (active) {
+    if (reservation.kind === 'another_session_active') {
       reply.code(409)
-      return anotherSessionActiveError(active)
+      return anotherSessionActiveError(reservation.active)
+    }
+    if (reservation.kind === 'turn_in_progress') {
+      reply.code(409)
+      return apiError('validation', 'A turn is already in progress for this session.', { code: 'turn_in_progress' })
     }
 
-    const result = session.mcpProfileSnapshot
+    const result = reservation.session.mcpProfileSnapshot
       ? await createToolEnabledTurn(database, dependencies.lmStudioGateway, dependencies.mcpGateway, {
           sessionId,
           userContent: input.userContent,
           maxToolRounds: config.maxToolRounds,
+          reservedTurn: reservation.turn,
         })
       : await createModelOnlyTurn(database, dependencies.lmStudioGateway, {
           sessionId,
           userContent: input.userContent,
+          reservedTurn: reservation.turn,
         })
 
     reply.code(201)
@@ -1008,16 +1053,61 @@ export async function buildBackendApp(
   app.post('/api/sessions/:sessionId/turns/stream', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     const input = createTurnInputSchema.parse(request.body)
-    const session = getSessionRecord(database.connection, sessionId)
-    if (!session) {
+
+    // Reserve the turn atomically (global lock check + same-session turn_in_progress check +
+    // turn insertion) before reply.hijack() and before any async work. This is critical:
+    // createModelOnlyTurn/createToolEnabledTurn do async work (token preflight) before they
+    // write the turn record to the DB. Without pre-inserting here, the global lock would have
+    // no DB record to find during the async gap, allowing concurrent session creation or other
+    // turn starts to slip through.
+    type ReserveResult =
+      | { kind: 'not_found' }
+      | { kind: 'another_session_active'; active: ActiveSessionInfo }
+      | { kind: 'turn_in_progress' }
+      | { kind: 'reserved'; session: SessionRecord; turn: TurnRecord }
+
+    const reservation: ReserveResult = database.connection.transaction((): ReserveResult => {
+      const session = getSessionRecord(database.connection, sessionId)
+      if (!session) return { kind: 'not_found' }
+
+      const active = findActiveSession(database.connection, sessionId)
+      if (active) return { kind: 'another_session_active', active }
+
+      const hasActiveTurn = listTurnRecordsBySession(database.connection, sessionId)
+        .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
+      if (hasActiveTurn) return { kind: 'turn_in_progress' }
+
+      const createdAt = Date.now()
+      const nextSeq = getNextTurnSequenceNumber(database.connection, sessionId)
+      const turn: TurnRecord = {
+        id: formatTurnId(sessionId, nextSeq),
+        sessionId,
+        sequenceNumber: nextSeq,
+        status: 'streaming',
+        createdAt,
+        completedAt: null,
+        outcome: null,
+        usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+        contextTokensAtTurnEnd: null,
+        contextTokensAfterCompaction: null,
+        compactionApplied: null,
+        compactionTokensRemoved: null,
+      }
+      insertTurnRecord(database.connection, turn)
+      return { kind: 'reserved', session, turn }
+    })()
+
+    if (reservation.kind === 'not_found') {
       reply.code(404)
       return apiError('not_found', 'Session not found')
     }
-
-    const active = findActiveSession(database.connection, sessionId)
-    if (active) {
+    if (reservation.kind === 'another_session_active') {
       reply.code(409)
-      return anotherSessionActiveError(active)
+      return anotherSessionActiveError(reservation.active)
+    }
+    if (reservation.kind === 'turn_in_progress') {
+      reply.code(409)
+      return apiError('validation', 'A turn is already in progress for this session.', { code: 'turn_in_progress' })
     }
 
     reply.hijack()
@@ -1031,15 +1121,7 @@ export async function buildBackendApp(
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
     }
 
-    // Track the turn ID as soon as it's emitted so error reporting can reference it.
-    let activeTurnId: string | null = null
-    const trackingEmitEvent = (event: { type: string; [key: string]: unknown }) => {
-      if (event.type === 'turn-started' && typeof event.turn === 'object' && event.turn !== null) {
-        activeTurnId = (event.turn as { id?: string }).id ?? null
-      }
-      emitEvent(event)
-    }
-
+    const { session, turn } = reservation
     try {
       if (session.mcpProfileSnapshot) {
         await createToolEnabledTurn(
@@ -1050,8 +1132,9 @@ export async function buildBackendApp(
             sessionId,
             userContent: input.userContent,
             maxToolRounds: config.maxToolRounds,
+            reservedTurn: turn,
           },
-          trackingEmitEvent,
+          emitEvent,
         )
       } else {
         await createModelOnlyTurn(
@@ -1060,16 +1143,17 @@ export async function buildBackendApp(
           {
             sessionId,
             userContent: input.userContent,
+            reservedTurn: turn,
           },
-          trackingEmitEvent,
+          emitEvent,
         )
       }
     } catch (error) {
-      app.log.error({ sessionId, turnId: activeTurnId, err: error instanceof Error ? error.message : String(error) }, 'Streaming turn failed')
+      app.log.error({ sessionId, turnId: turn.id, err: error instanceof Error ? error.message : String(error) }, 'Streaming turn failed')
       emitEvent({
         type: 'turn-failed',
         errorType: 'internal',
-        turnId: activeTurnId,
+        turnId: turn.id,
         message: error instanceof Error ? error.message : 'Unknown streaming failure',
       })
     } finally {
