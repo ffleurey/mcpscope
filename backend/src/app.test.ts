@@ -2737,6 +2737,60 @@ describe('CLI session lifecycle endpoints', () => {
       expect(startRes.statusCode).toBe(202)
     })
 
+    it('POST /api/sessions/preflight is blocked when another session is initializing', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      // Create a session and leave it in 'initializing' state (never set to 'ready')
+      const blockerRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Initializing Blocker', modelProfileSnapshot: minimalModelProfile },
+      })
+      expect(blockerRes.statusCode).toBe(201)
+      const blockerId = blockerRes.json().session.id as string
+
+      const preflightRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/preflight',
+        payload: {
+          lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1', apiKey: null },
+          mcpProfileSnapshot: null,
+          selectedModel: { modelKey: 'model-key', modelDisplayName: 'Model Key' },
+        },
+      })
+
+      expect(preflightRes.statusCode).toBe(409)
+      expect(preflightRes.json().error.code).toBe('another_session_active')
+      expect(preflightRes.json().error.active_session.id).toBe(blockerId)
+      expect(preflightRes.json().error.active_session.state).toBe('initializing')
+    })
+
+    it('POST /api/sessions/preflight is blocked when another session is running', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      const blockerId = await createReadySession(app, 'Running Blocker')
+      makeSessionRunning(app, blockerId)
+
+      const preflightRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/preflight',
+        payload: {
+          lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1', apiKey: null },
+          mcpProfileSnapshot: null,
+          selectedModel: { modelKey: 'model-key', modelDisplayName: 'Model Key' },
+        },
+      })
+
+      expect(preflightRes.statusCode).toBe(409)
+      expect(preflightRes.json().error.code).toBe('another_session_active')
+      expect(preflightRes.json().error.active_session.id).toBe(blockerId)
+      expect(preflightRes.json().error.active_session.state).toBe('running')
+    })
+
     it('concurrent: session creation is blocked while turns/stream is in flight', async () => {
       // This test proves the lock is actually held during the async gap inside turns/stream.
       // The gateway probe is blocked mid-turn so that the event loop can run a concurrent

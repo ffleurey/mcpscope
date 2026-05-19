@@ -846,6 +846,16 @@ export async function buildBackendApp(
       })
       .parse(_request.body)
 
+    // Enforce the global single-active-session rule here so the UI gets an immediate,
+    // consistent rejection before any network probes. The createSession call that
+    // follows preflight in the UI flow also checks, but checking here prevents a
+    // misleading "preflight OK" → "create 409" sequence that could confuse clients.
+    const activeBeforePreflight = findActiveSession(database.connection)
+    if (activeBeforePreflight) {
+      reply.code(409)
+      return anotherSessionActiveError(activeBeforePreflight)
+    }
+
     // Check LM Studio reachability
     let listedByCompatApi: boolean
     try {
