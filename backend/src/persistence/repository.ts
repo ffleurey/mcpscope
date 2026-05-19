@@ -378,6 +378,34 @@ export function findActiveSession(
   return row ?? null
 }
 
+/**
+ * Recovers from an unclean server shutdown by marking any turns and sessions
+ * that were left in an in-progress state as terminated.
+ *
+ * Must be called once at startup, before any requests are served. Without this,
+ * a crash mid-turn leaves a 'streaming' turn in the DB which permanently blocks
+ * findActiveSession and prevents any new session from ever starting.
+ *
+ * Transitions applied atomically:
+ *  - turns:    'draft' | 'streaming' | 'awaiting-tools'  →  'aborted'
+ *  - sessions: initStatus = 'initializing'               →  initStatus = 'error'
+ */
+export function recoverInterruptedState(connection: Database.Database): void {
+  connection.transaction(() => {
+    connection.prepare(`
+      UPDATE turns
+      SET status = 'aborted', completed_at = ?
+      WHERE status IN ('draft', 'streaming', 'awaiting-tools')
+    `).run(Date.now())
+
+    connection.prepare(`
+      UPDATE sessions
+      SET init_status = 'error', updated_at = ?
+      WHERE init_status = 'initializing'
+    `).run(Date.now())
+  })()
+}
+
 export function listSessionSummaries(connection: Database.Database): SessionSummary[] {
   const rows = connection.prepare(`
     SELECT

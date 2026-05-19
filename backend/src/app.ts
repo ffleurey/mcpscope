@@ -26,6 +26,7 @@ import {
   deleteModelConfig,
   deleteSessionRecord,
   findActiveSession,
+  recoverInterruptedState,
   getSessionRecord,
   updateSessionRecord,
   getSessionCreationDefaults,
@@ -144,6 +145,12 @@ export async function buildBackendApp(
 
   const database = openBackendDatabase(config.sqlitePath)
   app.decorate('backendDb', database)
+
+  // On an unclean shutdown (crash, kill, server restart mid-turn) turns and sessions
+  // can be left in in-progress states. Recover them before serving any requests so
+  // findActiveSession never sees stale 'running' entries that would permanently block
+  // new session creation.
+  recoverInterruptedState(database.connection)
 
   app.get('/api/health', async () => {
     return healthResponseSchema.parse({
