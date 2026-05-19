@@ -1,7 +1,7 @@
 import { CliError } from './errors.js'
 
 interface ApiErrorPayload {
-  error?: { message?: string; code?: string } | string
+  error?: { message?: string; code?: string; active_session?: { id: string; state: string } } | string
 }
 
 async function request<T>(baseUrl: string, path: string): Promise<T> {
@@ -36,7 +36,11 @@ async function request<T>(baseUrl: string, path: string): Promise<T> {
 
     const message = errorObj?.message
       ?? (typeof errPayload?.error === 'string' ? errPayload.error : `Backend request failed (${response.status})`)
-    const err = new CliError(message, 1)
+    const activeSession = errorObj?.active_session
+    const fullMessage = activeSession
+      ? `${message}\n  Blocking session: ${activeSession.id}  (${activeSession.state})`
+      : message
+    const err = new CliError(fullMessage, 1)
     if (errorObj?.code !== undefined) {
       (err as CliError & { code?: string }).code = errorObj.code
     }
@@ -82,7 +86,11 @@ async function post<T>(baseUrl: string, path: string, body: unknown): Promise<T>
 
     const message = errorObj?.message
       ?? (typeof errPayload?.error === 'string' ? errPayload.error : `Backend request failed (${response.status})`)
-    const err = new CliError(message, 1)
+    const activeSession = errorObj?.active_session
+    const fullMessage = activeSession
+      ? `${message}\n  Blocking session: ${activeSession.id}  (${activeSession.state})`
+      : message
+    const err = new CliError(fullMessage, 1)
     if (errorObj?.code !== undefined) {
       (err as CliError & { code?: string }).code = errorObj.code
     }

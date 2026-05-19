@@ -334,6 +334,48 @@ export function deleteSessionRecord(connection: Database.Database, sessionId: st
   return result.changes > 0
 }
 
+export interface ActiveSessionInfo {
+  id: string
+  state: 'initializing' | 'running'
+}
+
+/**
+ * Returns the first session that is currently active (initializing or running a turn),
+ * optionally excluding a specific session by ID.
+ *
+ * A session is "active" when:
+ *   - its initStatus is 'pending' or 'initializing' (state: 'initializing')
+ *   - or it has a turn with status 'draft', 'streaming', or 'awaiting-tools' (state: 'running')
+ *
+ * Used to enforce the global single-active-session invariant.
+ */
+export function findActiveSession(
+  connection: Database.Database,
+  excludeSessionId?: string,
+): ActiveSessionInfo | null {
+  const whereInit = excludeSessionId ? 'AND id != @excludeId' : ''
+  const whereRun = excludeSessionId ? 'AND s.id != @excludeId' : ''
+  const params: Record<string, string> = excludeSessionId ? { excludeId: excludeSessionId } : {}
+
+  const row = connection.prepare(`
+    SELECT id, state FROM (
+      SELECT id, 'initializing' AS state
+      FROM sessions
+      WHERE init_status IN ('pending', 'initializing')
+      ${whereInit}
+      UNION ALL
+      SELECT DISTINCT s.id, 'running' AS state
+      FROM sessions s
+      JOIN turns t ON t.session_id = s.id
+      WHERE t.status IN ('draft', 'streaming', 'awaiting-tools')
+      ${whereRun}
+    )
+    LIMIT 1
+  `).get(params) as { id: string; state: 'initializing' | 'running' } | undefined
+
+  return row ?? null
+}
+
 export function listSessionSummaries(connection: Database.Database): SessionSummary[] {
   const rows = connection.prepare(`
     SELECT

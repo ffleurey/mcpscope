@@ -61,6 +61,7 @@ Returns as soon as the session record exists — initialization may still be in 
 | `default_mcp_profile_not_found` | default MCP profile was deleted after the default was set |
 | `invalid_session_id` | `--id` value is not a valid session ID format |
 | `duplicate_session_id` | `--id` value is already in use |
+| `another_session_active` | another session is already initializing or running; only one session may be active at a time. The error payload includes `active_session: { id, state }` identifying the blocking session. |
 
 ### `mcpscope send <session-id> <prompt> [--json]`
 
@@ -80,6 +81,7 @@ The session must be fully initialized (`status` = `ready`) before sending. The t
 | `session_not_found` | session ID does not exist |
 | `session_not_initialized` | session has not finished initialization yet |
 | `turn_in_progress` | another turn is already active for the session |
+| `another_session_active` | a different session is currently initializing or running; only one session may be active at a time. The error payload includes `active_session: { id, state }` identifying the blocking session. |
 
 ### `mcpscope status <session-id> [--json]`
 

@@ -25,6 +25,7 @@ import {
   deleteMcpServerProfile,
   deleteModelConfig,
   deleteSessionRecord,
+  findActiveSession,
   getSessionRecord,
   updateSessionRecord,
   getSessionCreationDefaults,
@@ -43,6 +44,7 @@ import {
   upsertMcpServerProfile,
   upsertModelConfig,
   updateTurnRecord,
+  type ActiveSessionInfo,
 } from './persistence/repository.js'
 import {
   createChatCompletion,
@@ -98,6 +100,17 @@ export async function buildBackendApp(
     logger: true,
     bodyLimit: 50 * 1024 * 1024, // 50MB — large trace files can be several MB
   })
+
+  function anotherSessionActiveError(active: ActiveSessionInfo) {
+    return {
+      api_version: 1,
+      error: {
+        code: 'another_session_active',
+        message: 'Another session is currently active. Nothing was started.',
+        active_session: { id: active.id, state: active.state },
+      },
+    }
+  }
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof z.ZodError) {
@@ -174,26 +187,46 @@ export async function buildBackendApp(
 
   app.post('/api/sessions', async (request, reply) => {
     const input = createSessionInputSchema.parse(request.body)
-    let session
-    try {
-      session = createSession(database, input)
-    } catch (error) {
-      if (error instanceof SessionIdInputError) {
-        reply.code(400)
-        return apiError('validation', error.message, { code: 'invalid_session_id' })
+
+    type CreateResult =
+      | { kind: 'blocked'; active: ActiveSessionInfo }
+      | { kind: 'created'; session: SessionRecord }
+      | { kind: 'id_input_error'; error: SessionIdInputError }
+      | { kind: 'id_conflict_error'; error: SessionIdConflictError }
+      | { kind: 'id_generation_error'; error: SessionIdGenerationError }
+
+    const result: CreateResult = database.connection.transaction((): CreateResult => {
+      const active = findActiveSession(database.connection)
+      if (active) return { kind: 'blocked', active }
+      try {
+        const session = createSession(database, input)
+        return { kind: 'created', session }
+      } catch (error) {
+        if (error instanceof SessionIdInputError) return { kind: 'id_input_error', error }
+        if (error instanceof SessionIdConflictError) return { kind: 'id_conflict_error', error }
+        if (error instanceof SessionIdGenerationError) return { kind: 'id_generation_error', error }
+        throw error
       }
-      if (error instanceof SessionIdConflictError) {
-        reply.code(409)
-        return apiError('validation', error.message, { code: 'duplicate_session_id' })
-      }
-      if (error instanceof SessionIdGenerationError) {
-        reply.code(409)
-        return apiError('validation', error.message, { code: 'session_id_generation_failed' })
-      }
-      throw error
+    })()
+
+    if (result.kind === 'blocked') {
+      reply.code(409)
+      return anotherSessionActiveError(result.active)
+    }
+    if (result.kind === 'id_input_error') {
+      reply.code(400)
+      return apiError('validation', result.error.message, { code: 'invalid_session_id' })
+    }
+    if (result.kind === 'id_conflict_error') {
+      reply.code(409)
+      return apiError('validation', result.error.message, { code: 'duplicate_session_id' })
+    }
+    if (result.kind === 'id_generation_error') {
+      reply.code(409)
+      return apiError('validation', result.error.message, { code: 'session_id_generation_failed' })
     }
     reply.code(201)
-    return { session }
+    return { session: result.session }
   })
 
   app.post('/api/sessions/from-defaults', async (request, reply) => {
@@ -203,93 +236,141 @@ export async function buildBackendApp(
       compactionStrategy: z.enum(['none', 'strip-reasoning']).optional(),
     }).parse(request.body)
 
-    const defaults = getSessionCreationDefaults(database.connection)
+    type FromDefaultsResult =
+      | { kind: 'blocked'; active: ActiveSessionInfo }
+      | { kind: 'validation_error'; status: number; body: ReturnType<typeof apiError> }
+      | { kind: 'id_input_error'; error: SessionIdInputError }
+      | { kind: 'id_conflict_error'; error: SessionIdConflictError }
+      | { kind: 'id_generation_error'; error: SessionIdGenerationError }
+      | { kind: 'created'; session: SessionRecord; modelConfigId: string; modelConfigName: string; mcpProfileSnapshot: typeof mcpSnapshotRef }
 
-    if (!defaults.defaultModelConfigId) {
-      reply.code(422)
-      return apiError('validation', 'No default model config is configured for new sessions.', {
-        code: 'default_model_not_configured',
-      })
-    }
+    // Use a placeholder to capture mcp snapshot outside the transaction return type
+    let mcpSnapshotRef: {
+      id: string; name: string; url: string
+      transport: 'streamable-http' | 'sse'
+      authType: 'bearer' | null; authValue: string | null
+      createdAt: number; updatedAt: number
+    } | null = null
 
-    const modelConfigs = listModelConfigs(database.connection)
-    const modelConfig = modelConfigs.find(c => c.id === defaults.defaultModelConfigId)
-    if (!modelConfig) {
-      reply.code(422)
-      return apiError('validation', `Default model config "${defaults.defaultModelConfigId}" no longer exists.`, {
-        code: 'default_model_config_not_found',
-      })
-    }
+    const result: FromDefaultsResult = database.connection.transaction((): FromDefaultsResult => {
+      const active = findActiveSession(database.connection)
+      if (active) return { kind: 'blocked', active }
 
-    const lmConnections = listLmConnections(database.connection)
-    const lmConnection = lmConnections.find(c => c.id === modelConfig.connectionId)
-    if (!lmConnection) {
-      reply.code(422)
-      return apiError('validation', `LM connection "${modelConfig.connectionId}" referenced by the default model config no longer exists.`, {
-        code: 'default_lm_connection_not_found',
-      })
-    }
+      const defaults = getSessionCreationDefaults(database.connection)
 
-    let mcpProfileSnapshot = null
-    if (defaults.defaultMcpProfileId) {
-      const mcpProfiles = listMcpServerProfiles(database.connection)
-      const mcpProfile = mcpProfiles.find(p => p.id === defaults.defaultMcpProfileId)
-      if (!mcpProfile) {
-        reply.code(422)
-        return apiError('validation', `Default MCP profile "${defaults.defaultMcpProfileId}" no longer exists.`, {
-          code: 'default_mcp_profile_not_found',
+      if (!defaults.defaultModelConfigId) {
+        return {
+          kind: 'validation_error',
+          status: 422,
+          body: apiError('validation', 'No default model config is configured for new sessions.', {
+            code: 'default_model_not_configured',
+          }),
+        }
+      }
+
+      const modelConfigs = listModelConfigs(database.connection)
+      const modelConfig = modelConfigs.find(c => c.id === defaults.defaultModelConfigId)
+      if (!modelConfig) {
+        return {
+          kind: 'validation_error',
+          status: 422,
+          body: apiError('validation', `Default model config "${defaults.defaultModelConfigId}" no longer exists.`, {
+            code: 'default_model_config_not_found',
+          }),
+        }
+      }
+
+      const lmConnections = listLmConnections(database.connection)
+      const lmConnection = lmConnections.find(c => c.id === modelConfig.connectionId)
+      if (!lmConnection) {
+        return {
+          kind: 'validation_error',
+          status: 422,
+          body: apiError('validation', `LM connection "${modelConfig.connectionId}" referenced by the default model config no longer exists.`, {
+            code: 'default_lm_connection_not_found',
+          }),
+        }
+      }
+
+      let mcpProfileSnapshot: typeof mcpSnapshotRef = null
+      if (defaults.defaultMcpProfileId) {
+        const mcpProfiles = listMcpServerProfiles(database.connection)
+        const mcpProfile = mcpProfiles.find(p => p.id === defaults.defaultMcpProfileId)
+        if (!mcpProfile) {
+          return {
+            kind: 'validation_error',
+            status: 422,
+            body: apiError('validation', `Default MCP profile "${defaults.defaultMcpProfileId}" no longer exists.`, {
+              code: 'default_mcp_profile_not_found',
+            }),
+          }
+        }
+        mcpProfileSnapshot = {
+          id: mcpProfile.id,
+          name: mcpProfile.name,
+          url: mcpProfile.url,
+          transport: mcpProfile.transport,
+          authType: mcpProfile.authType ?? null,
+          authValue: mcpProfile.authValue ?? null,
+          createdAt: mcpProfile.createdAt,
+          updatedAt: mcpProfile.updatedAt,
+        }
+      }
+
+      const modelProfileSnapshot = {
+        id: modelConfig.id,
+        name: modelConfig.name,
+        connectionBaseUrl: lmConnection.baseUrl,
+        apiKey: lmConnection.apiKey ?? null,
+        modelKey: modelConfig.modelKey,
+        modelDisplayName: modelConfig.modelDisplayName,
+        systemPrompt: modelConfig.systemPrompt,
+        temperature: modelConfig.temperature,
+        reasoning: modelConfig.reasoning ?? null,
+        createdAt: modelConfig.createdAt,
+        updatedAt: modelConfig.updatedAt,
+      }
+
+      try {
+        const session = createSession(database, {
+          sessionId,
+          title,
+          modelProfileSnapshot,
+          mcpProfileSnapshot,
+          compactionStrategy: compactionStrategy ?? 'strip-reasoning',
         })
+        mcpSnapshotRef = mcpProfileSnapshot
+        return { kind: 'created', session, modelConfigId: modelConfig.id, modelConfigName: modelConfig.name, mcpProfileSnapshot }
+      } catch (error) {
+        if (error instanceof SessionIdInputError) return { kind: 'id_input_error', error }
+        if (error instanceof SessionIdConflictError) return { kind: 'id_conflict_error', error }
+        if (error instanceof SessionIdGenerationError) return { kind: 'id_generation_error', error }
+        throw error
       }
-      mcpProfileSnapshot = {
-        id: mcpProfile.id,
-        name: mcpProfile.name,
-        url: mcpProfile.url,
-        transport: mcpProfile.transport,
-        authType: mcpProfile.authType ?? null,
-        authValue: mcpProfile.authValue ?? null,
-        createdAt: mcpProfile.createdAt,
-        updatedAt: mcpProfile.updatedAt,
-      }
+    })()
+
+    if (result.kind === 'blocked') {
+      reply.code(409)
+      return anotherSessionActiveError(result.active)
+    }
+    if (result.kind === 'validation_error') {
+      reply.code(result.status)
+      return result.body
+    }
+    if (result.kind === 'id_input_error') {
+      reply.code(400)
+      return apiError('validation', result.error.message, { code: 'invalid_session_id' })
+    }
+    if (result.kind === 'id_conflict_error') {
+      reply.code(409)
+      return apiError('validation', result.error.message, { code: 'duplicate_session_id' })
+    }
+    if (result.kind === 'id_generation_error') {
+      reply.code(409)
+      return apiError('validation', result.error.message, { code: 'session_id_generation_failed' })
     }
 
-    const modelProfileSnapshot = {
-      id: modelConfig.id,
-      name: modelConfig.name,
-      connectionBaseUrl: lmConnection.baseUrl,
-      apiKey: lmConnection.apiKey ?? null,
-      modelKey: modelConfig.modelKey,
-      modelDisplayName: modelConfig.modelDisplayName,
-      systemPrompt: modelConfig.systemPrompt,
-      temperature: modelConfig.temperature,
-      reasoning: modelConfig.reasoning ?? null,
-      createdAt: modelConfig.createdAt,
-      updatedAt: modelConfig.updatedAt,
-    }
-
-    let session
-    try {
-      session = createSession(database, {
-        sessionId,
-        title,
-        modelProfileSnapshot,
-        mcpProfileSnapshot,
-        compactionStrategy: compactionStrategy ?? 'strip-reasoning',
-      })
-    } catch (error) {
-      if (error instanceof SessionIdInputError) {
-        reply.code(400)
-        return apiError('validation', error.message, { code: 'invalid_session_id' })
-      }
-      if (error instanceof SessionIdConflictError) {
-        reply.code(409)
-        return apiError('validation', error.message, { code: 'duplicate_session_id' })
-      }
-      if (error instanceof SessionIdGenerationError) {
-        reply.code(409)
-        return apiError('validation', error.message, { code: 'session_id_generation_failed' })
-      }
-      throw error
-    }
+    const { session, modelConfigId, modelConfigName, mcpProfileSnapshot } = result
 
     // Fire off initialization in the background (detached — caller polls via /status)
     const sessionId_ = session.id
@@ -310,7 +391,7 @@ export async function buildBackendApp(
         title: session.title,
         status: session.status,
         initStatus: session.initStatus,
-        model: { id: modelConfig.id, name: modelConfig.name },
+        model: { id: modelConfigId, name: modelConfigName },
         mcp: mcpProfileSnapshot ? { id: mcpProfileSnapshot.id, name: mcpProfileSnapshot.name } : null,
         compactionStrategy: session.compactionStrategy,
         createdAt: session.createdAt,
@@ -376,6 +457,11 @@ export async function buildBackendApp(
         return { kind: 'not_initialized' } as const
       }
 
+      const active = findActiveSession(database.connection, sessionId)
+      if (active) {
+        return { kind: 'another_session_active', active } as const
+      }
+
       const hasActiveTurn = listTurnRecordsBySession(database.connection, sessionId)
         .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
       if (hasActiveTurn) {
@@ -419,6 +505,11 @@ export async function buildBackendApp(
       return apiError('validation', 'Session is still initializing or has not reached a ready state. Nothing was queued.', {
         code: 'session_not_initialized',
       })
+    }
+
+    if (reservation.kind === 'another_session_active') {
+      reply.code(409)
+      return anotherSessionActiveError(reservation.active)
     }
 
     if (reservation.kind === 'turn_in_progress') {
@@ -842,6 +933,12 @@ export async function buildBackendApp(
       return apiError('not_found', 'Session not found')
     }
 
+    const active = findActiveSession(database.connection, sessionId)
+    if (active) {
+      reply.code(409)
+      return anotherSessionActiveError(active)
+    }
+
     const result = session.mcpProfileSnapshot
       ? await createToolEnabledTurn(database, dependencies.lmStudioGateway, dependencies.mcpGateway, {
           sessionId,
@@ -859,10 +956,22 @@ export async function buildBackendApp(
 
   app.post('/api/sessions/:sessionId/initialize', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
-    const session = getSessionRecord(database.connection, sessionId)
-    if (!session) {
+
+    const prereq = database.connection.transaction(() => {
+      const session = getSessionRecord(database.connection, sessionId)
+      if (!session) return { kind: 'not_found' } as const
+      const active = findActiveSession(database.connection, sessionId)
+      if (active) return { kind: 'another_session_active', active } as const
+      return { kind: 'ok' } as const
+    })()
+
+    if (prereq.kind === 'not_found') {
       reply.code(404)
       return apiError('not_found', 'Session not found')
+    }
+    if (prereq.kind === 'another_session_active') {
+      reply.code(409)
+      return anotherSessionActiveError(prereq.active)
     }
 
     reply.hijack()
@@ -903,6 +1012,12 @@ export async function buildBackendApp(
     if (!session) {
       reply.code(404)
       return apiError('not_found', 'Session not found')
+    }
+
+    const active = findActiveSession(database.connection, sessionId)
+    if (active) {
+      reply.code(409)
+      return anotherSessionActiveError(active)
     }
 
     reply.hijack()
