@@ -37,7 +37,7 @@ The CLI lifecycle MVP is now shipped, and the immediate packaging work is making
 - detached turn start and pollable session status are now part of the documented backend contract
 - next: improve follow/help UX and defer streaming, interactive mode, and richer follow/cancel workflows
 
-The completed Docker CLI packaging task lives in [backlog/done/cli-packaging-and-tutorial.md](backlog/done/cli-packaging-and-tutorial.md). The next CLI feature task lives in [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md).
+The completed Docker CLI packaging task lives in [backlog/done/cli-packaging-and-tutorial.md](backlog/done/cli-packaging-and-tutorial.md). The completed execution-lock task lives in [backlog/done/global-session-execution-lock.md](backlog/done/global-session-execution-lock.md). The next CLI feature task lives in [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md), and the future sequential experiment task lives in [backlog/session-batch-runs.md](backlog/session-batch-runs.md).
 
 ### 2. Token and context trust hardening
 
