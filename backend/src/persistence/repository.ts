@@ -363,7 +363,7 @@ export function findActiveSession(
     SELECT id, state FROM (
       SELECT id, 'initializing' AS state
       FROM sessions
-      WHERE init_status IN ('initializing')
+      WHERE init_status = 'initializing'
       ${whereInit}
       UNION ALL
       SELECT DISTINCT s.id, 'running' AS state
