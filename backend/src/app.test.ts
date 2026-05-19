@@ -2445,12 +2445,19 @@ describe('CLI session lifecycle endpoints', () => {
       })
     }
 
+    function makeSessionInitializing(a: FastifyInstance, sessionId: string): void {
+      const s = getSessionRecord(a.backendDb.connection, sessionId)!
+      s.initStatus = 'initializing'
+      s.updatedAt = Date.now()
+      updateSessionRecord(a.backendDb.connection, s)
+    }
+
     it('POST /api/sessions is blocked when another session is initializing', async () => {
       const config = makeTestConfig()
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
 
-      // Create first session — it enters pending (counts as initializing)
+      // Create first session and move it to 'initializing' (pending alone no longer counts)
       const first = await app.inject({
         method: 'POST',
         url: '/api/sessions',
@@ -2458,6 +2465,7 @@ describe('CLI session lifecycle endpoints', () => {
       })
       expect(first.statusCode).toBe(201)
       const blockerId = first.json().session.id as string
+      makeSessionInitializing(app, blockerId)
 
       // Second creation must fail
       const second = await app.inject({
@@ -2501,7 +2509,7 @@ describe('CLI session lifecycle endpoints', () => {
       await app.inject({ method: 'PUT', url: '/api/model-configs/mc-1', payload: modelConfig })
       await app.inject({ method: 'PUT', url: '/api/session-creation-defaults', payload: { defaultModelConfigId: 'mc-1', defaultMcpProfileId: null } })
 
-      // Create a session that stays in pending (active/initializing)
+      // Create a session and move it to 'initializing' (pending alone does not block)
       const blocker = await app.inject({
         method: 'POST',
         url: '/api/sessions',
@@ -2509,6 +2517,7 @@ describe('CLI session lifecycle endpoints', () => {
       })
       expect(blocker.statusCode).toBe(201)
       const blockerId = blocker.json().session.id as string
+      makeSessionInitializing(app, blockerId)
 
       const blocked = await app.inject({
         method: 'POST',
@@ -2742,7 +2751,7 @@ describe('CLI session lifecycle endpoints', () => {
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
 
-      // Create a session and leave it in 'initializing' state (never set to 'ready')
+      // Create a session and move it to 'initializing' (pending alone does not block)
       const blockerRes = await app.inject({
         method: 'POST',
         url: '/api/sessions',
@@ -2750,6 +2759,7 @@ describe('CLI session lifecycle endpoints', () => {
       })
       expect(blockerRes.statusCode).toBe(201)
       const blockerId = blockerRes.json().session.id as string
+      makeSessionInitializing(app, blockerId)
 
       const preflightRes = await app.inject({
         method: 'POST',

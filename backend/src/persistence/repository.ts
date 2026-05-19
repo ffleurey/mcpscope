@@ -344,10 +344,12 @@ export interface ActiveSessionInfo {
  * optionally excluding a specific session by ID.
  *
  * A session is "active" when:
- *   - its initStatus is 'pending' or 'initializing' (state: 'initializing')
+ *   - its initStatus is 'initializing' (state: 'initializing')
  *   - or it has a turn with status 'draft', 'streaming', or 'awaiting-tools' (state: 'running')
  *
- * Used to enforce the global single-active-session invariant.
+ * Note: 'pending' sessions are NOT considered active — a session that was created but whose
+ * initialization was never started (e.g. after a server restart or abandoned UI flow) must not
+ * permanently lock the system. The initialize route enforces the lock when real work begins.
  */
 export function findActiveSession(
   connection: Database.Database,
@@ -361,7 +363,7 @@ export function findActiveSession(
     SELECT id, state FROM (
       SELECT id, 'initializing' AS state
       FROM sessions
-      WHERE init_status IN ('pending', 'initializing')
+      WHERE init_status IN ('initializing')
       ${whereInit}
       UNION ALL
       SELECT DISTINCT s.id, 'running' AS state
