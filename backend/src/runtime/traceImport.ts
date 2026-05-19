@@ -26,6 +26,40 @@ function createUuid(): string {
   return crypto.randomUUID()
 }
 
+function normalizeImportedSession(session: SessionRecord): SessionRecord {
+  if (session.initStatus !== 'initializing') return session
+  return {
+    ...session,
+    initStatus: 'error',
+  }
+}
+
+function normalizeImportedTurn(turn: TurnRecord, normalizedAt: number): TurnRecord {
+  if (turn.status !== 'draft' && turn.status !== 'streaming' && turn.status !== 'awaiting-tools') {
+    return turn
+  }
+
+  return {
+    ...turn,
+    status: 'aborted',
+    completedAt: turn.completedAt ?? normalizedAt,
+    outcome: turn.outcome ?? 'aborted',
+  }
+}
+
+function normalizeImportedRound(round: RoundRecord, normalizedAt: number): RoundRecord {
+  if (round.status !== 'pending' && round.status !== 'streaming') {
+    return round
+  }
+
+  return {
+    ...round,
+    status: 'aborted',
+    finishReason: round.finishReason ?? 'cancelled',
+    completedAt: round.completedAt ?? normalizedAt,
+  }
+}
+
 export function importTraceBundle(
   database: BackendDatabase,
   trace: SessionTraceBundle,
@@ -36,6 +70,7 @@ export function importTraceBundle(
       .get(candidate) != null,
     3,
   ) ?? createUuid()
+  const normalizedAt = Date.now()
 
   const sortedSourceTurns = [...trace.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
   const turnIdBySource = new Map(sortedSourceTurns.map(turn => [turn.id, formatTurnId(sessionId, turn.sequenceNumber)]))
@@ -71,22 +106,22 @@ export function importTraceBundle(
       })
   }
 
-  const session: SessionRecord = {
+  const session: SessionRecord = normalizeImportedSession({
     ...trace.session,
     id: sessionId,
-  }
+  })
 
-  const turns: TurnRecord[] = trace.turns.map(turn => ({
+  const turns: TurnRecord[] = trace.turns.map(turn => normalizeImportedTurn({
     ...turn,
     id: turnIdBySource.get(turn.id) ?? formatTurnId(sessionId, turn.sequenceNumber),
     sessionId,
-  }))
+  }, normalizedAt))
 
-  const rounds: RoundRecord[] = trace.rounds.map(round => ({
+  const rounds: RoundRecord[] = trace.rounds.map(round => normalizeImportedRound({
     ...round,
     id: roundIdBySource.get(round.id) ?? formatRoundId(sessionId, 0, round.roundIndex + 1),
     turnId: turnIdBySource.get(round.turnId) ?? formatTurnId(sessionId, 0),
-  }))
+  }, normalizedAt))
 
   const parts: PartRecord[] = trace.parts.map(part => ({
     ...part,

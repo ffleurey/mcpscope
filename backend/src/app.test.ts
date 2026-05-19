@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import { buildBackendApp } from './app.js'
 import type { SessionTraceBundle } from './domain/trace.js'
-import { getSessionRecord, updateSessionRecord } from './persistence/repository.js'
+import { getSessionRecord, insertTurnRecord, updateSessionRecord } from './persistence/repository.js'
 import {
   capturedReasoningThreeBatchParts,
   capturedReasoningThreeBatchRounds,
@@ -134,6 +134,13 @@ describe('backend foundation', () => {
       },
     })
     expect(firstResponse.statusCode).toBe(201)
+    const firstSessionId = firstResponse.json().session.id as string
+
+    // Mark first session as ready so it no longer blocks creation of the second
+    const firstSession = getSessionRecord(app.backendDb.connection, firstSessionId)!
+    firstSession.initStatus = 'ready'
+    firstSession.updatedAt = Date.now()
+    updateSessionRecord(app.backendDb.connection, firstSession)
 
     const secondResponse = await app.inject({
       method: 'POST',
@@ -157,7 +164,6 @@ describe('backend foundation', () => {
     })
     expect(secondResponse.statusCode).toBe(201)
 
-    const firstSessionId = firstResponse.json().session.id as string
     const secondSessionId = secondResponse.json().session.id as string
 
     const listResponse = await app.inject({
@@ -222,6 +228,12 @@ describe('backend foundation', () => {
     })
     expect(first.statusCode).toBe(201)
     expect(first.json().session.id).toBe('AB23')
+
+    // Mark session as ready so global lock does not interfere with duplicate/format checks
+    const created = getSessionRecord(app.backendDb.connection, 'AB23')!
+    created.initStatus = 'ready'
+    created.updatedAt = Date.now()
+    updateSessionRecord(app.backendDb.connection, created)
 
     const duplicate = await app.inject({
       method: 'POST',
@@ -390,6 +402,89 @@ describe('backend foundation', () => {
     expect(traceBody.context.some((entry: { type: string }) => entry.type === 'assistant-reasoning')).toBe(false)
     expect(traceBody.parts.filter((part: { partType: string }) => part.partType === 'tool-call')).toHaveLength(6)
     expect(traceBody.parts.filter((part: { partType: string }) => part.partType === 'tool-result')).toHaveLength(6)
+  })
+
+  it('normalizes imported active execution state so trace imports cannot recreate a lock', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const capturedTrace: SessionTraceBundle = {
+      session: {
+        ...capturedReasoningThreeBatchSession,
+        initStatus: 'initializing',
+      },
+      turns: [
+        {
+          id: 'captured-reasoning-turn',
+          sessionId: capturedReasoningThreeBatchSession.id,
+          sequenceNumber: 1,
+          status: 'streaming',
+          createdAt: 1,
+          completedAt: null,
+          outcome: null,
+          usage: {
+            promptTokens: 9640,
+            completionTokens: 2246,
+            reasoningTokens: 1723,
+            totalTokens: 11886,
+          },
+          contextTokensAtTurnEnd: null,
+          contextTokensAfterCompaction: null,
+          compactionApplied: null,
+          compactionTokensRemoved: null,
+        },
+      ],
+      rounds: capturedReasoningThreeBatchRounds.map(round => round.roundIndex === 3
+        ? { ...round, status: 'streaming', finishReason: null, completedAt: null }
+        : round),
+      parts: capturedReasoningThreeBatchParts,
+      rawExchanges: [],
+      transcript: [],
+      context: [],
+    }
+
+    const importResponse = await app.inject({
+      method: 'POST',
+      url: '/api/traces/import',
+      payload: capturedTrace,
+    })
+    expect(importResponse.statusCode).toBe(201)
+    const importedSessionId = importResponse.json().session.id as string
+
+    const traceResponse = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${importedSessionId}/trace`,
+    })
+    expect(traceResponse.statusCode).toBe(200)
+
+    const traceBody = traceResponse.json()
+    expect(traceBody.session.initStatus).toBe('error')
+    expect(traceBody.turns[0].status).toBe('aborted')
+    expect(traceBody.turns[0].completedAt).toEqual(expect.any(Number))
+    expect(traceBody.rounds.find((round: { roundIndex: number }) => round.roundIndex === 3)?.status).toBe('aborted')
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        title: 'Fresh session after import',
+        modelProfileSnapshot: {
+          id: 'model-1',
+          name: 'Model',
+          connectionBaseUrl: 'https://example.com/v1',
+          apiKey: null,
+          modelKey: 'model-key',
+          modelDisplayName: 'Model Key',
+          systemPrompt: 'Reply exactly.',
+          temperature: 0,
+          reasoning: 'on',
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    })
+    expect(createResponse.statusCode).toBe(201)
   })
 
   it('returns expected lookup payloads for session/turn/round/part on exported multi-turn tool baseline', async () => {
@@ -2153,6 +2248,12 @@ describe('CLI session lifecycle endpoints', () => {
     const first = await app.inject({ method: 'POST', url: '/api/sessions/from-defaults', payload: { title: 'A', sessionId: 'AB23' } })
     expect(first.statusCode).toBe(201)
 
+    // Mark session as ready so global lock does not mask the duplicate-ID error
+    const createdSession = getSessionRecord(app.backendDb.connection, 'AB23')!
+    createdSession.initStatus = 'ready'
+    createdSession.updatedAt = Date.now()
+    updateSessionRecord(app.backendDb.connection, createdSession)
+
     const duplicate = await app.inject({ method: 'POST', url: '/api/sessions/from-defaults', payload: { title: 'B', sessionId: 'AB23' } })
     expect(duplicate.statusCode).toBe(409)
     expect(duplicate.json().error.code).toBe('duplicate_session_id')
@@ -2379,5 +2480,460 @@ describe('CLI session lifecycle endpoints', () => {
 
     releaseProbe.resolve()
     await new Promise(resolve => setTimeout(resolve, 0))
+  })
+
+  describe('global session execution lock', () => {
+    const minimalModelProfile = {
+      id: 'model-1',
+      name: 'Model',
+      connectionBaseUrl: 'https://example.com/v1',
+      apiKey: null,
+      modelKey: 'model-key',
+      modelDisplayName: 'Model Key',
+      systemPrompt: 'Be helpful.',
+      temperature: 0,
+      reasoning: null as null,
+      createdAt: 1,
+      updatedAt: 1,
+    }
+
+    async function createReadySession(a: FastifyInstance, title = 'Ready Session'): Promise<string> {
+      const res = await a.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title, modelProfileSnapshot: minimalModelProfile },
+      })
+      const id = res.json().session.id as string
+      const s = getSessionRecord(a.backendDb.connection, id)!
+      s.initStatus = 'ready'
+      s.updatedAt = Date.now()
+      updateSessionRecord(a.backendDb.connection, s)
+      return id
+    }
+
+    function makeSessionRunning(a: FastifyInstance, sessionId: string): void {
+      insertTurnRecord(a.backendDb.connection, {
+        id: `${sessionId}.1`,
+        sessionId,
+        sequenceNumber: 1,
+        status: 'streaming',
+        outcome: null,
+        usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+        contextTokensAtTurnEnd: null,
+        contextTokensAfterCompaction: null,
+        compactionApplied: null,
+        compactionTokensRemoved: null,
+        createdAt: Date.now(),
+        completedAt: null,
+      })
+    }
+
+    function makeSessionInitializing(a: FastifyInstance, sessionId: string): void {
+      const s = getSessionRecord(a.backendDb.connection, sessionId)!
+      s.initStatus = 'initializing'
+      s.updatedAt = Date.now()
+      updateSessionRecord(a.backendDb.connection, s)
+    }
+
+    it('POST /api/sessions is blocked when another session is initializing', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      // Create first session and move it to 'initializing' (pending alone no longer counts)
+      const first = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Blocker', modelProfileSnapshot: minimalModelProfile },
+      })
+      expect(first.statusCode).toBe(201)
+      const blockerId = first.json().session.id as string
+      makeSessionInitializing(app, blockerId)
+
+      // Second creation must fail
+      const second = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Should Be Blocked', modelProfileSnapshot: minimalModelProfile },
+      })
+      expect(second.statusCode).toBe(409)
+      expect(second.json().error.code).toBe('another_session_active')
+      expect(second.json().error.active_session.id).toBe(blockerId)
+      expect(second.json().error.active_session.state).toBe('initializing')
+    })
+
+    it('POST /api/sessions is blocked when another session is running a turn', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      const blockerId = await createReadySession(app)
+      makeSessionRunning(app, blockerId)
+
+      const second = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Should Be Blocked', modelProfileSnapshot: minimalModelProfile },
+      })
+      expect(second.statusCode).toBe(409)
+      expect(second.json().error.code).toBe('another_session_active')
+      expect(second.json().error.active_session.id).toBe(blockerId)
+      expect(second.json().error.active_session.state).toBe('running')
+    })
+
+    it('POST /api/sessions/from-defaults is blocked when another session is active', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      const lmConnection = { id: 'lm-1', name: 'LM', baseUrl: 'https://example.com/v1', createdAt: 1, updatedAt: 1 }
+      const modelConfig = { id: 'mc-1', name: 'Model', connectionId: 'lm-1', modelKey: 'qwen', modelDisplayName: 'Qwen', systemPrompt: '', temperature: 0, createdAt: 1, updatedAt: 1 }
+      await app.inject({ method: 'PUT', url: '/api/lm-connections/lm-1', payload: lmConnection })
+      await app.inject({ method: 'PUT', url: '/api/model-configs/mc-1', payload: modelConfig })
+      await app.inject({ method: 'PUT', url: '/api/session-creation-defaults', payload: { defaultModelConfigId: 'mc-1', defaultMcpProfileId: null } })
+
+      // Create a session and move it to 'initializing' (pending alone does not block)
+      const blocker = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Blocker', modelProfileSnapshot: minimalModelProfile },
+      })
+      expect(blocker.statusCode).toBe(201)
+      const blockerId = blocker.json().session.id as string
+      makeSessionInitializing(app, blockerId)
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/from-defaults',
+        payload: { title: 'Should Be Blocked' },
+      })
+      expect(blocked.statusCode).toBe(409)
+      expect(blocked.json().error.code).toBe('another_session_active')
+      expect(blocked.json().error.active_session.id).toBe(blockerId)
+      expect(blocked.json().error.active_session.state).toBe('initializing')
+    })
+
+    it('POST /api/sessions/:sessionId/initialize is blocked when another session is running', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      // Create blocker session and mark it ready (no active turn yet)
+      const blockerId = await createReadySession(app, 'Blocker')
+
+      // Create target session while blocker is idle (pending state)
+      const targetRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Target', modelProfileSnapshot: minimalModelProfile },
+      })
+      expect(targetRes.statusCode).toBe(201)
+      const targetId = targetRes.json().session.id as string
+
+      // Now make blocker running (has active turn) — it will block target's initialization
+      makeSessionRunning(app, blockerId)
+
+      const initRes = await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${targetId}/initialize`,
+      })
+      expect(initRes.statusCode).toBe(409)
+      expect(initRes.json().error.code).toBe('another_session_active')
+      expect(initRes.json().error.active_session.id).toBe(blockerId)
+      expect(initRes.json().error.active_session.state).toBe('running')
+    })
+
+    it('POST /api/sessions/:sessionId/turns/start is blocked when another session is initializing', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      // Create blocker session (starts as pending)
+      const blockerRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Blocker', modelProfileSnapshot: minimalModelProfile },
+      })
+      expect(blockerRes.statusCode).toBe(201)
+      const blockerId = blockerRes.json().session.id as string
+
+      // Mark blocker as ready so we can create the target session
+      const blockerSess = getSessionRecord(app.backendDb.connection, blockerId)!
+      blockerSess.initStatus = 'ready'
+      blockerSess.updatedAt = Date.now()
+      updateSessionRecord(app.backendDb.connection, blockerSess)
+
+      // Create target session and mark it ready
+      const targetId = await createReadySession(app, 'Target')
+
+      // Set blocker back to initializing — it now blocks the target's turn start
+      blockerSess.initStatus = 'initializing'
+      blockerSess.updatedAt = Date.now()
+      updateSessionRecord(app.backendDb.connection, blockerSess)
+
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${targetId}/turns/start`,
+        payload: { userContent: 'Hello' },
+      })
+      expect(startRes.statusCode).toBe(409)
+      expect(startRes.json().error.code).toBe('another_session_active')
+      expect(startRes.json().error.active_session.id).toBe(blockerId)
+      expect(startRes.json().error.active_session.state).toBe('initializing')
+    })
+
+    it('POST /api/sessions/:sessionId/turns/start is blocked when another session is running', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      // Create blocker session, mark ready
+      const blockerRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Blocker', modelProfileSnapshot: minimalModelProfile },
+      })
+      const blockerId = blockerRes.json().session.id as string
+      const blockerSess = getSessionRecord(app.backendDb.connection, blockerId)!
+      blockerSess.initStatus = 'ready'
+      blockerSess.updatedAt = Date.now()
+      updateSessionRecord(app.backendDb.connection, blockerSess)
+
+      // Create target session, mark ready
+      const targetRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Target', modelProfileSnapshot: minimalModelProfile },
+      })
+      const targetId = targetRes.json().session.id as string
+      const targetSess = getSessionRecord(app.backendDb.connection, targetId)!
+      targetSess.initStatus = 'ready'
+      targetSess.updatedAt = Date.now()
+      updateSessionRecord(app.backendDb.connection, targetSess)
+
+      // Give blocker an active turn
+      makeSessionRunning(app, blockerId)
+
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${targetId}/turns/start`,
+        payload: { userContent: 'Hello' },
+      })
+      expect(startRes.statusCode).toBe(409)
+      expect(startRes.json().error.code).toBe('another_session_active')
+      expect(startRes.json().error.active_session.id).toBe(blockerId)
+      expect(startRes.json().error.active_session.state).toBe('running')
+    })
+
+    it('POST /api/sessions/:sessionId/turns is blocked when another session is active', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      // Create blocker and target via DB manipulation to bypass lock
+      const blockerRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Blocker', modelProfileSnapshot: minimalModelProfile },
+      })
+      const blockerId = blockerRes.json().session.id as string
+      const blockerSess = getSessionRecord(app.backendDb.connection, blockerId)!
+      blockerSess.initStatus = 'ready'
+      blockerSess.updatedAt = Date.now()
+      updateSessionRecord(app.backendDb.connection, blockerSess)
+
+      const targetRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Target', modelProfileSnapshot: minimalModelProfile },
+      })
+      const targetId = targetRes.json().session.id as string
+
+      // Give blocker an active turn
+      makeSessionRunning(app, blockerId)
+
+      const turnRes = await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${targetId}/turns`,
+        payload: { userContent: 'Hello' },
+      })
+      expect(turnRes.statusCode).toBe(409)
+      expect(turnRes.json().error.code).toBe('another_session_active')
+      expect(turnRes.json().error.active_session.id).toBe(blockerId)
+      expect(turnRes.json().error.active_session.state).toBe('running')
+    })
+
+    it('POST /api/sessions/:sessionId/turns/stream is blocked when another session is active', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      const blockerRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Blocker', modelProfileSnapshot: minimalModelProfile },
+      })
+      const blockerId = blockerRes.json().session.id as string
+      const blockerSess = getSessionRecord(app.backendDb.connection, blockerId)!
+      blockerSess.initStatus = 'ready'
+      blockerSess.updatedAt = Date.now()
+      updateSessionRecord(app.backendDb.connection, blockerSess)
+
+      const targetRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Target', modelProfileSnapshot: minimalModelProfile },
+      })
+      const targetId = targetRes.json().session.id as string
+
+      makeSessionRunning(app, blockerId)
+
+      const streamRes = await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${targetId}/turns/stream`,
+        payload: { userContent: 'Hello' },
+      })
+      expect(streamRes.statusCode).toBe(409)
+      expect(streamRes.json().error.code).toBe('another_session_active')
+      expect(streamRes.json().error.active_session.id).toBe(blockerId)
+      expect(streamRes.json().error.active_session.state).toBe('running')
+    })
+
+    it('global lock does not block operations on the same session', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      // Create and mark ready
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Solo', modelProfileSnapshot: minimalModelProfile },
+      })
+      expect(res.statusCode).toBe(201)
+      const sessionId = res.json().session.id as string
+
+      // Initialize succeeds (only this session is active, and it's excluded from its own check)
+      const initRes = await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${sessionId}/initialize`,
+      })
+      expect(initRes.statusCode).toBe(200)
+
+      // turns/start should succeed after initialization
+      const startRes = await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${sessionId}/turns/start`,
+        payload: { userContent: 'Hello' },
+      })
+      expect(startRes.statusCode).toBe(202)
+    })
+
+    it('POST /api/sessions/preflight is blocked when another session is initializing', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      // Create a session and move it to 'initializing' (pending alone does not block)
+      const blockerRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Initializing Blocker', modelProfileSnapshot: minimalModelProfile },
+      })
+      expect(blockerRes.statusCode).toBe(201)
+      const blockerId = blockerRes.json().session.id as string
+      makeSessionInitializing(app, blockerId)
+
+      const preflightRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/preflight',
+        payload: {
+          lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1', apiKey: null },
+          mcpProfileSnapshot: null,
+          selectedModel: { modelKey: 'model-key', modelDisplayName: 'Model Key' },
+        },
+      })
+
+      expect(preflightRes.statusCode).toBe(409)
+      expect(preflightRes.json().error.code).toBe('another_session_active')
+      expect(preflightRes.json().error.active_session.id).toBe(blockerId)
+      expect(preflightRes.json().error.active_session.state).toBe('initializing')
+    })
+
+    it('POST /api/sessions/preflight is blocked when another session is running', async () => {
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, baseGateway)
+
+      const blockerId = await createReadySession(app, 'Running Blocker')
+      makeSessionRunning(app, blockerId)
+
+      const preflightRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions/preflight',
+        payload: {
+          lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1', apiKey: null },
+          mcpProfileSnapshot: null,
+          selectedModel: { modelKey: 'model-key', modelDisplayName: 'Model Key' },
+        },
+      })
+
+      expect(preflightRes.statusCode).toBe(409)
+      expect(preflightRes.json().error.code).toBe('another_session_active')
+      expect(preflightRes.json().error.active_session.id).toBe(blockerId)
+      expect(preflightRes.json().error.active_session.state).toBe('running')
+    })
+
+    it('concurrent: session creation is blocked while turns/stream is in flight', async () => {
+      // This test proves the lock is actually held during the async gap inside turns/stream.
+      // The gateway probe is blocked mid-turn so that the event loop can run a concurrent
+      // session-creation request. The pre-inserted turn record must be visible to
+      // findActiveSession at that point, causing the creation to return 409.
+      const releaseProbe = createDeferred<void>()
+      const config = makeTestConfig()
+      dataDir = config.dataDir
+      app = await buildBackendApp(config, {
+        ...baseGateway,
+        lmStudioGateway: {
+          ...baseGateway.lmStudioGateway,
+          async probePromptTokensDetailed(baseUrl, apiKey, body) {
+            await releaseProbe.promise
+            return baseGateway.lmStudioGateway.probePromptTokensDetailed(baseUrl, apiKey, body)
+          },
+        },
+      })
+
+      // Create and initialize session A
+      const sessionAId = await createReadySession(app, 'Session A')
+
+      // Start the stream request without awaiting — it will block at the deferred probe.
+      // The handler runs synchronously up to createModelOnlyTurn's first await, which means
+      // the reservation transaction (and turn insertion) completes before yielding.
+      const streamPromise = app.inject({
+        method: 'POST',
+        url: `/api/sessions/${sessionAId}/turns/stream`,
+        payload: { userContent: 'Hello, take your time' },
+      })
+
+      // Yield the event loop enough times for the stream handler to reach the blocked probe.
+      await new Promise(r => setImmediate(r))
+      await new Promise(r => setImmediate(r))
+
+      // Now try to create a new session. The pre-inserted turn should make findActiveSession
+      // find session A as "running", blocking the creation with 409.
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/sessions',
+        payload: { title: 'Should Be Blocked', modelProfileSnapshot: minimalModelProfile },
+      })
+
+      // Release the probe so the stream can finish, then clean up.
+      releaseProbe.resolve()
+      await streamPromise
+
+      expect(createRes.statusCode).toBe(409)
+      expect(createRes.json().error.code).toBe('another_session_active')
+      expect(createRes.json().error.active_session.id).toBe(sessionAId)
+    }, 15_000)
   })
 })

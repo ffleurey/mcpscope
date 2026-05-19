@@ -334,6 +334,78 @@ export function deleteSessionRecord(connection: Database.Database, sessionId: st
   return result.changes > 0
 }
 
+export interface ActiveSessionInfo {
+  id: string
+  state: 'initializing' | 'running'
+}
+
+/**
+ * Returns the first session that is currently active (initializing or running a turn),
+ * optionally excluding a specific session by ID.
+ *
+ * A session is "active" when:
+ *   - its initStatus is 'initializing' (state: 'initializing')
+ *   - or it has a turn with status 'draft', 'streaming', or 'awaiting-tools' (state: 'running')
+ *
+ * Note: 'pending' sessions are NOT considered active — a session that was created but whose
+ * initialization was never started (e.g. after a server restart or abandoned UI flow) must not
+ * permanently lock the system. The initialize route enforces the lock when real work begins.
+ */
+export function findActiveSession(
+  connection: Database.Database,
+  excludeSessionId?: string,
+): ActiveSessionInfo | null {
+  const whereInit = excludeSessionId ? 'AND id != @excludeId' : ''
+  const whereRun = excludeSessionId ? 'AND s.id != @excludeId' : ''
+  const params: Record<string, string> = excludeSessionId ? { excludeId: excludeSessionId } : {}
+
+  const row = connection.prepare(`
+    SELECT id, state FROM (
+      SELECT id, 'initializing' AS state
+      FROM sessions
+      WHERE init_status = 'initializing'
+      ${whereInit}
+      UNION ALL
+      SELECT DISTINCT s.id, 'running' AS state
+      FROM sessions s
+      JOIN turns t ON t.session_id = s.id
+      WHERE t.status IN ('draft', 'streaming', 'awaiting-tools')
+      ${whereRun}
+    )
+    LIMIT 1
+  `).get(params) as { id: string; state: 'initializing' | 'running' } | undefined
+
+  return row ?? null
+}
+
+/**
+ * Recovers from an unclean server shutdown by marking any turns and sessions
+ * that were left in an in-progress state as terminated.
+ *
+ * Must be called once at startup, before any requests are served. Without this,
+ * a crash mid-turn leaves a 'streaming' turn in the DB which permanently blocks
+ * findActiveSession and prevents any new session from ever starting.
+ *
+ * Transitions applied atomically:
+ *  - turns:    'draft' | 'streaming' | 'awaiting-tools'  →  'aborted'
+ *  - sessions: initStatus = 'initializing'               →  initStatus = 'error'
+ */
+export function recoverInterruptedState(connection: Database.Database): void {
+  connection.transaction(() => {
+    connection.prepare(`
+      UPDATE turns
+      SET status = 'aborted', completed_at = ?
+      WHERE status IN ('draft', 'streaming', 'awaiting-tools')
+    `).run(Date.now())
+
+    connection.prepare(`
+      UPDATE sessions
+      SET init_status = 'error', updated_at = ?
+      WHERE init_status = 'initializing'
+    `).run(Date.now())
+  })()
+}
+
 export function listSessionSummaries(connection: Database.Database): SessionSummary[] {
   const rows = connection.prepare(`
     SELECT
