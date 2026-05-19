@@ -404,6 +404,89 @@ describe('backend foundation', () => {
     expect(traceBody.parts.filter((part: { partType: string }) => part.partType === 'tool-result')).toHaveLength(6)
   })
 
+  it('normalizes imported active execution state so trace imports cannot recreate a lock', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const capturedTrace: SessionTraceBundle = {
+      session: {
+        ...capturedReasoningThreeBatchSession,
+        initStatus: 'initializing',
+      },
+      turns: [
+        {
+          id: 'captured-reasoning-turn',
+          sessionId: capturedReasoningThreeBatchSession.id,
+          sequenceNumber: 1,
+          status: 'streaming',
+          createdAt: 1,
+          completedAt: null,
+          outcome: null,
+          usage: {
+            promptTokens: 9640,
+            completionTokens: 2246,
+            reasoningTokens: 1723,
+            totalTokens: 11886,
+          },
+          contextTokensAtTurnEnd: null,
+          contextTokensAfterCompaction: null,
+          compactionApplied: null,
+          compactionTokensRemoved: null,
+        },
+      ],
+      rounds: capturedReasoningThreeBatchRounds.map(round => round.roundIndex === 3
+        ? { ...round, status: 'streaming', finishReason: null, completedAt: null }
+        : round),
+      parts: capturedReasoningThreeBatchParts,
+      rawExchanges: [],
+      transcript: [],
+      context: [],
+    }
+
+    const importResponse = await app.inject({
+      method: 'POST',
+      url: '/api/traces/import',
+      payload: capturedTrace,
+    })
+    expect(importResponse.statusCode).toBe(201)
+    const importedSessionId = importResponse.json().session.id as string
+
+    const traceResponse = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${importedSessionId}/trace`,
+    })
+    expect(traceResponse.statusCode).toBe(200)
+
+    const traceBody = traceResponse.json()
+    expect(traceBody.session.initStatus).toBe('error')
+    expect(traceBody.turns[0].status).toBe('aborted')
+    expect(traceBody.turns[0].completedAt).toEqual(expect.any(Number))
+    expect(traceBody.rounds.find((round: { roundIndex: number }) => round.roundIndex === 3)?.status).toBe('aborted')
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        title: 'Fresh session after import',
+        modelProfileSnapshot: {
+          id: 'model-1',
+          name: 'Model',
+          connectionBaseUrl: 'https://example.com/v1',
+          apiKey: null,
+          modelKey: 'model-key',
+          modelDisplayName: 'Model Key',
+          systemPrompt: 'Reply exactly.',
+          temperature: 0,
+          reasoning: 'on',
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    })
+    expect(createResponse.statusCode).toBe(201)
+  })
+
   it('returns expected lookup payloads for session/turn/round/part on exported multi-turn tool baseline', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir

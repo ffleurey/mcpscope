@@ -16,7 +16,7 @@ import {
   modelConfigSchema,
 } from './domain/configuration.js'
 import { getDomainModelSummary } from './domain/model.js'
-import type { TurnRecord } from './domain/model.js'
+import type { SessionRecord, TurnRecord } from './domain/model.js'
 import { deriveContextEntries, deriveTranscriptEntries } from './domain/selectors.js'
 import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from './domain/trace.js'
 import { openBackendDatabase } from './persistence/db.js'
@@ -252,12 +252,7 @@ export async function buildBackendApp(
       | { kind: 'created'; session: SessionRecord; modelConfigId: string; modelConfigName: string; mcpProfileSnapshot: typeof mcpSnapshotRef }
 
     // Use a placeholder to capture mcp snapshot outside the transaction return type
-    let mcpSnapshotRef: {
-      id: string; name: string; url: string
-      transport: 'streamable-http' | 'sse'
-      authType: 'bearer' | null; authValue: string | null
-      createdAt: number; updatedAt: number
-    } | null = null
+    let mcpSnapshotRef: SessionRecord['mcpProfileSnapshot'] = null
 
     const result: FromDefaultsResult = database.connection.transaction((): FromDefaultsResult => {
       const active = findActiveSession(database.connection)
