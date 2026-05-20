@@ -231,5 +231,3 @@ mcpscope send ABCD "How did indoor temperature change over the last 7 days?"
 mcpscope status ABCD
 mcpscope inspect ABCD.1
 ```
-
-For full CLI syntax, use [CLI.md](CLI.md).
