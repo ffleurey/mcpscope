@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { OperationError } from '@mcpscope/shared'
+import { OperationError } from '../operations/errors.js'
 import { operationList } from '../operations/index.js'
 import type { OperationContext } from '../operations/index.js'
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { PartRecord, SessionRecord } from './backendTypes'
+import type { PartRecord, SessionSummary } from './backendTypes'
 import {
   applyStreamingDelta,
   clearRoundStreamingState,
@@ -11,33 +11,19 @@ import {
   upsertPart,
 } from './traceStreaming'
 
-function makeSession(): SessionRecord {
+function makeSession(): SessionSummary {
   return {
     id: 'session-1',
     title: 'Session',
     status: 'ready',
-    initStatus: 'ready',
-    createdAt: 1,
-    updatedAt: 1,
-    modelProfileSnapshot: {
-      id: 'model-1',
-      name: 'Model',
-      connectionBaseUrl: 'http://localhost:1234/v1',
-      apiKey: null,
-      modelKey: 'model-key',
-      modelDisplayName: 'Model',
-      systemPrompt: 'Reply helpfully.',
-      temperature: 0.7,
-      reasoning: 'on',
-      createdAt: 1,
-      updatedAt: 1,
-    },
-    mcpProfileSnapshot: null,
-    loadedContextLength: null,
-    systemPromptTokens: null,
-    toolDefinitionsTokens: null,
-    isContextExhausted: false,
-    compactionStrategy: 'strip-reasoning',
+    init_status: 'ready',
+    created_at: 1,
+    updated_at: 1,
+    model_profile_snapshot: { name: 'Model' },
+    mcp_profile_snapshot: null,
+    loaded_context_length: null,
+    is_context_exhausted: false,
+    compaction_strategy: 'strip-reasoning',
   }
 }
 

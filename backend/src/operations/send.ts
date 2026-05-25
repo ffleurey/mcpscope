@@ -1,8 +1,5 @@
 import { z } from 'zod'
-import { sendInputSchema } from '@mcpscope/shared'
-import type { SendInput, SendResult } from '@mcpscope/shared'
-import { sendOperation as sendContract } from '@mcpscope/shared'
-import { OperationError } from '@mcpscope/shared'
+import { OperationError } from './errors.js'
 import {
   findActiveSession,
   getNextTurnSequenceNumber,
@@ -17,7 +14,20 @@ import { formatTurnId } from '../domain/hierarchicalIds.js'
 import type { TurnRecord } from '../domain/model.js'
 import type { OperationContext } from './context.js'
 
-export type { SendInput, SendResult }
+// ─── Canonical contract ───────────────────────────────────────────────────────
+
+export const sendInputSchema = z.object({
+  session_id: z.string().describe('Session ID to send the prompt to'),
+  prompt: z.string().min(1).describe('User prompt text to submit to the session'),
+})
+
+export type SendInput = z.infer<typeof sendInputSchema>
+
+export interface SendResult {
+  api_version: 1
+  session_id: string
+  turn: { id: string; status: string }
+}
 
 /** Zod output shape for MCP structured output. Mirrors SendResult. */
 export const sendOutputSchema = {
@@ -30,7 +40,12 @@ export const sendOutputSchema = {
 }
 
 export const sendOperation = {
-  ...sendContract,
+  id: 'send' as const,
+  description:
+    'Start a user turn for an existing session (non-streaming, returns immediately). '
+    + 'The session must be fully initialized (status=ready). '
+    + 'Poll with status after sending to track turn progress.',
+  schema: sendInputSchema,
   outputSchema: sendOutputSchema,
   async execute(ctx: OperationContext, input: SendInput): Promise<SendResult> {
     const { db, lmStudioGateway, mcpGateway, maxToolRounds, logger } = ctx
@@ -142,5 +157,3 @@ export const sendOperation = {
     }
   },
 }
-
-export { sendInputSchema }

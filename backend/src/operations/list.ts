@@ -1,11 +1,32 @@
 import { z } from 'zod'
-import { listInputSchema } from '@mcpscope/shared'
-import type { ListInput, ListResult } from '@mcpscope/shared'
-import { listOperation as listContract } from '@mcpscope/shared'
 import { listSessionSummaries } from '../persistence/repository.js'
 import type { OperationContext } from './context.js'
 
-export type { ListInput, ListResult }
+// ─── Canonical contract ───────────────────────────────────────────────────────
+
+export const listInputSchema = z.object({})
+
+export type ListInput = z.infer<typeof listInputSchema>
+
+/** Canonical snake_case session summary — used by both CLI rendering and MCP results. */
+export interface SessionSummary {
+  id: string
+  title: string
+  status: string
+  init_status: string
+  created_at: number
+  updated_at: number
+  is_context_exhausted: boolean
+  loaded_context_length: number | null
+  compaction_strategy: string
+  model_profile_snapshot: { name: string }
+  mcp_profile_snapshot: { name: string } | null
+}
+
+export interface ListResult {
+  api_version: 1
+  sessions: SessionSummary[]
+}
 
 /** Zod output shape for MCP structured output. Mirrors ListResult. */
 export const listOutputSchema = {
@@ -26,7 +47,9 @@ export const listOutputSchema = {
 }
 
 export const listOperation = {
-  ...listContract,
+  id: 'list' as const,
+  description: 'List all sessions with ID, title, status, model, and last-updated time.',
+  schema: listInputSchema,
   outputSchema: listOutputSchema,
   async execute(ctx: OperationContext, _input: ListInput): Promise<ListResult> {
     const rows = listSessionSummaries(ctx.db.connection)
@@ -48,5 +71,3 @@ export const listOperation = {
     }
   },
 }
-
-export { listInputSchema }

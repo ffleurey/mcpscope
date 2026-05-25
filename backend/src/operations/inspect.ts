@@ -1,12 +1,28 @@
 import { z } from 'zod'
-import { inspectInputSchema } from '@mcpscope/shared'
-import type { InspectInput, InspectResult } from '@mcpscope/shared'
-import { inspectOperation as inspectContract } from '@mcpscope/shared'
-import { OperationError } from '@mcpscope/shared'
+import { OperationError } from './errors.js'
 import { resolveHierarchicalId } from '../runtime/hierarchicalLookup.js'
 import type { OperationContext } from './context.js'
 
-export type { InspectInput, InspectResult }
+// ─── Canonical contract ───────────────────────────────────────────────────────
+
+export const inspectInputSchema = z.object({
+  id: z.string().describe(
+    'Hierarchical ID to inspect. Formats: SSS (session), SSS.S (setup), '
+    + 'SSS.N (turn), SSS.N.N (round), SSS.N.N.N-X (part). Example: QGWA.1.2',
+  ),
+  short: z.boolean().optional().describe(
+    'When true, omit part content and return token counts only. Parts always return full content regardless.',
+  ),
+})
+
+export type InspectInput = z.infer<typeof inspectInputSchema>
+
+export interface InspectResult {
+  id: string
+  type: string
+  mode: string
+  data: Record<string, unknown>
+}
 
 /** Zod output shape for MCP structured output. Mirrors InspectResult. */
 export const inspectOutputSchema = {
@@ -17,7 +33,12 @@ export const inspectOutputSchema = {
 }
 
 export const inspectOperation = {
-  ...inspectContract,
+  id: 'inspect' as const,
+  description:
+    'Inspect any object by hierarchical ID. Supports sessions, setups, turns, rounds, and parts. '
+    + 'Use short=true to get token counts only without part content. '
+    + 'Prefer inspecting specific turn or part IDs over full session dumps.',
+  schema: inspectInputSchema,
   outputSchema: inspectOutputSchema,
   async execute(ctx: OperationContext, input: InspectInput): Promise<InspectResult> {
     const { db } = ctx
@@ -39,5 +60,3 @@ export const inspectOperation = {
     }
   },
 }
-
-export { inspectInputSchema }

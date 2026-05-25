@@ -1,5 +1,5 @@
 import { cliCreate } from '../httpClient.js'
-import type { CreateResult } from '@mcpscope/shared'
+import type { CreateResult } from '../types.js'
 
 export interface CreateOptions {
   url: string

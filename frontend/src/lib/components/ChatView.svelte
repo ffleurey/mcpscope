@@ -99,14 +99,14 @@
       .join('|'),
   )
 
-  let isInitializing = $derived(session != null && session.initStatus !== 'ready')
+  let isInitializing = $derived(session != null && session.init_status !== 'ready')
   let hasTraceContent = $derived(
     isInitializing || sessionPreludeParts.length > 0 || sessionPreludeRawExchanges.length > 0 || traceTurns.length > 0,
   )
-  let isExhausted = $derived(session?.isContextExhausted === true)
-  let displayModelName = $derived(session?.modelProfileSnapshot?.name ?? '')
-  let displayMcpName = $derived(session?.mcpProfileSnapshot?.name ?? null)
-  let displayCompaction = $derived(session?.compactionStrategy ?? null)
+  let isExhausted = $derived(session?.is_context_exhausted === true)
+  let displayModelName = $derived(session?.model_profile_snapshot?.name ?? '')
+  let displayMcpName = $derived(session?.mcp_profile_snapshot?.name ?? null)
+  let displayCompaction = $derived(session?.compaction_strategy ?? null)
 
   async function startEditTitle() {
     if (!session) return
@@ -257,7 +257,7 @@
           <SessionPreludeBlock
             parts={sessionPreludeParts}
             mode={viewMode}
-            loadedContextLength={session.loadedContextLength ?? null}
+            loadedContextLength={session.loaded_context_length ?? null}
             {isInitializing}
           />
         {/if}
@@ -269,7 +269,7 @@
             roundStreams={roundStreamsByTurn.get(turn.id) ?? []}
             mode={viewMode}
             {contextSnapshotsByRound}
-            loadedContextLength={session.loadedContextLength ?? null}
+            loadedContextLength={session.loaded_context_length ?? null}
           />
         {/each}
       {/if}
@@ -318,7 +318,7 @@
     {#if $activeTrace && !isInitializing}
       <ContextSnapshotBar
         entries={$activeTrace.context}
-        contextSize={session.loadedContextLength ?? null}
+        contextSize={session.loaded_context_length ?? null}
         label="Context after compaction"
       />
     {/if}

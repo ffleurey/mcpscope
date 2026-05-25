@@ -77,11 +77,11 @@ Result field naming is snake_case throughout (same shapes as CLI `--json` mode).
 
 The tool descriptions, input schemas, output schemas, and execution functions come from `backend/src/operations/`. MCP operations execute directly in the backend process — no loopback HTTP.
 
-The `@mcpscope/shared` package provides the contract-only layer (IDs, descriptions, input schemas, result types). Both the CLI and the backend operation catalog derive from it, but execution is backend-owned.
+There is no separate shared package. The backend operation catalog is the single source of truth for both the CLI result types and the MCP tool surface.
 
-To verify parity: `npm test` — the parity test suite in `shared/src/operations/parity.test.ts` and `backend/src/mcp/mcp.test.ts` enforces:
+To verify parity: `npm test` — the parity test suite in `backend/src/mcp/mcp.test.ts` enforces:
 
-- same operation IDs and descriptions (backend inherits from shared contract)
+- same operation IDs and descriptions
 - same input schemas (no adapter-only flags)
 - canonical snake\_case field naming in all result shapes
 - outputSchema defined for every operation

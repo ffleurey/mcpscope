@@ -72,7 +72,7 @@ Important rules:
 - the backend owns operation semantics and execution
 - the MCP interface does not call the backend API over loopback HTTP for shared operations
 - the CLI calls the backend over HTTP (it is a remote adapter by design)
-- machine-readable command semantics are shared via `@mcpscope/shared` (contract-only: schemas, types, IDs, descriptions)
+- machine-readable command semantics are defined once in `backend/src/operations/` (the single source of truth)
 - presentation differences (text rendering, exit codes, MCP content formatting) are adapter concerns; semantic drift is not
 - every new shared operation should be added once to `backend/src/operations/` and then exposed automatically through both adapters
 

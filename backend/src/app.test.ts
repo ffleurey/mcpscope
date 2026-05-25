@@ -2229,8 +2229,8 @@ describe('CLI session lifecycle endpoints', () => {
     expect(body.session.model.name).toBe('Qwen Local')
     expect(body.session.mcp?.id).toBe('mcp-1')
     expect(body.session.mcp?.name).toBe('Home Assistant')
-    expect(body.session.compactionStrategy).toBe('none')
-    expect(body.session.initStatus).toBe('pending')
+    expect(body.session.compaction_strategy).toBe('none')
+    expect(body.session.init_status).toBe('pending')
     expect(typeof body.session.id).toBe('string')
   })
 
@@ -2284,7 +2284,7 @@ describe('CLI session lifecycle endpoints', () => {
     const body = statusRes.json()
     expect(body.session.id).toBe(sessionId)
     expect(body.session.state).toBe('initializing')
-    expect(body.activeTurn).toBeNull()
+    expect(body.active_turn).toBeNull()
   })
 
   it('GET /api/sessions/:sessionId/status returns 404 for unknown session', async () => {
@@ -2356,7 +2356,7 @@ describe('CLI session lifecycle endpoints', () => {
     })
     expect(startRes.statusCode).toBe(202)
     const body = startRes.json()
-    expect(body.sessionId).toBe(sessionId)
+    expect(body.session_id).toBe(sessionId)
     expect(body.turn.id).toMatch(new RegExp(`^${sessionId}\\.\\d+$`))
     expect(body.turn.status).toBe('running')
   })

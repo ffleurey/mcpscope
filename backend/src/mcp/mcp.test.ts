@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { operationCatalog as sharedCatalog, operationList as sharedList } from '@mcpscope/shared'
 import { operationCatalog, operationList } from '../operations/index.js'
 import { TOOL_PREFIX, createMcpServer } from './index.js'
 import type { OperationContext } from './index.js'
@@ -51,25 +50,23 @@ describe('backend operation catalog — 5 operations with execute', () => {
   })
 })
 
-describe('CLI/MCP parity — backend operations extend the shared contract', () => {
-  it('backend catalog IDs match shared catalog IDs', () => {
+describe('CLI/MCP parity — backend operation catalog is the source of truth', () => {
+  it('backend catalog contains exactly the 5 shipped operations', () => {
     const backendIds = operationList.map(op => op.id)
-    const sharedIds = sharedList.map(op => op.id)
-    expect(backendIds).toEqual(sharedIds)
+    expect(backendIds).toEqual(['list', 'create', 'send', 'status', 'inspect'])
   })
 
-  it('backend operations inherit descriptions from the shared catalog', () => {
+  it('each operation has a non-empty description', () => {
     for (const op of operationList) {
-      const sharedOp = sharedCatalog[op.id as keyof typeof sharedCatalog]
-      expect(op.description).toBe(sharedOp.description)
+      expect(typeof op.description).toBe('string')
+      expect(op.description.length).toBeGreaterThan(0)
     }
   })
 
-  it('backend operations inherit schemas from the shared catalog', () => {
+  it('each operation has an inputSchema and outputSchema', () => {
     for (const op of operationList) {
-      const sharedOp = sharedCatalog[op.id as keyof typeof sharedCatalog]
-      // Same schema object reference (spread preserves identity)
-      expect(op.schema).toBe(sharedOp.schema)
+      expect(op.schema).toBeDefined()
+      expect(op.outputSchema).toBeDefined()
     }
   })
 })

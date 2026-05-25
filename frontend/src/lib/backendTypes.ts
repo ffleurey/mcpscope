@@ -156,18 +156,19 @@ export const sessionRecordSchema = z.object({
 
 // Slim summary returned by GET /api/sessions.
 // Only includes fields needed for session listing and the sidebar UI.
+// Field names are snake_case matching the canonical backend operation contract.
 export const sessionSummarySchema = z.object({
   id: z.string(),
   title: z.string(),
   status: sessionStatusSchema,
-  initStatus: sessionInitStatusSchema,
-  createdAt: z.number().int().nonnegative(),
-  updatedAt: z.number().int().nonnegative(),
-  isContextExhausted: z.boolean(),
-  loadedContextLength: z.number().int().positive().nullable(),
-  compactionStrategy: compactionStrategyWithFallbackSchema,
-  modelProfileSnapshot: z.object({ name: z.string() }),
-  mcpProfileSnapshot: z.object({ name: z.string() }).nullable(),
+  init_status: sessionInitStatusSchema,
+  created_at: z.number().int().nonnegative(),
+  updated_at: z.number().int().nonnegative(),
+  is_context_exhausted: z.boolean(),
+  loaded_context_length: z.number().int().positive().nullable(),
+  compaction_strategy: compactionStrategyWithFallbackSchema,
+  model_profile_snapshot: z.object({ name: z.string() }),
+  mcp_profile_snapshot: z.object({ name: z.string() }).nullable(),
 })
 
 export const turnRecordSchema = z.object({
@@ -319,6 +320,7 @@ export const preludeStreamEventSchema = z.discriminatedUnion('type', [
 ])
 
 export const listSessionsResponseSchema = z.object({
+  api_version: z.literal(1),
   sessions: z.array(sessionSummarySchema),
 })
 

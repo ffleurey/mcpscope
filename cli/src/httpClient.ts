@@ -1,12 +1,11 @@
 /**
- * CLI HTTP client — calls the mcpscope backend API and maps responses to the
- * canonical snake_case result types defined in @mcpscope/shared.
+ * CLI HTTP client — calls the mcpscope backend API.
  *
- * This module is the CLI's remote-adapter execution layer. It is the only place
- * where the CLI makes HTTP calls to the backend. All result types are shared with
- * the MCP surface so CLI and MCP remain semantically identical.
+ * The backend HTTP API returns canonical snake_case result shapes (matching the
+ * backend operation layer), so no field mapping is required here. This module
+ * is the CLI's only place for HTTP calls to the backend.
  */
-import { OperationError } from '@mcpscope/shared'
+import { OperationError } from './errors.js'
 import type {
   ListResult,
   CreateInput,
@@ -17,7 +16,7 @@ import type {
   StatusResult,
   InspectInput,
   InspectResult,
-} from '@mcpscope/shared'
+} from './types.js'
 
 // ─── HTTP primitives ──────────────────────────────────────────────────────────
 
@@ -90,109 +89,34 @@ async function parseResponse<T>(response: Response, _baseUrl: string): Promise<T
   return payload as T
 }
 
-// ─── API response types (camelCase — matches backend HTTP API) ────────────────
+// ─── Operation call functions — pass-through to canonical HTTP result shapes ──
 
-interface ApiSessionSummary {
-  id: string
-  title: string
-  status: string
-  initStatus: string
-  createdAt: number
-  updatedAt: number
-  isContextExhausted: boolean
-  loadedContextLength: number | null
-  compactionStrategy: string
-  modelProfileSnapshot: { name: string }
-  mcpProfileSnapshot: { name: string } | null
-}
-
-interface ApiCreatedSession {
-  id: string
-  title: string
-  status: string
-  initStatus: string
-  model: { id: string; name: string }
-  mcp: { id: string; name: string } | null
-  compactionStrategy: string
-  createdAt: number
-  updatedAt: number
-}
-
-// ─── Operation call functions — map API responses to shared result types ──────
-
-/** GET /api/sessions → ListResult (snake_case) */
+/** GET /api/sessions → ListResult */
 export async function cliList(baseUrl: string): Promise<ListResult> {
-  const raw = await request<{ sessions: ApiSessionSummary[] }>(baseUrl, '/api/sessions')
-  return {
-    api_version: 1,
-    sessions: raw.sessions.map(s => ({
-      id: s.id,
-      title: s.title,
-      status: s.status,
-      init_status: s.initStatus,
-      created_at: s.createdAt,
-      updated_at: s.updatedAt,
-      is_context_exhausted: s.isContextExhausted,
-      loaded_context_length: s.loadedContextLength,
-      compaction_strategy: s.compactionStrategy,
-      model_profile_snapshot: { name: s.modelProfileSnapshot.name },
-      mcp_profile_snapshot: s.mcpProfileSnapshot ? { name: s.mcpProfileSnapshot.name } : null,
-    })),
-  }
+  return request<ListResult>(baseUrl, '/api/sessions')
 }
 
-/** POST /api/sessions/from-defaults → CreateResult (snake_case) */
+/** POST /api/sessions/from-defaults → CreateResult */
 export async function cliCreate(baseUrl: string, input: CreateInput): Promise<CreateResult> {
-  const body = {
+  return post<CreateResult>(baseUrl, '/api/sessions/from-defaults', {
     title: input.title,
     ...(input.id !== undefined ? { sessionId: input.id } : {}),
     ...(input.compaction !== undefined ? { compactionStrategy: input.compaction } : {}),
-  }
-  const raw = await post<{ session: ApiCreatedSession }>(baseUrl, '/api/sessions/from-defaults', body)
-  const s = raw.session
-  return {
-    api_version: 1,
-    session: {
-      id: s.id,
-      title: s.title,
-      status: s.status,
-      init_status: s.initStatus,
-      model: s.model,
-      mcp: s.mcp,
-      compaction_strategy: s.compactionStrategy,
-      created_at: s.createdAt,
-      updated_at: s.updatedAt,
-    },
-  }
+  })
 }
 
-/** POST /api/sessions/:id/turns/start → SendResult (snake_case) */
+/** POST /api/sessions/:id/turns/start → SendResult */
 export async function cliSend(baseUrl: string, input: SendInput): Promise<SendResult> {
-  const raw = await post<{ sessionId: string; turn: { id: string; status: string } }>(
+  return post<SendResult>(
     baseUrl,
     `/api/sessions/${encodeURIComponent(input.session_id)}/turns/start`,
     { userContent: input.prompt },
   )
-  return {
-    api_version: 1,
-    session_id: raw.sessionId,
-    turn: { id: raw.turn.id, status: raw.turn.status },
-  }
 }
 
-/** GET /api/sessions/:id/status → StatusResult (snake_case) */
+/** GET /api/sessions/:id/status → StatusResult */
 export async function cliStatus(baseUrl: string, input: StatusInput): Promise<StatusResult> {
-  const raw = await request<{
-    session: { id: string; state: 'initializing' | 'ready' | 'running' | 'error' }
-    activeTurn: { id: string; status: string } | null
-  }>(baseUrl, `/api/sessions/${encodeURIComponent(input.session_id)}/status`)
-  return {
-    api_version: 1,
-    session: { id: raw.session.id, state: raw.session.state },
-    active_turn: raw.activeTurn
-      ? { id: raw.activeTurn.id, status: raw.activeTurn.status }
-      : null,
-  }
+  return request<StatusResult>(baseUrl, `/api/sessions/${encodeURIComponent(input.session_id)}/status`)
 }
 
 /** GET /api/lookup/:id?mode=... → InspectResult */
