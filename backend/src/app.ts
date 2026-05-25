@@ -74,6 +74,7 @@ import { formatTurnId } from './domain/hierarchicalIds.js'
 import { importTraceBundle } from './runtime/traceImport.js'
 import { runSessionInitialization } from './runtime/sessionInit.js'
 import { resolveHierarchicalId } from './runtime/hierarchicalLookup.js'
+import { registerMcpTransport } from './mcp/index.js'
 
 interface RuntimeDependencies {
   lmStudioGateway: LmStudioGateway
@@ -151,6 +152,11 @@ export async function buildBackendApp(
   // findActiveSession never sees stale 'running' entries that would permanently block
   // new session creation.
   recoverInterruptedState(database.connection)
+
+  // Register MCP Streamable HTTP transport. Routes: POST/GET/DELETE /mcp
+  // The MCP tools call the local backend HTTP API via the shared operation catalog.
+  const selfBaseUrl = `http://${config.host}:${config.port}`
+  registerMcpTransport(app, selfBaseUrl)
 
   app.get('/api/health', async () => {
     return healthResponseSchema.parse({

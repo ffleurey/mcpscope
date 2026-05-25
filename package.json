@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.10.0",
   "type": "module",
+  "workspaces": [
+    "shared"
+  ],
   "bin": {
     "mcpscope": "./cli/dist/index.js"
   },
@@ -15,6 +18,7 @@
     "seed:dev-sessions": "tsx backend/src/dev/seedCapturedSessions.ts",
     "seed:dev-data": "npm run seed:dev-config && npm run seed:dev-sessions",
     "build": "vite build --config frontend/vite.config.ts",
+    "build:shared": "tsc -p shared/tsconfig.json",
     "build:backend": "tsc -p backend/tsconfig.json",
     "build:cli": "tsc -p cli/tsconfig.json",
     "start:backend": "node backend/dist/server.js",

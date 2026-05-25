@@ -1,4 +1,4 @@
-import { listSessions } from '../../apiClient.js'
+import { listOperation } from '@mcpscope/shared'
 
 export interface SessionsListOptions {
   url: string
@@ -14,12 +14,12 @@ function truncate(s: string, max: number): string {
 }
 
 export async function runSessionsList(opts: SessionsListOptions): Promise<void> {
-  const result = await listSessions(opts.url)
+  const result = await listOperation.execute(opts.url, {})
   const sessions = result.sessions
 
   if (opts.json) {
     process.stdout.write(
-      JSON.stringify({ api_version: 1, sessions }, null, 2) + '\n',
+      JSON.stringify(result, null, 2) + '\n',
     )
     return
   }

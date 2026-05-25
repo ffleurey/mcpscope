@@ -45,16 +45,24 @@ mcpscope currently ships:
 - a Web UI for human inspection and configuration
 - a backend HTTP API as the canonical integration layer
 - a packaged CLI for shell-native workflows
+- an MCP interface for agent-native interaction (Streamable HTTP at `/mcp`)
 
-These surfaces should stay aligned around one backend-owned model and one backend-owned set of semantics.
+These surfaces stay aligned around one backend-owned model and one backend-owned set of semantics.
 
-Important rule:
+The CLI and MCP interface are adapters over a **shared canonical operation catalog** defined in `shared/src/`. Each operation in the catalog defines:
 
-- the product should not grow separate conceptual contracts for UI, API, and CLI
-- machine-readable command semantics should be shared wherever possible
-- presentation differences are allowed; semantic drift is not
+- canonical operation ID
+- user-facing description (used by both CLI help and MCP tool descriptions)
+- input schema (Zod — used by both CLI validation and MCP tool registration)
+- execution function (calls the backend HTTP API — same code path for CLI and MCP)
+- machine-readable success shape
 
-If a future MCP interface is added, it should be an adapter over the same shared operations rather than a parallel hand-written command surface.
+Important rules:
+
+- the product should not grow separate conceptual contracts for UI, API, CLI, or MCP
+- machine-readable command semantics are shared wherever possible
+- presentation differences (text rendering, exit codes, MCP content formatting) are allowed; semantic drift is not
+- every new shared operation should be added once to the catalog and exposed automatically through both adapters
 
 ## Runtime state and persistence
 

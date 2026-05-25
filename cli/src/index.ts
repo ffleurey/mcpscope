@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { resolveBackendUrl } from './config.js'
-import { CliError, printError } from './errors.js'
+import { CliError, OperationError, printError } from './errors.js'
 import { parseSessionsListArgs, runSessionsList } from './commands/sessions/list.js'
 import { parseInspectArgs, runInspect } from './commands/inspect.js'
 import { parseCreateArgs, runCreate } from './commands/create.js'
@@ -148,6 +148,10 @@ main(process.argv).catch((err: unknown) => {
   if (err instanceof CliError) {
     printError(err.message)
     process.exit(err.exitCode)
+  }
+  if (err instanceof OperationError) {
+    printError(err.message)
+    process.exit(1)
   }
   printError(err instanceof Error ? err.message : String(err))
   process.exit(1)
