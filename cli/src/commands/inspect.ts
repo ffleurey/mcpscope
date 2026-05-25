@@ -1,4 +1,4 @@
-import { lookupById } from '../apiClient.js'
+import { cliInspect } from '../httpClient.js'
 import { bold, colorTokens } from '../colors.js'
 
 export interface InspectOptions {
@@ -145,8 +145,10 @@ function renderPartText(data: AnyRecord): void {
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 export async function runInspect(opts: InspectOptions): Promise<void> {
-  const mode = opts.short ? 'summary' : 'full'
-  const result = await lookupById(opts.url, opts.id, mode)
+  const result = await cliInspect(opts.url, {
+    id: opts.id,
+    ...(opts.short ? { short: true } : {}),
+  })
 
   if (opts.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n')

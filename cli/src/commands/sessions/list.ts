@@ -1,4 +1,4 @@
-import { listSessions } from '../../apiClient.js'
+import { cliList } from '../../httpClient.js'
 
 export interface SessionsListOptions {
   url: string
@@ -14,12 +14,12 @@ function truncate(s: string, max: number): string {
 }
 
 export async function runSessionsList(opts: SessionsListOptions): Promise<void> {
-  const result = await listSessions(opts.url)
+  const result = await cliList(opts.url)
   const sessions = result.sessions
 
   if (opts.json) {
     process.stdout.write(
-      JSON.stringify({ api_version: 1, sessions }, null, 2) + '\n',
+      JSON.stringify(result, null, 2) + '\n',
     )
     return
   }
@@ -38,8 +38,8 @@ export async function runSessionsList(opts: SessionsListOptions): Promise<void> 
     const id = truncate(session.id, 26)
     const title = truncate(session.title, 32)
     const status = truncate(session.status, 12)
-    const model = truncate(session.modelProfileSnapshot.name, 28)
-    const updated = formatDate(session.updatedAt)
+    const model = truncate(session.model_profile_snapshot.name, 28)
+    const updated = formatDate(session.updated_at)
     process.stdout.write(
       `${id.padEnd(26)}  ${title.padEnd(32)}  ${status.padEnd(12)}  ${model.padEnd(28)}  ${updated}\n`,
     )

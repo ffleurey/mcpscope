@@ -63,8 +63,8 @@ function setSessionError(error: AppError, surface: 'dialog' | 'new-session' = 'd
   sessionErrorSurface.set(surface)
 }
 
-function sortByUpdatedAtDesc<T extends { updatedAt: number }>(records: T[]): T[] {
-  return [...records].sort((left, right) => right.updatedAt - left.updatedAt)
+function sortByUpdatedAtDesc<T extends { updated_at: number }>(records: T[]): T[] {
+  return [...records].sort((left, right) => right.updated_at - left.updated_at)
 }
 
 function buildModelProfileSnapshot(modelConfig: ModelConfig, connection: LmStudioConnection) {
@@ -108,14 +108,14 @@ function toSessionSummary(record: SessionRecord): SessionSummary {
     id: record.id,
     title: record.title,
     status: record.status,
-    initStatus: record.initStatus,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    isContextExhausted: record.isContextExhausted,
-    loadedContextLength: record.loadedContextLength,
-    compactionStrategy: record.compactionStrategy,
-    modelProfileSnapshot: { name: record.modelProfileSnapshot.name },
-    mcpProfileSnapshot: record.mcpProfileSnapshot ? { name: record.mcpProfileSnapshot.name } : null,
+    init_status: record.initStatus,
+    created_at: record.createdAt,
+    updated_at: record.updatedAt,
+    is_context_exhausted: record.isContextExhausted,
+    loaded_context_length: record.loadedContextLength,
+    compaction_strategy: record.compactionStrategy,
+    model_profile_snapshot: { name: record.modelProfileSnapshot.name },
+    mcp_profile_snapshot: record.mcpProfileSnapshot ? { name: record.mcpProfileSnapshot.name } : null,
   }
 }
 

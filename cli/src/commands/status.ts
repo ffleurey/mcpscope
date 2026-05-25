@@ -1,4 +1,4 @@
-import { getSessionStatus } from '../apiClient.js'
+import { cliStatus } from '../httpClient.js'
 
 export interface StatusOptions {
   url: string
@@ -7,33 +7,18 @@ export interface StatusOptions {
 }
 
 export async function runStatus(opts: StatusOptions): Promise<void> {
-  const result = await getSessionStatus(opts.url, opts.sessionId)
+  const result = await cliStatus(opts.url, { session_id: opts.sessionId })
 
   if (opts.json) {
-    process.stdout.write(
-      JSON.stringify(
-        {
-          api_version: 1,
-          session: {
-            id: result.session.id,
-            state: result.session.state,
-          },
-          active_turn: result.activeTurn
-            ? { id: result.activeTurn.id, status: result.activeTurn.status }
-            : null,
-        },
-        null,
-        2,
-      ) + '\n',
-    )
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n')
     return
   }
 
   const state = result.session.state
   process.stdout.write(`${result.session.id}  ${state}\n`)
 
-  if (state === 'running' && result.activeTurn) {
-    process.stdout.write(`  turn  ${result.activeTurn.id}  ${result.activeTurn.status}\n`)
+  if (state === 'running' && result.active_turn) {
+    process.stdout.write(`  turn  ${result.active_turn.id}  ${result.active_turn.status}\n`)
   }
 
   if (state === 'ready') {

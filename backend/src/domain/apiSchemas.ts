@@ -32,14 +32,6 @@ export const mcpProfileSnapshotInputSchema = z.object({
   updatedAt: z.number().int().nonnegative(),
 })
 
-export const createSessionInputSchema = z.object({
-  sessionId: z.string().optional(),
-  title: z.string().optional(),
-  modelProfileSnapshot: modelProfileSnapshotInputSchema,
-  mcpProfileSnapshot: mcpProfileSnapshotInputSchema.nullable().optional(),
-  compactionStrategy: z.enum(['none', 'strip-reasoning']).optional(),
-})
-
 export const createTurnInputSchema = z.object({
   userContent: z.string().min(1),
 })

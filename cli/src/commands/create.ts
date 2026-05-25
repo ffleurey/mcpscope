@@ -1,5 +1,5 @@
-import { createSessionFromDefaults } from '../apiClient.js'
-import type { CreatedSessionSummary, CreateFromDefaultsInput } from '../apiClient.js'
+import { cliCreate } from '../httpClient.js'
+import type { CreateResult } from '../types.js'
 
 export interface CreateOptions {
   url: string
@@ -14,52 +14,32 @@ function formatDate(epochMs: number): string {
 }
 
 export async function runCreate(opts: CreateOptions): Promise<void> {
-  const input: CreateFromDefaultsInput = { title: opts.title }
-  if (opts.id !== undefined) input.sessionId = opts.id
-  if (opts.compaction !== undefined) input.compactionStrategy = opts.compaction
-
-  const result = await createSessionFromDefaults(opts.url, input)
-
-  const { session } = result
+  const result = await cliCreate(opts.url, {
+    title: opts.title,
+    ...(opts.id !== undefined ? { id: opts.id } : {}),
+    ...(opts.compaction !== undefined ? { compaction: opts.compaction } : {}),
+  })
 
   if (opts.json) {
-    process.stdout.write(
-      JSON.stringify(
-        {
-          api_version: 1,
-          session: toJsonShape(session),
-        },
-        null,
-        2,
-      ) + '\n',
-    )
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n')
     return
   }
 
+  renderCreateText(result)
+}
+
+function renderCreateText(result: CreateResult): void {
+  const { session } = result
   process.stdout.write(`${session.id}  ${session.title}\n`)
   process.stdout.write(`  status      ${session.status}\n`)
-  process.stdout.write(`  init        ${session.initStatus}\n`)
+  process.stdout.write(`  init        ${session.init_status}\n`)
   process.stdout.write(`  model       ${session.model.name}  (${session.model.id})\n`)
   if (session.mcp) {
     process.stdout.write(`  mcp         ${session.mcp.name}  (${session.mcp.id})\n`)
   }
-  process.stdout.write(`  compaction  ${session.compactionStrategy}\n`)
-  process.stdout.write(`  created     ${formatDate(session.createdAt)}\n`)
+  process.stdout.write(`  compaction  ${session.compaction_strategy}\n`)
+  process.stdout.write(`  created     ${formatDate(session.created_at)}\n`)
   process.stdout.write(`\nRun 'mcpscope status ${session.id}' to check initialization progress.\n`)
-}
-
-function toJsonShape(session: CreatedSessionSummary) {
-  return {
-    id: session.id,
-    title: session.title,
-    status: session.status,
-    init_status: session.initStatus,
-    model: session.model,
-    mcp: session.mcp,
-    compaction_strategy: session.compactionStrategy,
-    created_at: session.createdAt,
-    updated_at: session.updatedAt,
-  }
 }
 
 export function parseCreateArgs(

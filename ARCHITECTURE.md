@@ -35,7 +35,8 @@ The value of the project depends on correctness and inspectability:
 - transcript and context are two views over the same runtime, not separate systems
 - exported traces must stay replayable without reconstruction
 - the frontend is a thin client over backend state
-- command/tool interfaces should be adapters over shared backend-owned operations
+- command/tool interfaces are thin adapters over a backend-owned canonical operation catalog
+- the MCP interface executes operations directly via the backend (no loopback HTTP)
 - raw exchanges are preserved for diagnostics, auditing, and replay
 
 ## Product surfaces and contract sharing
@@ -45,16 +46,35 @@ mcpscope currently ships:
 - a Web UI for human inspection and configuration
 - a backend HTTP API as the canonical integration layer
 - a packaged CLI for shell-native workflows
+- an MCP interface for agent-native interaction (Streamable HTTP at `/mcp`)
 
-These surfaces should stay aligned around one backend-owned model and one backend-owned set of semantics.
+These surfaces stay aligned around one backend-owned model and one backend-owned set of semantics.
 
-Important rule:
+### Backend-owned operation catalog
 
-- the product should not grow separate conceptual contracts for UI, API, and CLI
-- machine-readable command semantics should be shared wherever possible
-- presentation differences are allowed; semantic drift is not
+The canonical operation layer lives in `backend/src/operations/`. Each operation in the catalog defines, in one place:
 
-If a future MCP interface is added, it should be an adapter over the same shared operations rather than a parallel hand-written command surface.
+- canonical operation ID
+- user-facing description (used by both CLI help and MCP tool descriptions)
+- input schema (Zod — shared contract, used by both CLI validation and MCP tool registration)
+- output schema (Zod shape — used by MCP for structured output)
+- execution function (calls backend directly — no loopback HTTP)
+- machine-readable success shape (snake_case throughout)
+- machine-readable error shape
+
+The CLI and MCP interface are adapters over this backend-owned catalog:
+
+- **CLI** — a thin remote adapter: argv parsing, stdin handling, text rendering, exit codes, HTTP calls to the backend API, mapping to shared result types
+- **MCP** — a backend-native adapter: tool registration from the catalog, direct execution via `OperationContext`, structured output via `outputSchema` + `structuredContent`
+
+Important rules:
+
+- the backend owns operation semantics and execution
+- the MCP interface does not call the backend API over loopback HTTP for shared operations
+- the CLI calls the backend over HTTP (it is a remote adapter by design)
+- machine-readable command semantics are defined once in `backend/src/operations/` (the single source of truth)
+- presentation differences (text rendering, exit codes, MCP content formatting) are adapter concerns; semantic drift is not
+- every new shared operation should be added once to `backend/src/operations/` and then exposed automatically through both adapters
 
 ## Runtime state and persistence
 

@@ -1,4 +1,4 @@
-import { startTurn } from '../apiClient.js'
+import { cliSend } from '../httpClient.js'
 
 export interface SendOptions {
   url: string
@@ -8,28 +8,18 @@ export interface SendOptions {
 }
 
 export async function runSend(opts: SendOptions): Promise<void> {
-  const result = await startTurn(opts.url, opts.sessionId, opts.prompt)
+  const result = await cliSend(opts.url, {
+    session_id: opts.sessionId,
+    prompt: opts.prompt,
+  })
 
   if (opts.json) {
-    process.stdout.write(
-      JSON.stringify(
-        {
-          api_version: 1,
-          session_id: result.sessionId,
-          turn: {
-            id: result.turn.id,
-            status: result.turn.status,
-          },
-        },
-        null,
-        2,
-      ) + '\n',
-    )
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n')
     return
   }
 
-  process.stdout.write(`${result.sessionId}  turn ${result.turn.id}  ${result.turn.status}\n`)
-  process.stdout.write(`\nRun 'mcpscope status ${result.sessionId}' to poll for completion.\n`)
+  process.stdout.write(`${result.session_id}  turn ${result.turn.id}  ${result.turn.status}\n`)
+  process.stdout.write(`\nRun 'mcpscope status ${result.session_id}' to poll for completion.\n`)
 }
 
 export async function parseSendArgs(
