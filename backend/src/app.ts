@@ -6,7 +6,6 @@ import path from 'node:path'
 import { z } from 'zod'
 import type { BackendConfig } from './config.js'
 import {
-  createSessionInputSchema,
   createTurnInputSchema,
   healthResponseSchema,
 } from './domain/apiSchemas.js'
@@ -61,10 +60,6 @@ import { callMcpTool, initializeMcpSession, listMcpTools } from './services/mcp/
 import { apiError } from './errors.js'
 import {
   createModelOnlyTurn,
-  createSession,
-  SessionIdConflictError,
-  SessionIdGenerationError,
-  SessionIdInputError,
   type LmStudioGateway,
 } from './runtime/modelTurns.js'
 import { createToolEnabledTurn, type McpGateway } from './runtime/toolTurns.js'
@@ -83,6 +78,7 @@ import {
   operationErrorToHttpStatus,
   type OperationContext,
 } from './operations/index.js'
+import { executeCreateExplicit } from './operations/createExplicit.js'
 
 interface RuntimeDependencies {
   lmStudioGateway: LmStudioGateway
@@ -219,48 +215,17 @@ export async function buildBackendApp(
     }
   })
 
+  // ─── Create session (explicit config) ─────────────────────────────────────
+  // Used by the frontend, which supplies its own fully-resolved model/MCP snapshots.
+  // Business logic is owned by executeCreateExplicit (backend/src/operations/createExplicit.ts).
   app.post('/api/sessions', async (request, reply) => {
-    const input = createSessionInputSchema.parse(request.body)
-
-    type CreateResult =
-      | { kind: 'blocked'; active: ActiveSessionInfo }
-      | { kind: 'created'; session: SessionRecord }
-      | { kind: 'id_input_error'; error: SessionIdInputError }
-      | { kind: 'id_conflict_error'; error: SessionIdConflictError }
-      | { kind: 'id_generation_error'; error: SessionIdGenerationError }
-
-    const result: CreateResult = database.connection.transaction((): CreateResult => {
-      const active = findActiveSession(database.connection)
-      if (active) return { kind: 'blocked', active }
-      try {
-        const session = createSession(database, input)
-        return { kind: 'created', session }
-      } catch (error) {
-        if (error instanceof SessionIdInputError) return { kind: 'id_input_error', error }
-        if (error instanceof SessionIdConflictError) return { kind: 'id_conflict_error', error }
-        if (error instanceof SessionIdGenerationError) return { kind: 'id_generation_error', error }
-        throw error
-      }
-    })()
-
-    if (result.kind === 'blocked') {
-      reply.code(409)
-      return anotherSessionActiveError(result.active)
+    try {
+      const result = await executeCreateExplicit(opCtx, request.body)
+      reply.code(201)
+      return result
+    } catch (err) {
+      return handleOperationError(err, reply)
     }
-    if (result.kind === 'id_input_error') {
-      reply.code(400)
-      return apiError('validation', result.error.message, { code: 'invalid_session_id' })
-    }
-    if (result.kind === 'id_conflict_error') {
-      reply.code(409)
-      return apiError('validation', result.error.message, { code: 'duplicate_session_id' })
-    }
-    if (result.kind === 'id_generation_error') {
-      reply.code(409)
-      return apiError('validation', result.error.message, { code: 'session_id_generation_failed' })
-    }
-    reply.code(201)
-    return { session: result.session }
   })
 
   // ─── Create session from defaults ──────────────────────────────────────────
