@@ -37,7 +37,7 @@ This task should build on:
 
 - `backlog/session-analysis-agent.md`
 - `backlog/session-batch-runs.md`
-- `backlog/mcpscope-mcp-interface.md`
+- the completed `backlog/done/mcpscope-mcp-interface.md` work
 
 The intended layering is:
 

@@ -56,7 +56,7 @@ The canonical operation layer lives in `backend/src/operations/`. Each operation
 
 - canonical operation ID
 - user-facing description (used by both CLI help and MCP tool descriptions)
-- input schema (Zod — shared contract, used by both CLI validation and MCP tool registration)
+- input schema (Zod — canonical contract used by backend execution and MCP tool registration)
 - output schema (Zod shape — used by MCP for structured output)
 - execution function (calls backend directly — no loopback HTTP)
 - machine-readable success shape (snake_case throughout)
@@ -64,7 +64,7 @@ The canonical operation layer lives in `backend/src/operations/`. Each operation
 
 The CLI and MCP interface are adapters over this backend-owned catalog:
 
-- **CLI** — a thin remote adapter: argv parsing, stdin handling, text rendering, exit codes, HTTP calls to the backend API, mapping to shared result types
+- **CLI** — a thin remote adapter: argv parsing, stdin handling, text rendering, exit codes, and HTTP calls to the backend API
 - **MCP** — a backend-native adapter: tool registration from the catalog, direct execution via `OperationContext`, structured output via `outputSchema` + `structuredContent`
 
 Important rules:

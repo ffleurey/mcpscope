@@ -7,11 +7,13 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 - [README.md](README.md) - repository/developer entrypoint for working on mcpscope itself
 - [TUTORIAL.md](TUTORIAL.md) - packaged user/tester tutorial for running released mcpscope in Docker
 - [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
+- [MCP.md](MCP.md) - MCP interface reference: transport, tool surface, and structured results
 - [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
 - [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
 - [PLAN.md](PLAN.md) - current product state and near-term focus
 - [backlog/done/cli-packaging-and-tutorial.md](backlog/done/cli-packaging-and-tutorial.md) - completed Docker CLI packaging and tutorial task
 - [backlog/done/global-session-execution-lock.md](backlog/done/global-session-execution-lock.md) - completed single-active-session execution lock task
+- [backlog/done/mcpscope-mcp-interface.md](backlog/done/mcpscope-mcp-interface.md) - completed backend-owned MCP interface and CLI/MCP alignment task
 - [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md) - next CLI increment after the shipped lifecycle MVP
 - [backlog/session-batch-runs.md](backlog/session-batch-runs.md) - future sequential batch/session-repeatability workflow
 - [backlog/done/hierachical-ids-system-and-api.md](backlog/done/hierachical-ids-system-and-api.md) - completed hierarchical ID and lookup groundwork the CLI builds on
@@ -33,11 +35,12 @@ If you want to **use** a released mcpscope build to evaluate an MCP server, star
 
 ## Product surfaces
 
-mcpscope currently ships as one product with three main surfaces:
+mcpscope currently ships as one product with four main surfaces:
 
 - Web UI for human inspection and configuration
 - backend HTTP API as the canonical integration layer
 - packaged CLI for shell-native workflows
+- MCP interface for agent-native interaction
 
 Those surfaces share the same backend-owned session model and canonical hierarchical IDs. The CLI is not a separate product or package line; it is another entrypoint into the same distribution.
 

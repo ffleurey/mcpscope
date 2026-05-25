@@ -31,7 +31,7 @@ This is **not** a deterministic oracle and **not** a generic agent framework. It
 
 ## Dependency note
 
-This task should depend on `backlog/mcpscope-mcp-interface.md`.
+This task should depend on the completed `backlog/done/mcpscope-mcp-interface.md` work.
 
 The analysis agent should use a **restricted analysis-oriented mcpscope MCP tool subset**, not the full operational tool surface.
 
