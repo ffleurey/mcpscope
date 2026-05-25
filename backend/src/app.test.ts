@@ -1365,6 +1365,7 @@ describe('backend foundation', () => {
       'assistant-reasoning',
       'assistant-content',
     ])
+    expect(getSessionRecord(app.backendDb.connection, createdSessionId)?.title).toBe('Integration Session')
 
     const traceResponse = await app.inject({
       method: 'GET',
@@ -1650,6 +1651,7 @@ describe('backend foundation', () => {
     expect(body.parts[0].tokens.count).toBeTypeOf('number')
     expect(body.parts[2].tokens.count).toBeTypeOf('number')
     expect(body.parts[3].tokens.count).toBeTypeOf('number')
+    expect(getSessionRecord(app.backendDb.connection, sessionId)?.title).toBe('Tool session')
 
     const traceResponse = await app.inject({
       method: 'GET',
@@ -2234,6 +2236,42 @@ describe('CLI session lifecycle endpoints', () => {
     expect(typeof body.session.id).toBe('string')
   })
 
+  it('auto-titles an unnamed session from the first prompt only', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, baseGateway)
+
+    const sessionRes = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        modelProfileSnapshot: {
+          id: 'model-1', name: 'Model', connectionBaseUrl: 'https://example.com/v1',
+          apiKey: null, modelKey: 'model-key', modelDisplayName: 'Model Key',
+          systemPrompt: 'Be helpful.', temperature: 0, reasoning: null,
+          createdAt: 1, updatedAt: 1,
+        },
+      },
+    })
+    const sessionId = sessionRes.json().session.id as string
+
+    const firstTurnPrompt = 'First prompt becomes the session title'
+    const firstTurnRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/turns`,
+      payload: { userContent: firstTurnPrompt },
+    })
+    expect(firstTurnRes.statusCode).toBe(201)
+
+    const secondTurnRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${sessionId}/turns`,
+      payload: { userContent: 'Second prompt must not replace the first auto title.' },
+    })
+    expect(secondTurnRes.statusCode).toBe(201)
+
+    expect(getSessionRecord(app.backendDb.connection, sessionId)?.title).toBe(firstTurnPrompt)
+  })
   it('POST /api/sessions/from-defaults rejects duplicate session ID', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir

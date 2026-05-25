@@ -52,6 +52,7 @@ import { probeRequestPromptTokens } from './promptTokenProbing.js'
 import { executeChatCompletion } from './streamedCompletion.js'
 import type { TurnStreamEventSink } from './streamEvents.js'
 import { applyContextCompaction } from '../domain/compaction.js'
+import { DEFAULT_SESSION_TITLE, maybeApplyAutomaticSessionTitle } from './sessionTitles.js'
 
 export interface LmStudioGateway {
   createChatCompletion(
@@ -156,7 +157,7 @@ export function createSession(
 
   const session: SessionRecord = {
     id: sessionId,
-    title: input.title?.trim() || 'New session',
+    title: input.title?.trim() || DEFAULT_SESSION_TITLE,
     status: 'ready',
     initStatus: 'pending',
     createdAt: timestamp,
@@ -575,7 +576,7 @@ export async function createModelOnlyTurn(
 
   session.status = 'active'
   session.updatedAt = completedAt
-  session.title = turn.sequenceNumber === 1 ? input.userContent.slice(0, 60) || session.title : session.title
+  maybeApplyAutomaticSessionTitle(session, turn.sequenceNumber, input.userContent)
   const prefixMessages = requestMessages.slice(0, Math.max(0, requestMessages.length - 1))
   const prefixTokens = prefixMessages.length > 0
     ? await probeRequestPromptTokens(lmStudioGateway, session, prefixMessages, undefined, {
