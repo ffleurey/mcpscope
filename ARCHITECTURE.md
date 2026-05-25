@@ -35,7 +35,26 @@ The value of the project depends on correctness and inspectability:
 - transcript and context are two views over the same runtime, not separate systems
 - exported traces must stay replayable without reconstruction
 - the frontend is a thin client over backend state
+- command/tool interfaces should be adapters over shared backend-owned operations
 - raw exchanges are preserved for diagnostics, auditing, and replay
+
+## Product surfaces and contract sharing
+
+mcpscope currently ships:
+
+- a Web UI for human inspection and configuration
+- a backend HTTP API as the canonical integration layer
+- a packaged CLI for shell-native workflows
+
+These surfaces should stay aligned around one backend-owned model and one backend-owned set of semantics.
+
+Important rule:
+
+- the product should not grow separate conceptual contracts for UI, API, and CLI
+- machine-readable command semantics should be shared wherever possible
+- presentation differences are allowed; semantic drift is not
+
+If a future MCP interface is added, it should be an adapter over the same shared operations rather than a parallel hand-written command surface.
 
 ## Runtime state and persistence
 
@@ -143,12 +162,17 @@ The goal is not to force fake exactness where the upstream API does not provide 
 **Session lifecycle:**
 
 - `POST /api/sessions`
+- `POST /api/sessions/from-defaults` — create a session from backend-owned defaults
+- `POST /api/sessions/:sessionId/initialize` — SSE initialization flow
+- `GET /api/sessions/:sessionId/status` — compact lifecycle state for polling
 - `GET /api/sessions` — lightweight session summaries for the sidebar
+- `PATCH /api/sessions/:sessionId` — update session metadata such as title
 - `DELETE /api/sessions/:sessionId`
 
 **Turn execution:**
 
-- `POST /api/sessions/:sessionId/turns` — synchronous, returns completed turn
+- `POST /api/sessions/:sessionId/turns` — blocking turn execution, returns the completed turn
+- `POST /api/sessions/:sessionId/turns/start` — detached turn start for polling workflows
 - `POST /api/sessions/:sessionId/turns/stream` — SSE streaming
 
 **Session inspection:**
@@ -236,4 +260,5 @@ This keeps local regressions close to real runtime behavior without depending on
 - provider-specific transport structures must normalize into the canonical mcpscope model
 - reasoning stays preserved in history even when stripped from later context
 - the frontend may render transient deltas, but committed state always comes from the backend
+- command-facing integrations should share one semantic contract rather than drift by surface
 - raw LM/MCP exchanges remain available for replay and debugging

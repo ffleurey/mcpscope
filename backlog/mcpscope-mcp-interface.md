@@ -35,7 +35,7 @@ The intended outcome is:
 
 1. agents can discover mcpscope capabilities through MCP tools
 2. agents are nudged toward the product's intended workflow
-3. CLI and MCP stay aligned and complementary
+3. CLI and MCP are the **same product surface exposed through two presentation modes**
 
 ## Core product idea
 
@@ -47,7 +47,49 @@ The likely long-term model is:
 - CLI for shell-native workflows and manual/scripted use
 - MCP interface for agent-native interaction
 
-The CLI and MCP tools should serve the **same purpose** and expose closely aligned concepts, structures, and payloads.
+The key implementation rule should be:
+
+> CLI and MCP must be a **1:1 surface by design**.
+
+That means:
+
+- each MCP tool corresponds to exactly one CLI command
+- each CLI command corresponds to exactly one MCP tool
+- parameter names, required/optional status, defaults, validation, and semantics are identical
+- machine-readable result shapes and error codes are identical
+- CLI help text and MCP tool descriptions come from the same source, not from duplicated wording
+
+MCP vs CLI should be treated as a **presentation difference**, not a product or contract difference.
+
+## Required architecture decision
+
+This task should explicitly require a **shared canonical operation layer**.
+
+The project should not implement:
+
+- one command parser and handler path for CLI
+- a separate hand-written tool layer for MCP
+
+Instead, mcpscope should define a single internal operation catalog for the shared surface. Each operation should define, in one place:
+
+- canonical operation name
+- user-facing description
+- arguments and options
+- required / optional fields
+- defaults
+- validation rules
+- backend call / execution path
+- machine-readable success shape
+- machine-readable error shape
+
+From that shared definition, mcpscope should derive:
+
+- CLI command registration and help text
+- MCP tool registration and tool descriptions
+- shared input validation
+- shared result mapping
+
+This is the most important design constraint of the task. It is how we prevent long-term drift between CLI and MCP.
 
 ## Why this matters
 
@@ -63,9 +105,9 @@ This is especially relevant because mcpscope is itself an evaluation/debugging t
 
 ## Desired behavior
 
-### 1. MCP tools mirror the current CLI baseline
+### 1. MCP tools and CLI commands are exact mirrors
 
-The first MCP surface should likely align with the shipped CLI baseline:
+The first MCP surface should mirror the shipped CLI baseline exactly:
 
 - list sessions
 - create session
@@ -74,9 +116,11 @@ The first MCP surface should likely align with the shipped CLI baseline:
 - inspect by hierarchical ID
 - rename session
 
-The conceptual rule should be:
+The rule is stronger than "equivalent":
 
-> every core CLI workflow should have an MCP equivalent, and both should feel like the same product surface.
+> every shared operation exists once in the product model and is exposed unchanged through both CLI and MCP.
+
+If a field is named `session_id` in one surface, it should not become `id` or `sessionId` in the other. If an option is optional in one surface, it should be optional in the other. If validation rejects a value in one surface, it should reject it in the other.
 
 ### 2. Same compact semantics
 
@@ -89,7 +133,7 @@ The MCP interface should preserve the same information-shaping goals as the CLI:
 
 ### 3. Stable tool contracts
 
-The MCP tool contracts should be stable enough that a coding agent can:
+The shared CLI/MCP contracts should be stable enough that a coding agent can:
 
 1. list or create a session
 2. poll status
@@ -97,6 +141,18 @@ The MCP tool contracts should be stable enough that a coding agent can:
 4. continue investigating only where needed
 
 This should make it easier for agents to stay within mcpscope's intended workflow instead of copying data out into separate local artifacts.
+
+### 4. Shared descriptions and documentation
+
+The descriptive text for a command/tool should be defined once.
+
+That includes:
+
+- one canonical summary/description
+- one canonical parameter description set
+- one canonical list of defaults and constraints
+
+The CLI help output and MCP tool descriptions should be rendered from that shared source. The project should avoid separately maintained help text for the same operation.
 
 ## Key design questions
 
@@ -113,7 +169,9 @@ Likely first candidates:
 - `send_prompt`
 - `inspect_object`
 
-Equivalent naming is fine, but the mapping to CLI concepts should stay obvious.
+The naming scheme should be chosen once and mapped mechanically across both surfaces, not invented separately per surface.
+
+If the CLI and MCP naming syntaxes need different separators for ergonomic reasons, the mapping must still be lossless and automatic. The operation identity, parameters, and descriptions must remain shared.
 
 ### 2. Transport and hosting model
 
@@ -129,15 +187,23 @@ The important product constraint is that it should still be part of the same shi
 
 ### 3. Shared contract layer
 
-To avoid drift, CLI and MCP should reuse the same backend-facing response shapes where possible.
+To avoid drift, CLI and MCP should reuse the same backend-facing response shapes wherever possible and share the same operation definitions by construction.
 
 This task should explicitly avoid creating:
 
+- one hand-written command implementation for CLI
+- a different hand-written tool implementation for MCP
 - one payload shape for CLI
-- a different conceptual shape for MCP
-- and a third shape for the UI
+- a second payload shape for MCP
+- duplicated descriptions for the same behavior
 
-The more the three surfaces share the same session/turn/inspect model, the better.
+The target model is:
+
+- one shared operation definition
+- one execution path
+- one validation path
+- one machine-readable contract
+- two adapters: CLI and MCP
 
 ### 4. Error handling
 
@@ -180,7 +246,8 @@ Those can be layered later.
 ### CLI
 
 - no removal or deprecation of the CLI
-- CLI and MCP should remain aligned in command/tool purpose and output shape
+- CLI and MCP should remain identical in command/tool purpose, parameters, validation, and machine-readable output shape
+- CLI-specific text rendering may differ from MCP because text rendering is presentation, but the underlying structured result must be the same
 
 ### UI
 
@@ -192,13 +259,26 @@ Those can be layered later.
 - the MCP interface should help agents use mcpscope properly, not bypass it
 - summary-first and detail-on-demand remain core design rules
 - the MCP interface should be additive, not a replacement for the CLI
-- if both CLI and MCP are kept, they should feel like parallel access modes over one backend-owned model
+- CLI and MCP should be parallel access modes over one shared operation layer
+- the project should optimize for **zero semantic drift** between CLI and MCP
+- any new shared workflow should be added once to the canonical operation catalog, then exposed automatically through both adapters
+
+## Concerns and tradeoffs
+
+This 1:1 strategy is the right default for mcpscope, but the task should acknowledge a few tradeoffs:
+
+- it reduces freedom to make MCP-only or CLI-only workflow variants for the same operation
+- it requires discipline in naming and schema design up front
+- presentation-only differences must stay clearly separated from contract differences
+
+Those are acceptable constraints here because mcpscope benefits much more from consistency than from surface-specific customization.
 
 ## Expected result
 
 After this task is designed and implemented:
 
 - coding agents can use mcpscope through an MCP tool surface
-- CLI and MCP workflows stay aligned
+- CLI and MCP are backed by the same canonical operation definitions and execution paths
+- each MCP tool corresponds exactly to one CLI command with the same parameters, defaults, validation, descriptions, and machine-readable results
 - agents are less likely to script around mcpscope and dump unnecessary data into local files
 - mcpscope's compact inspect-oriented workflow becomes easier to use correctly from agent environments

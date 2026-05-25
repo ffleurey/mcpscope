@@ -31,6 +31,16 @@ If you want to **use** a released mcpscope build to evaluate an MCP server, star
 - [TUTORIAL.md](TUTORIAL.md) for the Docker/user workflow
 - [RELEASING.md](RELEASING.md) for GHCR image usage and tags
 
+## Product surfaces
+
+mcpscope currently ships as one product with three main surfaces:
+
+- Web UI for human inspection and configuration
+- backend HTTP API as the canonical integration layer
+- packaged CLI for shell-native workflows
+
+Those surfaces share the same backend-owned session model and canonical hierarchical IDs. The CLI is not a separate product or package line; it is another entrypoint into the same distribution.
+
 ## Developer setup
 
 Clone the repo, install dependencies, then run mcpscope locally from source:
@@ -67,9 +77,15 @@ The released/product workflow is Docker — no Node.js install and no host CLI i
 For the published GHCR image, authenticate first with a GitHub PAT that has `read:packages`:
 
 ```bash
-docker login ghcr.io -u YOUR_GITHUB_USERNAME --password YOUR_PAT
-docker pull ghcr.io/ffleurey/mcpscope:0.9.0
-docker run -d --name mcpscope-app -p 3030:3030 ghcr.io/ffleurey/mcpscope:0.9.0
+echo "$GITHUB_PAT" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+docker pull ghcr.io/ffleurey/mcpscope:latest
+docker run -d \
+  --name mcpscope-app \
+  --restart unless-stopped \
+  --add-host=host.docker.internal:host-gateway \
+  -p 3030:3030 \
+  -v mcpscope-data:/data \
+  ghcr.io/ffleurey/mcpscope:latest
 ```
 
 The Web UI and API are both exposed through **`http://localhost:3030`**.
@@ -87,12 +103,6 @@ Run the CLI inside the same container:
 
 ```bash
 docker exec -i mcpscope-app mcpscope list
-```
-
-For persistent local data, add a volume:
-
-```bash
-docker run -d --name mcpscope-app -p 3030:3030 -v mcpscope-data:/data mcpscope
 ```
 
 `docker compose` remains available as a convenience wrapper around the same image.

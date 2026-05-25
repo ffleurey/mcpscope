@@ -1,6 +1,6 @@
 # mcpscope CLI
 
-In-repo tool for driving and inspecting sessions. Talks to the backend API only.
+In-repo command surface for driving and inspecting sessions. Talks to the backend API only and uses the same backend-owned session model and canonical IDs as the UI.
 
 ## Running from Docker
 

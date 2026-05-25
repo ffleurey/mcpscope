@@ -16,6 +16,7 @@ The version is baked into the image at build time and shown in the app footer.
 git checkout main && git pull
 npm test
 npm run check && npm run check:backend
+npm run check:cli
 ```
 
 ### 2. Bump the version
@@ -61,18 +62,28 @@ Monitor progress under the **Actions** tab on GitHub.
 Users need a GitHub personal access token (PAT) with `read:packages` scope.
 
 ```bash
-docker login ghcr.io -u YOUR_GITHUB_USERNAME --password YOUR_PAT
-docker pull ghcr.io/ffleurey/mcpscope:0.9.0
+echo "$GITHUB_PAT" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+docker pull ghcr.io/ffleurey/mcpscope:latest
 ```
 
 Run a quick local instance without persistence:
 ```bash
-docker run -d --name mcpscope-app -p 3030:3030 ghcr.io/ffleurey/mcpscope:0.9.0
+docker run -d \
+  --name mcpscope-app \
+  --add-host=host.docker.internal:host-gateway \
+  -p 3030:3030 \
+  ghcr.io/ffleurey/mcpscope:latest
 ```
 
 Run with persistent local data:
 ```bash
-docker run -d --name mcpscope-app -p 3030:3030 -v mcpscope-data:/data ghcr.io/ffleurey/mcpscope:0.9.0
+docker run -d \
+  --name mcpscope-app \
+  --restart unless-stopped \
+  --add-host=host.docker.internal:host-gateway \
+  -p 3030:3030 \
+  -v mcpscope-data:/data \
+  ghcr.io/ffleurey/mcpscope:latest
 ```
 
 The image also includes the CLI, so you can run commands inside the same container:
