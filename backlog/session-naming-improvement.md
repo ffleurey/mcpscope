@@ -1,66 +1,53 @@
 # Session naming improvement
 
-This task tightens session-title behavior so **user-provided titles stay stable** and the CLI can rename sessions intentionally.
+This task now covers the **remaining advanced naming work** after the shipped `fix/session-title-preservation` fix.
+
+## Status
+
+The release-safe naming fix is already done:
+
+- explicit titles are no longer overwritten by first-turn auto-titling
+- unnamed sessions may still be auto-titled from the first prompt
+
+That completed work lives in:
+
+- `backlog/done/fix-session-title-preservation.md`
 
 ## Problem
 
-Today, session titles can be changed automatically after creation.
+The runtime still has no durable notion of whether a title is:
 
-Current behavior:
+- user-owned
+- auto-generated
+- still just a placeholder
 
-- `mcpscope create "My title"` sends the requested title and the session is created with that title
-- but when the **first turn** completes, backend turn-finalization logic replaces the session title with the first prompt text
-- that happens for both:
-  - model-only turns
-  - tool-enabled turns
+And the CLI still has no explicit rename command.
 
-This creates a bad UX for scripted and agent-driven workflows:
-
-- the user explicitly names a session
-- the title later changes behind their back
-- the CLI has no direct rename command to correct or manage titles intentionally
+So while the release blocker is fixed, the broader naming model is still underspecified and incomplete.
 
 ## Goal
 
-Make session naming predictable and user-controlled:
+Make naming fully intentional and durable:
 
-1. if the user has explicitly named the session, that title must **not** be overwritten by automatic first-prompt titling
-2. sessions that were never explicitly named may still use an automatic title if we still want that behavior
-3. the CLI should expose an explicit rename command
+1. persist title ownership/source in the runtime model
+2. add an explicit CLI rename workflow
+3. keep backend, CLI, and UI semantics aligned
 
 ## Desired behavior
 
-### 1. Preserve explicit titles
+### 1. Persist title ownership/source
 
-If a session title was set intentionally by the user, it should remain stable until the user changes it.
-
-Examples of explicit naming:
-
-- `mcpscope create "my evaluation"`
-- Web UI creation with a provided title
-- Web UI manual rename
-- future CLI rename command
-
-Once a session is explicitly named:
-
-- first prompt submission must not overwrite the title
-- later prompts must not overwrite the title
-
-### 2. Keep auto-titling only for unnamed sessions
-
-If the product still wants an automatic first-prompt title, that behavior should apply only to sessions that are still effectively **untitled**.
-
-That means the implementation needs a clear distinction between:
+The runtime should distinguish between:
 
 - title chosen by the user
 - title derived automatically
-- default placeholder title such as `New session`
+- default placeholder title
 
-The important product rule is:
+The important product rule remains:
 
 > **Automatic titling must never overwrite an explicit user title.**
 
-### 3. Add a CLI rename command
+### 2. Add a CLI rename command
 
 Add an explicit CLI command to rename an existing session.
 
@@ -75,17 +62,21 @@ Minimum expectations:
 - supports `--json`
 - fails clearly for missing sessions or invalid input
 
+### 3. Keep UI and backend semantics aligned
+
+Manual rename from the UI should follow the same backend-owned rules as CLI rename.
+
 ## API and model implications
 
-The current backend can rename a session manually through:
+The current backend can already rename a session manually through:
 
 - `PATCH /api/sessions/:sessionId`
 
-But the runtime currently has no durable notion of whether the current title is:
+But the runtime still does not persist whether the current title is:
 
 - user-owned
 - auto-generated
-- still a placeholder
+- placeholder
 
 This task should settle that explicitly.
 
@@ -104,22 +95,19 @@ Equivalent naming is fine, but the behavior must support these transitions:
 3. first prompt auto-titles an unnamed session → `auto`
 4. manual rename from UI or CLI → `user`
 
-Then runtime turn-finalization logic can safely auto-title only when the current title is still eligible for auto-replacement.
-
-If the implementation can achieve the same behavior without a new persisted field, that is acceptable only if the rules remain explicit and robust.
+Then runtime behavior can safely decide when automatic title replacement is still allowed.
 
 ## Scope
 
 ### Backend
 
-- stop automatic first-prompt titling from overwriting explicit user titles
 - define and persist whatever state is needed to distinguish explicit vs automatic titles
 - keep manual rename working through `PATCH /api/sessions/:sessionId`
 - add deterministic tests for:
-  - explicit create title survives first turn
-  - default/untitled session can still be auto-titled if that behavior remains enabled
   - manual rename survives later turns
-  - model-only and tool-enabled first turns behave consistently
+  - title-source transitions behave as intended
+  - auto-title eligibility follows the persisted title source rather than a string heuristic
+  - UI/CLI rename paths produce the same durable semantics
 
 ### CLI
 
@@ -136,14 +124,14 @@ If the implementation can achieve the same behavior without a new persisted fiel
 
 - title changes must be intentional and predictable
 - backend behavior should be the source of truth, not CLI-only or UI-only rules
-- this is not just a CLI issue; it is a runtime/session-lifecycle behavior issue
-- the rule must hold for all turn-entry paths, not just one code path
+- the release-safe preservation fix is already shipped and should stay out of scope here
+- this task is now mainly about durable title ownership and intentional rename semantics
 
 ## Expected result
 
 After this task:
 
-- CLI-created sessions keep the title the user gave them
+- title ownership/source is explicit in the runtime model
 - user-renamed sessions keep that title
-- automatic titling, if retained, applies only to sessions that were never explicitly named
+- automatic titling, if retained, applies only to sessions eligible for automatic replacement
 - the CLI has a first-class rename command
