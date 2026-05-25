@@ -44,6 +44,7 @@ import { probeRequestPromptTokens } from './promptTokenProbing.js'
 import { applyContextCompaction } from '../domain/compaction.js'
 import { executeChatCompletion } from './streamedCompletion.js'
 import type { TurnStreamEventSink } from './streamEvents.js'
+import { maybeApplyAutomaticSessionTitle } from './sessionTitles.js'
 
 export interface McpGateway {
   initializeSession(serverUrl: string): Promise<{
@@ -1314,7 +1315,7 @@ export async function createToolEnabledTurn(
 
     session.status = 'active'
     session.updatedAt = completedAt
-    session.title = turn.sequenceNumber === 1 ? input.userContent.slice(0, 60) || session.title : session.title
+    maybeApplyAutomaticSessionTitle(session, turn.sequenceNumber, input.userContent)
 
     const finalizeTx = database.connection.transaction(() => {
       updateRoundRecord(database.connection, currentRound)
