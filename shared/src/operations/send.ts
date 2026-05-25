@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { startTurn } from '../httpClient.js'
 
 export const sendInputSchema = z.object({
   session_id: z.string().describe('Session ID to send the prompt to'),
@@ -21,12 +20,4 @@ export const sendOperation = {
     + 'The session must be fully initialized (status=ready). '
     + 'Poll with status after sending to track turn progress.',
   schema: sendInputSchema,
-  async execute(baseUrl: string, input: SendInput): Promise<SendResult> {
-    const result = await startTurn(baseUrl, input.session_id, input.prompt)
-    return {
-      api_version: 1,
-      session_id: result.sessionId,
-      turn: { id: result.turn.id, status: result.turn.status },
-    }
-  },
 }

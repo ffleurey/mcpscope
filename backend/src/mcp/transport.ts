@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { createMcpServer } from './server.js'
+import type { OperationContext } from './server.js'
 
 /**
  * Register Streamable HTTP MCP routes on the Fastify instance.
@@ -12,9 +13,9 @@ import { createMcpServer } from './server.js'
  *   DELETE /mcp  — session termination (stateless: no-op)
  *
  * Each request gets a fresh transport in stateless mode.
- * The shared operation catalog is evaluated per-request using baseUrl.
+ * Operations execute directly against the backend (no loopback HTTP).
  */
-export function registerMcpTransport(app: FastifyInstance, baseUrl: string): void {
+export function registerMcpTransport(app: FastifyInstance, ctx: OperationContext): void {
   const handleMcpRequest = async (
     request: Parameters<Parameters<FastifyInstance['route']>[0]['handler']>[0],
     reply: Parameters<Parameters<FastifyInstance['route']>[0]['handler']>[1],
@@ -24,7 +25,7 @@ export function registerMcpTransport(app: FastifyInstance, baseUrl: string): voi
     // Omitting sessionIdGenerator opts into stateless mode (no session tracking).
     const transport = new StreamableHTTPServerTransport({})
 
-    const server = createMcpServer(baseUrl)
+    const server = createMcpServer(ctx)
     // Cast needed due to exactOptionalPropertyTypes mismatch in SDK type definitions.
     await server.connect(transport as unknown as Transport)
 
@@ -36,3 +37,6 @@ export function registerMcpTransport(app: FastifyInstance, baseUrl: string): voi
   app.get('/mcp', handleMcpRequest)
   app.delete('/mcp', handleMcpRequest)
 }
+
+export type { OperationContext }
+

@@ -154,9 +154,14 @@ export async function buildBackendApp(
   recoverInterruptedState(database.connection)
 
   // Register MCP Streamable HTTP transport. Routes: POST/GET/DELETE /mcp
-  // The MCP tools call the local backend HTTP API via the shared operation catalog.
-  const selfBaseUrl = `http://${config.host}:${config.port}`
-  registerMcpTransport(app, selfBaseUrl)
+  // Operations execute directly against the backend (no loopback HTTP).
+  registerMcpTransport(app, {
+    db: database,
+    lmStudioGateway: dependencies.lmStudioGateway,
+    mcpGateway: dependencies.mcpGateway,
+    maxToolRounds: config.maxToolRounds,
+    logger: app.log,
+  })
 
   app.get('/api/health', async () => {
     return healthResponseSchema.parse({

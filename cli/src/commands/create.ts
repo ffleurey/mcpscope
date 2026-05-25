@@ -1,4 +1,4 @@
-import { createOperation } from '@mcpscope/shared'
+import { cliCreate } from '../httpClient.js'
 import type { CreateResult } from '@mcpscope/shared'
 
 export interface CreateOptions {
@@ -14,7 +14,7 @@ function formatDate(epochMs: number): string {
 }
 
 export async function runCreate(opts: CreateOptions): Promise<void> {
-  const result = await createOperation.execute(opts.url, {
+  const result = await cliCreate(opts.url, {
     title: opts.title,
     ...(opts.id !== undefined ? { id: opts.id } : {}),
     ...(opts.compaction !== undefined ? { compaction: opts.compaction } : {}),

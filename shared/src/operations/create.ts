@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { createSessionFromDefaults } from '../httpClient.js'
 
 export const createInputSchema = z.object({
   title: z.string().min(1).describe('Session title'),
@@ -33,27 +32,4 @@ export const createOperation = {
     + 'Returns immediately; session may still be initializing. '
     + 'Poll with status to wait for state=ready before sending a prompt.',
   schema: createInputSchema,
-  async execute(baseUrl: string, input: CreateInput): Promise<CreateResult> {
-    const apiInput = {
-      title: input.title,
-      ...(input.id !== undefined ? { sessionId: input.id } : {}),
-      ...(input.compaction !== undefined ? { compactionStrategy: input.compaction } : {}),
-    }
-    const result = await createSessionFromDefaults(baseUrl, apiInput)
-    const s = result.session
-    return {
-      api_version: 1,
-      session: {
-        id: s.id,
-        title: s.title,
-        status: s.status,
-        init_status: s.initStatus,
-        model: s.model,
-        mcp: s.mcp,
-        compaction_strategy: s.compactionStrategy,
-        created_at: s.createdAt,
-        updated_at: s.updatedAt,
-      },
-    }
-  },
 }

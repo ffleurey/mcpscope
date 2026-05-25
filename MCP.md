@@ -16,7 +16,7 @@ The transport operates in **stateless mode** — no server-side session is maint
 
 ## Tool surface
 
-Five tools mirror the shipped CLI surface exactly. Tool names are generated mechanically from the shared operation catalog using the `mcpscope_` prefix.
+Five tools mirror the shipped CLI surface exactly. Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
 
 | MCP tool name         | CLI command                | Description |
 |-----------------------|----------------------------|-------------|
@@ -64,24 +64,31 @@ No inputs.
 
 ## Tool results
 
-All tools return their result as JSON text content — the same machine-readable shapes as CLI `--json` mode. Error results set `isError: true` and include `{ error: { message, code? } }`.
+All tools return structured results. Each tool registers an `outputSchema` (Zod shape) and returns:
 
-See [CLI.md](CLI.md) for the exact result shapes and error codes per operation.
+- `structuredContent` — the full result object for clients that support structured output
+- `content` — the same result as JSON text (fallback for clients that do not support `outputSchema`)
 
-## Shared operation catalog
+Error results set `isError: true` and include `{ error: { message, code? } }`.
 
-The tool descriptions and input schemas come from `shared/src/operations/`. CLI and MCP share the same source — no separate documentation or separate validation logic.
+Result field naming is snake_case throughout (same shapes as CLI `--json` mode). See [CLI.md](CLI.md) for exact result shapes and error codes per operation.
+
+## Backend-owned operation catalog
+
+The tool descriptions, input schemas, output schemas, and execution functions come from `backend/src/operations/`. MCP operations execute directly in the backend process — no loopback HTTP.
+
+The `@mcpscope/shared` package provides the contract-only layer (IDs, descriptions, input schemas, result types). Both the CLI and the backend operation catalog derive from it, but execution is backend-owned.
 
 To verify parity: `npm test` — the parity test suite in `shared/src/operations/parity.test.ts` and `backend/src/mcp/mcp.test.ts` enforces:
 
-- same operation IDs
-- same schemas (no adapter-only flags)
-- canonical snake\_case field naming
-- same result shapes
+- same operation IDs and descriptions (backend inherits from shared contract)
+- same input schemas (no adapter-only flags)
+- canonical snake\_case field naming in all result shapes
+- outputSchema defined for every operation
 
 ## Configuration
 
-The MCP interface is hosted on the same port as the backend API (`BACKEND_PORT`, default 3030). No separate process or port is needed. The MCP tools call the backend HTTP API via loopback.
+The MCP interface is hosted on the same port as the backend API (`BACKEND_PORT`, default 3030). No separate process or port is needed.
 
 Example connection string for an MCP client:
 

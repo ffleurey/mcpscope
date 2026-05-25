@@ -4,28 +4,26 @@ This task adds an **MCP server interface for mcpscope itself** as a refactoring-
 
 ## Problem
 
-The current product exposes mcpscope through:
+mcpscope already exposes:
 
 - the Web UI
 - the backend HTTP API
 - the packaged CLI
 
-The CLI was the right first step because coding agents already have terminal access and are generally good at using shell tools.
+The current CLI was the right first step for coding-agent workflows, but it is not yet the right architectural base for MCP.
 
-That part is working.
+The important correction is this:
 
-But there is an important weakness:
+> mcpscope is a **backend-centered product**.
 
-- mcpscope is not a tool most coding agents were pretrained to use
-- so the agent often falls back to writing larger shell scripts around it
-- the agent may save session data into local files and re-analyze it externally
-- that works around mcpscope instead of taking advantage of mcpscope's compact inspect/status surfaces
+That means the canonical command/tool semantics should live in the backend, not in a separate execution layer outside the backend.
 
-This weakens the product's main value:
+If we instead make a shared external module own execution and have the backend-hosted MCP surface call back into the backend over loopback HTTP, we create the wrong ownership boundary:
 
-- compact payloads
-- targeted inspection by canonical ID
-- interactive exploration of traces without flooding context with irrelevant content
+- the backend stops being the clear owner of operation semantics
+- MCP becomes a thin wrapper over a second execution layer
+- the backend can end up calling itself over HTTP
+- cleanup later becomes harder as more operations accumulate
 
 ## Goal
 
@@ -35,25 +33,25 @@ The first increment is **not** a new tool-design exercise.
 
 It is a refactoring and adapter task:
 
-1. extract one shared canonical operation layer from the current CLI
+1. move canonical operation ownership into the backend
 2. keep the same shipped operations, parameters, validation, semantics, and machine-readable payloads
-3. expose that same surface through both:
-   - the existing CLI
+3. expose that same backend-owned surface through both:
+   - the CLI
    - a new MCP interface
 
 ## Core product idea
 
 The MCP interface should **not** replace the CLI.
 
-The likely long-term model is:
+The long-term model remains:
 
 - Web UI for human inspection and configuration
 - CLI for shell-native workflows and manual/scripted use
 - MCP interface for agent-native interaction
 
-The key implementation rule should be:
+The key implementation rule is:
 
-> CLI and MCP must be a **1:1 surface by design**.
+> CLI and MCP must be a **1:1 surface by design**, but the backend must own the semantics and execution.
 
 That means:
 
@@ -63,37 +61,38 @@ That means:
 - machine-readable result shapes and error codes are identical
 - CLI help text and MCP tool descriptions come from the same source, not from duplicated wording
 
-MCP vs CLI should be treated as a **presentation difference**, not a product or contract difference.
+MCP vs CLI is a presentation difference, not a product-contract difference.
 
 ## Required architecture decision
 
-This task should explicitly require a **shared canonical operation layer**.
+The canonical operation layer must be **backend-owned**.
 
 The project should not implement:
 
 - one command parser and handler path for CLI
 - a separate hand-written tool layer for MCP
+- a separate shared execution layer outside the backend that becomes a second operational core
+- a backend-hosted MCP adapter that calls back into the backend over loopback HTTP for shared operations
 
-Instead, mcpscope should define a single internal operation catalog for the shared surface. Each operation should define, in one place:
+Instead, mcpscope should define a single backend-owned operation catalog. Each operation should define, in one place:
 
-- canonical operation name
+- canonical operation ID
 - user-facing description
-- arguments and options
-- required / optional fields
+- canonical input schema
 - defaults
 - validation rules
-- backend call / execution path
+- backend execution function
 - machine-readable success shape
 - machine-readable error shape
 
-From that shared definition, mcpscope should derive:
+From that backend-owned definition, mcpscope should derive:
 
 - CLI command registration and help text
 - MCP tool registration and tool descriptions
 - shared input validation
 - shared result mapping
 
-This is the most important design constraint of the task. It is how we prevent long-term drift between CLI and MCP.
+This is the most important design constraint of the task. It is how we prevent long-term drift between CLI and MCP without creating a second core layer outside the backend.
 
 ## Implementation rule
 
@@ -115,20 +114,6 @@ Explicitly **out of scope** for this increment:
 - analysis-agent tools
 - any new MCP-only workflow
 
-The implementation should therefore start by refactoring the current CLI into a shared operation layer rather than by bolting an MCP adapter onto the current hand-written command files.
-
-## Why this matters
-
-For coding-agent use, an MCP interface would help in several ways:
-
-- reduce the tendency to build ad-hoc shell scripts around mcpscope
-- reduce the tendency to export too much data into local files
-- encourage agents to inspect sessions and turns incrementally
-- preserve mcpscope's compact payload strategy
-- keep the exploration loop interactive and focused
-
-This is especially relevant because mcpscope is itself an evaluation/debugging tool for MCP servers. Giving it an MCP interface could make agents use it in a more disciplined way.
-
 ## Desired behavior
 
 ### 1. MCP tools and CLI commands are exact mirrors
@@ -143,9 +128,9 @@ The first MCP surface should mirror the shipped CLI baseline exactly:
 
 The rule is stronger than "equivalent":
 
-> every shared operation exists once in the product model and is exposed unchanged through both CLI and MCP.
+> every shared operation exists once in the backend-owned product model and is exposed unchanged through both CLI and MCP.
 
-If a field is named `session_id` in one surface, it should not become `id` or `sessionId` in the other. If an option is optional in one surface, it should be optional in the other. If validation rejects a value in one surface, it should reject it in the other.
+If a field is named `session_id` in one surface, it should not become `id` or `sessionId` in the other. If validation rejects a value in one surface, it should reject it in the other.
 
 Important nuance:
 
@@ -175,7 +160,7 @@ The MCP interface should preserve the same information-shaping goals as the CLI:
 - inspect by ID instead of dumping full traces
 - avoid oversized payloads by default
 
-### 3. Stable tool contracts
+### 3. Same structured contract
 
 The shared CLI/MCP contracts should be stable enough that a coding agent can:
 
@@ -184,7 +169,7 @@ The shared CLI/MCP contracts should be stable enough that a coding agent can:
 3. inspect the exact failed turn or part
 4. continue investigating only where needed
 
-This should make it easier for agents to stay within mcpscope's intended workflow instead of copying data out into separate local artifacts.
+The MCP interface must expose **real structured results**, not just JSON serialized into text content. If the SDK supports structured output, mcpscope should use it.
 
 ### 4. Shared descriptions and documentation
 
@@ -196,7 +181,7 @@ That includes:
 - one canonical parameter description set
 - one canonical list of defaults and constraints
 
-The CLI help output and MCP tool descriptions should be rendered from that shared source. The project should avoid separately maintained help text for the same operation.
+The CLI help output and MCP tool descriptions should be rendered from that shared source.
 
 ## Settled implementation decisions
 
@@ -204,15 +189,15 @@ The CLI help output and MCP tool descriptions should be rendered from that share
 
 Keep one canonical internal operation ID per shared operation.
 
-The MCP tool names should be generated mechanically from that catalog rather than invented separately. A prefixed MCP naming style such as `mcpscope_list`, `mcpscope_create`, ... is acceptable as long as:
+The MCP tool names should be generated mechanically from that catalog rather than invented separately. A prefixed naming style such as `mcpscope_list`, `mcpscope_create`, ... is acceptable as long as:
 
 - the mapping is automatic
 - the shared descriptions and schemas remain identical
-- the operation identity still exists only once in the codebase
+- the operation identity still exists only once in the backend-owned catalog
 
 ### 2. Canonical field naming
 
-The shared operation layer should prefer stable machine-readable field names such as:
+The backend-owned operation layer should prefer stable machine-readable field names such as:
 
 - `session_id`
 - `prompt`
@@ -228,7 +213,7 @@ Important implications:
 
 - no stdio transport in this increment
 - no separate sidecar process by default
-- the MCP surface should be hosted by the existing Fastify-based mcpscope product
+- the MCP surface should be hosted by the existing Fastify-based mcpscope backend
 - the server factory should still be cleanly separated from transport wiring, but only Streamable HTTP needs to be implemented now
 
 ### 4. Framework and stack
@@ -241,41 +226,37 @@ Use:
 
 Do **not** add Express for this task.
 
-### 5. Shared execution path
+### 5. Backend ownership of execution
 
-The shared operation layer should continue using the existing backend HTTP API.
+The backend must own operation execution.
 
 That means:
 
-- CLI and MCP both call the same shared operation implementation
-- the shared operation implementation talks to the backend over HTTP
-- this increment should avoid a direct backend-internal MCP execution path
+- MCP should call backend-owned operations directly
+- backend-hosted MCP should not call the backend HTTP API over loopback for shared operations
+- CLI remains a remote adapter over HTTP
 
-This keeps the first implementation truly identical across CLI and MCP.
+If a top-level shared module remains, it should be limited to **contract-only** concerns such as:
 
-### 6. Neutral shared module
+- operation IDs
+- shared field names
+- schemas/types if still useful
+- descriptions
 
-The shared operation layer must live in a neutral module, not under a CLI-only or MCP-only directory.
-
-It should contain:
-
-- operation metadata
-- shared schemas
-- execution functions
-- structured result helpers
-- shared error typing / normalization
+It should **not** become the place where shared operations execute.
 
 ## Scope
 
-### Shared operation layer
+### Backend operation layer
 
-- define the shared operation catalog for `list`, `create`, `send`, `status`, `inspect`
-- centralize descriptions, argument schemas, validation rules, execution functions, and structured result shaping
+- define the backend-owned operation catalog for `list`, `create`, `send`, `status`, `inspect`
+- centralize descriptions, canonical input schemas, validation rules, execution functions, and structured result shaping
 - centralize backend error normalization
+- normalize result field naming so the shared contract is consistent across all five operations
 
 ### CLI refactor
 
-- refactor the CLI to consume the shared operation catalog instead of owning command contracts directly
+- refactor the CLI to consume the backend-owned contract instead of owning command semantics directly
 - keep the current CLI command names and behavior stable
 - keep `sessions list` as a CLI alias only
 - keep text rendering as a CLI-only presentation concern
@@ -283,17 +264,19 @@ It should contain:
 ### MCP adapter
 
 - add an MCP server factory using `@modelcontextprotocol/sdk`
-- register one MCP tool per shared operation
-- derive tool descriptions and schemas from the shared catalog
+- register one MCP tool per backend-owned operation
+- derive tool descriptions and schemas from the same backend-owned source
 - expose the same machine-readable results as the CLI JSON mode
-- host the MCP interface through Streamable HTTP on the existing Fastify-based product
+- use real structured MCP tool output
+- host the MCP interface through Streamable HTTP on the existing Fastify backend
 
 ### Testing
 
-- add contract tests showing CLI and MCP use the same shared schemas
+- add contract tests showing CLI and MCP use the same schemas
 - add tests showing descriptions/tool metadata come from the same shared source
 - add tests showing machine-readable results and error codes match across adapters
 - add tests showing adapter-only flags do not leak into the shared operation schema
+- add tests showing MCP results are structured, not text-only JSON blobs
 
 ### UI
 
@@ -301,66 +284,70 @@ It should contain:
 
 ## Implementation plan
 
-1. **Extract the shared operation catalog**
-   - inventory the current CLI surface
-   - move descriptions into shared metadata
-   - move argument definitions into shared schemas
-   - move machine-readable result shaping into shared helpers
-   - centralize backend error normalization
+1. **Move operation ownership into the backend**
+   - define the canonical operation catalog under the backend
+   - move execution functions there
+   - move canonical result shaping there
+   - move backend error normalization there
 
-2. **Refactor the CLI onto the shared layer**
-   - replace per-command contract ownership with shared operation definitions
-   - keep current command names and behavior unchanged
-   - keep current text rendering stable unless a change is needed for correctness
+2. **Reduce any top-level shared layer to contract-only concerns**
+   - keep only what is truly neutral and non-executing
+   - remove backend-calling execution functions from any root-level shared package
 
-3. **Introduce the MCP server factory**
-   - create one server factory from the shared operation catalog
+3. **Refactor the CLI into a thin adapter**
+   - keep argv parsing, stdin handling, text rendering, exit codes
+   - stop owning command semantics directly
+   - consume the backend-owned contract cleanly
+
+4. **Introduce the backend-native MCP server**
+   - create one server factory from the backend-owned catalog
    - register the tools from shared metadata
    - expose shared schemas and handlers
-   - return the shared structured payloads directly
+   - return structured MCP results directly
 
-4. **Add Streamable HTTP transport**
+5. **Add Streamable HTTP transport**
    - host the MCP interface through Fastify
    - keep transport wiring separate from server factory logic
    - keep transport configuration separate from tool parameters
 
-5. **Add validation coverage**
+6. **Add validation coverage**
    - contract tests for schema parity
    - tests for shared descriptions
    - tests for structured result parity
    - tests for shared error-code parity
 
-6. **Update active docs**
+7. **Update active docs**
    - document only the implemented MCP transport and tool surface
-   - keep the shared-surface rule explicit
+   - keep the backend-owned architecture rule explicit
 
 ## Acceptance criteria
 
 - the first MCP increment exposes only `list`, `create`, `send`, `status`, and `inspect`
-- each MCP tool is derived from the same shared operation definition used by the CLI
+- each MCP tool is derived from the same backend-owned operation definition used by the CLI
 - CLI and MCP share the same validation rules, defaults, descriptions, machine-readable success shapes, and machine-readable error codes
+- result field naming is consistent across all five operations
 - CLI-specific presentation flags and MCP transport settings are not part of the shared operation schema
 - the MCP interface is hosted through Streamable HTTP on Fastify
 - no Express dependency is introduced
-- no separate hand-written MCP-only execution path exists for the shared operations
+- no backend loopback HTTP path is used for backend-hosted MCP operation execution
+- any remaining top-level shared package is contract-only, not an execution layer
 
 ## Important design notes
 
 - the MCP interface should help agents use mcpscope properly, not bypass it
 - summary-first and detail-on-demand remain core design rules
 - the MCP interface should be additive, not a replacement for the CLI
-- CLI and MCP should be parallel access modes over one shared operation layer
+- CLI and MCP should be parallel access modes over one backend-owned operation layer
 - the project should optimize for **zero semantic drift** between CLI and MCP
-- any new shared workflow should be added once to the canonical operation catalog, then exposed automatically through both adapters
-- this first increment is intentionally refactoring-first: the goal is a clean shared foundation, not a broad new feature surface
+- this first increment is intentionally refactoring-first: the goal is a clean foundation we can build on, not a broad feature surface
 
 ## Expected result
 
 After this task is designed and implemented:
 
 - coding agents can use mcpscope through an MCP tool surface
-- CLI and MCP are backed by the same canonical operation definitions and execution paths
+- the backend clearly owns the canonical operation semantics
+- CLI and MCP are backed by the same backend-owned operation definitions and execution paths
 - each MCP tool corresponds exactly to one CLI command with the same parameters, defaults, validation, descriptions, and machine-readable results
-- the MCP interface is delivered through Streamable HTTP on the existing Fastify-based product
-- agents are less likely to script around mcpscope and dump unnecessary data into local files
-- mcpscope's compact inspect-oriented workflow becomes easier to use correctly from agent environments
+- the MCP interface is delivered through Streamable HTTP on the existing Fastify-based backend
+- the architecture remains clean enough to extend later with rename, batches, analysis-agent tools, and future surfaces without introducing a second operational core outside the backend

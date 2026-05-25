@@ -9,13 +9,12 @@ describe('operation catalog', () => {
     expect(Object.keys(operationCatalog)).toEqual(['list', 'create', 'send', 'status', 'inspect'])
   })
 
-  it('every operation has id, description, schema, and execute', () => {
+  it('every operation has id, description, and schema', () => {
     for (const op of operationList) {
       expect(typeof op.id).toBe('string')
       expect(typeof op.description).toBe('string')
       expect(op.description.length).toBeGreaterThan(0)
       expect(op.schema).toBeDefined()
-      expect(typeof op.execute).toBe('function')
     }
   })
 

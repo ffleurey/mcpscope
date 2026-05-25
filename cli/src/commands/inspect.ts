@@ -1,4 +1,4 @@
-import { inspectOperation } from '@mcpscope/shared'
+import { cliInspect } from '../httpClient.js'
 import { bold, colorTokens } from '../colors.js'
 
 export interface InspectOptions {
@@ -145,7 +145,7 @@ function renderPartText(data: AnyRecord): void {
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 export async function runInspect(opts: InspectOptions): Promise<void> {
-  const result = await inspectOperation.execute(opts.url, {
+  const result = await cliInspect(opts.url, {
     id: opts.id,
     ...(opts.short ? { short: true } : {}),
   })

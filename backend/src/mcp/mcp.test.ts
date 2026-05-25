@@ -1,13 +1,18 @@
 import { describe, it, expect } from 'vitest'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { operationList, operationCatalog } from '@mcpscope/shared'
+import { operationCatalog as sharedCatalog, operationList as sharedList } from '@mcpscope/shared'
+import { operationCatalog, operationList } from '../operations/index.js'
 import { TOOL_PREFIX, createMcpServer } from './index.js'
+import type { OperationContext } from './index.js'
 
 const EXPECTED_OPERATION_IDS = ['list', 'create', 'send', 'status', 'inspect'] as const
 
+// Mock context — never called in these unit tests (no actual execution)
+const mockCtx = {} as unknown as OperationContext
+
 describe('MCP server factory', () => {
   it('creates a McpServer instance', () => {
-    const server = createMcpServer('http://localhost:3030')
+    const server = createMcpServer(mockCtx)
     expect(server).toBeInstanceOf(McpServer)
   })
 
@@ -16,7 +21,7 @@ describe('MCP server factory', () => {
   })
 })
 
-describe('MCP tool names derived from operation IDs', () => {
+describe('MCP tool names derived from backend operation IDs', () => {
   for (const op of operationList) {
     it(`${op.id} maps to mcpscope_${op.id}`, () => {
       expect(`${TOOL_PREFIX}${op.id}`).toBe(`mcpscope_${op.id}`)
@@ -29,36 +34,50 @@ describe('MCP tool names derived from operation IDs', () => {
   })
 })
 
-describe('CLI/MCP operation parity — same shared catalog source', () => {
+describe('backend operation catalog — 5 operations with execute', () => {
   it('catalog has all 5 operations', () => {
     expect(Object.keys(operationCatalog)).toEqual([...EXPECTED_OPERATION_IDS])
   })
 
-  it('each operation has the same description in CLI and MCP (single source)', () => {
+  it('every backend operation has id, description, schema, outputSchema, and execute', () => {
     for (const op of operationList) {
-      // Both CLI and MCP use op.description — verify it is a meaningful string
+      expect(typeof op.id).toBe('string')
       expect(typeof op.description).toBe('string')
-      expect(op.description.trim().length).toBeGreaterThan(20)
-    }
-  })
-
-  it('each operation has the same schema in CLI and MCP (single source)', () => {
-    for (const op of operationList) {
+      expect(op.description.length).toBeGreaterThan(0)
       expect(op.schema).toBeDefined()
-      // Schema parses valid inputs without error
-      const validInput = getValidInput(op.id)
-      expect(op.schema.safeParse(validInput).success).toBe(true)
+      expect(op.outputSchema).toBeDefined()
+      expect(typeof op.execute).toBe('function')
     }
   })
 })
 
-describe('machine-readable result shape contracts', () => {
-  it('create result shape has api_version, session with snake_case fields', () => {
-    // The shared createOperation.execute returns this shape (verified by TypeScript types).
-    // This test documents the contract enforced at the type level.
+describe('CLI/MCP parity — backend operations extend the shared contract', () => {
+  it('backend catalog IDs match shared catalog IDs', () => {
+    const backendIds = operationList.map(op => op.id)
+    const sharedIds = sharedList.map(op => op.id)
+    expect(backendIds).toEqual(sharedIds)
+  })
+
+  it('backend operations inherit descriptions from the shared catalog', () => {
+    for (const op of operationList) {
+      const sharedOp = sharedCatalog[op.id as keyof typeof sharedCatalog]
+      expect(op.description).toBe(sharedOp.description)
+    }
+  })
+
+  it('backend operations inherit schemas from the shared catalog', () => {
+    for (const op of operationList) {
+      const sharedOp = sharedCatalog[op.id as keyof typeof sharedCatalog]
+      // Same schema object reference (spread preserves identity)
+      expect(op.schema).toBe(sharedOp.schema)
+    }
+  })
+})
+
+describe('backend result shape contracts — snake_case throughout', () => {
+  it('create result shape has snake_case fields (not camelCase)', () => {
     type CreateResult = Awaited<ReturnType<typeof operationCatalog.create.execute>>
     type Session = CreateResult['session']
-    // TypeScript enforces these fields exist — this is a compile-time test.
     const fields: Array<keyof Session> = [
       'id', 'title', 'status', 'init_status', 'model', 'mcp',
       'compaction_strategy', 'created_at', 'updated_at',
@@ -83,23 +102,47 @@ describe('machine-readable result shape contracts', () => {
     expect(fields).not.toContain('activeTurn')
   })
 
-  it('list result has api_version 1 and sessions array', () => {
+  it('list result has api_version 1, sessions with snake_case fields', () => {
     type ListResult = Awaited<ReturnType<typeof operationCatalog.list.execute>>
-    const fields: Array<keyof ListResult> = ['api_version', 'sessions']
-    expect(fields).toContain('api_version')
-    expect(fields).toContain('sessions')
+    type Session = ListResult['sessions'][number]
+    const sessionFields: Array<keyof Session> = [
+      'id', 'title', 'status', 'init_status', 'created_at', 'updated_at',
+      'is_context_exhausted', 'loaded_context_length', 'compaction_strategy',
+      'model_profile_snapshot', 'mcp_profile_snapshot',
+    ]
+    expect(sessionFields).toContain('init_status')
+    expect(sessionFields).toContain('model_profile_snapshot')
+    expect(sessionFields).not.toContain('initStatus')
+    expect(sessionFields).not.toContain('modelProfileSnapshot')
   })
 })
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+describe('MCP structured output — outputSchema defined for all operations', () => {
+  it('every operation has an outputSchema for structured MCP output', () => {
+    for (const op of operationList) {
+      expect(op.outputSchema).toBeDefined()
+      expect(typeof op.outputSchema).toBe('object')
+    }
+  })
 
-function getValidInput(opId: string): Record<string, unknown> {
-  switch (opId) {
-    case 'list': return {}
-    case 'create': return { title: 'test' }
-    case 'send': return { session_id: 'ABCD', prompt: 'hello' }
-    case 'status': return { session_id: 'ABCD' }
-    case 'inspect': return { id: 'ABCD.1' }
-    default: return {}
-  }
-}
+  it('list outputSchema has api_version and sessions fields', () => {
+    expect(operationCatalog.list.outputSchema).toHaveProperty('api_version')
+    expect(operationCatalog.list.outputSchema).toHaveProperty('sessions')
+  })
+
+  it('create outputSchema has api_version and session fields', () => {
+    expect(operationCatalog.create.outputSchema).toHaveProperty('api_version')
+    expect(operationCatalog.create.outputSchema).toHaveProperty('session')
+  })
+
+  it('send outputSchema has session_id (snake_case)', () => {
+    expect(operationCatalog.send.outputSchema).toHaveProperty('session_id')
+    expect(operationCatalog.send.outputSchema).not.toHaveProperty('sessionId')
+  })
+
+  it('status outputSchema has active_turn (snake_case)', () => {
+    expect(operationCatalog.status.outputSchema).toHaveProperty('active_turn')
+    expect(operationCatalog.status.outputSchema).not.toHaveProperty('activeTurn')
+  })
+})
+

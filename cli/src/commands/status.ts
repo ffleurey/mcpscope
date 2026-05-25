@@ -1,4 +1,4 @@
-import { statusOperation } from '@mcpscope/shared'
+import { cliStatus } from '../httpClient.js'
 
 export interface StatusOptions {
   url: string
@@ -7,7 +7,7 @@ export interface StatusOptions {
 }
 
 export async function runStatus(opts: StatusOptions): Promise<void> {
-  const result = await statusOperation.execute(opts.url, { session_id: opts.sessionId })
+  const result = await cliStatus(opts.url, { session_id: opts.sessionId })
 
   if (opts.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n')

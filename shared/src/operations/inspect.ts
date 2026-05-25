@@ -1,8 +1,4 @@
 import { z } from 'zod'
-import { lookupById } from '../httpClient.js'
-import type { LookupResponse } from '../httpClient.js'
-
-export { type LookupResponse }
 
 export const inspectInputSchema = z.object({
   id: z.string().describe(
@@ -16,7 +12,12 @@ export const inspectInputSchema = z.object({
 
 export type InspectInput = z.infer<typeof inspectInputSchema>
 
-export type InspectResult = LookupResponse
+export interface InspectResult {
+  id: string
+  type: string
+  mode: string
+  data: Record<string, unknown>
+}
 
 export const inspectOperation = {
   id: 'inspect' as const,
@@ -25,8 +26,4 @@ export const inspectOperation = {
     + 'Use short=true to get token counts only without part content. '
     + 'Prefer inspecting specific turn or part IDs over full session dumps.',
   schema: inspectInputSchema,
-  async execute(baseUrl: string, input: InspectInput): Promise<InspectResult> {
-    const mode = input.short === true ? 'summary' : 'full'
-    return lookupById(baseUrl, input.id, mode)
-  },
 }

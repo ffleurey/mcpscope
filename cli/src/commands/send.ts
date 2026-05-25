@@ -1,4 +1,4 @@
-import { sendOperation } from '@mcpscope/shared'
+import { cliSend } from '../httpClient.js'
 
 export interface SendOptions {
   url: string
@@ -8,7 +8,7 @@ export interface SendOptions {
 }
 
 export async function runSend(opts: SendOptions): Promise<void> {
-  const result = await sendOperation.execute(opts.url, {
+  const result = await cliSend(opts.url, {
     session_id: opts.sessionId,
     prompt: opts.prompt,
   })
