@@ -13,6 +13,9 @@ import {
   upsertLmConnectionResponseSchema,
   upsertMcpProfileResponseSchema,
   upsertModelConfigResponseSchema,
+  listAnalysisProfilesResponseSchema,
+  upsertAnalysisProfileResponseSchema,
+  analysisDefaultsResponseSchema,
   type LmStudioConnection,
   type McpProfileSnapshot,
   type McpServerProfile,
@@ -23,6 +26,8 @@ import {
   type SessionTraceBundle,
   type HierarchicalLookupResponse,
   type TurnStreamEvent,
+  type AnalysisProfile,
+  type AnalysisDefaults,
 } from '../backendTypes'
 import { AppError } from '../errors'
 
@@ -461,5 +466,41 @@ export function putSessionCreationDefaults(input: {
     method: 'PUT',
     body: input,
     schema: sessionCreationDefaultsResponseSchema,
+  })
+}
+
+export function listAnalysisProfiles() {
+  return request('/api/analysis-profiles', {
+    schema: listAnalysisProfilesResponseSchema,
+  })
+}
+
+export function upsertAnalysisProfile(profile: AnalysisProfile) {
+  return request(`/api/analysis-profiles/${profile.id}`, {
+    method: 'PUT',
+    body: profile,
+    schema: upsertAnalysisProfileResponseSchema,
+  })
+}
+
+export function deleteAnalysisProfile(profileId: string) {
+  return request<void>(`/api/analysis-profiles/${profileId}`, {
+    method: 'DELETE',
+  })
+}
+
+export function getAnalysisDefaults(): Promise<{ analysisDefaults: AnalysisDefaults }> {
+  return request('/api/analysis-defaults', {
+    schema: analysisDefaultsResponseSchema,
+  })
+}
+
+export function putAnalysisDefaults(input: {
+  defaultAnalysisProfileId: string | null
+}): Promise<{ analysisDefaults: AnalysisDefaults }> {
+  return request('/api/analysis-defaults', {
+    method: 'PUT',
+    body: input,
+    schema: analysisDefaultsResponseSchema,
   })
 }

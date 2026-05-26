@@ -13,6 +13,7 @@ import type {
   LmStudioConnection as LmStudioConnectionRecord,
   ModelConfig as ModelConfigRecord,
   McpServerProfile as McpServerProfileRecord,
+  AnalysisProfile as AnalysisProfileRecord,
 } from '../domain/configuration.js'
 import { validateSessionParent } from '../domain/sessionValidation.js'
 
@@ -619,6 +620,67 @@ export function listMcpServerProfiles(connection: Database.Database): McpServerP
 
 export function deleteMcpServerProfile(connection: Database.Database, id: string): boolean {
   return deleteJsonRecord(connection, 'mcp_server_profiles', id)
+}
+
+export function upsertAnalysisProfile(
+  connection: Database.Database,
+  record: AnalysisProfileRecord,
+): void {
+  upsertJsonRecord(connection, 'analysis_profiles', {
+    id: record.id,
+    name: record.name,
+    recordJson: JSON.stringify(record),
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  })
+}
+
+export function listAnalysisProfiles(connection: Database.Database): AnalysisProfileRecord[] {
+  return listJsonRecords<AnalysisProfileRecord>(connection, 'analysis_profiles')
+}
+
+export function deleteAnalysisProfile(connection: Database.Database, id: string): boolean {
+  return deleteJsonRecord(connection, 'analysis_profiles', id)
+}
+
+export interface AnalysisDefaults {
+  defaultAnalysisProfileId: string | null
+  updatedAt: number
+}
+
+export function getAnalysisDefaults(connection: Database.Database): AnalysisDefaults {
+  const row = connection.prepare(`
+    SELECT default_analysis_profile_id, updated_at
+    FROM analysis_defaults
+    WHERE id = 1
+  `).get() as {
+    default_analysis_profile_id: string | null
+    updated_at: number
+  } | undefined
+
+  if (!row) {
+    return { defaultAnalysisProfileId: null, updatedAt: 0 }
+  }
+
+  return {
+    defaultAnalysisProfileId: row.default_analysis_profile_id,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function upsertAnalysisDefaults(
+  connection: Database.Database,
+  defaults: AnalysisDefaults,
+): void {
+  connection.prepare(`
+    UPDATE analysis_defaults
+    SET default_analysis_profile_id = @defaultAnalysisProfileId,
+        updated_at                  = @updatedAt
+    WHERE id = 1
+  `).run({
+    defaultAnalysisProfileId: defaults.defaultAnalysisProfileId,
+    updatedAt: defaults.updatedAt,
+  })
 }
 
 export interface SessionCreationDefaults {

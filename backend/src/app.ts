@@ -13,6 +13,7 @@ import {
   lmStudioConnectionSchema,
   mcpServerProfileSchema,
   modelConfigSchema,
+  analysisProfileSchema,
 } from './domain/configuration.js'
 import { getDomainModelSummary } from './domain/model.js'
 import type { SessionRecord, TurnRecord } from './domain/model.js'
@@ -43,6 +44,11 @@ import {
   upsertMcpServerProfile,
   upsertModelConfig,
   listChildSessionSummaries,
+  upsertAnalysisProfile,
+  listAnalysisProfiles,
+  deleteAnalysisProfile,
+  getAnalysisDefaults,
+  upsertAnalysisDefaults,
   type ActiveSessionInfo,
 } from './persistence/repository.js'
 import {
@@ -406,6 +412,14 @@ export async function buildBackendApp(
         code: 'default_model_config_in_use',
       })
     }
+    const referencedByAnalysisProfile = listAnalysisProfiles(database.connection)
+      .some(p => p.modelConfigId === modelConfigId)
+    if (referencedByAnalysisProfile) {
+      reply.code(409)
+      return apiError('validation', 'Cannot delete this model config because one or more analysis profiles still reference it. Delete those analysis profiles first.', {
+        code: 'model_config_in_use_by_analysis_profile',
+      })
+    }
     const deleted = deleteModelConfig(database.connection, modelConfigId)
     if (!deleted) {
       reply.code(404)
@@ -490,6 +504,80 @@ export async function buildBackendApp(
     }
     upsertSessionCreationDefaults(database.connection, updatedDefaults)
     return { sessionCreationDefaults: updatedDefaults }
+  })
+
+  // ─── Analysis profiles ─────────────────────────────────────────────────────
+
+  app.get('/api/analysis-profiles', async () => {
+    return {
+      analysisProfiles: listAnalysisProfiles(database.connection),
+    }
+  })
+
+  app.put('/api/analysis-profiles/:analysisProfileId', async (request, reply) => {
+    const { analysisProfileId } = z.object({ analysisProfileId: z.string() }).parse(request.params)
+    const record = analysisProfileSchema.parse(request.body)
+    if (record.id !== analysisProfileId) {
+      reply.code(400)
+      return apiError('validation', 'Analysis profile ID mismatch')
+    }
+    const modelConfigs = listModelConfigs(database.connection)
+    if (!modelConfigs.some(c => c.id === record.modelConfigId)) {
+      reply.code(422)
+      return apiError('validation', `Model config "${record.modelConfigId}" not found.`, {
+        code: 'analysis_profile_model_config_not_found',
+      })
+    }
+    upsertAnalysisProfile(database.connection, record)
+    return { analysisProfile: record }
+  })
+
+  app.delete('/api/analysis-profiles/:analysisProfileId', async (request, reply) => {
+    const { analysisProfileId } = z.object({ analysisProfileId: z.string() }).parse(request.params)
+    const defaults = getAnalysisDefaults(database.connection)
+    if (defaults.defaultAnalysisProfileId === analysisProfileId) {
+      reply.code(409)
+      return apiError('validation', 'Cannot delete this analysis profile because it is currently set as the default. Change or clear the default first.', {
+        code: 'default_analysis_profile_in_use',
+      })
+    }
+    const deleted = deleteAnalysisProfile(database.connection, analysisProfileId)
+    if (!deleted) {
+      reply.code(404)
+      return apiError('not_found', 'Analysis profile not found')
+    }
+    reply.code(204)
+    return null
+  })
+
+  app.get('/api/analysis-defaults', async () => {
+    const defaults = getAnalysisDefaults(database.connection)
+    return { analysisDefaults: defaults }
+  })
+
+  const analysisDefaultsInputSchema = z.object({
+    defaultAnalysisProfileId: z.string().nullable(),
+  })
+
+  app.put('/api/analysis-defaults', async (request, reply) => {
+    const { defaultAnalysisProfileId } = analysisDefaultsInputSchema.parse(request.body)
+
+    if (defaultAnalysisProfileId !== null) {
+      const profiles = listAnalysisProfiles(database.connection)
+      if (!profiles.some(p => p.id === defaultAnalysisProfileId)) {
+        reply.code(422)
+        return apiError('validation', `Analysis profile "${defaultAnalysisProfileId}" not found.`, {
+          code: 'default_analysis_profile_not_found',
+        })
+      }
+    }
+
+    const updatedDefaults = {
+      defaultAnalysisProfileId,
+      updatedAt: Date.now(),
+    }
+    upsertAnalysisDefaults(database.connection, updatedDefaults)
+    return { analysisDefaults: updatedDefaults }
   })
 
   app.post('/api/lm-connections/test', async (_request, reply) => {

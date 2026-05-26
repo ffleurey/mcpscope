@@ -17,7 +17,7 @@ import {
   turnStatusValues,
 } from '../domain/model.js'
 
-const SQLITE_SCHEMA_VERSION = 6
+const SQLITE_SCHEMA_VERSION = 7
 
 function sqlEnum(values: readonly string[]): string {
   return values.map(value => `'${value}'`).join(', ')
@@ -185,6 +185,23 @@ export function initializeBackendSchema(connection: Database.Database): void {
 
     INSERT OR IGNORE INTO session_creation_defaults (id, default_model_config_id, default_mcp_profile_id, updated_at)
     VALUES (1, NULL, NULL, 0);
+
+    CREATE TABLE IF NOT EXISTS analysis_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS analysis_defaults (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      default_analysis_profile_id TEXT,
+      updated_at INTEGER NOT NULL
+    );
+
+    INSERT OR IGNORE INTO analysis_defaults (id, default_analysis_profile_id, updated_at)
+    VALUES (1, NULL, 0);
   `)
 
   const upsertMeta = connection.prepare(`
@@ -210,6 +227,9 @@ export function initializeBackendSchema(connection: Database.Database): void {
   migrate(`ALTER TABLE sessions ADD COLUMN parent_id TEXT`)
   migrate(`CREATE INDEX IF NOT EXISTS idx_sessions_session_type ON sessions(session_type)`)
   migrate(`CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_kind, parent_id)`)
+  migrate(`CREATE TABLE IF NOT EXISTS analysis_profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL, record_json TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`)
+  migrate(`CREATE TABLE IF NOT EXISTS analysis_defaults (id INTEGER PRIMARY KEY CHECK (id = 1), default_analysis_profile_id TEXT, updated_at INTEGER NOT NULL)`)
+  connection.exec(`INSERT OR IGNORE INTO analysis_defaults (id, default_analysis_profile_id, updated_at) VALUES (1, NULL, 0)`)
 
   // Backfill: NULL compaction_strategy → 'strip-reasoning' (for rows predating this column)
   connection.exec(`UPDATE sessions SET compaction_strategy = 'strip-reasoning' WHERE compaction_strategy IS NULL`)

@@ -90,6 +90,9 @@
       <button class="nav-item" class:active={$currentView === 'mcp-profiles'} onclick={() => navigate('mcp-profiles')}>
         MCP Servers
       </button>
+      <button class="nav-item" class:active={$currentView === 'analysis-profiles'} onclick={() => navigate('analysis-profiles')}>
+        Analysis Profiles
+      </button>
     </div>
 
     <button
