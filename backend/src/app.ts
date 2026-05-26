@@ -42,6 +42,7 @@ import {
   upsertLmConnection,
   upsertMcpServerProfile,
   upsertModelConfig,
+  listChildSessionSummaries,
   type ActiveSessionInfo,
 } from './persistence/repository.js'
 import {
@@ -296,6 +297,37 @@ export async function buildBackendApp(
     }
     reply.code(204)
     return null
+  })
+
+  // ─── Child sessions of a session parent ────────────────────────────────────
+  app.get('/api/sessions/:sessionId/children', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return apiError('not_found', 'Session not found')
+    }
+    const children = listChildSessionSummaries(database.connection, 'session', sessionId)
+    return {
+      api_version: 1,
+      parent_session_id: sessionId,
+      children: children.map(s => ({
+        id: s.id,
+        title: s.title,
+        status: s.status,
+        init_status: s.initStatus,
+        session_type: s.sessionType,
+        parent_kind: s.parentKind,
+        parent_id: s.parentId,
+        created_at: s.createdAt,
+        updated_at: s.updatedAt,
+        is_context_exhausted: s.isContextExhausted,
+        loaded_context_length: s.loadedContextLength,
+        compaction_strategy: s.compactionStrategy,
+        model_profile_snapshot: { name: s.modelProfileSnapshot.name },
+        mcp_profile_snapshot: s.mcpProfileSnapshot ? { name: s.mcpProfileSnapshot.name } : null,
+      })),
+    }
   })
 
   app.patch('/api/sessions/:sessionId', async (request, reply) => {

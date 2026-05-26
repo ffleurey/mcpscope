@@ -35,6 +35,8 @@ export const mcpServerProfileSchema = z.object({
 
 export const sessionStatusSchema = z.enum(['draft', 'ready', 'active', 'error', 'archived'])
 export const sessionInitStatusSchema = z.enum(['pending', 'initializing', 'ready', 'error'])
+export const sessionTypeSchema = z.enum(['primary', 'session_analysis', 'session_compaction', 'benchmark_analysis'])
+export const parentKindSchema = z.enum(['session', 'benchmark'])
 export const turnStatusSchema = z.enum(['draft', 'streaming', 'awaiting-tools', 'complete', 'error', 'aborted'])
 export const roundStatusSchema = z.enum(['pending', 'streaming', 'complete', 'error', 'aborted'])
 export const roundFinishReasonSchema = z.enum(['stop', 'tool_calls', 'length', 'error', 'cancelled'])
@@ -143,6 +145,9 @@ export const sessionRecordSchema = z.object({
   title: z.string(),
   status: sessionStatusSchema,
   initStatus: sessionInitStatusSchema,
+  sessionType: sessionTypeSchema.default('primary'),
+  parentKind: parentKindSchema.nullable().default(null),
+  parentId: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   modelProfileSnapshot: modelProfileSnapshotSchema,
@@ -162,6 +167,9 @@ export const sessionSummarySchema = z.object({
   title: z.string(),
   status: sessionStatusSchema,
   init_status: sessionInitStatusSchema,
+  session_type: sessionTypeSchema.default('primary'),
+  parent_kind: parentKindSchema.nullable().default(null),
+  parent_id: z.string().nullable().default(null),
   created_at: z.number().int().nonnegative(),
   updated_at: z.number().int().nonnegative(),
   is_context_exhausted: z.boolean(),
@@ -376,6 +384,8 @@ export type ModelConfig = z.infer<typeof modelConfigSchema>
 export type McpServerProfile = z.infer<typeof mcpServerProfileSchema>
 export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>
+export type SessionType = z.infer<typeof sessionTypeSchema>
+export type ParentKind = z.infer<typeof parentKindSchema>
 export type SessionRecord = z.infer<typeof sessionRecordSchema>
 export type SessionSummary = z.infer<typeof sessionSummarySchema>
 export type TurnRecord = z.infer<typeof turnRecordSchema>

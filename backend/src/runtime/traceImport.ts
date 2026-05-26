@@ -21,15 +21,26 @@ import {
   insertRoundRecord,
   insertTurnRecord,
 } from '../persistence/repository.js'
+import { validateSessionParent } from '../domain/sessionValidation.js'
 
 function createUuid(): string {
   return crypto.randomUUID()
 }
 
 function normalizeImportedSession(session: SessionRecord): SessionRecord {
-  if (session.initStatus !== 'initializing') return session
-  return {
+  const normalized: SessionRecord = {
     ...session,
+    sessionType: session.sessionType ?? 'primary',
+    parentKind: session.parentKind ?? null,
+    parentId: session.parentId ?? null,
+  }
+  const error = validateSessionParent(normalized.sessionType, normalized.parentKind, normalized.parentId)
+  if (error) {
+    throw new Error(`Invalid imported session metadata: ${error}`)
+  }
+  if (normalized.initStatus !== 'initializing') return normalized
+  return {
+    ...normalized,
     initStatus: 'error',
   }
 }

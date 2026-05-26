@@ -5,17 +5,19 @@ import {
   contextStateValues,
   displayStateValues,
   exchangeKindValues,
+  parentKindValues,
   partTypeValues,
   roundFinishReasonValues,
   roundStatusValues,
   sessionInitStatusValues,
   sessionStatusValues,
+  sessionTypeValues,
   tokenConfidenceValues,
   tokenSourceValues,
   turnStatusValues,
 } from '../domain/model.js'
 
-const SQLITE_SCHEMA_VERSION = 5
+const SQLITE_SCHEMA_VERSION = 6
 
 function sqlEnum(values: readonly string[]): string {
   return values.map(value => `'${value}'`).join(', ')
@@ -73,6 +75,9 @@ export function initializeBackendSchema(connection: Database.Database): void {
       title TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN (${sqlEnum(sessionStatusValues)})),
       init_status TEXT NOT NULL CHECK (init_status IN (${sqlEnum(sessionInitStatusValues)})),
+      session_type TEXT NOT NULL DEFAULT 'primary' CHECK (session_type IN (${sqlEnum(sessionTypeValues)})),
+      parent_kind TEXT CHECK (parent_kind IS NULL OR parent_kind IN (${sqlEnum(parentKindValues)})),
+      parent_id TEXT,
       model_profile_snapshot_json TEXT NOT NULL,
       mcp_profile_snapshot_json TEXT,
       loaded_context_length INTEGER,
@@ -200,9 +205,16 @@ export function initializeBackendSchema(connection: Database.Database): void {
   migrate(`ALTER TABLE turns ADD COLUMN compaction_applied TEXT`)
   migrate(`ALTER TABLE turns ADD COLUMN compaction_tokens_removed INTEGER`)
   migrate(`ALTER TABLE parts ADD COLUMN stripped_by_compaction_at_turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL`)
+  migrate(`ALTER TABLE sessions ADD COLUMN session_type TEXT NOT NULL DEFAULT 'primary' CHECK (session_type IN (${sqlEnum(sessionTypeValues)}))`)
+  migrate(`ALTER TABLE sessions ADD COLUMN parent_kind TEXT CHECK (parent_kind IS NULL OR parent_kind IN (${sqlEnum(parentKindValues)}))`)
+  migrate(`ALTER TABLE sessions ADD COLUMN parent_id TEXT`)
+  migrate(`CREATE INDEX IF NOT EXISTS idx_sessions_session_type ON sessions(session_type)`)
+  migrate(`CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_kind, parent_id)`)
 
   // Backfill: NULL compaction_strategy → 'strip-reasoning' (for rows predating this column)
   connection.exec(`UPDATE sessions SET compaction_strategy = 'strip-reasoning' WHERE compaction_strategy IS NULL`)
+  // Backfill: NULL session_type → 'primary' (for rows predating this column)
+  connection.exec(`UPDATE sessions SET session_type = 'primary' WHERE session_type IS NULL`)
 
   upsertMeta.run('sqlite_schema_version', String(SQLITE_SCHEMA_VERSION))
   upsertMeta.run('domain_model_version', String(DOMAIN_MODEL_VERSION))
@@ -219,6 +231,7 @@ export function validateBackendSchema(connection: Database.Database): void {
   const required: Record<string, string[]> = {
     sessions: [
       'id', 'title', 'status', 'init_status',
+      'session_type', 'parent_kind', 'parent_id',
       'model_profile_snapshot_json', 'mcp_profile_snapshot_json',
       'loaded_context_length', 'system_prompt_tokens', 'tool_definitions_tokens',
       'is_context_exhausted', 'compaction_strategy', 'created_at', 'updated_at',

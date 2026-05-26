@@ -60,6 +60,9 @@ export const capturedReasoningThreeBatchSession: SessionRecord = {
   title: 'Captured reasoning retention',
   status: 'active',
   initStatus: 'ready',
+  sessionType: 'primary',
+  parentKind: null,
+  parentId: null,
   createdAt: 1,
   updatedAt: 18,
   modelProfileSnapshot: {
