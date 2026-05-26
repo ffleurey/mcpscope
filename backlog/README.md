@@ -16,18 +16,35 @@ These decisions now shape the active parent-link and analysis work:
 6. analysis configuration starts simple: named analysis profiles plus one default
 7. the tree view should sort siblings newest-first and show compact date/time
 
+## Recently completed increments
+
+- `backlog/done/session-metadata-foundation.md`
+- `backlog/done/analysis-configurations.md`
+- `backlog/done/session-analysis-launch-and-report.md`
+
 ## Active split for the next implementation steps
 
 The larger specs are now split into smaller, testable increments:
 
 - `backlog/session-types-and-parent-links.md` — epic/background spec
-  - `backlog/session-metadata-foundation.md`
   - `backlog/session-tree-navigation.md`
 
 - `backlog/session-analysis-agent.md` — epic/background spec
-  - `backlog/analysis-configurations.md`
-  - `backlog/session-analysis-launch-and-report.md`
+  - `backlog/session-analysis-backend-owned-launch.md`
   - `backlog/analysis-follow-up-and-viewing.md`
+
+## Next implementation step
+
+The next recommended increment is:
+
+- `backlog/session-analysis-backend-owned-launch.md`
+
+Reasoning:
+
+- the tree-integrated analysis MVP is now implemented and can be moved to done
+- the remaining gap is architectural: the frontend still orchestrates initialization and first-turn launch
+- the next increment should make analysis launch fully backend-owned and reusable for future CLI and MCP triggers
+- richer analysis viewing can stay separate once that shared launch path exists
 
 ## Still deferred
 

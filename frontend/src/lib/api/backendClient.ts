@@ -16,6 +16,7 @@ import {
   listAnalysisProfilesResponseSchema,
   upsertAnalysisProfileResponseSchema,
   analysisDefaultsResponseSchema,
+  launchAnalysisResponseSchema,
   type LmStudioConnection,
   type McpProfileSnapshot,
   type McpServerProfile,
@@ -94,8 +95,9 @@ export function fetchHealth() {
   return request('/api/health', { schema: healthResponseSchema })
 }
 
-export function listSessions() {
-  return request('/api/sessions', {
+export function listSessions(options?: { includeChildren?: boolean }) {
+  const url = options?.includeChildren ? '/api/sessions?include_children=true' : '/api/sessions'
+  return request(url, {
     schema: listSessionsResponseSchema,
   })
 }
@@ -502,5 +504,16 @@ export function putAnalysisDefaults(input: {
     method: 'PUT',
     body: input,
     schema: analysisDefaultsResponseSchema,
+  })
+}
+
+export function launchAnalysis(
+  targetSessionId: string,
+  input: { analysis_profile_id?: string; analysis_prompt: string },
+) {
+  return request(`/api/sessions/${targetSessionId}/analyze`, {
+    method: 'POST',
+    body: input,
+    schema: launchAnalysisResponseSchema,
   })
 }

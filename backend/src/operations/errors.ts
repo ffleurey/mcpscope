@@ -30,6 +30,7 @@ export function operationErrorToHttpStatus(code: string | undefined): number {
   switch (code) {
     case 'session_not_found':
     case 'hierarchical_id_not_found':
+    case 'not_found':
       return 404
     case 'invalid_session_id':
     case 'invalid_hierarchical_id':
@@ -44,6 +45,11 @@ export function operationErrorToHttpStatus(code: string | undefined): number {
     case 'default_model_config_not_found':
     case 'default_lm_connection_not_found':
     case 'default_mcp_profile_not_found':
+    case 'no_analysis_profile':
+    case 'analysis_profile_not_found':
+    case 'target_session_not_eligible':
+    case 'analysis_model_config_not_found':
+    case 'analysis_lm_connection_not_found':
       return 422
     default:
       return 500

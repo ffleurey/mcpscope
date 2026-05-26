@@ -23,8 +23,8 @@ This feature depends on:
 
 In practice, it should build on:
 
-- `backlog/session-metadata-foundation.md`
-- `backlog/session-tree-navigation.md`
+- `backlog/done/session-metadata-foundation.md`
+- the shipped tree-integrated MVP from `backlog/done/session-analysis-launch-and-report.md`
 
 ## Fixed v1 decisions
 
@@ -46,7 +46,7 @@ The intended implementation is to **bootstrap mcpscope on itself**:
 
 ## Implementation increments
 
-### 1. `backlog/analysis-configurations.md`
+### 1. `backlog/done/analysis-configurations.md`
 
 Configuration increment:
 
@@ -56,27 +56,39 @@ Configuration increment:
 
 This should be testable before any analysis execution exists.
 
-### 2. `backlog/session-analysis-launch-and-report.md`
+This increment is now complete.
 
-Backend/CLI execution increment:
+### 2. `backlog/done/session-analysis-launch-and-report.md`
 
-- explicit expectations input for one base session
+Backend/CLI/tree-integrated MVP increment:
+
+- explicit user-supplied analysis prompt for one base session
 - creation of a child analysis session
+- binding that child session to mcpscope's own MCP endpoint with a restricted analysis tool subset
 - restricted analysis MCP tool subset
 - compact structured report output
 - CLI/API launch surface
+- tree-based UI launch that shows the created child session beneath its parent, navigates into it, and reuses the standard session view for streaming and follow-up
 
 This is the first increment that should produce a real end-to-end analysis result.
 
-### 3. `backlog/analysis-follow-up-and-viewing.md`
+This increment is now complete, with the remaining backend-owned launch/CLI/MCP refactor tracked separately below.
+
+### 3. `backlog/session-analysis-backend-owned-launch.md`
+
+Backend ownership and automation increment:
+
+- move analysis launch orchestration fully into a backend-owned reusable path
+- expose that same launch path to future CLI and MCP triggers
+- keep the UI on top of that shared launch surface instead of owning the orchestration itself
+
+### 4. `backlog/analysis-follow-up-and-viewing.md`
 
 Interactive UI increment:
 
-- launch from the base session and/or tree selection
-- live visibility while analysis runs
-- follow-up turns in the same analysis session
 - separate viewing surface so the base session can stay visible
 - selective delete of individual analysis sessions
+- richer launch entry points from the base session and/or tree selection
 
 ## Important design notes
 

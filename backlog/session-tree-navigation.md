@@ -2,9 +2,11 @@
 
 This increment adds the UI/navigation layer on top of the typed session foundation.
 
+The session-analysis MVP now absorbs the minimum tree behavior needed to create and navigate analysis child sessions beneath their parent. This task therefore remains the broader tree-navigation spec and the place for any remaining polish or generalization beyond that MVP slice.
+
 ## Dependency
 
-- `backlog/session-metadata-foundation.md`
+- `backlog/done/session-metadata-foundation.md`
 
 ## Goal
 

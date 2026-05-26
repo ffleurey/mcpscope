@@ -4,6 +4,7 @@ import {
   deleteSession as deleteBackendSession,
   getSessionTrace,
   importTrace as importBackendTrace,
+  launchAnalysis as launchBackendAnalysis,
   listSessions,
   preflightSession,
   streamPreludeInit,
@@ -46,6 +47,7 @@ export const activeTraceLoading = writable(false)
 export const isSendingTurn = writable(false)
 export const isStartingSession = writable(false)
 export const isImportingTrace = writable(false)
+export const isLaunchingAnalysis = writable(false)
 export const activeTurnStream = writable<TurnStreamingState | null>(null)
 
 export const activeSession = derived(
@@ -97,8 +99,8 @@ function buildMcpProfileSnapshot(mcpProfile: McpServerProfile) {
 }
 
 async function refreshSessions(): Promise<SessionSummary[]> {
-  const response = await listSessions()
-  const sessions = sortByUpdatedAtDesc(response.sessions)
+  const response = await listSessions({ includeChildren: true })
+  const sessions = response.sessions
   chatSessions.set(sessions)
   return sessions
 }
@@ -398,4 +400,58 @@ function applyTurnStreamEvent(
   activeTurnStream.set(null)
   // turn-failed event
   setSessionError(new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0))
+}
+
+/**
+ * Launch an analysis session for the given target session.
+ *
+ * Creates a session_analysis child session on the backend, navigates to it,
+ * runs prelude initialization, then auto-sends the analysis prompt as the
+ * first turn — all using the existing streaming infrastructure.
+ */
+export async function launchAnalysis(input: {
+  targetSessionId: string
+  analysisProfileId?: string
+  analysisPrompt: string
+}): Promise<void> {
+  clearSessionError()
+  isLaunchingAnalysis.set(true)
+  try {
+    // 1. Create the child session (backend binds it to the restricted analysis MCP endpoint)
+    const { session, analysis_prompt } = await launchBackendAnalysis(
+      input.targetSessionId,
+      {
+        analysis_profile_id: input.analysisProfileId,
+        analysis_prompt: input.analysisPrompt,
+      },
+    )
+
+    // 2. Navigate to the new session immediately (shows it in tree and switches to chat view)
+    const summary = toSessionSummary(session)
+    chatSessions.update((sessions) => {
+      const filtered = sessions.filter((s) => s.id !== summary.id)
+      return [...filtered, summary]
+    })
+    activeChatId.set(session.id)
+    activeTrace.set(createEmptyTrace(summary))
+
+    // 3. Stream the prelude initialization
+    await streamPreludeInit(session.id, (event) => applyPreludeStreamEvent(event))
+
+    // 4. Auto-send the analysis prompt as the first turn
+    const sessionSummary = get(chatSessions).find((s) => s.id === session.id) ?? summary
+    activeTurnStream.set(createTurnStreamingState(session.id, analysis_prompt))
+
+    await streamBackendTurn(session.id, analysis_prompt, async (event) => {
+      applyTurnStreamEvent(sessionSummary, analysis_prompt, event)
+    })
+
+    // 5. Refresh the full session list so the tree is accurate
+    await refreshSessions()
+  } catch (error) {
+    setSessionError(toAppError(error))
+  } finally {
+    isLaunchingAnalysis.set(false)
+    activeTurnStream.set(null)
+  }
 }
