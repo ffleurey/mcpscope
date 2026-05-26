@@ -25,7 +25,39 @@ For the canonical runtime model and lookup vocabulary, use [DATA-MODEL.md](DATA-
 
 ## Main unresolved product work
 
-### 1. CLI next iteration and interface discipline
+### 1. Session metadata and parent-linked navigation
+
+This is the next implementation priority because it is the foundation for the session-analysis-agent work.
+
+- goal: add typed sessions plus parent links without changing the canonical runtime tree
+- step 1 should be independently testable at the backend/API level before the broader analysis workflow lands
+- implementation is now split into:
+  - `backlog/session-metadata-foundation.md`
+  - `backlog/session-tree-navigation.md`
+- the epic/background spec remains:
+  - `backlog/session-types-and-parent-links.md`
+
+### 2. Session analysis agent
+
+The next feature should build on the parent-linked session foundation rather than bypass it.
+
+- goal: run a dedicated internal analysis session against one finished base session and produce a compact, trace-grounded report
+- implementation is now split into:
+  - `backlog/analysis-configurations.md`
+  - `backlog/session-analysis-launch-and-report.md`
+  - `backlog/analysis-follow-up-and-viewing.md`
+- the epic/background spec remains:
+  - `backlog/session-analysis-agent.md`
+
+### 3. Token and context trust hardening
+
+This remains the main quality gap beyond the CLI work.
+
+- verify token attribution against captured traces and live sessions
+- ensure the context bar is driven by the same canonical state as trace export
+- remove remaining mismatches between displayed statistics and backend truth
+
+### 4. CLI next iteration and interface discipline
 
 The CLI lifecycle MVP is now shipped and packaged in the Docker image, and the first MCP increment is now shipped on the same backend-owned operation layer. The next work is to improve the CLI incrementally without introducing contract drift.
 
@@ -43,31 +75,13 @@ The CLI lifecycle MVP is now shipped and packaged in the Docker image, and the f
 
 The completed Docker CLI packaging task lives in [backlog/done/cli-packaging-and-tutorial.md](backlog/done/cli-packaging-and-tutorial.md). The completed execution-lock task lives in [backlog/done/global-session-execution-lock.md](backlog/done/global-session-execution-lock.md). The completed MCP task lives in [backlog/done/mcpscope-mcp-interface.md](backlog/done/mcpscope-mcp-interface.md). The next CLI feature task lives in [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md), and the future sequential experiment task lives in [backlog/session-batch-runs.md](backlog/session-batch-runs.md).
 
-### 2. Token and context trust hardening
-
-This remains the main quality gap beyond the CLI work.
-
-- verify token attribution against captured traces and live sessions
-- ensure the context bar is driven by the same canonical state as trace export
-- remove remaining mismatches between displayed statistics and backend truth
-
-### 3. Frontend cleanup
+### 5. Frontend cleanup
 
 - simplify session and turn state handling
 - keep inspectability high without reintroducing frontend-owned runtime logic
 - polish the MCP debugging workflow in compact and inspect views
 
-### 4. Richer MCP analysis output
+### 6. Richer MCP analysis output
 
 - support artifacts such as charts, tables, HTML fragments, and files
 - keep large user-facing artifacts out of model context whenever possible
-
-### 5. Session types and parent links
-
-- future internal workflows such as session analysis, advanced compaction, and benchmark synthesis should reuse normal sessions rather than invent a second runtime concept
-- that requires future session metadata for session type plus a parent reference to the owning object
-- this is not implemented yet; see:
-  - `backlog/session-types-and-parent-links.md`
-  - `backlog/session-analysis-agent.md`
-  - `backlog/session-compaction-agent.md`
-  - `backlog/benchmark-automation.md`
