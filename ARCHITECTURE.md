@@ -90,11 +90,55 @@ The backend persistence layer stores the runtime as internal records:
 
 These records are the source of truth for runtime behavior and replay.
 
+### Current implementation
+
+Today, mcpscope persists and exposes sessions as ordinary runtime sessions with:
+
+- setup
+- turns
+- rounds
+- parts
+- raw exchanges
+
+The shipped product does **not yet** implement generalized session typing or parent-linked session metadata.
+
+That means:
+
+- the current session model is effectively flat at the product/lifecycle layer
+- special internal session kinds such as analysis or compaction sessions are not yet part of the shipped data model
+- benchmark/experiment ownership of sessions is not yet represented through a generalized session-parent model
+
 The important rule is:
 
 - mcpscope should have one canonical model across persistence, API, UI, and CLI
 - provider-specific transport structures are normalized into that model at the integration boundary
 - `RawExchangeRecord` belongs to the diagnostic and replay layer, not to the canonical runtime tree
+
+### Future work: session types and parent links
+
+Future work will likely add generalized session metadata around the runtime tree:
+
+- `session_type`
+- `parent_ref`
+
+The important architectural rule is:
+
+> the setup/turn/round/part runtime tree stays the same; session type and parent link are metadata around the session, not a replacement for the runtime model
+
+This is intended to support future features such as:
+
+- per-session analysis sessions attached to a base session
+- compaction sessions attached to a session or turn
+- primary run sessions optionally attached to a benchmark/experiment
+- benchmark-analysis sessions attached to a benchmark/experiment
+
+Tracked tasks:
+
+- `backlog/session-types-and-parent-links.md`
+- `backlog/session-analysis-agent.md`
+- `backlog/session-compaction-agent.md`
+- `backlog/session-batch-runs.md`
+- `backlog/benchmark-automation.md`
 
 ## Transcript vs context
 
@@ -218,6 +262,13 @@ The frontend is a thin client over backend state. Its responsibilities:
 - render backend trace snapshots
 - initiate actions such as session creation and turn submission
 - support trace export/import workflows
+
+Future UI work around session types and parent links should preserve the same principle:
+
+- normal session views stay focused on normal primary sessions by default
+- internal workflow sessions remain inspectable, but should appear from their parent object or in dedicated debug/development views
+
+That behavior is future work, not part of the currently shipped UI model.
 - expose inspect workflows over backend-owned IDs and lookup data
 
 The frontend must not maintain its own parallel runtime model or re-implement runtime logic.

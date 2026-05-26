@@ -31,7 +31,10 @@ This is **not** a deterministic oracle and **not** a generic agent framework. It
 
 ## Dependency note
 
-This task should depend on the completed `backlog/done/mcpscope-mcp-interface.md` work.
+This task should depend on:
+
+- the completed `backlog/done/mcpscope-mcp-interface.md` work
+- `backlog/session-types-and-parent-links.md`
 
 The analysis agent should use a **restricted analysis-oriented mcpscope MCP tool subset**, not the full operational tool surface.
 
@@ -70,7 +73,7 @@ without turning mcpscope into a general-purpose agent platform.
 
 ## Session model requirements
 
-Analysis runs must be represented as a **dedicated internal session type** or equivalent persisted classification.
+Analysis runs must be represented as a **dedicated internal session type** in the generalized parent-linked session model.
 
 They must be clearly distinct from:
 
@@ -81,9 +84,12 @@ This distinction must exist in backend/runtime behavior, not only in the UI.
 
 Analysis sessions should:
 
-- link back to the subject session they analyze
+- have `session_type = session_analysis` or equivalent
+- have a mandatory parent reference to the subject session they analyze
 - be inspectable during development
 - be hidden from the normal session list by default
+
+This task should **reuse** the typed parent-linked session model from `session-types-and-parent-links.md`, not redefine that model locally.
 
 They also need **dedicated analysis configuration**, separate from ordinary session defaults, including:
 
@@ -91,6 +97,8 @@ They also need **dedicated analysis configuration**, separate from ordinary sess
 - system prompt
 - temperature / reasoning settings if needed
 - any special evaluation instructions
+
+This configuration should be treated as a first-class configuration surface, not as an ad-hoc special case.
 
 ## Desired behavior
 
@@ -147,6 +155,74 @@ The model should be pushed to:
 - separate fact from interpretation
 - avoid inventing expectations or hidden intent
 
+### 5. Analysis sessions are interactive and inspectable
+
+An analysis run should behave like a real session, not a hidden one-shot background job.
+
+That means:
+
+- the analysis session should be visible live while it runs
+- it should be inspectable just like a normal session
+- it should be possible to ask follow-up questions in the analysis session after the initial run
+
+Follow-up questions should remain in the same analysis conversation:
+
+- first turn = initial analysis
+- later turns = follow-up questions and refinement
+
+### 6. Multiple analyses per base session
+
+It should be possible to run more than one analysis session on the same primary session.
+
+Examples:
+
+- compare different analysis prompts
+- compare different analysis models
+- rerun an analysis after changing expectations
+
+It should also be possible to delete selected analysis sessions without deleting the base session.
+
+### 7. Launch and viewing UX
+
+The user should be able to trigger analysis:
+
+- from the session being analyzed
+- and/or by selecting the target session in the session tree view
+
+Because the base session often needs to remain visible during evaluation, the analysis UX should support a separate viewing surface.
+
+Acceptable directions include:
+
+- a fresh analysis window/view
+- a split pane
+- a dialog
+
+The important requirement is:
+
+> running and inspecting the analysis should not force the user to lose sight of the base session they are evaluating
+
+### 8. Analysis configuration UI
+
+The product should have a dedicated configuration screen for analysis sessions.
+
+That screen should allow the user to:
+
+- choose which model to use for analysis
+- inspect and edit the system prompt used by the analysis agent
+- define multiple analysis model/prompt alternatives
+- choose which analysis alternative is the default
+
+This should be done consistently with the existing configuration model used elsewhere in the product.
+
+If the current configuration area is not clean or reusable enough, the task should refactor and solidify that area instead of layering new shortcuts on top of old ones.
+
+The launch UX should support:
+
+- one-click start with the default analysis alternative
+- a small selector/dropdown to start with a non-default alternative when needed
+
+Because session snapshots already persist model/system-prompt state, this should reuse existing session snapshot mechanics rather than introducing parallel storage concepts.
+
 ## Scope
 
 ### Backend
@@ -155,22 +231,31 @@ The model should be pushed to:
 - define the output/report shape
 - run the analysis agent using the configured LM runtime
 - expose the analysis through a backend surface suitable for UI and CLI use
-- define a dedicated session type / classification for analysis runs
+- support more than one analysis session attached to the same base session
+- support deleting individual analysis sessions
 - define how analysis-session configuration is stored separately from ordinary session defaults
-- define how analysis sessions link back to the subject session
 - define or reuse a restricted mcpscope MCP tool subset for analysis-only session inspection
+- keep execution fully sequential across all session types (same global lock model as normal sessions)
+- enforce cascade deletion from parent session to attached analysis sessions
 
 ### CLI
 
 - add a command to analyze one session explicitly
 - show the short report in text mode
 - support JSON output for scripting and later automation
+- keep session-listing behavior focused on primary sessions only unless a later task explicitly expands CLI visibility of non-primary sessions
 
 ### UI
 
-- show the analysis result in a compact form
-- make analysis sessions inspectable in a dedicated development-oriented view or filter
-- keep analysis sessions out of the ordinary session list by default
+- allow analysis to be triggered from the base session and/or session tree selection
+- show analysis sessions live while they run
+- allow follow-up questions inside the analysis session
+- keep analysis sessions out of the ordinary top-level session list by default
+- when non-primary sessions are revealed, show analysis sessions under their parent session in the tree view
+- support viewing analysis in a separate surface so the base session can remain visible
+- allow deleting selected analysis sessions
+- add a dedicated analysis-configuration screen for models, prompts, alternatives, and default selection
+- use a default title pattern for analysis sessions based on the selected analysis model/profile name so multiple analyses are easy to distinguish
 
 ## Important design notes
 
@@ -178,10 +263,12 @@ The model should be pushed to:
 - expectations should guide evaluation, not pretend the run has only one valid path
 - the analysis prompt should emphasize factual, trace-based observations
 - the output should be small enough to be useful in repeated workflows
-- this task should create the reusable primitive that later benchmark automation builds on
+- the reusable typed parent-linked session primitive should come from `session-types-and-parent-links.md`
 - the implementation should stay product-specific and avoid growing into a full generic agent framework
 - analysis sessions must be clearly separated from normal user sessions
 - the analysis agent should get only the mcpscope MCP tools it actually needs for session analysis
+- configuration for analysis sessions should reuse and strengthen the existing configuration architecture rather than bypass it
+- this task should not require benchmark details; benchmark object design remains part of benchmark tasks as long as session-parent semantics are respected
 
 ## Expected result
 
@@ -191,4 +278,7 @@ After this task:
 - mcpscope can run an analysis agent against that session
 - mcpscope can produce a compact report about whether the run matched the expectations and what the main issues were
 - analysis runs are clearly represented as dedicated internal analysis sessions rather than ordinary sessions
-- the project has a concrete foundation for later benchmark automation
+- users can run multiple analyses against one primary session and inspect/delete them independently
+- the GUI can reveal those analysis sessions under the base session when non-primary sessions are shown
+- analysis model/prompt configuration is first-class and consistent with the rest of product configuration
+- the project has a concrete per-session analysis layer that later benchmark automation can build on

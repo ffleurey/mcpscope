@@ -35,6 +35,7 @@ Add a first-class **benchmark automation** workflow that can:
 
 This task should build on:
 
+- `backlog/session-types-and-parent-links.md`
 - `backlog/session-analysis-agent.md`
 - `backlog/session-batch-runs.md`
 - the completed `backlog/done/mcpscope-mcp-interface.md` work
@@ -45,7 +46,12 @@ The intended layering is:
 2. grouped repeated runs / prompt sets
 3. benchmark-level synthesis and reporting
 
-That means benchmark automation should build on the specialized analysis-session machinery from `session-analysis-agent.md`, not invent a separate generic agent subsystem.
+That means benchmark automation should build on:
+
+- the generalized typed parent-linked session model from `session-types-and-parent-links.md`
+- the specialized analysis-session machinery from `session-analysis-agent.md`
+
+It should not invent a separate generic agent subsystem.
 
 It should also inherit the same principle for tool access:
 
@@ -73,6 +79,11 @@ That synthesis step will likely also need a dedicated internal session type, sep
 
 - normal user sessions
 - per-session analysis sessions
+
+Likely relationship:
+
+- benchmark run sessions may optionally have a benchmark/experiment parent
+- benchmark synthesis sessions should have a mandatory benchmark/experiment parent
 
 ## Important scope boundary
 
@@ -129,7 +140,7 @@ This may require a second agent step that synthesizes multiple per-session repor
 If so, that synthesis should also run as a clearly identified internal workflow with:
 
 - its own configuration
-- its own session type or equivalent classification
+- its own session type
 - explicit links to the experiment and analyzed sessions
 
 ### 4. Reports stay inspectable
@@ -208,7 +219,7 @@ the product needs a clear visibility model.
 
 The likely rule is:
 
-- normal session lists show normal user/evaluation sessions
+- normal session lists show primary sessions
 - internal analysis/synthesis sessions are hidden by default
 - dedicated development-oriented views can reveal them for debugging
 
@@ -221,6 +232,7 @@ The likely rule is:
 - run per-session analysis automatically
 - add benchmark-level aggregation and possibly synthesis
 - store enough structure to inspect results later
+- define how primary benchmark run sessions and benchmark-analysis sessions attach to benchmark/experiment parents
 - preserve explicit links between:
   - experiment
   - normal run sessions

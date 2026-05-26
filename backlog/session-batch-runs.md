@@ -124,6 +124,7 @@ Minimum likely operations:
 - preserve sequential execution so LM/MCP contention stays controlled
 - treat experiments as a grouping and lifecycle layer above sessions, not as a replacement for sessions
 - make experiment deletion explicit and safe because it implies deleting multiple sessions
+- in the future typed parent-linked session model, a primary run session may optionally belong to a benchmark/experiment parent object
 
 ## Out of scope for now
 
@@ -140,3 +141,9 @@ This task should follow the global lock / single-active-session work.
 That lock gives the product a clear execution model first; experiment batches can then be built as an intentional sequential scheduler on top of it.
 
 It also overlaps conceptually with future naming and metadata work because experiments will need clear labels and grouping semantics.
+
+It should also align with:
+
+- `backlog/session-types-and-parent-links.md`
+
+so benchmark/experiment grouping and child analysis/synthesis sessions do not end up with competing ownership models.

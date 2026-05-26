@@ -61,3 +61,13 @@ This remains the main quality gap beyond the CLI work.
 
 - support artifacts such as charts, tables, HTML fragments, and files
 - keep large user-facing artifacts out of model context whenever possible
+
+### 5. Session types and parent links
+
+- future internal workflows such as session analysis, advanced compaction, and benchmark synthesis should reuse normal sessions rather than invent a second runtime concept
+- that requires future session metadata for session type plus a parent reference to the owning object
+- this is not implemented yet; see:
+  - `backlog/session-types-and-parent-links.md`
+  - `backlog/session-analysis-agent.md`
+  - `backlog/session-compaction-agent.md`
+  - `backlog/benchmark-automation.md`
