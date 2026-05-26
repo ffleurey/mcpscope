@@ -6,6 +6,9 @@ export const capturedMultiTurnToolTrace: SessionTraceBundle = {
     title: 'Captured multi-turn tool trace',
     status: 'active',
     initStatus: 'ready',
+    sessionType: 'primary',
+    parentKind: null,
+    parentId: null,
     createdAt: 1,
     updatedAt: 40,
     modelProfileSnapshot: {

@@ -2,6 +2,9 @@ import { z } from 'zod'
 
 export const DOMAIN_MODEL_VERSION = 1
 
+export const sessionTypeValues = ['primary', 'session_analysis', 'session_compaction', 'benchmark_analysis'] as const
+export const parentKindValues = ['session', 'benchmark'] as const
+
 export const sessionStatusValues = ['draft', 'ready', 'active', 'error', 'archived'] as const
 export const sessionInitStatusValues = ['pending', 'initializing', 'ready', 'error'] as const
 export const turnStatusValues = ['draft', 'streaming', 'awaiting-tools', 'complete', 'error', 'aborted'] as const
@@ -31,6 +34,9 @@ export const exchangeKindValues = [
   'mcp-request',
   'mcp-response',
 ] as const
+
+export const sessionTypeSchema = z.enum(sessionTypeValues)
+export const parentKindSchema = z.enum(parentKindValues)
 
 export const sessionStatusSchema = z.enum(sessionStatusValues)
 export const sessionInitStatusSchema = z.enum(sessionInitStatusValues)
@@ -100,6 +106,9 @@ export const sessionRecordSchema = z.object({
   title: z.string(),
   status: sessionStatusSchema,
   initStatus: sessionInitStatusSchema,
+  sessionType: sessionTypeSchema.default('primary'),
+  parentKind: parentKindSchema.nullable().default(null),
+  parentId: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   modelProfileSnapshot: modelProfileSnapshotSchema,
@@ -118,6 +127,9 @@ export const sessionSummarySchema = z.object({
   title: z.string(),
   status: sessionStatusSchema,
   initStatus: sessionInitStatusSchema,
+  sessionType: sessionTypeSchema.default('primary'),
+  parentKind: parentKindSchema.nullable().default(null),
+  parentId: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   isContextExhausted: z.boolean(),
@@ -200,6 +212,8 @@ export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>
 export type TokenMetadata = z.infer<typeof tokenMetadataSchema>
 export type CompactionStrategy = z.infer<typeof compactionStrategySchema>
+export type SessionType = z.infer<typeof sessionTypeSchema>
+export type ParentKind = z.infer<typeof parentKindSchema>
 export type SessionRecord = z.infer<typeof sessionRecordSchema>
 export type SessionSummary = z.infer<typeof sessionSummarySchema>
 export type TurnRecord = z.infer<typeof turnRecordSchema>
@@ -212,6 +226,8 @@ export function getDomainModelSummary() {
     version: DOMAIN_MODEL_VERSION,
     entities: ['session', 'turn', 'round', 'part', 'raw-exchange'],
     enums: {
+      sessionTypeValues,
+      parentKindValues,
       sessionStatusValues,
       sessionInitStatusValues,
       turnStatusValues,

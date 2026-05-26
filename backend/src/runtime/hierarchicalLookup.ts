@@ -255,6 +255,7 @@ export function resolveHierarchicalId(
     const data: Record<string, unknown> = {
       id: session.id,
       title: session.title,
+      session_type: session.sessionType,
       compaction_strategy: session.compactionStrategy,
       model: {
         name: session.modelProfileSnapshot.name,
@@ -266,6 +267,10 @@ export function resolveHierarchicalId(
       },
       setup: buildSetupNode(session.id, setupParts, mode, false),
       turns: turnNodes,
+    }
+
+    if (session.parentKind !== null && session.parentId !== null) {
+      data.parent_ref = { kind: session.parentKind, id: session.parentId }
     }
 
     if (session.mcpProfileSnapshot) {

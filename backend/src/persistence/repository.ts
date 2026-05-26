@@ -14,6 +14,7 @@ import type {
   ModelConfig as ModelConfigRecord,
   McpServerProfile as McpServerProfileRecord,
 } from '../domain/configuration.js'
+import { validateSessionParent } from '../domain/sessionValidation.js'
 
 function parseJson<T>(value: string | null): T | null {
   return value ? (JSON.parse(value) as T) : null
@@ -23,17 +24,27 @@ function stringifyJson(value: unknown): string | null {
   return value == null ? null : JSON.stringify(value)
 }
 
+function assertValidSessionParent(session: Pick<SessionRecord, 'sessionType' | 'parentKind' | 'parentId'>): void {
+  const error = validateSessionParent(session.sessionType, session.parentKind, session.parentId)
+  if (error) {
+    throw new Error(`Invalid session metadata: ${error}`)
+  }
+}
+
 export function createSessionRecord(
   connection: Database.Database,
   session: SessionRecord,
 ): void {
+  assertValidSessionParent(session)
   connection.prepare(`
     INSERT INTO sessions (
-      id, title, status, init_status, model_profile_snapshot_json, mcp_profile_snapshot_json,
+      id, title, status, init_status, session_type, parent_kind, parent_id,
+      model_profile_snapshot_json, mcp_profile_snapshot_json,
       loaded_context_length, system_prompt_tokens, tool_definitions_tokens,
       is_context_exhausted, compaction_strategy, created_at, updated_at
     ) VALUES (
-      @id, @title, @status, @initStatus, @modelProfileSnapshotJson, @mcpProfileSnapshotJson,
+      @id, @title, @status, @initStatus, @sessionType, @parentKind, @parentId,
+      @modelProfileSnapshotJson, @mcpProfileSnapshotJson,
       @loadedContextLength, @systemPromptTokens, @toolDefinitionsTokens,
       @isContextExhausted, @compactionStrategy, @createdAt, @updatedAt
     )
@@ -42,6 +53,9 @@ export function createSessionRecord(
     title: session.title,
     status: session.status,
     initStatus: session.initStatus,
+    sessionType: session.sessionType,
+    parentKind: session.parentKind,
+    parentId: session.parentId,
     modelProfileSnapshotJson: JSON.stringify(session.modelProfileSnapshot),
     mcpProfileSnapshotJson: stringifyJson(session.mcpProfileSnapshot),
     loadedContextLength: session.loadedContextLength,
@@ -92,6 +106,9 @@ export function getSessionRecord(
         title: string
         status: SessionRecord['status']
         init_status: SessionRecord['initStatus']
+        session_type: SessionRecord['sessionType']
+        parent_kind: SessionRecord['parentKind']
+        parent_id: string | null
         model_profile_snapshot_json: string
         mcp_profile_snapshot_json: string | null
         loaded_context_length: number | null
@@ -111,6 +128,9 @@ export function getSessionRecord(
     title: row.title,
     status: row.status,
     initStatus: row.init_status,
+    sessionType: row.session_type ?? 'primary',
+    parentKind: row.parent_kind ?? null,
+    parentId: row.parent_id ?? null,
     modelProfileSnapshot: JSON.parse(row.model_profile_snapshot_json) as ModelProfileSnapshot,
     mcpProfileSnapshot: parseJson<McpProfileSnapshot>(row.mcp_profile_snapshot_json),
     loadedContextLength: row.loaded_context_length,
@@ -297,6 +317,9 @@ export function listSessionRecords(connection: Database.Database): SessionRecord
     title: string
     status: SessionRecord['status']
     init_status: SessionRecord['initStatus']
+    session_type: SessionRecord['sessionType']
+    parent_kind: SessionRecord['parentKind']
+    parent_id: string | null
     model_profile_snapshot_json: string
     mcp_profile_snapshot_json: string | null
     loaded_context_length: number | null
@@ -313,6 +336,9 @@ export function listSessionRecords(connection: Database.Database): SessionRecord
     title: row.title,
     status: row.status,
     initStatus: row.init_status,
+    sessionType: row.session_type ?? 'primary',
+    parentKind: row.parent_kind ?? null,
+    parentId: row.parent_id ?? null,
     modelProfileSnapshot: JSON.parse(row.model_profile_snapshot_json) as ModelProfileSnapshot,
     mcpProfileSnapshot: parseJson<McpProfileSnapshot>(row.mcp_profile_snapshot_json),
     loadedContextLength: row.loaded_context_length,
@@ -327,8 +353,19 @@ export function listSessionRecords(connection: Database.Database): SessionRecord
 
 export function deleteSessionRecord(connection: Database.Database, sessionId: string): boolean {
   const result = connection.prepare(`
+    WITH RECURSIVE session_tree(id) AS (
+      SELECT id
+      FROM sessions
+      WHERE id = ?
+      UNION
+      SELECT s.id
+      FROM sessions s
+      JOIN session_tree st
+        ON s.parent_kind = 'session'
+       AND s.parent_id = st.id
+    )
     DELETE FROM sessions
-    WHERE id = ?
+    WHERE id IN (SELECT id FROM session_tree)
   `).run(sessionId)
 
   return result.changes > 0
@@ -406,47 +443,78 @@ export function recoverInterruptedState(connection: Database.Database): void {
   })()
 }
 
+type SessionSummaryRow = {
+  id: string
+  title: string
+  status: SessionSummary['status']
+  init_status: SessionSummary['initStatus']
+  session_type: SessionSummary['sessionType']
+  parent_kind: SessionSummary['parentKind']
+  parent_id: string | null
+  created_at: number
+  updated_at: number
+  is_context_exhausted: number
+  loaded_context_length: number | null
+  compaction_strategy: SessionSummary['compactionStrategy']
+  model_profile_snapshot_json: string
+  mcp_profile_snapshot_json: string | null
+}
+
+function mapSessionSummaryRow(row: SessionSummaryRow): SessionSummary {
+  const modelSnapshot = JSON.parse(row.model_profile_snapshot_json) as { name: string }
+  const mcpSnapshot = row.mcp_profile_snapshot_json
+    ? (JSON.parse(row.mcp_profile_snapshot_json) as { name: string })
+    : null
+  return {
+    id: row.id,
+    title: row.title,
+    status: row.status,
+    initStatus: row.init_status,
+    sessionType: row.session_type ?? 'primary',
+    parentKind: row.parent_kind ?? null,
+    parentId: row.parent_id ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    isContextExhausted: row.is_context_exhausted === 1,
+    loadedContextLength: row.loaded_context_length,
+    compactionStrategy: row.compaction_strategy,
+    modelProfileSnapshot: { name: modelSnapshot.name },
+    mcpProfileSnapshot: mcpSnapshot ? { name: mcpSnapshot.name } : null,
+  }
+}
+
+const SESSION_SUMMARY_COLS = `
+  id, title, status, init_status, session_type, parent_kind, parent_id,
+  created_at, updated_at, is_context_exhausted, loaded_context_length,
+  compaction_strategy, model_profile_snapshot_json, mcp_profile_snapshot_json
+`
+
+/** Returns only primary sessions (session_type = 'primary'). Used by GET /api/sessions. */
 export function listSessionSummaries(connection: Database.Database): SessionSummary[] {
   const rows = connection.prepare(`
-    SELECT
-      id, title, status, init_status, created_at, updated_at,
-      is_context_exhausted, loaded_context_length, compaction_strategy,
-      model_profile_snapshot_json, mcp_profile_snapshot_json
+    SELECT ${SESSION_SUMMARY_COLS}
     FROM sessions
+    WHERE session_type = 'primary'
     ORDER BY updated_at DESC, created_at DESC
-  `).all() as Array<{
-    id: string
-    title: string
-    status: SessionSummary['status']
-    init_status: SessionSummary['initStatus']
-    created_at: number
-    updated_at: number
-    is_context_exhausted: number
-    loaded_context_length: number | null
-    compaction_strategy: SessionSummary['compactionStrategy']
-    model_profile_snapshot_json: string
-    mcp_profile_snapshot_json: string | null
-  }>
+  `).all() as SessionSummaryRow[]
 
-  return rows.map(row => {
-    const modelSnapshot = JSON.parse(row.model_profile_snapshot_json) as { name: string }
-    const mcpSnapshot = row.mcp_profile_snapshot_json
-      ? (JSON.parse(row.mcp_profile_snapshot_json) as { name: string })
-      : null
-    return {
-      id: row.id,
-      title: row.title,
-      status: row.status,
-      initStatus: row.init_status,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      isContextExhausted: row.is_context_exhausted === 1,
-      loadedContextLength: row.loaded_context_length,
-      compactionStrategy: row.compaction_strategy,
-      modelProfileSnapshot: { name: modelSnapshot.name },
-      mcpProfileSnapshot: mcpSnapshot ? { name: mcpSnapshot.name } : null,
-    }
-  })
+  return rows.map(mapSessionSummaryRow)
+}
+
+/** Returns child sessions attached to the given parent (any type, for parent lookup). */
+export function listChildSessionSummaries(
+  connection: Database.Database,
+  parentKind: string,
+  parentId: string,
+): SessionSummary[] {
+  const rows = connection.prepare(`
+    SELECT ${SESSION_SUMMARY_COLS}
+    FROM sessions
+    WHERE parent_kind = ? AND parent_id = ?
+    ORDER BY created_at ASC
+  `).all(parentKind, parentId) as SessionSummaryRow[]
+
+  return rows.map(mapSessionSummaryRow)
 }
 
 function upsertJsonRecord(
@@ -837,11 +905,15 @@ export function insertRawExchangeRecord(connection: Database.Database, exchange:
 }
 
 export function updateSessionRecord(connection: Database.Database, session: SessionRecord): void {
+  assertValidSessionParent(session)
   connection.prepare(`
     UPDATE sessions
     SET title = @title,
         status = @status,
         init_status = @initStatus,
+        session_type = @sessionType,
+        parent_kind = @parentKind,
+        parent_id = @parentId,
         loaded_context_length = @loadedContextLength,
         system_prompt_tokens = @systemPromptTokens,
         tool_definitions_tokens = @toolDefinitionsTokens,
@@ -854,6 +926,9 @@ export function updateSessionRecord(connection: Database.Database, session: Sess
     title: session.title,
     status: session.status,
     initStatus: session.initStatus,
+    sessionType: session.sessionType,
+    parentKind: session.parentKind,
+    parentId: session.parentId,
     loadedContextLength: session.loadedContextLength,
     systemPromptTokens: session.systemPromptTokens,
     toolDefinitionsTokens: session.toolDefinitionsTokens,

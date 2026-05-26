@@ -8,6 +8,9 @@ function makeSession(): SessionRecord {
     title: 'Test session',
     status: 'ready',
     initStatus: 'ready',
+    sessionType: 'primary',
+    parentKind: null,
+    parentId: null,
     createdAt: 1,
     updatedAt: 1,
     modelProfileSnapshot: {

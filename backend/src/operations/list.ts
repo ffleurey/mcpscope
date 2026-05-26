@@ -14,6 +14,9 @@ export interface SessionSummary {
   title: string
   status: string
   init_status: string
+  session_type: string
+  parent_kind: string | null
+  parent_id: string | null
   created_at: number
   updated_at: number
   is_context_exhausted: boolean
@@ -36,6 +39,9 @@ export const listOutputSchema = {
     title: z.string(),
     status: z.string(),
     init_status: z.string(),
+    session_type: z.string(),
+    parent_kind: z.string().nullable(),
+    parent_id: z.string().nullable(),
     created_at: z.number(),
     updated_at: z.number(),
     is_context_exhausted: z.boolean(),
@@ -60,6 +66,9 @@ export const listOperation = {
         title: s.title,
         status: s.status,
         init_status: s.initStatus,
+        session_type: s.sessionType,
+        parent_kind: s.parentKind,
+        parent_id: s.parentId,
         created_at: s.createdAt,
         updated_at: s.updatedAt,
         is_context_exhausted: s.isContextExhausted,
