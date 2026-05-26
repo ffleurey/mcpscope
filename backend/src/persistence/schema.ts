@@ -272,6 +272,12 @@ export function validateBackendSchema(connection: Database.Database): void {
       'token_count', 'token_source', 'token_confidence', 'token_note',
       'provenance_json', 'created_at', 'updated_at',
     ],
+    analysis_profiles: [
+      'id', 'name', 'record_json', 'created_at', 'updated_at',
+    ],
+    analysis_defaults: [
+      'id', 'default_analysis_profile_id', 'updated_at',
+    ],
   }
 
   const missing: string[] = []

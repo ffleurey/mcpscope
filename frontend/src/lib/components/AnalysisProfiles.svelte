@@ -69,7 +69,12 @@
   <div class="view-header">
     <h2>Analysis Profiles</h2>
     {#if !showNew}
-      <button class="btn btn-primary" onclick={startNew}>+ New Analysis Profile</button>
+      <button
+        class="btn btn-primary"
+        onclick={startNew}
+        disabled={$modelConfigs.length === 0}
+        title={$modelConfigs.length === 0 ? 'Create a model config first' : 'Create a new analysis profile'}
+      >+ New Analysis Profile</button>
     {/if}
   </div>
 
