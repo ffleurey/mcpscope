@@ -99,11 +99,11 @@ describe('backend foundation', () => {
       entities: ['session', 'turn', 'round', 'part', 'raw-exchange'],
     })
     expect(body.schema.tables).toEqual(
-      expect.arrayContaining(['sessions', 'turns', 'rounds', 'parts', 'raw_exchanges', 'session_creation_defaults'])
+      expect.arrayContaining(['sessions', 'turns', 'rounds', 'parts', 'raw_exchanges', 'session_creation_defaults', 'analysis_profiles', 'analysis_defaults'])
     )
     expect(body.schema.meta).toMatchObject({
       domain_model_version: '1',
-      sqlite_schema_version: '6',
+      sqlite_schema_version: '7',
     })
   })
 
@@ -2973,5 +2973,178 @@ describe('CLI session lifecycle endpoints', () => {
       expect(createRes.json().error.code).toBe('another_session_active')
       expect(createRes.json().error.active_session.id).toBe(sessionAId)
     }, 15_000)
+  })
+})
+
+describe('analysis profiles', () => {
+  let app: FastifyInstance | undefined
+  let dataDir: string | undefined
+
+  afterEach(async () => {
+    await app?.close()
+    app = undefined
+    if (dataDir) {
+      fs.rmSync(dataDir, { recursive: true, force: true })
+      dataDir = undefined
+    }
+  })
+
+  const modelConfig = {
+    id: 'mc-1',
+    name: 'Test Model',
+    connectionId: 'lm-1',
+    modelKey: 'qwen-1',
+    modelDisplayName: 'Qwen 1',
+    systemPrompt: 'You are helpful.',
+    temperature: 0.7,
+    reasoning: 'on' as const,
+    createdAt: 1,
+    updatedAt: 2,
+  }
+
+  const analysisProfile = {
+    id: 'ap-1',
+    name: 'Analysis Profile 1',
+    modelConfigId: 'mc-1',
+    systemPrompt: 'Analyse the session.',
+    temperature: 0.5,
+    reasoning: 'on' as const,
+    createdAt: 10,
+    updatedAt: 11,
+  }
+
+  async function setupApp() {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+    await app.inject({ method: 'PUT', url: '/api/model-configs/mc-1', payload: modelConfig })
+    return app
+  }
+
+  it('GET /api/analysis-profiles returns empty list initially', async () => {
+    app = await (async () => { const c = makeTestConfig(); dataDir = c.dataDir; return buildBackendApp(c) })()
+    const res = await app.inject({ method: 'GET', url: '/api/analysis-profiles' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ analysisProfiles: [] })
+  })
+
+  it('GET /api/analysis-defaults returns null default initially', async () => {
+    app = await (async () => { const c = makeTestConfig(); dataDir = c.dataDir; return buildBackendApp(c) })()
+    const res = await app.inject({ method: 'GET', url: '/api/analysis-defaults' })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().analysisDefaults.defaultAnalysisProfileId).toBeNull()
+  })
+
+  it('creates, lists, and deletes an analysis profile', async () => {
+    await setupApp()
+
+    const putRes = await app!.inject({
+      method: 'PUT',
+      url: '/api/analysis-profiles/ap-1',
+      payload: analysisProfile,
+    })
+    expect(putRes.statusCode).toBe(200)
+    expect(putRes.json().analysisProfile).toEqual(analysisProfile)
+
+    const listRes = await app!.inject({ method: 'GET', url: '/api/analysis-profiles' })
+    expect(listRes.statusCode).toBe(200)
+    expect(listRes.json().analysisProfiles).toEqual([analysisProfile])
+
+    const deleteRes = await app!.inject({ method: 'DELETE', url: '/api/analysis-profiles/ap-1' })
+    expect(deleteRes.statusCode).toBe(204)
+
+    const listAfter = await app!.inject({ method: 'GET', url: '/api/analysis-profiles' })
+    expect(listAfter.json().analysisProfiles).toEqual([])
+  })
+
+  it('rejects PUT when path id and body id mismatch', async () => {
+    await setupApp()
+    const res = await app!.inject({
+      method: 'PUT',
+      url: '/api/analysis-profiles/ap-wrong',
+      payload: analysisProfile,
+    })
+    expect(res.statusCode).toBe(400)
+    expect(res.json().error.type).toBe('validation')
+  })
+
+  it('rejects PUT when modelConfigId does not exist', async () => {
+    app = await (async () => { const c = makeTestConfig(); dataDir = c.dataDir; return buildBackendApp(c) })()
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/analysis-profiles/ap-1',
+      payload: { ...analysisProfile, modelConfigId: 'nonexistent' },
+    })
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.code).toBe('analysis_profile_model_config_not_found')
+  })
+
+  it('sets and clears analysis default', async () => {
+    await setupApp()
+    await app!.inject({ method: 'PUT', url: '/api/analysis-profiles/ap-1', payload: analysisProfile })
+
+    const setRes = await app!.inject({
+      method: 'PUT',
+      url: '/api/analysis-defaults',
+      payload: { defaultAnalysisProfileId: 'ap-1' },
+    })
+    expect(setRes.statusCode).toBe(200)
+    expect(setRes.json().analysisDefaults.defaultAnalysisProfileId).toBe('ap-1')
+
+    const getRes = await app!.inject({ method: 'GET', url: '/api/analysis-defaults' })
+    expect(getRes.json().analysisDefaults.defaultAnalysisProfileId).toBe('ap-1')
+
+    const clearRes = await app!.inject({
+      method: 'PUT',
+      url: '/api/analysis-defaults',
+      payload: { defaultAnalysisProfileId: null },
+    })
+    expect(clearRes.statusCode).toBe(200)
+    expect(clearRes.json().analysisDefaults.defaultAnalysisProfileId).toBeNull()
+  })
+
+  it('rejects setting default to a nonexistent analysis profile', async () => {
+    app = await (async () => { const c = makeTestConfig(); dataDir = c.dataDir; return buildBackendApp(c) })()
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/analysis-defaults',
+      payload: { defaultAnalysisProfileId: 'nonexistent' },
+    })
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.code).toBe('default_analysis_profile_not_found')
+  })
+
+  it('rejects deleting the current default analysis profile', async () => {
+    await setupApp()
+    await app!.inject({ method: 'PUT', url: '/api/analysis-profiles/ap-1', payload: analysisProfile })
+    await app!.inject({ method: 'PUT', url: '/api/analysis-defaults', payload: { defaultAnalysisProfileId: 'ap-1' } })
+
+    const deleteRes = await app!.inject({ method: 'DELETE', url: '/api/analysis-profiles/ap-1' })
+    expect(deleteRes.statusCode).toBe(409)
+    expect(deleteRes.json().error.code).toBe('default_analysis_profile_in_use')
+  })
+
+  it('returns 404 when deleting a nonexistent analysis profile', async () => {
+    app = await (async () => { const c = makeTestConfig(); dataDir = c.dataDir; return buildBackendApp(c) })()
+    const res = await app.inject({ method: 'DELETE', url: '/api/analysis-profiles/nonexistent' })
+    expect(res.statusCode).toBe(404)
+  })
+
+  it('rejects deleting a model config that is referenced by an analysis profile', async () => {
+    await setupApp()
+    await app!.inject({ method: 'PUT', url: '/api/analysis-profiles/ap-1', payload: analysisProfile })
+
+    const deleteRes = await app!.inject({ method: 'DELETE', url: '/api/model-configs/mc-1' })
+    expect(deleteRes.statusCode).toBe(409)
+    expect(deleteRes.json().error.code).toBe('model_config_in_use_by_analysis_profile')
+  })
+
+  it('allows deleting a model config once its analysis profile references are removed', async () => {
+    await setupApp()
+    await app!.inject({ method: 'PUT', url: '/api/analysis-profiles/ap-1', payload: analysisProfile })
+    await app!.inject({ method: 'DELETE', url: '/api/analysis-profiles/ap-1' })
+
+    const deleteRes = await app!.inject({ method: 'DELETE', url: '/api/model-configs/mc-1' })
+    expect(deleteRes.statusCode).toBe(204)
   })
 })

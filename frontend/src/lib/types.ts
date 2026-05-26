@@ -37,4 +37,20 @@ export interface SessionCreationDefaults {
   updatedAt: number
 }
 
-export type NavView = 'chats' | 'connections' | 'model-configs' | 'mcp-profiles'
+export interface AnalysisProfile {
+  id: string
+  name: string
+  modelConfigId: string
+  systemPrompt: string
+  temperature: number
+  reasoning?: 'on' | 'off'
+  createdAt: number
+  updatedAt: number
+}
+
+export interface AnalysisDefaults {
+  defaultAnalysisProfileId: string | null
+  updatedAt: number
+}
+
+export type NavView = 'chats' | 'connections' | 'model-configs' | 'mcp-profiles' | 'analysis-profiles'
