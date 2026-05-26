@@ -2,6 +2,8 @@
 
 This increment delivers the first end-to-end analysis workflow.
 
+Status: completed in the current PR, with the remaining backend-owned launch orchestration and CLI/MCP trigger work deferred to `backlog/session-analysis-backend-owned-launch.md`.
+
 ## Dependencies
 
 - `backlog/done/session-metadata-foundation.md`
@@ -204,7 +206,7 @@ After this increment:
 
 The coding agent should start from these files and patterns before editing:
 
-- `backlog/session-analysis-launch-and-report.md` — this task, the source of truth for the increment
+- `backlog/done/session-analysis-launch-and-report.md` — this task, the source of truth for the increment
 - `backlog/session-tree-navigation.md` — design reference for tree shaping and display rules used by this MVP
 - `backlog/done/mcpscope-mcp-interface.md` — source of truth for the internal mcpscope MCP surface
 - `backend/src/app.ts` — existing session routes, child-session route, and HTTP wiring patterns

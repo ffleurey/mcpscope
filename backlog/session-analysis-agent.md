@@ -24,7 +24,7 @@ This feature depends on:
 In practice, it should build on:
 
 - `backlog/done/session-metadata-foundation.md`
-- the minimum parent/child tree behavior, now absorbed into `backlog/session-analysis-launch-and-report.md`
+- the shipped tree-integrated MVP from `backlog/done/session-analysis-launch-and-report.md`
 
 ## Fixed v1 decisions
 
@@ -58,7 +58,7 @@ This should be testable before any analysis execution exists.
 
 This increment is now complete.
 
-### 2. `backlog/session-analysis-launch-and-report.md`
+### 2. `backlog/done/session-analysis-launch-and-report.md`
 
 Backend/CLI/tree-integrated MVP increment:
 
@@ -72,7 +72,17 @@ Backend/CLI/tree-integrated MVP increment:
 
 This is the first increment that should produce a real end-to-end analysis result.
 
-### 3. `backlog/analysis-follow-up-and-viewing.md`
+This increment is now complete, with the remaining backend-owned launch/CLI/MCP refactor tracked separately below.
+
+### 3. `backlog/session-analysis-backend-owned-launch.md`
+
+Backend ownership and automation increment:
+
+- move analysis launch orchestration fully into a backend-owned reusable path
+- expose that same launch path to future CLI and MCP triggers
+- keep the UI on top of that shared launch surface instead of owning the orchestration itself
+
+### 4. `backlog/analysis-follow-up-and-viewing.md`
 
 Interactive UI increment:
 

@@ -15,18 +15,18 @@
   let analysisTarget = $state<{ id: string; title: string } | null>(null)
 
   // ─── Tree shaping ────────────────────────────────────────────────────────────
-  // Primary sessions sorted newest-first; for each primary session, collect
-  // its session_analysis children sorted oldest-first.
+  // Primary sessions sorted by creation time newest-first; for each primary
+  // session, collect its child sessions newest-first as well.
   const primarySessions = $derived(
     [...$chatSessions]
       .filter(s => s.session_type === 'primary')
-      .sort((a, b) => b.updated_at - a.updated_at),
+      .sort((a, b) => b.created_at - a.created_at),
   )
 
   function childrenOf(parentId: string): SessionSummary[] {
     return [...$chatSessions]
       .filter(s => s.parent_kind === 'session' && s.parent_id === parentId)
-      .sort((a, b) => a.created_at - b.created_at)
+      .sort((a, b) => b.created_at - a.created_at)
   }
 
   // Track which primary sessions have their children expanded.

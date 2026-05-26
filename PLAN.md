@@ -44,8 +44,10 @@ The next feature should build on the parent-linked session foundation rather tha
 - goal: run a dedicated internal analysis session against one finished base session and produce a compact, trace-grounded report
 - completed configuration increment:
   - `backlog/done/analysis-configurations.md`
+- completed tree-integrated MVP increment:
+  - `backlog/done/session-analysis-launch-and-report.md`
 - next remaining increment:
-  - `backlog/session-analysis-launch-and-report.md`
+  - `backlog/session-analysis-backend-owned-launch.md`
 - later UI increment:
   - `backlog/analysis-follow-up-and-viewing.md`
 - the epic/background spec remains:
