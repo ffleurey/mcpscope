@@ -16,18 +16,34 @@ These decisions now shape the active parent-link and analysis work:
 6. analysis configuration starts simple: named analysis profiles plus one default
 7. the tree view should sort siblings newest-first and show compact date/time
 
+## Recently completed increments
+
+- `backlog/done/session-metadata-foundation.md`
+- `backlog/done/analysis-configurations.md`
+
 ## Active split for the next implementation steps
 
 The larger specs are now split into smaller, testable increments:
 
 - `backlog/session-types-and-parent-links.md` — epic/background spec
-  - `backlog/session-metadata-foundation.md`
   - `backlog/session-tree-navigation.md`
 
 - `backlog/session-analysis-agent.md` — epic/background spec
-  - `backlog/analysis-configurations.md`
   - `backlog/session-analysis-launch-and-report.md`
   - `backlog/analysis-follow-up-and-viewing.md`
+
+## Next implementation step
+
+The next recommended increment is:
+
+- `backlog/session-analysis-launch-and-report.md`
+
+Reasoning:
+
+- the backend parent-link foundation is now complete
+- the analysis-profile configuration increment is now complete
+- the MVP task now explicitly includes the minimum tree behavior needed to show analysis child sessions beneath their parent
+- this is the first remaining analysis increment that delivers a real end-to-end result without splitting execution from navigation
 
 ## Still deferred
 

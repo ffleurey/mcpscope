@@ -23,8 +23,8 @@ This feature depends on:
 
 In practice, it should build on:
 
-- `backlog/session-metadata-foundation.md`
-- `backlog/session-tree-navigation.md`
+- `backlog/done/session-metadata-foundation.md`
+- the minimum parent/child tree behavior, now absorbed into `backlog/session-analysis-launch-and-report.md`
 
 ## Fixed v1 decisions
 
@@ -46,7 +46,7 @@ The intended implementation is to **bootstrap mcpscope on itself**:
 
 ## Implementation increments
 
-### 1. `backlog/analysis-configurations.md`
+### 1. `backlog/done/analysis-configurations.md`
 
 Configuration increment:
 
@@ -56,15 +56,19 @@ Configuration increment:
 
 This should be testable before any analysis execution exists.
 
+This increment is now complete.
+
 ### 2. `backlog/session-analysis-launch-and-report.md`
 
-Backend/CLI execution increment:
+Backend/CLI/tree-integrated MVP increment:
 
-- explicit expectations input for one base session
+- explicit user-supplied analysis prompt for one base session
 - creation of a child analysis session
+- binding that child session to mcpscope's own MCP endpoint with a restricted analysis tool subset
 - restricted analysis MCP tool subset
 - compact structured report output
 - CLI/API launch surface
+- tree-based UI launch that shows the created child session beneath its parent, navigates into it, and reuses the standard session view for streaming and follow-up
 
 This is the first increment that should produce a real end-to-end analysis result.
 
@@ -72,11 +76,9 @@ This is the first increment that should produce a real end-to-end analysis resul
 
 Interactive UI increment:
 
-- launch from the base session and/or tree selection
-- live visibility while analysis runs
-- follow-up turns in the same analysis session
 - separate viewing surface so the base session can stay visible
 - selective delete of individual analysis sessions
+- richer launch entry points from the base session and/or tree selection
 
 ## Important design notes
 

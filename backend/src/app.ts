@@ -44,6 +44,7 @@ import {
   upsertMcpServerProfile,
   upsertModelConfig,
   listChildSessionSummaries,
+  listAllSessionSummaries,
   upsertAnalysisProfile,
   listAnalysisProfiles,
   deleteAnalysisProfile,
@@ -86,6 +87,7 @@ import {
   type OperationContext,
 } from './operations/index.js'
 import { executeCreateExplicit } from './operations/createExplicit.js'
+import { executeAnalysisLaunch } from './operations/launchAnalysis.js'
 
 interface RuntimeDependencies {
   lmStudioGateway: LmStudioGateway
@@ -173,11 +175,16 @@ export async function buildBackendApp(
 
   // Register MCP Streamable HTTP transport. Routes: POST/GET/DELETE /mcp
   // Operations execute directly against the backend (no loopback HTTP).
+  // Build the analysis MCP URL from the backend's own host/port.
+  // Analysis sessions use /mcp/analysis which exposes only inspect + status.
+  const analysisMcpUrl = `http://${config.host}:${config.port}/mcp/analysis`
+
   const opCtx: OperationContext = {
     db: database,
     lmStudioGateway: dependencies.lmStudioGateway,
     mcpGateway: dependencies.mcpGateway,
     maxToolRounds: config.maxToolRounds,
+    analysisMcpUrl,
     logger: app.log,
   }
   registerMcpTransport(app, opCtx)
@@ -290,7 +297,37 @@ export async function buildBackendApp(
   })
 
   // ─── List sessions ─────────────────────────────────────────────────────────
-  app.get('/api/sessions', async () => {
+  // Supports ?include_children=true to return all sessions (primary + children)
+  // for tree rendering in the frontend. The operation-layer list always returns
+  // primary-only (used by CLI/MCP); only the HTTP route layer expands this.
+  app.get('/api/sessions', async (request) => {
+    const { include_children } = z.object({
+      include_children: z.enum(['true', 'false']).optional(),
+    }).parse(request.query)
+
+    if (include_children === 'true') {
+      const rows = listAllSessionSummaries(database.connection)
+      return {
+        api_version: 1,
+        sessions: rows.map(s => ({
+          id: s.id,
+          title: s.title,
+          status: s.status,
+          init_status: s.initStatus,
+          session_type: s.sessionType,
+          parent_kind: s.parentKind,
+          parent_id: s.parentId,
+          created_at: s.createdAt,
+          updated_at: s.updatedAt,
+          is_context_exhausted: s.isContextExhausted,
+          loaded_context_length: s.loadedContextLength,
+          compaction_strategy: s.compactionStrategy,
+          model_profile_snapshot: { name: s.modelProfileSnapshot.name },
+          mcp_profile_snapshot: s.mcpProfileSnapshot ? { name: s.mcpProfileSnapshot.name } : null,
+        })),
+      }
+    }
+
     return listOperation.execute(opCtx, {})
   })
 
@@ -333,6 +370,23 @@ export async function buildBackendApp(
         model_profile_snapshot: { name: s.modelProfileSnapshot.name },
         mcp_profile_snapshot: s.mcpProfileSnapshot ? { name: s.mcpProfileSnapshot.name } : null,
       })),
+    }
+  })
+
+  // ─── Launch analysis session ────────────────────────────────────────────────
+  // Creates a session_analysis child session bound to mcpscope's own restricted
+  // MCP endpoint, ready for the frontend to initialize and run the first turn.
+  app.post('/api/sessions/:sessionId/analyze', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    try {
+      const result = await executeAnalysisLaunch(opCtx, sessionId, request.body)
+      reply.code(201)
+      return {
+        session: result.session,
+        analysis_prompt: result.analysis_prompt,
+      }
+    } catch (err) {
+      return handleOperationError(err, reply)
     }
   })
 

@@ -1,13 +1,15 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { OperationError } from '../operations/errors.js'
-import { operationList } from '../operations/index.js'
+import { operationList, operationCatalog } from '../operations/index.js'
 import type { OperationContext } from '../operations/index.js'
+
+type Operation = (typeof operationCatalog)[keyof typeof operationCatalog]
 
 // MCP tool name prefix applied automatically to all canonical operation IDs.
 const TOOL_PREFIX = 'mcpscope_'
 
 /**
- * Create and configure an McpServer from the backend-owned operation catalog.
+ * Shared factory: build an McpServer that exposes exactly the given operations.
  *
  * Each operation becomes one MCP tool named `mcpscope_<id>`.
  * Descriptions, input schemas, output schemas, and execute functions all come
@@ -17,13 +19,17 @@ const TOOL_PREFIX = 'mcpscope_'
  * Results are returned as both `content` (text fallback) and `structuredContent`
  * (structured output for clients that support outputSchema).
  */
-export function createMcpServer(ctx: OperationContext): McpServer {
+export function buildMcpServer(
+  ctx: OperationContext,
+  ops: readonly Operation[],
+  serverName = 'mcpscope',
+): McpServer {
   const server = new McpServer(
-    { name: 'mcpscope', version: '1.0.0' },
+    { name: serverName, version: '1.0.0' },
     { capabilities: { tools: {} } },
   )
 
-  for (const op of operationList) {
+  for (const op of ops) {
     const toolName = `${TOOL_PREFIX}${op.id}`
     server.registerTool(
       toolName,
@@ -68,6 +74,11 @@ export function createMcpServer(ctx: OperationContext): McpServer {
   }
 
   return server
+}
+
+/** Create an McpServer exposing the full operation catalog. */
+export function createMcpServer(ctx: OperationContext): McpServer {
+  return buildMcpServer(ctx, operationList)
 }
 
 export { TOOL_PREFIX }

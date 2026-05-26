@@ -42,7 +42,7 @@ The new work is metadata around the session, not a replacement for the session/t
 
 ## Implementation increments
 
-### 1. `backlog/session-metadata-foundation.md`
+### 1. `backlog/done/session-metadata-foundation.md`
 
 Backend-first, testable foundation:
 
@@ -55,6 +55,8 @@ Backend-first, testable foundation:
 - inspectable metadata in API/CLI/MCP surfaces
 
 This is the first increment because it gives a useful, testable result without requiring the new tree UI yet.
+
+This increment is now complete.
 
 ### 2. `backlog/session-tree-navigation.md`
 

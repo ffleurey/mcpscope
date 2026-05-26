@@ -405,6 +405,11 @@ export const analysisDefaultsResponseSchema = z.object({
   analysisDefaults: analysisDefaultsSchema,
 })
 
+export const launchAnalysisResponseSchema = z.object({
+  session: sessionRecordSchema,
+  analysis_prompt: z.string(),
+})
+
 export type SessionCreationDefaults = z.infer<typeof sessionCreationDefaultsSchema>
 
 export type LmStudioConnection = z.infer<typeof lmStudioConnectionSchema>
@@ -429,3 +434,4 @@ export type LmStudioStreamDelta = z.infer<typeof lmStudioStreamDeltaSchema>
 export type TurnStreamEvent = z.infer<typeof turnStreamEventSchema>
 export type PreludeStreamEvent = z.infer<typeof preludeStreamEventSchema>
 export type HierarchicalLookupResponse = z.infer<typeof hierarchicalLookupResponseSchema>
+export type LaunchAnalysisResponse = z.infer<typeof launchAnalysisResponseSchema>

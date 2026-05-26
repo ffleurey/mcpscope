@@ -30,9 +30,9 @@ For the canonical runtime model and lookup vocabulary, use [DATA-MODEL.md](DATA-
 This is the next implementation priority because it is the foundation for the session-analysis-agent work.
 
 - goal: add typed sessions plus parent links without changing the canonical runtime tree
-- step 1 should be independently testable at the backend/API level before the broader analysis workflow lands
-- implementation is now split into:
-  - `backlog/session-metadata-foundation.md`
+- completed foundation step:
+  - `backlog/done/session-metadata-foundation.md`
+- next remaining increment:
   - `backlog/session-tree-navigation.md`
 - the epic/background spec remains:
   - `backlog/session-types-and-parent-links.md`
@@ -42,9 +42,11 @@ This is the next implementation priority because it is the foundation for the se
 The next feature should build on the parent-linked session foundation rather than bypass it.
 
 - goal: run a dedicated internal analysis session against one finished base session and produce a compact, trace-grounded report
-- implementation is now split into:
-  - `backlog/analysis-configurations.md`
+- completed configuration increment:
+  - `backlog/done/analysis-configurations.md`
+- next remaining increment:
   - `backlog/session-analysis-launch-and-report.md`
+- later UI increment:
   - `backlog/analysis-follow-up-and-viewing.md`
 - the epic/background spec remains:
   - `backlog/session-analysis-agent.md`

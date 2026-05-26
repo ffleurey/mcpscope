@@ -518,6 +518,17 @@ export function listChildSessionSummaries(
   return rows.map(mapSessionSummaryRow)
 }
 
+/** Returns all sessions regardless of type — used by GET /api/sessions?include_children=true for tree rendering. */
+export function listAllSessionSummaries(connection: Database.Database): SessionSummary[] {
+  const rows = connection.prepare(`
+    SELECT ${SESSION_SUMMARY_COLS}
+    FROM sessions
+    ORDER BY updated_at DESC, created_at DESC
+  `).all() as SessionSummaryRow[]
+
+  return rows.map(mapSessionSummaryRow)
+}
+
 function upsertJsonRecord(
   connection: Database.Database,
   tableName: string,
