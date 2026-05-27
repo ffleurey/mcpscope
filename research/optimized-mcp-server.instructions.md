@@ -322,7 +322,7 @@ project-root/
 ├── README.md
 ├── DESIGN.md
 ├── REQUIREMENTS.md
-├── PLAN.md
+├── backlog/ROADMAP.md
 ├── RELATED_PROJECTS.md
 ├── TOOLS.md
 ├── research/

@@ -108,5 +108,5 @@ http://localhost:3030/mcp
 
 Future analysis-specific prompt guidance and the restricted analysis MCP tool subset are tracked with the session-analysis backlog increments:
 
-- `backlog/session-analysis-agent.md`
-- `backlog/session-analysis-backend-owned-launch.md`
+- `backlog/specification/session-analysis-agent.md`
+- `backlog/implementation/session-analysis-backend-owned-launch.md`

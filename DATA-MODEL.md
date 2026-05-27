@@ -21,11 +21,11 @@ That future session metadata is tracked separately because it is **around** the 
 
 Relevant future tasks:
 
-- `backlog/session-types-and-parent-links.md`
-- `backlog/session-analysis-agent.md`
-- `backlog/session-compaction-agent.md`
-- `backlog/session-batch-runs.md`
-- `backlog/benchmark-automation.md`
+- `backlog/specification/session-types-and-parent-links.md`
+- `backlog/specification/session-analysis-agent.md`
+- `backlog/candidates/session-compaction-agent.md`
+- `backlog/candidates/session-batch-runs.md`
+- `backlog/candidates/benchmark-automation.md`
 
 ## Canonical tree
 
@@ -72,7 +72,7 @@ The table above describes the currently implemented runtime-session shape.
 
 Future work may add session metadata such as session type and parent reference, but that is not part of the current canonical runtime tree yet. See:
 
-- `backlog/session-types-and-parent-links.md`
+- `backlog/specification/session-types-and-parent-links.md`
 
 ### Setup
 
@@ -272,4 +272,4 @@ Important boundary:
 
 See:
 
-- `backlog/session-types-and-parent-links.md`
+- `backlog/specification/session-types-and-parent-links.md`

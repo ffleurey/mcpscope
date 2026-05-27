@@ -2,14 +2,14 @@
 
 This increment delivers the first end-to-end analysis workflow.
 
-Status: completed in the current PR, with the remaining backend-owned launch orchestration and CLI/MCP trigger work deferred to `backlog/session-analysis-backend-owned-launch.md`.
+Status: completed in the current PR, with the remaining backend-owned launch orchestration and CLI/MCP trigger work deferred to `backlog/implementation/session-analysis-backend-owned-launch.md`.
 
 ## Dependencies
 
-- `backlog/done/session-metadata-foundation.md`
-- `backlog/done/analysis-configurations.md`
+- `backlog/completed/session-metadata-foundation.md`
+- `backlog/completed/analysis-configurations.md`
 
-For the MVP, this task also absorbs the minimum tree-navigation work needed to show analysis child sessions beneath their parent. Use `backlog/session-tree-navigation.md` as a design reference for tree shaping and display rules, not as a separate prerequisite branch.
+For the MVP, this task also absorbs the minimum tree-navigation work needed to show analysis child sessions beneath their parent. Use `backlog/specification/session-tree-navigation.md` as a design reference for tree shaping and display rules, not as a separate prerequisite branch.
 
 ## Goal
 
@@ -56,7 +56,7 @@ It should **not** get broad operational tools such as:
 
 The created analysis session must be wired to mcpscope's own MCP server endpoint rather than to an arbitrary external MCP profile.
 
-- use the mcpscope-hosted MCP surface introduced by `backlog/done/mcpscope-mcp-interface.md`
+- use the mcpscope-hosted MCP surface introduced by `backlog/completed/mcpscope-mcp-interface.md`
 - the analysis session should be able to inspect the target session through that backend-owned surface
 - the backend should provide the MCP snapshot/connection details for this internal analysis flow rather than asking the user to configure an MCP server for it
 - the tool exposure on that endpoint must be restricted to the analysis-focused subset for this workflow
@@ -206,9 +206,9 @@ After this increment:
 
 The coding agent should start from these files and patterns before editing:
 
-- `backlog/done/session-analysis-launch-and-report.md` — this task, the source of truth for the increment
-- `backlog/session-tree-navigation.md` — design reference for tree shaping and display rules used by this MVP
-- `backlog/done/mcpscope-mcp-interface.md` — source of truth for the internal mcpscope MCP surface
+- `backlog/completed/session-analysis-launch-and-report.md` — this task, the source of truth for the increment
+- `backlog/specification/session-tree-navigation.md` — design reference for tree shaping and display rules used by this MVP
+- `backlog/completed/mcpscope-mcp-interface.md` — source of truth for the internal mcpscope MCP surface
 - `backend/src/app.ts` — existing session routes, child-session route, and HTTP wiring patterns
 - `backend/src/operations/createExplicit.ts` — backend-owned HTTP execution pattern to mirror for a frontend-consumed action
 - `backend/src/operations/catalog.ts` and neighboring operations — CLI/MCP operation patterns to mirror when adding analysis launch
@@ -227,9 +227,9 @@ The coding agent should treat this file as the authoritative task definition for
 Recommended reading order:
 
 1. this task file
-2. `backlog/done/mcpscope-mcp-interface.md`
+2. `backlog/completed/mcpscope-mcp-interface.md`
 3. existing backend session routes, operations, and tests
 4. existing frontend session store, list rendering, and chat view
-5. `backlog/session-tree-navigation.md` only as supporting guidance for the tree UI details that this MVP absorbs
+5. `backlog/specification/session-tree-navigation.md` only as supporting guidance for the tree UI details that this MVP absorbs
 
 The agent should implement the smallest end-to-end slice that makes backend launch real first, then wire the tree/UI navigation on top of that backend-owned path.

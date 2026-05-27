@@ -42,7 +42,7 @@ The new work is metadata around the session, not a replacement for the session/t
 
 ## Implementation increments
 
-### 1. `backlog/done/session-metadata-foundation.md`
+### 1. `backlog/completed/session-metadata-foundation.md`
 
 Backend-first, testable foundation:
 
@@ -58,7 +58,7 @@ This is the first increment because it gives a useful, testable result without r
 
 This increment is now complete.
 
-### 2. `backlog/session-tree-navigation.md`
+### 2. `backlog/specification/session-tree-navigation.md`
 
 UI/navigation increment:
 
@@ -73,10 +73,10 @@ UI/navigation increment:
 
 This foundation is required by:
 
-- `backlog/session-analysis-agent.md`
-- `backlog/session-compaction-agent.md`
-- `backlog/benchmark-automation.md`
-- `backlog/session-batch-runs.md`
+- `backlog/specification/session-analysis-agent.md`
+- `backlog/candidates/session-compaction-agent.md`
+- `backlog/candidates/benchmark-automation.md`
+- `backlog/candidates/session-batch-runs.md`
 
 Those tasks should build on this model rather than each inventing their own session-linking semantics.
 

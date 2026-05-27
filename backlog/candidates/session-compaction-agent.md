@@ -35,7 +35,7 @@ Add a future **compaction session** workflow that:
 
 This task should build on:
 
-- `backlog/session-types-and-parent-links.md`
+- `backlog/specification/session-types-and-parent-links.md`
 
 It should reuse the same typed parent-linked session model as analysis and benchmark synthesis work.
 

@@ -4,8 +4,8 @@ This increment closes the main architecture gap left intentionally after the shi
 
 ## Dependencies
 
-- `backlog/done/session-analysis-launch-and-report.md`
-- `backlog/done/mcpscope-mcp-interface.md`
+- `backlog/completed/session-analysis-launch-and-report.md`
+- `backlog/completed/mcpscope-mcp-interface.md`
 
 ## Problem
 

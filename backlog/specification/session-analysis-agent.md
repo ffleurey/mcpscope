@@ -18,13 +18,13 @@ This is **not** a deterministic oracle and **not** a generic agent framework. It
 
 This feature depends on:
 
-- the completed `backlog/done/mcpscope-mcp-interface.md` work
-- the parent-link foundation from `backlog/session-types-and-parent-links.md`
+- the completed `backlog/completed/mcpscope-mcp-interface.md` work
+- the parent-link foundation from `backlog/specification/session-types-and-parent-links.md`
 
 In practice, it should build on:
 
-- `backlog/done/session-metadata-foundation.md`
-- the shipped tree-integrated MVP from `backlog/done/session-analysis-launch-and-report.md`
+- `backlog/completed/session-metadata-foundation.md`
+- the shipped tree-integrated MVP from `backlog/completed/session-analysis-launch-and-report.md`
 
 ## Fixed v1 decisions
 
@@ -46,7 +46,7 @@ The intended implementation is to **bootstrap mcpscope on itself**:
 
 ## Implementation increments
 
-### 1. `backlog/done/analysis-configurations.md`
+### 1. `backlog/completed/analysis-configurations.md`
 
 Configuration increment:
 
@@ -58,7 +58,7 @@ This should be testable before any analysis execution exists.
 
 This increment is now complete.
 
-### 2. `backlog/done/session-analysis-launch-and-report.md`
+### 2. `backlog/completed/session-analysis-launch-and-report.md`
 
 Backend/CLI/tree-integrated MVP increment:
 
@@ -74,7 +74,7 @@ This is the first increment that should produce a real end-to-end analysis resul
 
 This increment is now complete, with the remaining backend-owned launch/CLI/MCP refactor tracked separately below.
 
-### 3. `backlog/session-analysis-backend-owned-launch.md`
+### 3. `backlog/implementation/session-analysis-backend-owned-launch.md`
 
 Backend ownership and automation increment:
 
@@ -82,7 +82,7 @@ Backend ownership and automation increment:
 - expose that same launch path to future CLI and MCP triggers
 - keep the UI on top of that shared launch surface instead of owning the orchestration itself
 
-### 4. `backlog/analysis-follow-up-and-viewing.md`
+### 4. `backlog/specification/analysis-follow-up-and-viewing.md`
 
 Interactive UI increment:
 

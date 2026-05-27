@@ -11,7 +11,7 @@ The release-safe naming fix is already done:
 
 That completed work lives in:
 
-- `backlog/done/fix-session-title-preservation.md`
+- `backlog/completed/fix-session-title-preservation.md`
 
 ## Problem
 

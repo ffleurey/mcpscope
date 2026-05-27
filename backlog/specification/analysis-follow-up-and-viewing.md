@@ -4,7 +4,7 @@ This increment adds the interactive user workflow around analysis sessions.
 
 ## Dependencies
 
-- `backlog/done/session-analysis-launch-and-report.md`
+- `backlog/completed/session-analysis-launch-and-report.md`
 
 ## Goal
 

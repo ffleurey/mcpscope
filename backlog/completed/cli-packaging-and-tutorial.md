@@ -27,7 +27,7 @@ This task packaged the shipped CLI lifecycle MVP so it can be used without cloni
 - updated [README.md](../../README.md) to present Docker as the main packaged path
 - updated [CLI.md](../../CLI.md) to document the in-container CLI usage
 - updated [RELEASING.md](../../RELEASING.md) so released-image usage includes the packaged CLI path
-- updated [PLAN.md](../../PLAN.md) to reflect the completed Docker CLI packaging work
+- updated the backlog planning docs to reflect the completed Docker CLI packaging work
 
 ## Important decisions
 

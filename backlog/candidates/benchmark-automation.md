@@ -35,10 +35,10 @@ Add a first-class **benchmark automation** workflow that can:
 
 This task should build on:
 
-- `backlog/session-types-and-parent-links.md`
-- `backlog/session-analysis-agent.md`
-- `backlog/session-batch-runs.md`
-- the completed `backlog/done/mcpscope-mcp-interface.md` work
+- `backlog/specification/session-types-and-parent-links.md`
+- `backlog/specification/session-analysis-agent.md`
+- `backlog/candidates/session-batch-runs.md`
+- the completed `backlog/completed/mcpscope-mcp-interface.md` work
 
 The intended layering is:
 

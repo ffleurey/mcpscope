@@ -10,13 +10,8 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 - [MCP.md](MCP.md) - MCP interface reference: transport, tool surface, and structured results
 - [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
 - [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
-- [PLAN.md](PLAN.md) - current product state and near-term focus
-- [backlog/done/cli-packaging-and-tutorial.md](backlog/done/cli-packaging-and-tutorial.md) - completed Docker CLI packaging and tutorial task
-- [backlog/done/global-session-execution-lock.md](backlog/done/global-session-execution-lock.md) - completed single-active-session execution lock task
-- [backlog/done/mcpscope-mcp-interface.md](backlog/done/mcpscope-mcp-interface.md) - completed backend-owned MCP interface and CLI/MCP alignment task
-- [backlog/cli-next-iteration.md](backlog/cli-next-iteration.md) - next CLI increment after the shipped lifecycle MVP
-- [backlog/session-batch-runs.md](backlog/session-batch-runs.md) - future sequential batch/session-repeatability workflow
-- [backlog/done/hierachical-ids-system-and-api.md](backlog/done/hierachical-ids-system-and-api.md) - completed hierarchical ID and lookup groundwork the CLI builds on
+- [backlog/README.md](backlog/README.md) - backlog workflow, state folders, and promotion rules
+- [backlog/ROADMAP.md](backlog/ROADMAP.md) - current roadmap, active queue, and next planning priorities
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
 - [FRONTEND-TEST.md](FRONTEND-TEST.md) - optional manual browser-based UI checks with agent-browser
 - [RELEASING.md](RELEASING.md) - release workflow and GHCR image publishing
@@ -138,4 +133,4 @@ See [TESTING.md](TESTING.md) for the test strategy and how to add regressions.
 
 - `backend-data/` is local runtime state and live integration output; only its README is tracked.
 - `research/` contains reference material and archived investigations, not active implementation specs.
-- `backlog/` contains active implementation tasks; `backlog/done/` contains completed specs kept for historical context.
+- `backlog/` is organized as lightweight workflow state folders: `candidates/`, `specification/`, `implementation/`, `fixme/`, and `completed/`.

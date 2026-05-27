@@ -6,7 +6,7 @@ The session-analysis MVP now absorbs the minimum tree behavior needed to create 
 
 ## Dependency
 
-- `backlog/done/session-metadata-foundation.md`
+- `backlog/completed/session-metadata-foundation.md`
 
 ## Goal
 

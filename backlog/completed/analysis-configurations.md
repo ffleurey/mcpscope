@@ -8,7 +8,7 @@ Status: completed and merged from PR #13.
 
 ## Dependency
 
-- `backlog/done/session-metadata-foundation.md`
+- `backlog/completed/session-metadata-foundation.md`
 
 ## Goal
 
@@ -199,7 +199,7 @@ After this increment:
 
 The coding agent should start from these existing files and patterns before editing:
 
-- `backlog/done/analysis-configurations.md` — this task, the source of truth for the increment
+- `backlog/completed/analysis-configurations.md` — this task, the source of truth for the increment
 - `backend/src/domain/configuration.ts` — existing config schemas and types
 - `backend/src/persistence/schema.ts` — SQLite schema and additive migrations
 - `backend/src/persistence/repository.ts` — config persistence helpers and defaults helpers

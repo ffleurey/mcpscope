@@ -134,11 +134,11 @@ This is intended to support future features such as:
 
 Tracked tasks:
 
-- `backlog/session-types-and-parent-links.md`
-- `backlog/session-analysis-agent.md`
-- `backlog/session-compaction-agent.md`
-- `backlog/session-batch-runs.md`
-- `backlog/benchmark-automation.md`
+- `backlog/specification/session-types-and-parent-links.md`
+- `backlog/specification/session-analysis-agent.md`
+- `backlog/candidates/session-compaction-agent.md`
+- `backlog/candidates/session-batch-runs.md`
+- `backlog/candidates/benchmark-automation.md`
 
 ## Transcript vs context
 

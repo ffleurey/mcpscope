@@ -4,9 +4,9 @@ This task tracks the **next CLI increment after the shipped v3 session lifecycle
 
 Completed CLI increments:
 
-- [backlog/done/cli-v1-sessions-list.md](done/cli-v1-sessions-list.md)
-- [backlog/done/cli-v2-inspect-command.md](done/cli-v2-inspect-command.md)
-- [backlog/done/cli-v3-session-lifecycle-mvp.md](done/cli-v3-session-lifecycle-mvp.md)
+- [backlog/completed/cli-v1-sessions-list.md](../completed/cli-v1-sessions-list.md)
+- [backlog/completed/cli-v2-inspect-command.md](../completed/cli-v2-inspect-command.md)
+- [backlog/completed/cli-v3-session-lifecycle-mvp.md](../completed/cli-v3-session-lifecycle-mvp.md)
 
 The current shipped CLI reference remains [CLI.md](../CLI.md).
 
