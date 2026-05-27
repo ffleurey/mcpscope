@@ -33,15 +33,34 @@ The current direction is to turn mcpscope from a single-session inspector into a
 
 ### 1. Make analysis a first-class backend-owned workflow
 
-The immediate direction is to finish the shift from an MVP analysis flow to a backend-owned one. The key idea is that analysis should be reusable and consistent across UI, CLI, and MCP, rather than partly orchestrated in the frontend.
+The immediate direction is no longer to harden the launch flow first. The immediate direction is to use the current shipped analysis workflow as an experimental harness to learn what trustworthy analysis actually requires.
 
-That is why the current implementation focus is on the analysis-launch follow-up work in [implementation/](implementation/).
+But backend ownership is only half of the problem. The next critical question is analysis quality: the product needs an analysis process that is evidence-grounded, systematic, and resistant to lazy or hallucinatory summaries from smaller models.
+
+That means the roadmap should prioritize analysis discipline before scaling analysis to batches or benchmark suites. A technically working analysis session is not yet enough if it can produce plausible but unsupported stories.
+
+That experimental clarification work is captured in [specification/session-analysis-evidence-protocol.md](specification/session-analysis-evidence-protocol.md). The backend-owned launch follow-up should come after that work is concrete enough to say what workflow the backend is actually expected to own.
 
 ### 2. Strengthen inspectability and trust in operational workflows
 
 The next layer of value is not more features for their own sake. It is making failures, streaming behavior, and CLI-driven workflows easier to understand and trust. The fast-lane fixes in [fixme/](fixme/) exist to improve day-to-day usability for both humans and coding agents without needing large design cycles.
 
-### 3. Build toward repeatable evaluation, not just isolated chats
+### 3. Build toward evidence-grounded evaluation, not just free-form judgment
+
+The next planning step on the analysis line is to define a stricter evaluation protocol for one session before trying to synthesize many sessions.
+
+The likely direction is a constrained multi-step workflow rather than a single free-form prompt:
+
+- deterministic session digest and structural coverage
+- required inspection of setup, relevant turns, rounds, and parts
+- explicit evidence extraction before diagnosis
+- final compact synthesis that is only allowed to rely on gathered evidence
+
+This is more agentic than the current MVP, but it should be constrained and backend-owned rather than open-ended.
+
+That work is now captured by [specification/session-analysis-evidence-protocol.md](specification/session-analysis-evidence-protocol.md), and it should be treated as the next planning priority on the analysis line.
+
+### 4. Build toward repeatable evaluation, not just isolated chats
 
 The longer arc of the roadmap is repeatable session evaluation:
 
@@ -57,7 +76,7 @@ The backlog should be prioritized against these use cases:
 
 - a developer debugging one MCP-backed run and needing precise trace and tool insight
 - a developer rerunning and inspecting sessions through stable backend-owned CLI and MCP surfaces
-- a developer evaluating whether a session met expectations through a dedicated analysis workflow
+- a developer evaluating whether a session met expectations through a dedicated analysis workflow that cites real session evidence instead of inventing a plausible story
 - later, a developer comparing repeated runs or benchmark cases without losing inspectable evidence
 
 If a task does not clearly support one of those use cases, it should be questioned, deferred, or rewritten.
@@ -69,6 +88,7 @@ Near-term planning should keep favoring:
 - backend-owned execution paths over frontend orchestration
 - thin adapters over shared backend semantics
 - inspectable and replayable workflows over opaque automation
+- analysis workflows that force evidence coverage before synthesis
 - small, testable increments that move candidate ideas toward real evaluation workflows
 
 The roadmap should stay selective. Detailed task inventory belongs in the state folders, not here.

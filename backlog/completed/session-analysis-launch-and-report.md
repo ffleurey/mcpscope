@@ -2,7 +2,7 @@
 
 This increment delivers the first end-to-end analysis workflow.
 
-Status: completed in the current PR, with the remaining backend-owned launch orchestration and CLI/MCP trigger work deferred to `backlog/implementation/session-analysis-backend-owned-launch.md`.
+Status: completed in the current PR, with the remaining backend-owned launch orchestration and CLI/MCP trigger work deferred to `backlog/specification/session-analysis-backend-owned-launch.md`.
 
 ## Dependencies
 

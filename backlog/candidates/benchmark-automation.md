@@ -37,14 +37,16 @@ This task should build on:
 
 - `backlog/specification/session-types-and-parent-links.md`
 - `backlog/specification/session-analysis-agent.md`
+- `backlog/specification/session-analysis-evidence-protocol.md`
 - `backlog/candidates/session-batch-runs.md`
 - the completed `backlog/completed/mcpscope-mcp-interface.md` work
 
 The intended layering is:
 
-1. session-level analysis
-2. grouped repeated runs / prompt sets
-3. benchmark-level synthesis and reporting
+1. experimentally clarified session-analysis protocol
+2. session-level analysis productization
+3. grouped repeated runs / prompt sets
+4. benchmark-level synthesis and reporting
 
 That means benchmark automation should build on:
 
@@ -192,6 +194,8 @@ A likely direction is:
 
 - structured per-session analysis first
 - optional synthesis agent second
+
+But the exact structure of per-session analysis should remain provisional until the evidence-protocol task establishes a trustworthy base layer.
 
 This preserves inspectability and reduces the risk of opaque benchmark conclusions.
 

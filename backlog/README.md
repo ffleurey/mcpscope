@@ -4,6 +4,8 @@ Use this file for backlog process only.
 
 Use [ROADMAP.md](ROADMAP.md) for the current product roadmap, active queue, and next planning priorities.
 
+When roadmap direction is still uncertain, the relevant task should stay in `specification/` until experiments clarify the right workflow and contract.
+
 ## States
 
 - `candidates/` — ideas, future work, and deferred concepts that are worth keeping but are not yet selected for active specification.

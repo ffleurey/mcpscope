@@ -5,10 +5,13 @@ This increment adds the interactive user workflow around analysis sessions.
 ## Dependencies
 
 - `backlog/completed/session-analysis-launch-and-report.md`
+- `backlog/specification/session-analysis-evidence-protocol.md`
 
 ## Goal
 
 Make analysis sessions feel like real, inspectable conversations rather than one-shot hidden jobs.
+
+This task assumes the project has already clarified experimentally what trustworthy analysis looks like. It should build UI on top of that clarified workflow rather than treating the current MVP prompt behavior as final.
 
 The launch-and-report increment already covers the MVP path of creating the child analysis session, showing it in the tree beneath its parent, navigating into it, live streaming its first turn, and allowing follow-up through the standard chat view.
 

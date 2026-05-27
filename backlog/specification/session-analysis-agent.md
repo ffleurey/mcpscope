@@ -74,7 +74,18 @@ This is the first increment that should produce a real end-to-end analysis resul
 
 This increment is now complete, with the remaining backend-owned launch/CLI/MCP refactor tracked separately below.
 
-### 3. `backlog/implementation/session-analysis-backend-owned-launch.md`
+### 3. `backlog/specification/session-analysis-evidence-protocol.md`
+
+Experimental protocol-discovery increment:
+
+- use the current shipped analysis workflow as a harness for real analysis experiments
+- compare prompt/process variants against captured sessions
+- determine what coverage rules, intermediate artifacts, and gates are actually needed
+- clarify what the exact analysis inputs and outputs should be before locking them into later product increments
+
+This increment should happen before later analysis tasks freeze detailed contracts around prompt shape, intermediate artifacts, or report structure.
+
+### 4. `backlog/specification/session-analysis-backend-owned-launch.md`
 
 Backend ownership and automation increment:
 
@@ -82,7 +93,9 @@ Backend ownership and automation increment:
 - expose that same launch path to future CLI and MCP triggers
 - keep the UI on top of that shared launch surface instead of owning the orchestration itself
 
-### 4. `backlog/specification/analysis-follow-up-and-viewing.md`
+This increment depends on the evidence-protocol task to clarify what the backend-owned workflow should actually launch and what stages or artifacts it must preserve.
+
+### 5. `backlog/specification/analysis-follow-up-and-viewing.md`
 
 Interactive UI increment:
 
@@ -96,6 +109,7 @@ Interactive UI increment:
 - the output should stay compact and reusable
 - analysis sessions must remain clearly separate from normal user sessions
 - the implementation should stay product-specific and avoid growing into a generic agent framework
+- the exact analysis workflow and report contract should be clarified experimentally before later increments freeze detailed inputs and outputs
 - benchmark details remain deferred as long as session-parent semantics stay compatible with later benchmark work
 
 ## Expected result for the full epic
