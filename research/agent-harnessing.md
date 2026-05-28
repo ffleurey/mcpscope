@@ -602,6 +602,260 @@ That is helpful for mcpscope because it means the elegant version of the idea is
 
 If we do not want to build that machinery yet, the deterministic multi-run pipeline remains the simpler first step and is still completely aligned with current ecosystem practice.
 
+## Additional considerations for local SLMs, small context windows, and strong token-efficiency targets
+
+The sources above mostly describe general agent practice, often assuming reasonably capable models and enough budget to tolerate extra turns, retries, and sometimes parallel workers.
+
+mcpscope has a more constrained target:
+
+- local or self-hosted models
+- smaller context windows
+- lower per-run capability
+- stronger sensitivity to prompt bloat
+- stronger need for predictable token usage
+- limited benefit from parallel fan-out because local throughput is finite
+
+Under those constraints, the rationale changes in a few important ways.
+
+### 1. The case for explicit workflows gets stronger, not weaker
+
+The Anthropic guidance already says to start with the simplest workflow that works. Under SLM constraints, that advice becomes even more important.
+
+Why:
+
+- smaller models are less reliable at deciding what to inspect next
+- they are more likely to get distracted by stale context
+- they are more likely to overproduce shallow narrative instead of precise extraction
+- every extra turn is a bigger relative cost when latency and throughput are limited locally
+
+So the local-model setting strengthens the case for:
+
+- deterministic outer control
+- bounded evidence slices
+- fixed question sets
+- explicit gates before synthesis
+
+This means the mcpscope problem looks even less like "build an autonomous analyst" and even more like "build a compact evidence-reduction workflow with model-assisted judgments".
+
+### 2. Long guided sessions become less attractive unless compaction is extremely aggressive
+
+In the general case, a guided session with smart compaction is elegant because it preserves continuity while reducing repeated setup cost.
+
+In the SLM case, the downside grows:
+
+- short context windows mean even moderate history accumulation becomes harmful quickly
+- smaller models are more brittle when the prompt mixes protocol, evidence, prior artifacts, and partial conclusions
+- the compaction mechanism itself becomes part of the token budget
+- debugging becomes harder if a weak model starts relying on stale or malformed compacted summaries
+
+This does not kill the guided-session idea, but it changes the bar.
+
+For local SLMs, a guided session is only appealing if:
+
+- the surviving memory is tiny and schema-like
+- each turn sees only one narrow evidence unit plus a compact ledger
+- compaction is mostly deterministic or at least machine-checkable
+- the session never relies on carrying rich natural-language summaries forward for long
+
+In practice, this pushes the design closer to "stateful workflow with a session veneer" than to a true long-running conversational agent.
+
+### 3. Deterministic multi-run pipelines become relatively more attractive
+
+For frontier models, the trade-off between one guided session and many bounded runs can be ambiguous.
+
+For local SLMs, many arguments shift toward bounded runs:
+
+- each step gets a fresh prompt with no accidental baggage
+- token usage is easier to budget and cap per stage
+- failures are easier to localize and rerun
+- smaller models often do better when the task shape is extremely narrow and reset each time
+- orchestration can aggressively prune what flows into the next stage
+
+The main loss is reduced cross-step adaptive reasoning. But in the mcpscope analysis task, that may be an acceptable trade because the desired reasoning is mostly evidence reduction, not creative search.
+
+This suggests that for local-model-first mcpscope, the deterministic multi-run pipeline moves from "safe first implementation" to "probably the default architecture unless experiments prove otherwise".
+
+### 4. Parallelization is less compelling on local hardware
+
+In the general agent literature, parallelization is attractive because it improves latency or gives multiple perspectives.
+
+For local inference, that rationale weakens:
+
+- running multiple model calls at once may just compete for the same local GPU or CPU budget
+- throughput constraints can turn parallel fan-out into queueing, memory pressure, or slower total completion
+- multiple parallel calls also multiply prompt overhead
+
+So for mcpscope, local deployment changes the parallelization story:
+
+- parallel fan-out is still useful conceptually for independent subproblems
+- but operationally, it may be better implemented as sequential micro-batches or optional offline batch runs
+- "multiple perspectives" is a luxury stage, not the default path
+
+This further favors a narrow staged pipeline over orchestrator-worker designs that assume cheap concurrent model calls.
+
+### 5. The best artifact form becomes smaller, more regular, and less prose-heavy
+
+Smaller context windows do not just affect architecture. They also affect the shape of intermediate artifacts.
+
+For local SLMs, artifacts should generally be:
+
+- compact
+- repetitive in structure
+- low in stylistic variation
+- easy to validate mechanically
+- directly usable without re-reading the source evidence
+
+That means mcpscope should likely prefer artifacts such as:
+
+- short key-value ledgers
+- fixed field records
+- enum-like judgments
+- direct quoted error/result snippets only where necessary
+- explicit inspected IDs
+
+and avoid artifacts such as:
+
+- broad free-form round summaries
+- rich narrative prose about reasoning
+- duplicated context in multiple stages
+
+This lines up with the LangGraph memory guidance that long message histories are expensive and distracting, but in the local-model case the penalty is harsher.
+
+### 6. Retrieval and chunking discipline matter more than prompt cleverness
+
+The Azure guidance is nominally about RAG, but the token-budget lesson transfers directly.
+
+The main points are:
+
+- chunk size times retrieved items controls prompt size very quickly
+- smaller chunks can improve focus and reduce distraction
+- too many retrieved items can overwhelm the model
+- long questions and long history should be broken up rather than naively accumulated
+
+For mcpscope, this suggests a strong preference for:
+
+- inspecting only the smallest evidence-bearing units needed for the current judgment
+- keeping the active evidence set tiny
+- preferring additional deterministic passes over one oversized evidence bundle
+- treating coverage as a routing problem, not a "stuff everything into context" problem
+
+This pushes the workflow toward selective retrieval of session parts plus explicit artifact carry-forward.
+
+### 7. Strong schemas still help, but overly rich structure can hurt smaller models
+
+One subtle result from the Hugging Face structured-code-agent work is especially relevant here.
+
+It shows two things at once:
+
+- structure often improves reliability by removing parsing failures
+- smaller models can suffer a "structure tax" when they must simultaneously satisfy too many formatting constraints and solve the task
+
+That matters for mcpscope because it argues against two extremes:
+
+- no structure at all: too hard to validate, too easy to drift
+- overly elaborate nested JSON everywhere: too much cognitive overhead for weaker models
+
+For local SLMs, the sweet spot is likely:
+
+- shallow schemas
+- short field names only if still readable
+- fixed output ordering
+- limited nesting
+- minimal escaping burden
+- examples in the exact target format
+
+In other words: structure is still important, but it must be cheap structure.
+
+### 8. Tool and interface design matter even more for weaker local models
+
+Anthropic's point about tool design becomes more important under SLM constraints.
+
+If the model is smaller, then every ambiguity in:
+
+- tool descriptions
+- parameter names
+- inspect object semantics
+- result-shape expectations
+
+costs more.
+
+That means local-model-first design should invest even more heavily in:
+
+- precise inspect descriptions
+- examples of the target output format
+- explicit statements of what parent-level inspect does not provide
+- few near-duplicate tools or output shapes
+- naming that reduces interpretation work
+
+For mcpscope specifically, this supports the earlier changes to `mcpscope_inspect` wording and suggests the protocol should continue reducing inferential burden wherever possible.
+
+### 9. Few-shot examples and reusable micro-prompts become more valuable
+
+Smaller models often benefit more from direct pattern matching than from abstract, high-level instructions.
+
+That suggests a local-SLM-friendly protocol should lean more heavily on:
+
+- one or two exact examples of a good `tool_call_assessment`
+- one exact example of a supported vs unsupported `turn_outcome_assessment`
+- repeated fixed wording for stage prompts
+- maybe even stage-specific prompts that are shorter and more specialized instead of one universal analysis prompt
+
+This again favors a multi-run staged pipeline. It is easier to attach very specific few-shot guidance to a narrow stage than to maintain a single monolithic guided session prompt.
+
+## How the constraints change the architecture ranking for mcpscope
+
+If we optimize for capable frontier models with generous context, the ranking is roughly:
+
+- deterministic outer workflow first
+- guided session as a plausible experimental alternative
+- graph/process runtime as a strong long-term direction
+
+If we optimize for local SLMs, smaller windows, and strong token efficiency, the ranking changes to:
+
+### Best default: deterministic multi-run pipeline
+
+Why it moves up:
+
+- easiest to keep prompts tiny
+- easiest to bound token usage
+- easiest to attach stage-specific examples
+- easiest to validate and retry
+- least dependent on model-managed memory
+
+### Viable but higher bar: guided analysis session with ultra-compact artifact memory
+
+Why it moves down:
+
+- local SLMs are less reliable at carrying forward compacted context correctly
+- prompt/state accumulation is riskier
+- compaction errors can poison later steps
+
+What would make it viable:
+
+- strict deterministic turn schedule
+- tiny artifact ledger
+- aggressive forgetting of raw evidence
+- shallow schemas and heavy validation
+
+### Long-term backend direction: graph/process runtime still makes sense
+
+This does not move down conceptually. If anything, the local-model setting makes explicit state even more attractive.
+
+But it remains a heavier implementation step than the immediate research workflow.
+
+## Provisional SLM-first recommendation for mcpscope
+
+If the product target is genuinely local SLMs with smaller windows, I would currently recommend:
+
+1. start with a deterministic staged pipeline, not a long guided session
+2. make each stage small enough to fit comfortably inside a conservative prompt budget
+3. keep intermediate artifacts shallow, repetitive, and machine-checkable
+4. use examples and fixed fielded outputs rather than broad instruction prose
+5. treat parallel fan-out as optional and probably offline, not as the default runtime shape
+6. keep any persistent session memory as a tiny ledger of facts, not as the primary working substrate
+
+In that world, the elegant version of the steered-session idea is still possible, but it becomes a second-step optimization after we have proven that the artifact set is sufficient and that the compaction policy is robust on weaker models.
+
 ## Sources reviewed
 
 Primary public references reviewed for this note:
@@ -609,9 +863,12 @@ Primary public references reviewed for this note:
 - Anthropic: Building effective agents
 - OpenAI Agents SDK docs: orchestration and sessions
 - LangGraph docs and repository patterns around `StateGraph`, checkpoints, and interrupts
+- LangGraph memory guidance on short-term memory, trimming, and long-term stores
 - Microsoft AutoGen docs and repository patterns around routed agents, graph flow, and ledger orchestration
 - Microsoft Semantic Kernel docs and repository patterns around the Process Framework
 - Pydantic AI docs and repository patterns around typed outputs, programmatic hand-off, and durable execution
+- Hugging Face smolagents and structured-code-agent research, including the small-model "structure tax" discussion
+- Azure guidance on token usage, chunk size, retrieved-document counts, and history management under fixed prompt budgets
 
 ## Bottom line
 
