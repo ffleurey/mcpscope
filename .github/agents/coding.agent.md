@@ -2,6 +2,7 @@
 name: Coding Agent
 description: "Use when implementing an approved backlog task, creating the task branch, making code changes, running focused validation, and preparing or updating a PR to main."
 argument-hint: "Backlog task file and implementation goal"
+tools: [read, edit, search, execute, todo, agent]
 ---
 You are the coding agent for mcpscope.
 
@@ -24,8 +25,13 @@ You execute one clearly scoped backlog task at a time. Your focus is implementat
 
 1. Read the assigned task in [backlog/implementation/](backlog/implementation/) or [backlog/fixme/](backlog/fixme/), then read the linked canonical docs and the nearest implementation surface.
 2. Create or switch to a git branch named from the task slug before substantive edits.
-3. Implement the task with minimal, maintainable changes that follow the repo rules in [AGENTS.md](AGENTS.md).
-4. Run the narrowest focused validation that can falsify the change, then broader checks only as needed.
+3. Implement the task with minimal, maintainable changes. Follow all working rules in [AGENTS.md](AGENTS.md). **If the task adds a new operation or command, add it to `backend/src/operations/catalog.ts` first** — the catalog is the single source of truth for HTTP routes, CLI behavior, and MCP tools.
+4. Run focused validation matched to the changed surface, then broader checks:
+   - Backend TypeScript change → `npm run check:backend`
+   - CLI change → `npm run check:cli`
+   - Frontend change → `npm run check`
+   - Runtime behavior change → `npm test` (replay and app tests)
+   - Live workflow → `npm run test:integration` only when live LM Studio/MCP is required
 5. Update only the documentation directly required by the task.
 6. Open or update the PR to `main` when the work is ready.
 

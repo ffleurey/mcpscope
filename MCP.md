@@ -24,7 +24,7 @@ Five tools mirror the shipped CLI surface exactly. Tool names are generated mech
 | `mcpscope_create`     | `mcpscope create`          | Create a session from defaults |
 | `mcpscope_send`       | `mcpscope send`            | Start a user turn |
 | `mcpscope_status`     | `mcpscope status`          | Get session lifecycle state |
-| `mcpscope_inspect`    | `mcpscope inspect`         | Inspect any object by hierarchical ID |
+| `mcpscope_inspect`    | `mcpscope inspect`         | Inspect any object by hierarchical ID; use parent objects to map IDs, then inspect parts directly for detailed evidence |
 
 ## Tool inputs
 
@@ -59,7 +59,7 @@ No inputs.
 
 | Field  | Type    | Required | Description |
 |--------|---------|----------|-------------|
-| `id`   | string  | ✓        | Hierarchical ID (e.g. `ABCD`, `ABCD.1`, `ABCD.1.2`, `ABCD.1.2.3-U`) |
+| `id`   | string  | ✓        | Hierarchical ID (e.g. `ABCD`, `ABCD.1`, `ABCD.1.2`, `ABCD.1.2.3-U`). Inspecting a session, setup, turn, or round is useful for finding child IDs; inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content. |
 | `short`| boolean |          | Token counts only, no part content |
 
 ## Tool results

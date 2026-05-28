@@ -86,6 +86,56 @@ Keep this short and empirical. The point is to compare a few plausible workflow 
 - one stage extracts grounded observations only
 - a later stage produces the compact report from those observations
 
+### 5. Controlled evidence reduction with explicit adjudication
+
+- pass 1 builds a required-coverage map for the target turn: setup parts, rounds, reasoning parts, tool calls, tool results, and final answer parts
+- pass 2 produces a compact fact ledger for each round, especially:
+	- why the model appears to have chosen the next tool or answer
+	- what tool was called
+	- whether that tool call was relevant to the user goal in that round
+	- whether the tool result succeeded, failed, or returned mixed guidance
+	- the exact error or guidance text that changed the next step
+	- token counts or cost signals only as secondary efficiency evidence
+- pass 3 makes a narrow turn-outcome judgment from the extracted facts only: was the request answered, unsupported, partially answered, or unanswered
+- pass 4 produces the final compact diagnosis about path efficiency and MCP-surface quality from the earlier structured artifacts, not from fresh free-form trace reading
+
+Current candidate protocol to test first:
+
+- stage A: coverage and object inventory
+- stage B: per-round tool-choice and tool-call assessment
+- stage C: turn success adjudication
+- stage D: compact MCP-surface diagnosis
+
+The intended flow is deliberately narrow:
+
+- first establish what was inspected
+- then establish why each tool or answer step was taken
+- then establish whether the turn actually succeeded
+- only then explain what this implies about the MCP surface
+
+This ordering matters because the current failure mode is not only missing evidence. It is also premature interpretation. The protocol should therefore delay diagnosis until the session facts have already been reduced into a constrained ledger.
+
+Starting point for the specific questions in the protocol:
+
+For each relevant round, the analysis should answer only tightly scoped questions such as:
+
+- what was the user goal in this round?
+- why was this tool selected next according to the inspected reasoning part?
+- if no tool was selected, why did the model choose to answer instead?
+- was the selected tool relevant to the user goal in this round?
+- what exact result did the tool call return?
+- did that result match what the inspected reasoning appeared to expect from the tool call?
+- if the result did not match expectations, is the most direct observed cause:
+	- wrong parameters supplied by the model
+	- misunderstanding of the tool's purpose, fields, or result shape
+	- a tool limitation or mismatch with the task
+	- unclear tool description or setup guidance
+- after seeing the tool result, did the next reasoning step show that the model understood the failure, partial result, or guidance?
+- if the model repeated or varied the call, what exactly changed?
+- if the round ended in an answer, is that answer supported by the inspected evidence from earlier rounds?
+
+These questions should be treated as reporting questions, not invitations to write a broad summary. The protocol should prefer short factual answers tied to inspected IDs over prose descriptions of the whole round.
+
 This task should determine which of these is good enough, simple enough, and robust enough to become the basis for later product work.
 
 ## Scope
@@ -102,6 +152,52 @@ This task should explicitly include manual and repeatable experiments with:
 - real captured sessions that expose lazy inspection and hallucinated explanations
 
 The point is to learn what process produces trustworthy output, not to assume the first draft of the protocol is already correct.
+
+#### Baseline experiments recorded so far
+
+Keep a compact record of early experiments before drawing design conclusions.
+
+- Pair `MTFC` -> `XZDA`: inspect a primary session and its analysis session, then compare what the analysis claimed against the specific inspected IDs, tool-call payloads, tool results, and final answers.
+- Pair `QU8X` -> `MSYQ`: repeat the same inspection pattern on a second captured session and its analysis session, including later user follow-ups that pushed the analysis model to inspect more specific parts.
+- Pair `MTFC` -> `YFRC`: rerun analysis on the same primary session with a much more specific one-shot prompt that explicitly requires setup inspection, per-round inspection, reasoning inspection, tool-result inspection, and a per-round ledger before synthesis.
+- Pair `MTFC` -> `K5BA`: run the same tighter one-shot prompt shape against the same primary session with a different and much larger model to compare prompt-following and evidence discipline.
+
+Models used in the recorded runs so far:
+
+- `google/gemma-4-e4b` with `temperature = 0.5`
+- `qwen3.6-35b-a3b-apex` with `temperature = 0.5`
+
+This is not a controlled Gemma-vs-Qwen benchmark. The Qwen run used a significantly larger MoE model, so treat it as an illustration of model sensitivity rather than a head-to-head quality claim.
+
+Observed baseline patterns from these experiments:
+
+- a single root-level `mcpscope_inspect` call on the source session often led the analysis model to synthesize conclusions before it had inspected the relevant setup parts, tool-call payloads, or specific evidence-bearing parts
+- the analysis model sometimes overstated what had been inspected, claiming access to reasoning content or detailed tool results that were not actually fetched in the initial pass
+- user follow-up pressure improved specificity, but only after the model had already produced confident early judgments
+- in both experiment pairs, the analysis was willing to write strong conclusions about request satisfaction or MCP-surface quality before coverage of the relevant turn was demonstrably complete
+- these experiments are enough to justify treating the current shipped workflow as a weak baseline, but not enough yet to lock in the final solution shape
+
+Observed changes after tightening the one-shot prompt:
+
+- the more process-oriented prompt materially improved behavior on the same `MTFC` session by pushing the analysis model to inspect more of the runtime tree before writing its report
+- under `YFRC`, the Gemma-based analysis moved in the right direction: it inspected setup parts and all three turns, and it adopted the requested report shape, but it still overclaimed coverage and still treated turn-level inspection as if it were enough to justify per-round statements
+- under `K5BA`, the Qwen-based analysis followed the stricter inspect discipline much better: it inspected the detailed round objects for the relevant turns, correctly recognized repeated tool failures in `MTFC.3`, and correctly concluded that the final `16.8 °C` answer was unsupported by the inspected evidence
+- the prompt therefore appears capable of improving one-shot analysis substantially, but model capability still matters a great deal for whether that prompt is actually followed rigorously
+
+What the current experiments support about prompt quality vs model sensitivity:
+
+- prompt specificity clearly matters; the tighter prompt improved behavior compared with the earlier weaker-prompt runs on the same source session
+- model choice also clearly matters; the stronger Qwen run produced materially better evidence discipline than the smaller Gemma run under a similar prompt shape
+- the current evidence is enough to justify continued work on the one-shot prompt before moving to more complex orchestration
+- the current evidence is also enough to justify treating model sensitivity as a first-class concern in later evaluation, not as a secondary implementation detail
+
+What these experiments currently support:
+
+- preserve these session pairs as known baseline cases for future protocol comparisons
+- continue evaluating whether the key problem is insufficient coverage discipline, unsupported synthesis, poor use of admissible evidence, or some combination of the three
+- continue testing one-shot prompt variants on the same captured sessions before freezing a more complex multi-stage workflow
+- compare prompt variants across more than one model family before treating any single-model result as representative
+- avoid freezing a winning architecture yet; the immediate goal is to accumulate a small set of repeatable bad cases and compare protocol variants against them
 
 ### 1. Define the required coverage for a serious analysis
 
@@ -122,12 +218,31 @@ The workflow may need structured intermediate outputs such as:
 - setup/tooling summary
 - user-request summary
 - per-round or per-tool-call evidence ledger
+- per-round reasoning-for-action summary limited to tool choice, retry choice, or answer choice
+- per-tool-call outcome record including relevance, exact error text or guidance text, and token usage when available
+- turn-outcome adjudication record comparing the user request against the final answer and inspected evidence
 - observed issue candidates tied to IDs
 - final compact report
+
+A good starting artifact set for experiments is:
+
+- `coverage_map`: which setup parts, rounds, reasoning parts, tool calls, tool results, and answers were inspected
+- `round_action_ledger`: one entry per round explaining the chosen next action and the evidence for that explanation
+- `tool_call_assessment`: one entry per relevant tool call recording expected purpose, observed result, relevance, exact failure or guidance text, and whether the mismatch appears to come from parameters, tool understanding, or tool limitations
+- `turn_outcome_assessment`: a narrow decision about whether the request was answered, unsupported, partially answered, or unanswered
+- `mcp_surface_findings`: only the final compact diagnosis derived from the earlier artifacts
 
 The important rule is that the final report should be derived from these intermediate artifacts rather than from a vague end-of-run impression.
 
 This task should also decide which of these artifacts are truly necessary and which are over-design.
+
+Working hypothesis from the current experiments:
+
+- a dedicated evidence-reduction pass is likely useful because it removes most narrative noise while preserving the facts that later judgment actually needs
+- reasoning should be reduced narrowly, not summarized broadly; the valuable question is usually why a tool or answer was chosen next, not a prose retelling of all hidden chain-of-thought content
+- tool-call summaries should preserve exact failure or guidance text because unsupported final answers often come from ignored or misunderstood tool results
+- a separate turn-success pass is likely worth keeping because request satisfaction should be judged against the inspected user prompt, inspected tool outcomes, and inspected final answer, not mixed together with broader MCP-surface diagnosis
+- the most important diagnostic target is not generic conversation quality; it is whether the model followed a good tool path and, when it did not, whether the evidence points to tool choice, parameter choice, tool-description clarity, or tool-surface mismatch
 
 ### 3. Decide what should be deterministic vs model-driven
 
@@ -163,6 +278,8 @@ The workflow should still end in a compact report that answers:
 - was the path efficient
 - what in the MCP surface appears to have helped or hurt
 - what the most actionable next improvement is
+
+That final report should be explicitly downstream of the earlier passes. It should not have to rediscover why tools were chosen or whether tool calls actually succeeded. Those questions should already have been answered in the structured artifacts.
 
 ## Non-goals
 
