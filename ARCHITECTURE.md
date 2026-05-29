@@ -19,6 +19,7 @@ The value of the project depends on correctness and inspectability:
 ## Documentation boundaries
 
 - [DATA-MODEL.md](DATA-MODEL.md) — compact canonical runtime tree, public part taxonomy, canonical IDs, and lookup-model rules
+- [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) — current SQLite tables, foreign keys, singleton defaults, and ER diagram
 - [CLI.md](CLI.md) — CLI command reference: commands, flags, output format, exit codes
 - `ARCHITECTURE.md` — system design, persistence model, streaming model, replay model, and API overview
 
@@ -100,19 +101,446 @@ Today, mcpscope persists and exposes sessions as ordinary runtime sessions with:
 - parts
 - raw exchanges
 
-The shipped product does **not yet** implement generalized session typing or parent-linked session metadata.
+The shipped product **does** implement the first session-metadata foundation:
+
+- persisted `session_type`
+- persisted `parent_kind` and `parent_id`
+- primary-only default list behavior
+- child-session lookup and cascade delete for session-parent trees
+- shipped `session_analysis` child sessions used by the analysis workflow
+
+What it does **not** implement yet is a broader generalized workflow/runtime model beyond chat-style sessions.
 
 That means:
 
-- the current session model is effectively flat at the product/lifecycle layer
-- special internal session kinds such as analysis or compaction sessions are not yet part of the shipped data model
-- benchmark/experiment ownership of sessions is not yet represented through a generalized session-parent model
+- the runtime tree is still session/setup/turn/round/part
+- special session kinds exist, but they still run on the same chat-centered execution machinery
+- benchmark/experiment ownership is only partially represented through the current parent-link metadata
+- deterministic workflow stages inside a session are not yet modeled as first-class runtime entities
 
 The important rule is:
 
 - mcpscope should have one canonical model across persistence, API, UI, and CLI
 - provider-specific transport structures are normalized into that model at the integration boundary
 - `RawExchangeRecord` belongs to the diagnostic and replay layer, not to the canonical runtime tree
+
+## Actual runtime ownership today
+
+The current implementation is important to state explicitly because it is easy to imagine a dual-master design where:
+
+- LM Studio owns the live conversational session state
+- mcpscope separately stores its own inspect/runtime model
+
+That is **not** how the backend currently works for LM Studio.
+
+### Current ownership model
+
+Today the implementation is closer to:
+
+- mcpscope owns the canonical persisted runtime state in SQLite
+- mcpscope reconstructs model request messages from that persisted state before each LM Studio call
+- LM Studio is used as a stateless chat-completions transport, not as the owner of a native long-lived session object
+- raw LM Studio request/response payloads are retained for diagnostics and replay, but they are not the authoritative session model
+
+The one place where there is a real external session handle today is MCP:
+
+- tool-enabled turns call `initializeSession(...)` on the MCP server
+- the returned MCP `sessionId` is then reused for tool calls within that turn
+- that MCP session handle is transient runtime state, not the canonical persisted mcpscope session model
+
+So the current architecture is not a dual-master model. It is better described as:
+
+- one canonical mcpscope runtime model
+- plus transient and diagnostic transport-layer structures around it
+
+### What is canonical vs derived vs transport
+
+#### Canonical persistent records
+
+These records are the authoritative mcpscope runtime state:
+
+- `SessionRecord`
+- `TurnRecord`
+- `RoundRecord`
+- `PartRecord`
+- `RawExchangeRecord`
+
+#### Derived in-memory request state
+
+These structures are rebuilt from canonical records as needed and are not persisted as the primary model:
+
+- `ApiMessage[]` from `buildApiMessages(...)`
+- `ModelMessage[]` from `buildModelMessages(...)`
+- derived transcript entries from `deriveTranscriptEntries(...)`
+- derived context entries from `deriveContextEntries(...)`
+- LM tool definitions from `buildLmToolDefinitions(...)`
+
+#### Provider/service transport structures
+
+These are provider-facing or service-layer structures, not the mcpscope domain model:
+
+- LM Studio request bodies sent to `POST /chat/completions`
+- `LmStudioChatCompletionResponse`
+- `LmStudioChatCompletionChunk`
+- `LmStudioStreamDelta`
+- `LmStudioAssistantSegment`
+- MCP raw exchanges and MCP tool-call results
+
+Some of these are partially persisted for diagnostics:
+
+- LM Studio request/response bodies are stored in `RawExchangeRecord`
+- round-level `requestPayloadJson` and `responseTraceJson` keep a diagnostic mirror of transport activity
+
+That diagnostic persistence does **not** make those transport structures canonical. The canonical runtime still lives in session/turn/round/part records.
+
+### The practical consequence
+
+For LM Studio, mcpscope is already much closer to "our representation is the master" than to "the provider's session is the master".
+
+Before each model turn:
+
+- mcpscope loads persisted parts for the session
+- mcpscope derives the model-visible history from part `context_state`
+- mcpscope builds a fresh `messages` array
+- mcpscope sends that fresh request to LM Studio
+
+After each model turn:
+
+- mcpscope normalizes streamed/provider output into canonical `PartRecord`s
+- mcpscope stores raw request/response exchanges for replay and debugging
+- mcpscope applies its own compaction rules to canonical parts
+
+So the main gap is not "move ownership away from LM Studio". The main gap is:
+
+- generalize the mcpscope-owned runtime so it can represent more than LLM turns
+- make the layered state model explicit enough to support deterministic workflow turns and richer context management
+
+## Runtime structures and lifecycles
+
+### Core record model and dependencies
+
+```mermaid
+classDiagram
+	class SessionRecord {
+		+id
+		+title
+		+status
+		+sessionType
+		+modelProfileSnapshot
+		+mcpProfileSnapshot
+		+compactionStrategy
+	}
+
+	class TurnRecord {
+		+id
+		+sessionId
+		+sequenceNumber
+		+status
+		+usage
+		+contextTokensAtTurnEnd
+		+contextTokensAfterCompaction
+	}
+
+	class RoundRecord {
+		+id
+		+turnId
+		+roundIndex
+		+status
+		+finishReason
+		+requestPayloadJson
+		+responseTraceJson
+	}
+
+	class PartRecord {
+		+id
+		+sessionId
+		+turnId
+		+roundId
+		+partType
+		+payload
+		+display
+		+context
+		+tokens
+		+provenanceJson
+	}
+
+	class RawExchangeRecord {
+		+id
+		+sessionId
+		+turnId
+		+roundId
+		+kind
+		+requestBody
+		+responseBody
+	}
+
+	class SessionTraceBundle {
+		+session
+		+turns
+		+rounds
+		+parts
+		+rawExchanges
+		+transcript
+		+context
+	}
+
+	SessionRecord "1" o-- "*" TurnRecord
+	TurnRecord "1" o-- "*" RoundRecord
+	SessionRecord "1" o-- "*" PartRecord
+	SessionRecord "1" o-- "*" RawExchangeRecord
+	TurnRecord "1" o-- "*" PartRecord
+	RoundRecord "1" o-- "*" PartRecord
+	TurnRecord "1" o-- "*" RawExchangeRecord
+	RoundRecord "1" o-- "*" RawExchangeRecord
+	SessionTraceBundle "1" --> "1" SessionRecord
+	SessionTraceBundle "1" --> "*" TurnRecord
+	SessionTraceBundle "1" --> "*" RoundRecord
+	SessionTraceBundle "1" --> "*" PartRecord
+	SessionTraceBundle "1" --> "*" RawExchangeRecord
+```
+
+### Execution-layer dependencies
+
+```mermaid
+classDiagram
+	class OperationContext {
+		+db
+		+lmStudioGateway
+		+mcpGateway
+		+maxToolRounds
+	}
+
+	class LmStudioGateway {
+		<<interface>>
+		+createChatCompletion()
+		+streamChatCompletion()
+		+probePromptTokens()
+	}
+
+	class McpGateway {
+		<<interface>>
+		+initializeSession()
+		+listTools()
+		+callTool()
+	}
+
+	class createModelOnlyTurn {
+		+execute
+	}
+
+	class createToolEnabledTurn {
+		+execute
+	}
+
+	class selectors {
+		+buildApiMessages()
+		+buildModelMessages()
+		+deriveTranscriptEntries()
+		+deriveContextEntries()
+		+buildLmToolDefinitions()
+	}
+
+	class applyContextCompaction {
+		+execute
+	}
+
+	class LMStudioTransport {
+		+chat completions
+	}
+
+	class MCPTransport {
+		+initialize session
+		+list tools
+		+call tool
+	}
+
+	OperationContext --> LmStudioGateway
+	OperationContext --> McpGateway
+	createModelOnlyTurn --> selectors
+	createModelOnlyTurn --> LmStudioGateway
+	createModelOnlyTurn --> applyContextCompaction
+	createToolEnabledTurn --> selectors
+	createToolEnabledTurn --> LmStudioGateway
+	createToolEnabledTurn --> McpGateway
+	createToolEnabledTurn --> applyContextCompaction
+	LmStudioGateway --> LMStudioTransport
+	McpGateway --> MCPTransport
+```
+
+### Lifecycle by structure
+
+#### `SessionRecord`
+
+Lifecycle:
+
+- created by `createSession(...)`
+- persists session-level configuration snapshots and compaction strategy
+- updated as turns complete and session metadata changes
+- remains the root of the canonical runtime tree
+
+Dependency role:
+
+- owns model-profile snapshot used to build LM Studio request bodies
+- optionally owns MCP-profile snapshot used to initialize tool-enabled turns
+
+#### `TurnRecord`
+
+Lifecycle:
+
+- created at the start of a user request
+- moves through `streaming` to `complete` or `error`
+- stores aggregate usage and post-turn compaction accounting
+
+Dependency role:
+
+- parent for one or more `RoundRecord`s
+- anchor for turn-level outcomes and post-turn compaction metadata
+
+#### `RoundRecord`
+
+Lifecycle:
+
+- created once per model iteration within a turn
+- for model-only turns there is normally one round
+- for tool-enabled turns there may be multiple rounds in a tool-call loop
+- stores diagnostic copies of `requestPayloadJson` and `responseTraceJson`
+
+Dependency role:
+
+- binds one LM Studio request/response cycle to canonical persisted state
+- links canonical parts to the provider round that produced them
+
+#### `PartRecord`
+
+Lifecycle:
+
+- setup parts are created at session creation or MCP initialization time
+- user parts are created at turn start
+- assistant reasoning/content/tool-call/tool-result parts are created from provider outputs and tool activity
+- compaction later mutates `context.state` on canonical parts instead of deleting transcript history
+
+Dependency role:
+
+- this is the most important structure for context reconstruction
+- future model-visible context is derived from part `context.state`, not from provider-held session memory
+- transcript and context views are both projections over the same parts table
+
+#### `RawExchangeRecord`
+
+Lifecycle:
+
+- created whenever LM Studio or MCP traffic is captured
+- persisted for replay, debugging, and auditability
+- never becomes the authoritative semantic runtime model
+
+Dependency role:
+
+- diagnostic mirror of transport activity
+- useful for replay and inspection, but subordinate to the canonical runtime tree
+
+#### `ApiMessage[]` / `ModelMessage[]`
+
+Lifecycle:
+
+- rebuilt from persisted parts immediately before model calls
+- never treated as the persistent source of truth
+- discarded after request construction
+
+Dependency role:
+
+- bridge between canonical parts and provider chat-completion transport
+
+#### LM Studio transport structures
+
+Lifecycle:
+
+- created for a single request/response exchange
+- parsed into segments/deltas/chunks during streaming
+- normalized into canonical parts
+- persisted only as raw/diagnostic mirrors where needed
+
+Dependency role:
+
+- transport only
+- no LM Studio-native session handle is used as authoritative runtime state today
+
+#### MCP session handle
+
+Lifecycle:
+
+- created by `initializeSession(...)` at the start of a tool-enabled turn
+- reused for MCP tool calls within that turn
+- not part of the canonical persisted session model
+
+Dependency role:
+
+- external server-owned session handle for MCP interaction
+- currently the main example of true external session state in runtime execution
+
+## What is actually used during a session
+
+### Model-only turn
+
+The runtime flow is:
+
+1. load the `SessionRecord`
+2. load persisted `PartRecord`s for the session
+3. ensure prelude token metadata is present
+4. derive `ModelMessage[]` from canonical parts via selectors
+5. send a fresh LM Studio `chat/completions` request
+6. normalize streamed response into canonical assistant parts
+7. persist raw exchanges and updated turn/round/session records
+8. apply mcpscope compaction by mutating canonical parts
+
+Important conclusion:
+
+- the LM request is reconstructed from mcpscope state on every turn
+- LM Studio is not carrying the authoritative conversational memory for us
+
+### Tool-enabled turn
+
+The runtime flow is:
+
+1. load the `SessionRecord`
+2. initialize MCP session context and fetch tools
+3. persist MCP instructions and tool definitions as setup parts when needed
+4. derive `ApiMessage[]` and tool definitions from canonical parts
+5. send a fresh LM Studio request with `messages` and `tools`
+6. normalize assistant reasoning/content/tool calls into canonical parts
+7. call MCP tools using the transient MCP `sessionId`
+8. persist tool results as canonical parts and MCP raw exchanges
+9. build the next LM Studio request from accumulated canonical parts and repeat rounds as needed
+10. persist final assistant response and apply compaction
+
+Important conclusion:
+
+- even in tool mode, later rounds are built from mcpscope-owned reconstructed messages
+- the external MCP session handle is real, but it is scoped to tool interaction rather than replacing the mcpscope runtime tree
+
+## Architectural assessment of the current gap
+
+The current implementation is already partway toward a session-backed deterministic runtime.
+
+What is already true today:
+
+- mcpscope owns the canonical runtime model
+- mcpscope decides what remains in future model-visible context via `context_state`
+- mcpscope rebuilds LM Studio requests from its own persisted state
+- compaction is already a backend-owned post-turn transformation over canonical parts
+
+What is not yet generalized:
+
+- turns are still structurally assumed to be LLM turns or tool-loop rounds
+- deterministic workflow steps are not yet first-class turn types in the canonical runtime
+- the distinction between transcript state, broader working state, and LLM-visible context is only partially explicit
+- round/request diagnostic structures exist, but there is not yet a generalized runtime abstraction for non-LLM workflow nodes
+
+So the main architecture question going forward is not "can mcpscope take ownership away from LM Studio?".
+
+It is:
+
+- how to generalize the already mcpscope-owned runtime so that deterministic workflow nodes can live beside LLM turns
+- how to make layered context ownership explicit enough that future session-backed workflow execution stays coherent
 
 ### Future work: session types and parent links
 

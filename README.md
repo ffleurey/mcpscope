@@ -10,6 +10,7 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 - [MCP.md](MCP.md) - MCP interface reference: transport, tool surface, and structured results
 - [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
 - [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
+- [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) - current SQLite tables, foreign keys, singleton defaults, and Mermaid ER diagram
 - [backlog/README.md](backlog/README.md) - backlog workflow, state folders, and promotion rules
 - [backlog/ROADMAP.md](backlog/ROADMAP.md) - current roadmap, active queue, and next planning priorities
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures

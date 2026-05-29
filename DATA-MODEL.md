@@ -4,20 +4,25 @@ This document defines the compact canonical runtime tree used by mcpscope.
 
 It is intentionally small. It is the **canonical mcpscope model** used by persistence, API, UI inspect workflows, and future CLI work.
 
+For the backing SQLite storage layout, foreign keys, and singleton defaults tables, see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
+
 ## Current implementation vs future work
 
 **Implemented today:**
 
-- the runtime tree described below for normal persisted sessions
+- the runtime tree described below for persisted sessions
 - one session contains one setup and zero or more turns
 - hierarchical IDs for session/setup/turn/round/part runtime nodes
+- session metadata around the tree: persisted `session_type`, `parent_kind`, and `parent_id`
+- v1 child-session behavior used today by analysis sessions
 
 **Not implemented yet:**
 
-- typed sessions such as analysis, compaction, or benchmark-synthesis sessions
-- parent-linked session metadata that ties a session to another object such as a session, turn, or benchmark
+- a generalized execution model beyond chat-style session turns
+- `turn` parents or richer non-session parent objects
+- a broader workflow/runtime abstraction for deterministic non-LLM steps inside a session
 
-That future session metadata is tracked separately because it is **around** the runtime tree, not a replacement for it.
+The existing session metadata is still **around** the runtime tree, not a replacement for it.
 
 Relevant future tasks:
 
@@ -70,7 +75,7 @@ These tables describe the canonical properties of each node in the runtime tree.
 
 The table above describes the currently implemented runtime-session shape.
 
-Future work may add session metadata such as session type and parent reference, but that is not part of the current canonical runtime tree yet. See:
+Current implementations may also expose metadata around the session tree such as session type and parent reference, but those fields are not part of the canonical setup/turn/round/part tree itself. See:
 
 - `backlog/specification/session-types-and-parent-links.md`
 

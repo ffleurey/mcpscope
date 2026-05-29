@@ -17,844 +17,546 @@ This example is very tool call oriented, after experimentation we might have mor
 
 I think this approach is cool and elegant but I want to know what people are doing. And I can see that we can also implement the same kind of workflow to be a deterministic workflow (not a session) and then use a bunch of session with a single turn in which we feed all the information in the prompt and ask for the answer. Ie. a set of simple session, for example one per tool call and then the deterministic workflow agregates the results and control excaly what is given to the next session. This is more adhoc and in a way simpler but it is more rigid, I like the idea of having a guided session in which we may experiment giving more or less autonomy to the model to see what works best as opossed to impelmenting a rigid framework. I also like the idea of using context engeeneering to keep the memory about the ongoing analysis and potentially the fact that we might be way more token efficient since we are building a single session and compacting each turns.
 
+My idea of an "elegant" steared session is still to but in full control of each turn when we want in terms of inputs and outputs. If you look at how we have been thinking of compation in the project, it is also a very deterministic and transparent process which is controled by the harness and in terms of transparency, mcpscope is all about being able to inspect the session context, including knowing and being able to pull back the parts of converstation which have been stripped. So that is why I consider that we potentially have an elegant and token efficient way to fully impelment the level of determinism and transparency by using the session memory as the working memory.
+
+In that sense what we have of features in mcpscope related to context management and related to how we expose the context in a transparent way provides opportunities to build not only test sessions for mcp server but can be useful for any usecase where context and compaction need to be transparent, inspectable and potentially manipulate by task specific rules, ie. we can make task specific or event subtask specific turn compaction strategies.
+
 ## Research results
 
 ## High-level conclusion
 
-The strongest current practice is not "make one smart autonomous session and hope it behaves".
+The clearest common result is that serious agent systems are usually not built as one unconstrained conversation. The dominant pattern across the frameworks reviewed is:
 
-Across the frameworks and projects reviewed, the dominant pattern is:
-
-- keep the workflow shape explicit in code
-- persist explicit state between steps
-- require structured intermediate outputs
-- use the model for bounded judgments inside that workflow
-- add checkpoints, tracing, and optional human approval where mistakes are costly
-
-In other words, the industry trend is closer to "controlled orchestration with LLM steps" than to "one unconstrained long-running conversation".
-
-That does not mean your guided-session idea is wrong. It means that when teams make it work in production, they usually add deterministic scaffolding around it:
-
-- explicit step boundaries
-- explicit state artifacts
-- explicit stop/retry/approval conditions
-- explicit memory or compaction policy
-
-For mcpscope, this is a very good match for the direction we are already moving toward in the session-analysis protocol.
-
-## What the ecosystem currently does
-
-### 1. Anthropic: start with workflows, add autonomy only when necessary
-
-Anthropic's "Building effective agents" is the clearest public statement of the current best-practice direction.
-
-Their main distinction is:
-
-- workflows: LLMs and tools orchestrated through predefined code paths
-- agents: LLMs dynamically decide their own process and tool usage
-
-Their recommendation is to start with the simplest pattern that works and only add more autonomy when the task truly requires it.
-
-The workflow patterns they explicitly recommend are:
-
-- prompt chaining
-- routing
-- parallelization
-- orchestrator-workers
-- evaluator-optimizer
-
-That matters for our case because session analysis is not an open-ended exploration problem in the usual sense. It is a grounded evidence-processing problem with known object types and known questions. That is much closer to workflow territory than to a highly autonomous agent.
-
-Anthropic also emphasizes two points that are directly relevant to mcpscope:
-
-- tool results are the ground truth inside the loop
-- tool interfaces and descriptions deserve as much engineering attention as the prompt itself
-
-That lines up almost perfectly with what we observed in `MTFC`, `XZDA`, `YFRC`, and `K5BA`.
-
-### 2. OpenAI Agents SDK: managed loop plus explicit sessions, guardrails, and code orchestration
-
-OpenAI's current SDK exposes a built-in agent loop, but it also explicitly distinguishes between:
-
-- letting the LLM orchestrate via tools and handoffs
-- orchestrating via code for more deterministic and predictable behavior
-
-Their docs are very clear that code orchestration is the better fit when you want:
-
-- speed predictability
-- cost predictability
+- explicit workflow shape in code
+- explicit state or memory artifacts between steps
 - structured intermediate outputs
-- evaluator loops
-- deterministic sequencing
+- bounded model judgments inside the workflow
+- checkpoints, validation, and optional approval where mistakes matter
 
-The most relevant implementation details for us are:
+So the ecosystem trend is closer to controlled orchestration with LLM steps than to "one smart autonomous session".
 
-- persistent sessions as a first-class abstraction
-- hooks to customize what history is actually sent to the model on each run
-- explicit compaction wrappers around session memory
-- guardrails running alongside the loop
-- tool-output trimming and filtering before later calls
+That does not invalidate the guided-session idea. It changes the standard for when it is a good design: teams that make it work usually add deterministic scaffolding around it, including step boundaries, artifact contracts, gating, and explicit memory or compaction policy.
 
-This is important because it validates the exact kind of idea you proposed: keep a persistent session if useful, but aggressively control what prior material is forwarded into later turns.
+## Consolidated findings
 
-The interesting nuance is that OpenAI treats memory management as an explicit runtime layer, not something hidden inside the prompt. That suggests that if mcpscope experiments with guided analysis sessions, compaction should be a named, inspectable mechanism rather than an invisible optimization.
+### 1. Explicit state beats implicit transcript memory
 
-### 3. LangGraph: explicit graph state, checkpoints, interrupts, reducers, and state snapshots
+This is the strongest repeated pattern. LangGraph, Semantic Kernel, OpenAI sessions, AutoGen message filtering, and Pydantic AI all treat important working state as something more explicit than raw chat history.
 
-LangGraph represents the "graph-first" camp.
+The practical lesson for mcpscope is that the authoritative state for session analysis should be compact artifacts such as coverage maps, round ledgers, tool-call assessments, and turn-outcome judgments, not a growing transcript.
 
-The core idea is very simple:
+### 2. Intermediate artifacts should be structured, narrow, and machine-checkable
 
-- define a typed shared state
-- define nodes that read the current state and return partial state updates
-- define edges and conditional edges between nodes
-- compile the graph with checkpointing, interrupts, retry policies, cache policies, and durable execution
+Across frameworks, the model is usually asked for bounded outputs that code can validate and reuse: typed objects, ledgers, classifications, evaluator results, or step-local reports.
 
-The recurring implementation pattern is not a chat transcript. It is a typed state object plus deterministic node transitions.
-
-The parts most relevant to mcpscope are:
-
-- `StateGraph` with explicit state schemas
-- reducers for merging partial outputs from multiple nodes
-- checkpointers for durable execution and replay
-- interrupts before or after nodes for approval or inspection
-- state snapshots that make the workflow inspectable at each step
-
-This is a strong reference model for a future mcpscope analysis harness because it matches our needs unusually well:
-
-- the source session is fixed
-- the analysis passes are known in advance
-- intermediate artifacts should be structured
-- we want inspectable checkpoints between passes
-
-If we were to implement the analysis protocol outside a session transcript, a graph/state model like this is one of the cleanest fits.
-
-### 4. AutoGen: event-driven runtime and multi-agent message protocols
-
-AutoGen is useful mainly as an example of the event-driven, message-oriented end of the spectrum.
-
-The current architecture emphasizes:
-
-- routed agents with typed handlers
-- an agent runtime that dispatches messages and events
-- explicit orchestration patterns such as sequential workflows, graph flows, handoffs, and orchestrator-worker setups
-- group-chat and ledger-based orchestration patterns
-
-The most interesting point for us is that AutoGen's deeper runtime model is not really "prompt engineering" at all. It is closer to:
-
-- define message types
-- define routing behavior
-- define who handles what next
-- let the runtime manage dispatch and persistence
-
-That is a better fit for distributed multi-agent systems than for our immediate analysis use case, but two ideas transfer well:
-
-- explicit behavior contracts between stages
-- ledger-style orchestration instead of free-form narrative memory
-
-The Magentic-One orchestrator is especially notable because it uses a structured progress ledger rather than relying only on raw conversational history. That is very close in spirit to the per-round or per-tool-call ledgers we are discussing.
-
-### 5. Semantic Kernel: process framework with step state and event-driven routing
-
-Semantic Kernel's process framework is the clearest example of a business-process style implementation.
-
-The core shape is:
-
-- a process contains steps
-- steps expose functions and may have persisted state
-- steps emit events
-- event routing determines which step runs next
-- execution is inspectable and auditable
-
-This is especially relevant because it shows how teams implement "AI inside a process" rather than "AI as the whole process".
-
-The recurring implementation ideas are:
-
-- step builders and process builders
-- stateful steps with explicit activation and persisted step state
-- event emission and event routing
-- nested processes and fan-in/fan-out patterns
-- local runtime or durable actor-backed runtime
-
-For mcpscope, this is probably the closest conceptual match if we think of the analysis protocol as a product feature rather than an experimental chat trick.
-
-Our passes already look like process steps:
-
-- build coverage map
-- assess tool-choice and tool-call outcomes
-- adjudicate turn success
-- synthesize MCP-surface diagnosis
-
-Semantic Kernel reinforces that this kind of workflow is usually implemented as a process with explicit state transitions, not as a single evolving natural-language conversation.
-
-### 6. Pydantic AI: typed outputs, explicit history passing, and durable wrappers
-
-Pydantic AI represents another important current practice: make everything typed and inspectable.
-
-The most relevant ideas are:
-
-- output schemas for agent results
-- tool and dependency typing
-- explicit `message_history` passing between runs
-- programmatic hand-off between agents
-- durable execution wrappers using workflow engines such as Temporal, DBOS, and Prefect
-- event streams and observability built around the run
-
-Their multi-agent docs are notable because they explicitly show programmatic hand-off where application code decides which agent runs next.
-
-That is very close to one of the options you described:
-
-- many small bounded runs
-- deterministic code decides what to send next
-- only structured outputs are forwarded
-
-Pydantic AI also makes an important philosophical point through its API shape: a conversation can be composed of multiple runs, and run boundaries are a design tool, not a failure of the abstraction. That supports the idea that one session per tool call, or one run per analysis step, is a perfectly normal design choice rather than an inelegant fallback.
-
-## Cross-framework patterns that appear consistently
-
-Across all of the sources above, the same implementation practices keep reappearing.
-
-### A. Explicit state beats implicit transcript memory
-
-The common production pattern is to keep important state in a structured object, store, or process state instead of relying on the full chat history remaining in context forever.
-
-Examples:
-
-- LangGraph state schemas and state snapshots
-- Semantic Kernel step state
-- OpenAI sessions with input filtering and compaction
-- Pydantic AI message history and typed outputs
-- AutoGen message protocols and routed-agent state
-
-This is the most important result for our question. The default industry move is not to trust a growing transcript. It is to extract the facts into state.
-
-### B. Intermediate artifacts are structured and typed
-
-The current practice is to ask the model for bounded outputs that code can inspect.
-
-Typical forms include:
-
-- JSON or typed schema outputs
-- ledgers
-- classifications
-- step-local reports
-- evaluator results
-
-That is directly aligned with our plan to ask narrow questions like:
+For mcpscope this supports asking narrow factual questions such as:
 
 - why was this tool selected?
+- what result did it actually return?
 - did the result match what the model appeared to expect?
-- if not, was the issue wrong parameters, poor tool understanding, or a tool limitation?
+- if not, is the most direct observed cause parameters, tool understanding, tool description, or a real tool limitation?
 
-### C. Checkpointing and resumability are first-class
+That also suggests treating the unit of work as an `assessment task`, not a raw turn. Sometimes one assessment task is one tool call, but sometimes it must include reasoning before the call, the payload, the exact result, and the next reasoning step.
 
-Current frameworks assume long-running or multi-step workflows may pause, fail, or need approval.
+### 3. Checkpoints, gates, and resumability are first-class features
 
-Common mechanisms:
+LangGraph interrupts and checkpointers, OpenAI resumable runs, Pydantic durable wrappers, and Semantic Kernel process state all assume multi-step workflows can pause, fail, or require approval.
 
-- LangGraph checkpointers and interrupts
-- OpenAI session persistence and resumable runs
-- Pydantic durable execution wrappers
-- Semantic Kernel process state and actor runtimes
+For mcpscope, this supports:
 
-This suggests that if mcpscope moves toward a guided analysis harness, we should design interruption and resume points from the beginning instead of bolting them on later.
+- machine-checkable coverage gates
+- explicit rejection of unsupported synthesis
+- retry points between stages
+- visible compaction and resume boundaries
 
-### D. Human approval and explicit gates are normal, not exceptional
+### 4. Tool and interface design are part of the solution
 
-Another repeated pattern is that the workflow often has code-level gates:
+Anthropic states this directly, but the same assumption appears everywhere tools are typed, filtered, or schema-validated. Tool descriptions, parameter names, and result shapes are not side details; they are part of the control surface.
 
-- approve a tool call
-- verify structured output
-- reject incomplete evidence
-- retry a step with narrower instructions
+This is directly relevant to mcpscope because the earlier findings about `mcpscope_inspect` were not incidental. Reducing ambiguity in tool semantics is part of making the analysis workflow reliable.
 
-That supports the direction of adding machine-checkable gates to the session analysis workflow rather than relying only on prompt wording.
+### 5. Decomposition is normal: extractor plus synthesizer, or orchestrator plus workers
 
-### E. Tool and tool-description design is treated as part of the system, not a side detail
+The usual pattern is to let one stage extract or assess bounded facts and a later stage synthesize them. This appears as orchestrator-workers, evaluator-optimizer, typed hand-offs, or process steps depending on the framework.
 
-Anthropic says this explicitly, but the same assumption shows up in every framework that invests in structured tools, schema validation, or tool guardrails.
+For mcpscope, that argues against mixing extraction, adjudication, and MCP-surface diagnosis in one pass.
 
-For mcpscope, this is reassuring: our focus on tool-choice rationale and tool-call success diagnostics is not unusual. It is exactly the kind of lens used in mature agent workflows.
+## What the frameworks contribute
 
-### F. Orchestrator plus workers or extractor plus synthesizer is common
+- Anthropic gives the clearest high-level rule: start with workflows, not agents, and only add autonomy when the task truly needs it.
+- OpenAI Agents SDK is the best concrete reference for a harness-owned guided session with explicit sessions, compaction, filtering, and approvals.
+- LangGraph is the clearest model for a backend-owned state graph with checkpoints, interrupts, reducers, and inspectable state snapshots.
+- AutoGen is the best reference for separating the execution graph from the message graph, which is highly relevant to transparent compaction and selective memory.
+- Semantic Kernel is the clearest process-style reference: stateful steps, event routing, subprocesses, and versioned persisted state.
+- Pydantic AI shows the value of typed outputs, explicit history passing, and code-owned hand-offs between bounded runs.
 
-The decomposition we are considering is standard:
+## Implications for mcpscope
 
-- workers extract facts from bounded evidence slices
-- a later stage synthesizes those facts
-- an evaluator or gate checks that the synthesis is admissible
+The research points to two different design questions that should be kept separate:
 
-That is effectively the same family of pattern as:
+- control shape: how deterministic the workflow is, how much initiative is delegated to the model, and whether the primary logic lives in code or in the LLM loop
+- implementation substrate: where that workflow actually runs, and whether the authoritative working state lives in a session backbone or in an external workflow runtime
 
-- Anthropic orchestrator-workers
-- Anthropic evaluator-optimizer
-- AutoGen orchestrator + workers / ledger manager
-- code-orchestrated runs in OpenAI Agents SDK
-- programmatic hand-offs in Pydantic AI
+The earlier discussion about autonomy, determinism, and bounded stages remains useful, but it should not be confused with the implementation choice of whether mcpscope sessions themselves become the native runtime for deterministic agent workflows.
 
-## What this means for the specific mcpscope design question
+## Control-shape options
 
-### Your guided session idea is valid, but only if the session is tightly scaffolded
+### Guided session: viable, but only if tightly scaffolded
 
-The idea of a single guided session with compaction after each pass is not weird. It is actually close to what newer runtimes are trying to make possible.
+A steered session can still be deterministic and transparent if the harness owns:
 
-But the evidence from current frameworks suggests that this should not be an unconstrained chat loop. It should look more like:
+- the turn sequence
+- the evidence slice shown at each turn
+- the artifact written at each turn
+- the compaction policy
+- the surviving memory after compaction
 
-- one persistent analysis session
-- deterministic system-owned turn sequence
-- each turn receives a bounded evidence slice and a fixed question set
-- each turn returns a structured artifact
-- compaction replaces the bulky evidence slice with the resulting artifact
-- later turns see only the compact ledger plus any newly required evidence
+In that design, the session memory is really a visible working ledger, not an unconstrained conversation.
 
-That can be elegant, but only if the workflow rules are owned by the harness, not improvised by the model.
+### Deterministic multi-run workflow: fully respectable and often simpler
 
-### A purely deterministic multi-run workflow is also a normal and respectable design
+Many frameworks make bounded runs easier to reason about than one persistent session. The strengths are consistent:
 
-Your alternative idea, where each bounded analysis step becomes its own simple session or run and code aggregates the outputs, is also exactly in line with current practice.
-
-In fact, most frameworks make this style easier to reason about than a single persistent conversational agent.
-
-Main strengths:
-
-- easier to test
-- easier to cache
-- easier to compare across models and prompts
-- easier to retry only the failing step
+- easier to test and cache
+- easier to retry a failing step
+- easier to compare prompts or models
 - much easier to prove what evidence each step saw
 
-Main weakness:
+The tradeoff is less adaptive multi-step reasoning inside one persistent working memory.
 
-- less flexibility for adaptive multi-step reasoning inside one persistent working memory
+### Likely near-term shape: deterministic outer workflow plus bounded model stages
 
-### The best near-term shape is probably hybrid
+The strongest common recommendation is a hybrid shape:
 
-The current ecosystem evidence suggests that the strongest starting point for mcpscope is probably not at either extreme.
-
-Likely best first experimental shape:
-
-- deterministic outer workflow
+- deterministic outer orchestration
 - bounded model calls inside each stage
 - structured artifacts passed between stages
-- optional session-like memory only inside a stage or between tightly related stages
+- optional session-like memory only where it clearly helps
 - explicit compaction or artifact substitution between stages
 
-That gives us most of the benefits of agent harnessing without making the workflow opaque.
+That keeps the process transparent without overcommitting to a heavy framework too early.
 
-## Recommended architecture options for mcpscope
+This is still the right place to discuss whether the solution is primarily deterministic, primarily LLM-driven, or hybrid.
 
-### Option 1. Deterministic multi-run pipeline
+## Implementation substrate options for mcpscope
 
-Shape:
+Once the control-shape question is separated out, there is a second and different implementation choice:
 
-- run A: build coverage map
-- run B: per-tool-call assessment entries
-- run C: per-round ledger
-- run D: turn success adjudication
-- run E: final MCP-surface synthesis
+### 1. Add workflows on top of sessions
 
-Characteristics:
+In this model, mcpscope sessions remain mostly what they are today: a substrate for LLM conversation and inspection. The deterministic workflow lives outside the session as a higher-level harness or workflow runtime that decides which session or run to create next, what to feed it, and how to aggregate the results.
 
-- easiest to validate
-- easiest to diff across prompts or models
-- easiest to parallelize some stages later
-- least agentic, most workflow-like
+Main properties:
 
-This is the safest first implementation if the goal is trustworthy research rather than maximum elegance.
+- clear separation between workflow engine and session engine
+- easier to align with external workflow libraries or graph/process runtimes
+- easier to keep session behavior conceptually simple
+- but risks duplicating context-management, inspectability, and state-transition machinery that mcpscope sessions already expose
 
-### Option 2. Guided analysis session with session-owned artifact memory
+### 2. Add deterministic workflow tasks within mcpscope sessions
 
-Shape:
+In this model, the session is not treated as an autonomous chat loop. It becomes the backbone for a deterministic harness that can run task-specific processing nodes between LLM turns.
+
+That means compaction is not "ask the model to summarize". It is a deterministic transition that can:
+
+- decide exactly what remains in active context
+- prune or transform prior material according to task-specific rules
+- inject the next evidence slice or artifact
+- choose the next instruction block and output schema
+- then trigger the next LLM turn
+
+Main properties:
+
+- reuses mcpscope's existing strengths around transparent context, inspectable history, and reversible pruning
+- makes session memory an explicit working-memory substrate rather than just a transcript
+- keeps deterministic nodes and LLM turns in one inspectable runtime
+- creates the possibility of using mcpscope not only to inspect MCP sessions, but to inspect the behavior of a harnessed agent itself
+
+This is the strongest version of the "agent scope" idea: a session-backed deterministic workflow where both the deterministic nodes and the LLM turns are visible and inspectable through the same runtime model.
+
+That does not automatically mean this should become the public positioning of mcpscope. But for internal experimentation, debugging, and protocol design, it could be a strong bootstrap advantage: use mcpscope to build and inspect the very agent workflow we are trying to understand.
+
+### 3. Keep the control-shape discussion separate from the substrate decision
+
+The important clarification is that these are not the same question.
+
+- a session-backed design can still be highly deterministic
+- an external workflow runtime can still contain bounded multi-turn agent stages
+- "session" does not imply "more autonomous"
+- "deterministic workflow" does not imply "outside mcpscope sessions"
+
+So the real comparison is not session versus workflow. It is:
+
+- where the working state should live
+- whether mcpscope's session/context model is already the right native substrate for deterministic agent workflows
+- whether reusing that substrate gives us better inspectability than introducing a separate orchestration runtime
+
+## Comparison of the implementation approaches
+
+### Compact comparison
+
+| Approach | Reliability | Inspectability | Reuse of current mcpscope mechanisms | Implementation complexity | Long-term architectural risk |
+| --- | --- | --- | --- | --- | --- |
+| Workflows on top of sessions | High | Medium to high | Medium | Medium | Medium |
+| Deterministic workflow tasks within sessions | High if designed carefully | Very high | Very high | High | High |
+
+### Rationale for workflows on top of sessions
+
+Why this approach is attractive:
+
+- it keeps a clean boundary between the workflow engine and the session engine
+- it is easier to align with graph or process frameworks without reshaping the meaning of a session
+- it keeps the existing session abstraction conceptually simpler
+- it makes it easier to reason about the authoritative workflow state as something separate from chat state
+
+Why its scores look the way they do:
+
+- reliability is high because deterministic orchestration is straightforward when the workflow state is managed outside the session
+- inspectability is only medium to high because the workflow can certainly be instrumented, but the instrumentation may live partly outside the core mcpscope session model
+- reuse is only medium because the workflow may duplicate some of mcpscope's existing context, compaction, and trace-inspection capabilities rather than inheriting them directly
+- implementation complexity is medium because the design boundaries are cleaner, but there is still real orchestration work to build
+- long-term architectural risk is medium because this approach avoids overloading sessions, but it may create parallel abstractions for state transitions and inspectability
+
+Main pros:
+
+- cleaner architecture boundaries
+- easier adoption of external workflow libraries
+- less pressure to redefine what a session means
+- easier to keep deterministic state separate from conversational state
+
+Main cons:
+
+- more duplication of state-management and inspection concepts
+- weaker "inspect the agent itself through the native mcpscope runtime" story
+- possible split-brain architecture where session state and workflow state evolve in different places
+
+### Rationale for deterministic workflow tasks within sessions
+
+Why this approach is attractive:
+
+- it reuses the session/context machinery mcpscope already has instead of rebuilding parallel workflow memory machinery
+- it makes compaction, pruning, context carry-forward, and stripped-part recovery part of the same inspectable runtime
+- it allows deterministic nodes and LLM turns to be understood through one common execution model
+- it creates a real possibility for mcpscope to act as an internal "agent scope" for understanding harness behavior itself
+
+Why its scores look the way they do:
+
+- reliability can be high, but only if the deterministic nodes, state transitions, and context rules are explicit and machine-checkable; otherwise the session abstraction can become muddy
+- inspectability is very high because both workflow transitions and LLM turns can be surfaced through the same session-centered model
+- reuse is very high because it directly leverages current mcpscope mechanisms around context transparency, compaction, and recoverable stripped history
+- implementation complexity is high because sessions must be extended carefully to host deterministic workflow tasks without turning into an ad hoc bag of special cases
+- long-term architectural risk is high because this option can blur abstraction boundaries if the runtime model for "session state" and "workflow state" is not made explicit
+
+Main pros:
+
+- strongest reuse of existing mcpscope capabilities
+- strongest inspectability and debugging story
+- best fit for transparent task-specific compaction
+- strongest bootstrap value for analyzing the analysis agent itself
+
+Main cons:
+
+- heavier and more ambitious change to the session abstraction
+- greater coupling between orchestration logic and mcpscope internals
+- easier to accumulate architectural debt if deterministic nodes are added opportunistically rather than through a clean runtime model
+- more care required to distinguish transcript state, working-memory state, and workflow-control state
+
+### Decision logic
+
+The practical rationale for choosing between them is:
+
+- choose workflows on top of sessions if the main goal is a cleaner first implementation with conventional boundaries and lower conceptual risk
+- choose deterministic workflow tasks within sessions if the main goal is to maximize inspectability, reuse mcpscope's context machinery deeply, and explore whether mcpscope itself can become a serious substrate for transparent agent execution
+
+The second option is more ambitious, but it is also the only one that could make mcpscope itself part of the experimental advantage rather than just the place where experiment outputs are viewed.
+
+## Architecture options for mcpscope
+
+### 1. Deterministic multi-run pipeline
+
+Representative shape:
+
+- build coverage map
+- build per-tool-call assessments
+- build per-round ledger
+- adjudicate turn success
+- synthesize final MCP-surface diagnosis
+
+This is the easiest option to validate, diff, and rerun.
+
+### 2. Guided analysis session with artifact memory
+
+Representative shape:
 
 - create one analysis session
-- seed it with session root and protocol goals
-- drive deterministic turns that each inspect one evidence slice or one batch of slices
-- after each turn, compact out the bulky inspected evidence and keep only the structured artifact
-- final turn performs synthesis from the accumulated artifacts
+- seed it with protocol goals and root context
+- drive deterministic turns over bounded evidence slices
+- after each turn, replace bulky evidence with a compact artifact
+- perform final synthesis from accumulated artifacts
 
-Characteristics:
+This is elegant and potentially token efficient, but only if compaction remains highly inspectable.
 
-- elegant and potentially token efficient
-- keeps one coherent analysis narrative
-- good experimental surface for testing different amounts of model autonomy
-- harder to guarantee exactly what remains in context unless compaction is very inspectable
+If implemented on top of mcpscope sessions, this should be understood as a deterministic session-backed workflow rather than as a free-form multi-turn agent.
 
-This is the best option if we want to explore context engineering as part of the product itself.
+### 3. Graph/process runtime with checkpoints
 
-### Option 3. Graph/process runtime with explicit checkpoints
+Representative shape:
 
-Shape:
-
-- represent each analysis pass as a graph node or process step
-- store artifacts in explicit shared state
+- model each pass as a graph node or process step
+- keep artifacts in explicit shared state
 - add retry, interrupt, approval, and resume points between nodes
-- use sessions only as execution traces or UI affordances, not as the source of truth for state
+- treat sessions as traces or UI affordances, not as the source of truth for state
 
-Characteristics:
+This is the strongest long-term architecture, but not the lightest first implementation.
 
-- strongest long-term architecture
-- closest to LangGraph or Semantic Kernel process style
-- best fit for later benchmark or batch analysis
-- more engineering overhead up front
-
-This is probably where the product should head if session analysis becomes a serious backend-owned workflow.
-
-## Recommended starting position
-
-Based on current public practice, I would not recommend starting with a highly autonomous multi-turn analysis agent.
-
-I would recommend:
-
-1. use a deterministic outer workflow
-2. make every intermediate artifact structured and inspectable
-3. keep tool-call assessment as a first-class stage
-4. treat success adjudication as its own stage
-5. experiment with guided-session compaction only after the artifact contracts are stable
-
-That gives us a clean research path:
-
-- first learn what artifacts are actually needed
-- then decide whether those artifacts should live in one compacted guided session or in multiple deterministic runs
-
-## Specific implications for the tool-call-focused analysis idea
-
-Your proposed workflow of one turn per tool call is very plausible, but it should probably be reframed slightly.
-
-Instead of "one turn per tool call" as the concept, the stronger abstraction is:
-
-- one bounded evidence-assessment unit per relevant evidence slice
-
-Sometimes that slice will be one tool call.
-Sometimes it may need to include:
-
-- reasoning before the call
-- the call payload
-- the exact tool result
-- the next reasoning block if the question is whether the model understood the outcome
-
-That means the unit of orchestration should probably be an `assessment task`, not a raw session turn.
-
-Each assessment task should produce a structured record such as:
-
-- target IDs inspected
-- local user goal
-- why the tool was selected
-- what the tool was expected to provide
-- what the tool actually returned
-- whether the result matched expectations
-- if not, whether the most direct cause appears to be:
-	- wrong parameters
-	- misunderstanding of the tool
-	- unclear tool description
-	- real tool limitation
-- whether the next step showed that the model understood the result
-
-This is very close to the ledger-oriented practice visible in current frameworks.
-
-## What to avoid
-
-The research strongly suggests avoiding the following traps:
-
-- relying on one large running transcript as the authoritative state
-- asking for broad summaries of reasoning blocks instead of narrow factual judgments
-- letting the model decide coverage boundaries for an evidence-grounded task
-- mixing extraction, adjudication, and product diagnosis in one prompt
-- making compaction opaque instead of inspectable
-- introducing a framework abstraction that hides prompts, intermediate artifacts, or control flow too early
-
-## Provisional recommendation for mcpscope
-
-Short term:
-
-- keep the session-analysis work centered on explicit artifacts and deterministic stage boundaries
-- use the current captured sessions to discover the minimal artifact set
-- prototype with simple orchestration before adopting a heavy framework
-
-Medium term:
-
-- if a persistent guided analysis session still looks attractive, implement it as a harnessed workflow with explicit turn types and explicit compaction artifacts
-- otherwise move directly to a backend-owned graph/process workflow
-
-Long term:
-
-- treat analysis, compaction, and later benchmark synthesis as related typed workflows with shared inspectability principles
+Relative to the new distinction above, this option is mainly a different substrate choice: it moves the authoritative workflow state outside sessions.
 
 ## Concrete reference cases worth studying
 
-The frameworks above are easier to reason about once we pin them to specific examples and repos.
+The most useful concrete references are:
 
-### 1. OpenAI Agents SDK: deterministic flows, approvals, memory, and compaction in one repo
+- OpenAI Agents SDK examples for deterministic flows, forcing tool use, HITL approvals, compaction sessions, MCP tool filtering, and larger orchestrated workflows such as `healthcare_support`
+- Anthropic cookbook examples for basic workflows, orchestrator-workers, evaluator-optimizer, and managed-agent recovery loops such as `CMA_orchestrate_issue_to_pr`
+- AutoGen graph and sequential workflow examples, plus `MessageFilterAgent` and graph tests that show joins, loops, resume, and filtered visibility
+- LangGraph examples such as `storm.py`, adaptive/self/CRAG RAG loops, interrupt primitives, and explicit graph state compilation
+- Semantic Kernel process samples for loops, fan-in/fan-out, stateful steps, subprocesses, versioned process definitions, and persisted state reload
 
-The OpenAI Agents SDK repo is one of the clearest examples of a modern "managed loop plus explicit control" stack.
+These references mainly matter because they show three concrete interpretations of the steered-session idea:
 
-Concrete examples worth reading:
+- harness-owned guided session
+- execution graph plus filtered memory
+- process runtime with persisted artifacts
 
-- `examples/agent_patterns/deterministic.py`: sequential bounded workflow where one agent produces an outline, another judges quality, and later steps only run if the gate passes
-- `examples/agent_patterns/forcing_tool_use.py`: explicit control over how tool results are turned into final output, which is directly relevant to tool-grounded analysis workflows
-- `examples/agent_patterns/human_in_the_loop.py` and `human_in_the_loop_stream.py`: interrupt, serialize run state, approve or reject tool calls, then resume
-- `examples/memory/compaction_session_example.py` and `compaction_session_stateless_example.py`: explicit session compaction wrappers rather than silent history growth
-- `examples/mcp/tool_filter_example`: narrow MCP tool surface enforced by code
-- `examples/sandbox/healthcare_support/`: larger orchestrated workflow with persistent memory, approval gates, structured outputs, and tracing
-- `examples/research_bot/` and `examples/financial_research_agent/`: useful as "complex research workflow" references, even though their domains differ from ours
+The useful distinction is therefore not really "session" versus "workflow", but:
 
-Why this matters for mcpscope:
-
-- this is the strongest concrete reference for a guided session that is still harness-owned
-- sessions, approvals, filtering, and compaction are explicit runtime mechanisms, not hidden prompt tricks
-- it supports the idea that a "steered session" can still be deterministic if the harness owns turn inputs, tool availability, and what history survives compaction
-
-### 2. Anthropic cookbooks: minimal implementations of workflow patterns, plus managed-agent recovery loops
-
-Anthropic's public material is split between simple workflow notebooks and more managed-agent demos.
-
-Concrete references worth reading:
-
-- `anthropics/claude-cookbooks/patterns/agents/basic_workflows.ipynb`: minimal chain, parallelization, and routing implementations; good for understanding the smallest useful control layer
-- `patterns/agents/orchestrator_workers.ipynb`: explicit orchestrator that generates structured worker tasks, then collects outputs
-- `patterns/agents/evaluator_optimizer.ipynb`: generator plus evaluator loop with clear pass/fail feedback contracts
-- `managed_agents/CMA_orchestrate_issue_to_pr.ipynb`: realistic multi-turn coding loop with CI failure recovery and review feedback handling
-- `managed_agents/linear/`: concrete webhook-backed managed-agent integration with `sessions.create`, metadata routing, and async reply handling
-
-Why this matters for mcpscope:
-
-- the small notebooks are good references for the first experimental version of our protocol because they show the workflow shape without much framework noise
-- the managed-agent examples are useful once we care about long-lived sessions, webhooks, external events, and recovery points
-- Anthropic is also the clearest reference for evaluator-style loops, which may be relevant if we later add a rejection pass for unsupported analysis claims
-
-### 3. AutoGen: deterministic graph flow plus explicit message filtering
-
-AutoGen is especially relevant when the question is not just "who runs next" but also "what context should each step actually see".
-
-Concrete references worth reading:
-
-- `python/docs/src/user-guide/core-user-guide/design-patterns/sequential-workflow.ipynb`: deterministic publish-subscribe pipeline for concept extraction -> writing -> proofing
-- `python/docs/src/user-guide/agentchat-user-guide/graph-flow.ipynb`: graph examples for sequential flow, parallel fan-out, conditional loop, and filtered summary
-- `python/packages/autogen-agentchat/src/autogen_agentchat/teams/_group_chat/_graph/_graph_builder.py`: builder surface for sequential, fan-out, conditional, and cyclic workflows
-- `python/packages/autogen-agentchat/src/autogen_agentchat/agents/_message_filter_agent.py`: selective visibility over prior messages
-- `python/packages/autogen-agentchat/tests/test_group_chat_graph.py`: useful because it shows what the runtime authors themselves consider important enough to test: joins, loops, resume, serialization, and filtering
-- older .NET workflow examples such as `Example07_Dynamic_GroupChat_Calculate_Fibonacci.cs`: concrete code-review/run/fix loop with explicit transitions and error-triggered re-entry
-
-Why this matters for mcpscope:
-
-- AutoGen is the best public reference we found for separating the execution graph from the message graph
-- that is very close to the compaction problem we care about: later steps may need the analysis artifacts, but not the full raw inspect payloads that produced them
-- if we ever build a steered session abstraction, this message-filtering idea is one of the most relevant external precedents
-
-### 4. LangGraph: typed state plus checkpoints and resumable interrupts
-
-LangGraph is still one of the clearest references for "stateful workflow first, transcript second".
-
-Concrete references worth reading:
-
-- `libs/cli/examples/graphs/storm.py`: substantial multi-stage research graph with subgraphs, parallel interview execution, outline refinement, indexing, section writing, and final article synthesis
-- `examples/rag/langgraph_self_rag.ipynb`, `langgraph_crag.ipynb`, and `langgraph_adaptive_rag.ipynb`: retrieval/evaluation/regeneration loops with conditional routing
-- `langgraph/types.py` interrupt support: resumable human-in-the-loop primitive tied to checkpointed execution
-- `graph/state.py` compile path: explicit checkpointer, cache, store, and interrupt configuration
-- `pregel/main.py` and `pregel/protocol.py`: runtime support for `get_state`, `get_graph`, subgraphs, interrupts, and state snapshots
-
-Why this matters for mcpscope:
-
-- LangGraph is the strongest reference if we decide the real product should be a backend-owned graph with explicit artifacts in shared state
-- it also shows that interrupts and resume are not exotic features; they are normal expectations once workflows become multi-step and inspectable
-- its subgraph examples are a good match for a future design where each turn or round assessment is a reusable sub-workflow
-
-### 5. Semantic Kernel processes: event-routed steps with persisted state and versioned sub-processes
-
-Semantic Kernel is less about chat and more about building inspectable process runtimes.
-
-Concrete references worth reading:
-
-- `dotnet/samples/GettingStartedWithProcesses/Step01/Step01_Processes.cs`: small loop with explicit events and conditional exit
-- `dotnet/samples/GettingStartedWithProcesses/Step03/Processes/FriedFishProcess.cs`: sequential stateful process with retries on failure events and versioned process definitions
-- `dotnet/samples/GettingStartedWithProcesses/Step03/Processes/FishAndChipsProcess.cs`: fan-out/fan-in process using subprocesses as steps
-- `dotnet/samples/GettingStartedWithProcesses/Step03/Step03a_FoodPreparation.cs`: save state locally, load it back, and run later versions against stored state
-- `python/samples/concepts/processes/cycles_with_fan_in.py`: compact Python example of cycles, fan-in, persisted step state, and explicit stop events
-- `samples/Demos/ProcessFrameworkWithSignalR/README.md` and `ProcessWithDapr`: good references for user approval and distributed/runtime-backed process execution
-
-Why this matters for mcpscope:
-
-- this is the strongest concrete precedent for treating the analysis protocol as a product workflow with explicit state contracts
-- it is also a strong reference for versioned workflows and persisted process state, which may matter once we want to compare protocol revisions over saved artifacts
-
-## How these references map to the steered-session idea
-
-The key clarification from this research pass is that a steered session does not have to mean "let the model improvise for many turns".
-
-There are at least three concrete interpretations that all have public precedents:
-
-- harness-owned guided session: closest to the OpenAI Agents SDK session plus compaction examples, where a persistent session exists but the harness owns tool surface, approvals, and history forwarding
-- execution graph plus filtered memory: closest to AutoGen GraphFlow and LangGraph, where control flow and visible memory are both explicit runtime concerns
-- process runtime with persisted artifacts: closest to Semantic Kernel, where the authoritative state is the process state and chat-like interaction is only one interface over it
-
-So the distinction is not really "session" versus "deterministic workflow".
-The more useful distinction is:
-
-- where the authoritative analysis state lives
-- who decides what each step can see next
+- where the authoritative state lives
+- who decides what the next step sees
 - whether compaction is inspectable and replayable
 
-That is helpful for mcpscope because it means the elegant version of the idea is still viable, but only if we make these rules first-class:
+For mcpscope, this now needs one more explicit layer of interpretation:
 
-- the harness owns the turn sequence
-- the harness owns which inspect payloads are reduced into which artifacts
-- the harness owns which artifacts survive into later turns
-- the resulting memory changes are inspectable, not hidden
+- whether the deterministic workflow is implemented above sessions
+- or whether sessions themselves become the native runtime for deterministic agent workflows
 
-If we do not want to build that machinery yet, the deterministic multi-run pipeline remains the simpler first step and is still completely aligned with current ecosystem practice.
+## Additional considerations for local SLMs, small context windows, and token efficiency
 
-## Additional considerations for local SLMs, small context windows, and strong token-efficiency targets
+The general research becomes more decisive under local-model constraints.
 
-The sources above mostly describe general agent practice, often assuming reasonably capable models and enough budget to tolerate extra turns, retries, and sometimes parallel workers.
+### What changes under SLM constraints
 
-mcpscope has a more constrained target:
+- explicit workflows become more important because smaller models are less reliable at deciding what to inspect next and more sensitive to stale context
+- long guided sessions become less attractive unless the surviving memory is tiny, schema-like, and aggressively compacted
+- deterministic multi-run pipelines become relatively more attractive because each stage can start fresh with a tightly bounded prompt budget
+- parallel fan-out becomes less compelling on local hardware because concurrent calls compete for the same compute budget and duplicate prompt overhead
+- artifact design must become smaller and more regular: short ledgers, fixed records, enum-like judgments, exact snippets only where needed, and explicit inspected IDs
+- retrieval discipline matters more than prompt cleverness: keep the active evidence set tiny and prefer multiple narrow passes over one oversized prompt
+- structure still helps, but overly rich schemas can hurt small models through a real "structure tax"; the sweet spot is cheap structure with shallow schemas, fixed order, low nesting, and exact format examples
+- tool and inspect semantics matter even more because smaller models pay more for ambiguity
+- few-shot examples and stage-specific micro-prompts become more valuable than one large universal prompt
 
-- local or self-hosted models
-- smaller context windows
-- lower per-run capability
-- stronger sensitivity to prompt bloat
-- stronger need for predictable token usage
-- limited benefit from parallel fan-out because local throughput is finite
+### How that changes the mcpscope ranking
 
-Under those constraints, the rationale changes in a few important ways.
+If mcpscope optimizes for capable frontier models, the default ranking is roughly:
 
-### 1. The case for explicit workflows gets stronger, not weaker
-
-The Anthropic guidance already says to start with the simplest workflow that works. Under SLM constraints, that advice becomes even more important.
-
-Why:
-
-- smaller models are less reliable at deciding what to inspect next
-- they are more likely to get distracted by stale context
-- they are more likely to overproduce shallow narrative instead of precise extraction
-- every extra turn is a bigger relative cost when latency and throughput are limited locally
-
-So the local-model setting strengthens the case for:
-
-- deterministic outer control
-- bounded evidence slices
-- fixed question sets
-- explicit gates before synthesis
-
-This means the mcpscope problem looks even less like "build an autonomous analyst" and even more like "build a compact evidence-reduction workflow with model-assisted judgments".
-
-### 2. Long guided sessions become less attractive unless compaction is extremely aggressive
-
-In the general case, a guided session with smart compaction is elegant because it preserves continuity while reducing repeated setup cost.
-
-In the SLM case, the downside grows:
-
-- short context windows mean even moderate history accumulation becomes harmful quickly
-- smaller models are more brittle when the prompt mixes protocol, evidence, prior artifacts, and partial conclusions
-- the compaction mechanism itself becomes part of the token budget
-- debugging becomes harder if a weak model starts relying on stale or malformed compacted summaries
-
-This does not kill the guided-session idea, but it changes the bar.
-
-For local SLMs, a guided session is only appealing if:
-
-- the surviving memory is tiny and schema-like
-- each turn sees only one narrow evidence unit plus a compact ledger
-- compaction is mostly deterministic or at least machine-checkable
-- the session never relies on carrying rich natural-language summaries forward for long
-
-In practice, this pushes the design closer to "stateful workflow with a session veneer" than to a true long-running conversational agent.
-
-### 3. Deterministic multi-run pipelines become relatively more attractive
-
-For frontier models, the trade-off between one guided session and many bounded runs can be ambiguous.
-
-For local SLMs, many arguments shift toward bounded runs:
-
-- each step gets a fresh prompt with no accidental baggage
-- token usage is easier to budget and cap per stage
-- failures are easier to localize and rerun
-- smaller models often do better when the task shape is extremely narrow and reset each time
-- orchestration can aggressively prune what flows into the next stage
-
-The main loss is reduced cross-step adaptive reasoning. But in the mcpscope analysis task, that may be an acceptable trade because the desired reasoning is mostly evidence reduction, not creative search.
-
-This suggests that for local-model-first mcpscope, the deterministic multi-run pipeline moves from "safe first implementation" to "probably the default architecture unless experiments prove otherwise".
-
-### 4. Parallelization is less compelling on local hardware
-
-In the general agent literature, parallelization is attractive because it improves latency or gives multiple perspectives.
-
-For local inference, that rationale weakens:
-
-- running multiple model calls at once may just compete for the same local GPU or CPU budget
-- throughput constraints can turn parallel fan-out into queueing, memory pressure, or slower total completion
-- multiple parallel calls also multiply prompt overhead
-
-So for mcpscope, local deployment changes the parallelization story:
-
-- parallel fan-out is still useful conceptually for independent subproblems
-- but operationally, it may be better implemented as sequential micro-batches or optional offline batch runs
-- "multiple perspectives" is a luxury stage, not the default path
-
-This further favors a narrow staged pipeline over orchestrator-worker designs that assume cheap concurrent model calls.
-
-### 5. The best artifact form becomes smaller, more regular, and less prose-heavy
-
-Smaller context windows do not just affect architecture. They also affect the shape of intermediate artifacts.
-
-For local SLMs, artifacts should generally be:
-
-- compact
-- repetitive in structure
-- low in stylistic variation
-- easy to validate mechanically
-- directly usable without re-reading the source evidence
-
-That means mcpscope should likely prefer artifacts such as:
-
-- short key-value ledgers
-- fixed field records
-- enum-like judgments
-- direct quoted error/result snippets only where necessary
-- explicit inspected IDs
-
-and avoid artifacts such as:
-
-- broad free-form round summaries
-- rich narrative prose about reasoning
-- duplicated context in multiple stages
-
-This lines up with the LangGraph memory guidance that long message histories are expensive and distracting, but in the local-model case the penalty is harsher.
-
-### 6. Retrieval and chunking discipline matter more than prompt cleverness
-
-The Azure guidance is nominally about RAG, but the token-budget lesson transfers directly.
-
-The main points are:
-
-- chunk size times retrieved items controls prompt size very quickly
-- smaller chunks can improve focus and reduce distraction
-- too many retrieved items can overwhelm the model
-- long questions and long history should be broken up rather than naively accumulated
-
-For mcpscope, this suggests a strong preference for:
-
-- inspecting only the smallest evidence-bearing units needed for the current judgment
-- keeping the active evidence set tiny
-- preferring additional deterministic passes over one oversized evidence bundle
-- treating coverage as a routing problem, not a "stuff everything into context" problem
-
-This pushes the workflow toward selective retrieval of session parts plus explicit artifact carry-forward.
-
-### 7. Strong schemas still help, but overly rich structure can hurt smaller models
-
-One subtle result from the Hugging Face structured-code-agent work is especially relevant here.
-
-It shows two things at once:
-
-- structure often improves reliability by removing parsing failures
-- smaller models can suffer a "structure tax" when they must simultaneously satisfy too many formatting constraints and solve the task
-
-That matters for mcpscope because it argues against two extremes:
-
-- no structure at all: too hard to validate, too easy to drift
-- overly elaborate nested JSON everywhere: too much cognitive overhead for weaker models
-
-For local SLMs, the sweet spot is likely:
-
-- shallow schemas
-- short field names only if still readable
-- fixed output ordering
-- limited nesting
-- minimal escaping burden
-- examples in the exact target format
-
-In other words: structure is still important, but it must be cheap structure.
-
-### 8. Tool and interface design matter even more for weaker local models
-
-Anthropic's point about tool design becomes more important under SLM constraints.
-
-If the model is smaller, then every ambiguity in:
-
-- tool descriptions
-- parameter names
-- inspect object semantics
-- result-shape expectations
-
-costs more.
-
-That means local-model-first design should invest even more heavily in:
-
-- precise inspect descriptions
-- examples of the target output format
-- explicit statements of what parent-level inspect does not provide
-- few near-duplicate tools or output shapes
-- naming that reduces interpretation work
-
-For mcpscope specifically, this supports the earlier changes to `mcpscope_inspect` wording and suggests the protocol should continue reducing inferential burden wherever possible.
-
-### 9. Few-shot examples and reusable micro-prompts become more valuable
-
-Smaller models often benefit more from direct pattern matching than from abstract, high-level instructions.
-
-That suggests a local-SLM-friendly protocol should lean more heavily on:
-
-- one or two exact examples of a good `tool_call_assessment`
-- one exact example of a supported vs unsupported `turn_outcome_assessment`
-- repeated fixed wording for stage prompts
-- maybe even stage-specific prompts that are shorter and more specialized instead of one universal analysis prompt
-
-This again favors a multi-run staged pipeline. It is easier to attach very specific few-shot guidance to a narrow stage than to maintain a single monolithic guided session prompt.
-
-## How the constraints change the architecture ranking for mcpscope
-
-If we optimize for capable frontier models with generous context, the ranking is roughly:
-
-- deterministic outer workflow first
-- guided session as a plausible experimental alternative
+- deterministic workflow first
+- guided session as a plausible alternative
 - graph/process runtime as a strong long-term direction
 
-If we optimize for local SLMs, smaller windows, and strong token efficiency, the ranking changes to:
+If mcpscope optimizes for local SLMs with smaller windows and strong token efficiency, the ranking shifts to:
 
-### Best default: deterministic multi-run pipeline
+- deterministic multi-run pipeline as the default
+- guided analysis session only if compaction is ultra-compact and robust
+- graph/process runtime still attractive long term because explicit state becomes even more valuable
 
-Why it moves up:
+## Consolidated recommendation for mcpscope
 
-- easiest to keep prompts tiny
-- easiest to bound token usage
-- easiest to attach stage-specific examples
-- easiest to validate and retry
-- least dependent on model-managed memory
+Current recommendation:
 
-### Viable but higher bar: guided analysis session with ultra-compact artifact memory
+- start from a deterministic staged pipeline rather than a highly autonomous analysis agent
+- keep every intermediate artifact structured, inspectable, and small
+- keep tool-call assessment and turn-success adjudication as distinct stages
+- use the current captured sessions to discover the minimal artifact set
+- experiment with guided-session compaction only after the artifact contracts are stable
 
-Why it moves down:
+On the separate substrate question, the most interesting new option is to seriously evaluate a session-backed deterministic harness rather than assuming that "deterministic workflow" means "outside sessions".
 
-- local SLMs are less reliable at carrying forward compacted context correctly
-- prompt/state accumulation is riskier
-- compaction errors can poison later steps
+That option is especially attractive if the goal is not just running the agent, but inspecting it with the same transparency principles mcpscope already applies to session state and compaction.
 
-What would make it viable:
-
-- strict deterministic turn schedule
-- tiny artifact ledger
-- aggressive forgetting of raw evidence
-- shallow schemas and heavy validation
-
-### Long-term backend direction: graph/process runtime still makes sense
-
-This does not move down conceptually. If anything, the local-model setting makes explicit state even more attractive.
-
-But it remains a heavier implementation step than the immediate research workflow.
-
-## Provisional SLM-first recommendation for mcpscope
-
-If the product target is genuinely local SLMs with smaller windows, I would currently recommend:
+If the product target is specifically local SLMs, the recommendation becomes stronger:
 
 1. start with a deterministic staged pipeline, not a long guided session
-2. make each stage small enough to fit comfortably inside a conservative prompt budget
-3. keep intermediate artifacts shallow, repetitive, and machine-checkable
+2. keep each stage inside a conservative prompt budget
+3. prefer shallow, repetitive, machine-checkable artifacts over prose summaries
 4. use examples and fixed fielded outputs rather than broad instruction prose
-5. treat parallel fan-out as optional and probably offline, not as the default runtime shape
-6. keep any persistent session memory as a tiny ledger of facts, not as the primary working substrate
+5. treat parallel fan-out as optional or offline, not the default runtime shape
+6. if a guided session is explored later, keep its memory to a tiny factual ledger rather than rich narrative state
 
-In that world, the elegant version of the steered-session idea is still possible, but it becomes a second-step optimization after we have proven that the artifact set is sufficient and that the compaction policy is robust on weaker models.
+That still leaves room for the elegant steered-session idea, but it makes it a second-step optimization rather than the default first implementation.
+
+## First-pass design sketch for a session-backed deterministic harness
+
+If mcpscope explores the more ambitious option, the most useful framing is not "make sessions more autonomous" but "treat sessions as a runtime that can host both LLM turns and deterministic turns over a shared context".
+
+That suggests a first-pass model with the following principles:
+
+- a session remains the top-level execution container
+- a session contains multiple turn types, not only LLM turns
+- all turns operate over one shared session context
+- the session context distinguishes between full working state and the smaller subset currently kept in LLM-visible context
+- compaction becomes a deterministic turn, not an opaque summarization side effect
+- validation, gating, mutation, and artifact production can also be modeled as deterministic turns
+- task-specific workflows can be built by composing specialized turn types over the same session/context substrate
+
+### Mermaid sketch
+
+```mermaid
+classDiagram
+	class Session {
+		+id: SessionId
+		+turns: Turn[]
+		+context: SessionContext
+		+runNextTurn()
+		+appendTurn(turn)
+	}
+
+	class SessionContext {
+		+workingState: WorkingState
+		+llmVisibleContext: LlmVisibleContext
+		+artifacts: ArtifactStore
+		+applyMutation(mutation)
+		+setLlmVisibility(selection)
+	}
+
+	class Turn {
+		<<abstract>>
+		+id: TurnId
+		+kind: TurnKind
+		+execute(context)
+		+output: TurnOutput
+	}
+
+	class LlmTurn {
+		+promptSpec: PromptSpec
+		+outputSchema: OutputSchema
+		+execute(context)
+	}
+
+	class DeterministicTurn {
+		+execute(context)
+	}
+
+	class CompactionTurn {
+		+strategy: CompactionStrategy
+		+execute(context)
+	}
+
+	class ValidationTurn {
+		+rules: ValidationRule[]
+		+execute(context)
+	}
+
+	class ContextMutationTurn {
+		+mutationSpec: MutationSpec
+		+execute(context)
+	}
+
+	class ArtifactProductionTurn {
+		+artifactType: ArtifactType
+		+execute(context)
+	}
+
+	class ArtifactStore {
+		+put(artifact)
+		+get(id)
+		+listByType(type)
+	}
+
+	class Artifact {
+		+id: ArtifactId
+		+type: ArtifactType
+		+payload: object
+	}
+
+	class ContextReader {
+		<<interface>>
+		+read(context)
+	}
+
+	class ContextMutator {
+		<<interface>>
+		+mutate(context)
+	}
+
+	class OutputProducer {
+		<<interface>>
+		+produceOutput()
+	}
+
+	class Validator {
+		<<interface>>
+		+validate(context)
+	}
+
+	Session "1" o-- "1" SessionContext
+	Session "1" o-- "*" Turn
+	SessionContext "1" o-- "1" ArtifactStore
+	ArtifactStore "1" o-- "*" Artifact
+
+	Turn <|-- LlmTurn
+	Turn <|-- DeterministicTurn
+	DeterministicTurn <|-- CompactionTurn
+	DeterministicTurn <|-- ValidationTurn
+	DeterministicTurn <|-- ContextMutationTurn
+	DeterministicTurn <|-- ArtifactProductionTurn
+
+	ContextReader <|.. Turn
+	OutputProducer <|.. Turn
+	ContextMutator <|.. DeterministicTurn
+	Validator <|.. ValidationTurn
+```
+
+### What this sketch is trying to make explicit
+
+- the session is the execution backbone, not the decision-maker
+- the harness still owns sequencing, turn insertion, gating, and visibility rules
+- the shared context is broader than the LLM-visible context
+- deterministic turns can read and mutate the broader context directly
+- LLM turns should only receive the bounded subset that the harness explicitly keeps in active model context
+- artifacts are first-class outputs of the workflow and should not be conflated with raw transcript history
+
+### Why this is a promising shape for mcpscope
+
+It reuses the distinctive things mcpscope already has or wants to have:
+
+- transparent context management
+- inspectable compaction
+- recoverable stripped history
+- explicit turn structure
+- inspectable runtime traces
+
+That makes it a plausible foundation for a more general "agent scope" style runtime, even if mcpscope never markets itself that way.
+
+### The main architectural caution
+
+If this direction is explored, the implementation has to keep three kinds of state separate:
+
+- transcript state: the historical record of turns and outputs
+- working state: the broader session-owned artifacts and mutable runtime data
+- LLM-visible context: the carefully bounded subset forwarded into a given model turn
+
+If those three layers are not made explicit, the design will become confusing quickly and the session abstraction will accumulate ad hoc semantics.
+
+### Provisional wrap-up
+
+This research points to a pragmatic sequence:
+
+1. keep the analysis protocol itself deterministic and artifact-driven
+2. preserve the distinction between control shape and implementation substrate
+3. treat the session-backed deterministic harness as the ambitious but interesting option
+4. if that option is pursued, model compaction, validation, mutation, and artifact production as explicit deterministic turns rather than hidden side effects
+5. design the context model around explicit layers of visibility and state ownership from the beginning
+
+That gives mcpscope a plausible path from "inspect sessions" to "inspect and run transparent agent workflows" without abandoning the core principles that made the current project useful in the first place.
 
 ## Sources reviewed
 
