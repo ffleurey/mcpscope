@@ -18,7 +18,6 @@ import {
   listAnalysisProfiles,
   listLmConnections,
   listModelConfigs,
-  updateSessionRecord,
 } from '../persistence/repository.js'
 import {
   createSession,
@@ -166,14 +165,10 @@ export async function executeAnalysisLaunch(
         modelProfileSnapshot,
         mcpProfileSnapshot,
         compactionStrategy: 'strip-reasoning',
+        sessionType: 'session_analysis',
+        parentKind: 'session',
+        parentId: targetSessionId,
       })
-
-      // createSession always creates with sessionType='primary'.
-      // Patch the child-session fields on the record and persist them.
-      session.sessionType = 'session_analysis'
-      session.parentKind = 'session'
-      session.parentId = targetSessionId
-      updateSessionRecord(db.connection, session)
 
       return { kind: 'created', session, modelName: modelConfig.name }
     } catch (error) {
