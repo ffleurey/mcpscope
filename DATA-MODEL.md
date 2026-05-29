@@ -261,7 +261,7 @@ Implemented rules:
 - `session_compaction` → mandatory `session` parent
 - `benchmark_analysis` → mandatory `benchmark` parent
 
-All creation paths — including the analysis-launch flow — use one unified validated `createSession(...)` path. Session type and parent metadata are validated before persistence and never patched afterward.
+The backend runtime session-creation flow — including the analysis-launch flow — uses one unified validated `createSession(...)` path. Session type and parent metadata are validated before persistence and never patched afterward in that flow.
 
 Important boundary:
 
