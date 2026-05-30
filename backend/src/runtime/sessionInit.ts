@@ -4,6 +4,7 @@ import {
   listPartRecordsBySession,
   listRawExchangeRecordsBySession,
   listRoundRecordsBySession,
+  listStepRecordsBySession,
   listTurnRecordsBySession,
   updateSessionRecord,
 } from '../persistence/repository.js'
@@ -46,6 +47,7 @@ export async function runSessionInitialization(
     }
     const trace = buildSessionTraceBundle({
       session,
+      steps: listStepRecordsBySession(database.connection, sessionId),
       turns: listTurnRecordsBySession(database.connection, sessionId),
       rounds: listRoundRecordsBySession(database.connection, sessionId),
       parts,
@@ -93,6 +95,7 @@ export async function runSessionInitialization(
   const allParts = listPartRecordsBySession(database.connection, sessionId)
   const trace = buildSessionTraceBundle({
     session,
+    steps: listStepRecordsBySession(database.connection, sessionId),
     turns: listTurnRecordsBySession(database.connection, sessionId),
     rounds: listRoundRecordsBySession(database.connection, sessionId),
     parts: allParts,

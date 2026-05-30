@@ -10,6 +10,18 @@ export interface BackendDatabase {
   readonly schema: ReturnType<typeof querySchemaSummary>
 }
 
+function removeLegacyCompactionDiagnosticParts(connection: Database.Database): void {
+  connection.prepare(`
+    DELETE FROM v2_parts
+    WHERE part_type = 'diagnostic-note'
+      AND step_id IN (
+        SELECT id
+        FROM v2_steps
+        WHERE step_type_key = 'compaction'
+      )
+  `).run()
+}
+
 export function openBackendDatabase(sqlitePath: string): BackendDatabase {
   fs.mkdirSync(path.dirname(sqlitePath), { recursive: true })
 
@@ -26,6 +38,7 @@ export function openBackendDatabase(sqlitePath: string): BackendDatabase {
   // validates that all required v2 columns are present.
   initializeNewSchema(connection)
   validateNewSchema(connection)
+  removeLegacyCompactionDiagnosticParts(connection)
 
   const schema = querySchemaSummary(connection)
 

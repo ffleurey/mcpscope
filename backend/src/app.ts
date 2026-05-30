@@ -37,6 +37,7 @@ import {
   listPartRecordsBySession,
   listRawExchangeRecordsBySession,
   listRoundRecordsBySession,
+  listStepRecordsBySession,
   listTurnRecordsBySession,
   getNextTurnSequenceNumber,
   insertTurnRecord,
@@ -806,6 +807,7 @@ export async function buildBackendApp(
     const rawExchanges = listRawExchangeRecordsBySession(database.connection, sessionId)
     return buildSessionTraceBundle({
       session,
+      steps: listStepRecordsBySession(database.connection, sessionId),
       turns,
       rounds,
       parts,

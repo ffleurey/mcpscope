@@ -85,6 +85,42 @@ function renderTurnParts(turn: AnyRecord): void {
   }
 }
 
+function renderGenericStep(step: AnyRecord): void {
+  const id = String(step['id'] ?? '')
+  const type = String(step['type'] ?? 'step')
+  const status = step['status'] ? `  ${String(step['status'])}` : ''
+  const strategy = step['strategy'] ? `  ${String(step['strategy'])}` : ''
+  const sourceTurn = step['source_turn_number'] != null ? `  after turn ${String(step['source_turn_number'])}` : ''
+  out(`${id}  ${type}${status}${strategy}${sourceTurn}`)
+
+  const strippedPartIds = Array.isArray(step['stripped_part_ids']) ? step['stripped_part_ids'] as unknown[] : []
+  if (strippedPartIds.length > 0) {
+    out('  stripped parts')
+    for (const partId of strippedPartIds) {
+      out(`    ${String(partId)}`)
+    }
+  }
+
+  const strippedParts = Array.isArray(step['stripped_parts']) ? step['stripped_parts'] as AnyRecord[] : []
+  if (strippedParts.length > 0) {
+    out('  stripped details')
+    for (const strippedPart of strippedParts) {
+      const strippedId = String(strippedPart['id'] ?? '')
+      const strippedType = strippedPart['type'] ? `  ${String(strippedPart['type'])}` : ''
+      const strippedTokens = strippedPart['token_count'] != null ? `  (${Number(strippedPart['token_count'])} tokens)` : ''
+      out(`    ${strippedId}${strippedType}${strippedTokens}`)
+      if (typeof strippedPart['reason'] === 'string') {
+        out(`      ${strippedPart['reason']}`)
+      }
+    }
+  }
+
+  const parts = step['parts'] as AnyRecord[] | undefined
+  if (parts) {
+    for (const part of parts) renderPart(part, '  ')
+  }
+}
+
 // ─── Type-specific text renderers ─────────────────────────────────────────────
 
 function renderSessionText(data: AnyRecord): void {
@@ -110,6 +146,19 @@ function renderSessionText(data: AnyRecord): void {
     }
   }
 
+  const steps = data['steps'] as AnyRecord[] | undefined
+  if (steps && steps.length > 0) {
+    for (const step of steps) {
+      out('')
+      if (String(step['type'] ?? '') === 'turn') {
+        renderTurnParts(step)
+      } else {
+        renderGenericStep(step)
+      }
+    }
+    return
+  }
+
   const turns = data['turns'] as AnyRecord[] | undefined
   if (turns && turns.length > 0) {
     for (const turn of turns) {
@@ -117,6 +166,10 @@ function renderSessionText(data: AnyRecord): void {
       renderTurnParts(turn)
     }
   }
+}
+
+function renderStepText(data: AnyRecord): void {
+  renderGenericStep(data)
 }
 
 function renderTurnText(data: AnyRecord): void {
@@ -164,6 +217,9 @@ export async function runInspect(opts: InspectOptions): Promise<void> {
       break
     case 'turn':
       renderTurnText(d)
+      break
+    case 'step':
+      renderStepText(d)
       break
     case 'round':
       renderRoundText(d)

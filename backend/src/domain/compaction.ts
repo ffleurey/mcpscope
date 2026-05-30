@@ -1,5 +1,13 @@
 import type Database from 'better-sqlite3'
-import type { CompactionStrategy, TurnRecord } from './model.js'
+import type { CompactionStrategy, PartRecord, StepRecord, TurnRecord } from './model.js'
+import { formatCompactionStepId } from './hierarchicalIds.js'
+import { STEP_TYPE } from './executionModel.js'
+
+export interface CompactionStepResult {
+  turn: TurnRecord
+  step: StepRecord
+  parts: PartRecord[]
+}
 
 /**
  * Applies the configured compaction strategy to the parts produced by a completed turn,
@@ -12,7 +20,7 @@ export function applyContextCompaction(
   connection: Database.Database,
   completedTurn: TurnRecord,
   strategy: CompactionStrategy,
-): TurnRecord {
+): CompactionStepResult {
   const now = Date.now()
 
   // Compute context tokens at turn end (before any compaction).
@@ -31,6 +39,7 @@ export function applyContextCompaction(
 
   let contextTokensAfterCompaction: number | null = contextTokensAtTurnEnd
   let compactionTokensRemoved: number | null = 0
+  let strippedPartIds: string[] = []
 
   if (strategy === 'strip-reasoning') {
     // Find all assistant-reasoning parts from the completed turn that are currently 'included'.
@@ -66,6 +75,7 @@ export function applyContextCompaction(
       })
       updateAll()
 
+      strippedPartIds = reasoningParts.map(part => part.id)
       compactionTokensRemoved = strippedTokens
       contextTokensAfterCompaction =
         contextTokensAtTurnEnd !== null ? contextTokensAtTurnEnd - strippedTokens : null
@@ -98,5 +108,59 @@ export function applyContextCompaction(
       compactionTokensRemoved,
     })
 
-  return updatedTurn
+  const stepOrdinalRow = connection
+    .prepare< [string], { max_ordinal: number }>(`
+      SELECT COALESCE(MAX(ordinal), -1) AS max_ordinal
+      FROM v2_steps
+      WHERE session_id = ?
+    `)
+    .get(completedTurn.sessionId) as { max_ordinal: number }
+
+  const step: StepRecord = {
+    id: formatCompactionStepId(completedTurn.sessionId, completedTurn.sequenceNumber),
+    sessionId: completedTurn.sessionId,
+    stepTypeKey: STEP_TYPE.COMPACTION,
+    ordinal: stepOrdinalRow.max_ordinal + 1,
+    status: 'complete',
+    params: {
+      strategy,
+      sourceTurnId: completedTurn.id,
+      sourceTurnSequenceNumber: completedTurn.sequenceNumber,
+    },
+    state: {
+      strippedPartIds,
+      strippedPartCount: strippedPartIds.length,
+      contextTokensAtTurnEnd,
+      contextTokensAfterCompaction,
+      compactionTokensRemoved,
+    },
+    createdAt: now,
+    completedAt: now,
+  }
+
+  connection.prepare(`
+    INSERT INTO v2_steps (
+      id, session_id, step_type_key, ordinal, status,
+      params_json, state_json, created_at, completed_at
+    ) VALUES (
+      @id, @sessionId, @stepTypeKey, @ordinal, @status,
+      @paramsJson, @stateJson, @createdAt, @completedAt
+    )
+  `).run({
+    id: step.id,
+    sessionId: step.sessionId,
+    stepTypeKey: step.stepTypeKey,
+    ordinal: step.ordinal,
+    status: step.status,
+    paramsJson: JSON.stringify(step.params),
+    stateJson: JSON.stringify(step.state),
+    createdAt: step.createdAt,
+    completedAt: step.completedAt,
+  })
+
+  return {
+    turn: updatedTurn,
+    step,
+    parts: [],
+  }
 }

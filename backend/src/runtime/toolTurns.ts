@@ -11,6 +11,7 @@ import {
   getNextPreludePartSequence,
   getNextPartOrdinal,
   getNextRoundPartSequence,
+  listStepRecordsBySession,
   getNextTurnSequenceNumber,
   getSessionRecord,
   insertPartRecord,
@@ -1327,10 +1328,14 @@ export async function createToolEnabledTurn(
     finalizeTx()
 
     // Apply context compaction (e.g. strip reasoning) now that the turn is fully persisted.
-    const compactedTurn = applyContextCompaction(database.connection, turn, session.compactionStrategy)
-    Object.assign(turn, compactedTurn)
+    const compaction = applyContextCompaction(database.connection, turn, session.compactionStrategy)
+    Object.assign(turn, compaction.turn)
 
     assistantParts.forEach(part => emitEvent?.({
+      type: 'part-committed',
+      part,
+    }))
+    compaction.parts.forEach(part => emitEvent?.({
       type: 'part-committed',
       part,
     }))
@@ -1342,6 +1347,7 @@ export async function createToolEnabledTurn(
     const persistedParts = listPartRecordsBySession(database.connection, session.id)
     const trace = buildSessionTraceBundle({
       session,
+      steps: listStepRecordsBySession(database.connection, session.id),
       turns: listTurnRecordsBySession(database.connection, session.id),
       rounds: listRoundRecordsBySession(database.connection, session.id),
       parts: persistedParts,
@@ -1359,7 +1365,7 @@ export async function createToolEnabledTurn(
       turn,
       round: currentRound,
       rounds,
-      parts: persistedParts.filter(part => part.turnId === turnId),
+      parts: persistedParts.filter(part => part.turnId === turnId || part.turnId === compaction.step.id),
       transcript: trace.transcript,
       context: trace.context,
     }
@@ -1439,6 +1445,7 @@ export async function createToolEnabledTurn(
   const persistedPartsOnError = listPartRecordsBySession(database.connection, session.id)
   const traceOnError = buildSessionTraceBundle({
     session,
+    steps: listStepRecordsBySession(database.connection, session.id),
     turns: listTurnRecordsBySession(database.connection, session.id),
     rounds: listRoundRecordsBySession(database.connection, session.id),
     parts: persistedPartsOnError,

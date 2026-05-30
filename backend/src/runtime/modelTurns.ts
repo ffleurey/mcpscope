@@ -4,6 +4,7 @@ import {
   getNextPreludePartSequence,
   getNextRoundPartSequence,
   getNextPartOrdinal,
+  listStepRecordsBySession,
   getNextTurnSequenceNumber,
   getSessionRecord,
   insertPartRecord,
@@ -622,11 +623,15 @@ export async function createModelOnlyTurn(
   finalizeTx()
 
   // Apply context compaction (e.g. strip reasoning) now that the turn is fully persisted.
-  const compactedTurn = applyContextCompaction(database.connection, turn, session.compactionStrategy)
-  Object.assign(turn, compactedTurn)
+  const compaction = applyContextCompaction(database.connection, turn, session.compactionStrategy)
+  Object.assign(turn, compaction.turn)
 
   const persistedParts = listPartRecordsBySession(database.connection, session.id)
   assistantParts.forEach(part => emitEvent?.({
+    type: 'part-committed',
+    part,
+  }))
+  compaction.parts.forEach(part => emitEvent?.({
     type: 'part-committed',
     part,
   }))
@@ -636,6 +641,7 @@ export async function createModelOnlyTurn(
   })
   const trace = buildSessionTraceBundle({
     session,
+    steps: listStepRecordsBySession(database.connection, session.id),
     turns: listTurnRecordsBySession(database.connection, session.id),
     rounds: listRoundRecordsBySession(database.connection, session.id),
     parts: persistedParts,
@@ -654,7 +660,7 @@ export async function createModelOnlyTurn(
     turn,
     round,
     rounds: [round],
-    parts: persistedParts.filter(part => part.turnId === turnId),
+    parts: persistedParts.filter(part => part.turnId === turnId || part.turnId === compaction.step.id),
     transcript: trace.transcript,
     context: trace.context,
   }

@@ -146,6 +146,18 @@ export const usageSummarySchema = z.object({
   totalTokens: z.number().int().nonnegative().nullable(),
 })
 
+export const stepRecordSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  stepTypeKey: z.string(),
+  ordinal: z.number().int().nonnegative(),
+  status: z.string(),
+  params: z.record(z.string(), z.unknown()),
+  state: z.record(z.string(), z.unknown()),
+  createdAt: z.number().int().nonnegative(),
+  completedAt: z.number().int().nonnegative().nullable(),
+})
+
 export const turnRecordSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
@@ -216,6 +228,7 @@ export type SessionType = z.infer<typeof sessionTypeSchema>
 export type ParentKind = z.infer<typeof parentKindSchema>
 export type SessionRecord = z.infer<typeof sessionRecordSchema>
 export type SessionSummary = z.infer<typeof sessionSummarySchema>
+export type StepRecord = z.infer<typeof stepRecordSchema>
 export type TurnRecord = z.infer<typeof turnRecordSchema>
 export type RoundRecord = z.infer<typeof roundRecordSchema>
 export type PartRecord = z.infer<typeof partRecordSchema>

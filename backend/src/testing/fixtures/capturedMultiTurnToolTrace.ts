@@ -40,6 +40,7 @@ export const capturedMultiTurnToolTrace: SessionTraceBundle = {
     isContextExhausted: false,
     compactionStrategy: 'strip-reasoning',
   },
+  steps: [],
   turns: [
     {
       id: 'turn-a',

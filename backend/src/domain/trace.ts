@@ -4,6 +4,7 @@ import type {
   RawExchangeRecord,
   RoundRecord,
   SessionRecord,
+  StepRecord,
   TurnRecord,
 } from './model.js'
 import {
@@ -11,12 +12,14 @@ import {
   rawExchangeRecordSchema,
   roundRecordSchema,
   sessionRecordSchema,
+  stepRecordSchema,
   turnRecordSchema,
 } from './model.js'
 import type { deriveContextEntries, deriveTranscriptEntries } from './selectors.js'
 
 export const sessionTraceBundleSchema = z.object({
   session: sessionRecordSchema,
+  steps: z.array(stepRecordSchema).default([]),
   turns: z.array(turnRecordSchema),
   rounds: z.array(roundRecordSchema),
   parts: z.array(partRecordSchema),
@@ -27,6 +30,7 @@ export const sessionTraceBundleSchema = z.object({
 
 export interface SessionTraceBundle {
   session: SessionRecord
+  steps: StepRecord[]
   turns: TurnRecord[]
   rounds: RoundRecord[]
   parts: PartRecord[]
@@ -37,6 +41,7 @@ export interface SessionTraceBundle {
 
 export function buildSessionTraceBundle(input: {
   session: SessionRecord
+  steps?: StepRecord[]
   turns: TurnRecord[]
   rounds: RoundRecord[]
   parts: PartRecord[]
@@ -46,6 +51,7 @@ export function buildSessionTraceBundle(input: {
 }): SessionTraceBundle {
   return {
     session: input.session,
+    steps: input.steps ?? [],
     turns: input.turns,
     rounds: input.rounds,
     parts: input.parts,

@@ -1,13 +1,15 @@
 import type Database from 'better-sqlite3'
-import type { PartRecord, RoundRecord, TurnRecord } from '../domain/model.js'
+import type { PartRecord, RoundRecord, StepRecord, TurnRecord } from '../domain/model.js'
 import { formatSetupId, parseHierarchicalId } from '../domain/hierarchicalIds.js'
 import {
   getPartRecord,
   getRoundRecord,
   getSessionRecord,
+  getStepRecord,
   getTurnRecord,
   listPartRecordsBySession,
   listRoundRecordsBySession,
+  listStepRecordsBySession,
   listTurnRecordsBySession,
 } from '../persistence/repository.js'
 
@@ -17,7 +19,7 @@ type LookupSuccess = {
   status: 'ok'
   payload: {
     id: string
-    type: 'session' | 'setup' | 'turn' | 'round' | 'part'
+    type: 'session' | 'setup' | 'step' | 'turn' | 'round' | 'part'
     mode: LookupMode
     data: unknown
   }
@@ -37,6 +39,7 @@ const CANONICAL_PART_TYPE: Record<string, string> = {
   'assistant-reasoning': 'reasoning',
   'assistant-content': 'assistant_answer',
   'tool-call': 'tool_call',
+  'diagnostic-note': 'diagnostic',
 }
 
 const CANONICAL_CONTEXT_STATE: Record<string, string> = {
@@ -58,7 +61,7 @@ function canonicalContextState(state: string): string {
 // ─── Part helpers ─────────────────────────────────────────────────────────────
 
 function isPublicPartType(partType: string): boolean {
-  return partType !== 'diagnostic-note' && partType !== 'tool-result'
+  return partType !== 'tool-result'
 }
 
 function extractToolName(part: PartRecord): string | null {
@@ -211,9 +214,113 @@ function buildTurnNode(
   })
   return {
     id: turn.id,
+    type: 'turn',
     number: turn.sequenceNumber,
     ...(turn.status ? { status: turn.status } : {}),
     rounds: roundNodes,
+  }
+}
+
+function getCompactionRemovalReason(strategy: string | null, part: PartRecord | null): string {
+  if (strategy === 'strip-reasoning') {
+    if (part?.partType === 'assistant-reasoning') {
+      return 'Removed from future context because strip-reasoning compaction excludes assistant reasoning parts.'
+    }
+    return 'Removed from future context by strip-reasoning compaction.'
+  }
+
+  return strategy
+    ? `Removed from future context by ${strategy} compaction.`
+    : 'Removed from future context by compaction.'
+}
+
+function buildCompactionStepEvidence(
+  step: StepRecord,
+  allParts: PartRecord[],
+  mode: LookupMode,
+): Record<string, unknown> {
+  const strippedPartIds = Array.isArray(step.state.strippedPartIds)
+    ? step.state.strippedPartIds.filter((value): value is string => typeof value === 'string')
+    : []
+
+  const evidence: Record<string, unknown> = {
+    stripped_part_ids: strippedPartIds,
+  }
+
+  if (mode !== 'full') {
+    return evidence
+  }
+
+  const partsById = new Map(allParts.map(part => [part.id, part]))
+  evidence.stripped_parts = strippedPartIds.map((partId) => {
+    const part = partsById.get(partId) ?? null
+    return {
+      id: partId,
+      ...(part ? {
+        type: canonicalPartType(part.partType),
+        token_count: part.tokens.count ?? null,
+        round_id: part.roundId,
+      } : {}),
+      reason: getCompactionRemovalReason(
+        typeof step.params.strategy === 'string' ? step.params.strategy : null,
+        part,
+      ),
+    }
+  })
+
+  return evidence
+}
+
+function buildStepNode(
+  step: StepRecord,
+  turns: TurnRecord[],
+  rounds: RoundRecord[],
+  allParts: PartRecord[],
+  mode: LookupMode,
+  isDirectLookup: boolean,
+): object {
+  if (step.stepTypeKey === 'turn') {
+    const turn = turns.find(candidate => candidate.id === step.id)
+    if (!turn) {
+      return {
+        id: step.id,
+        type: 'turn',
+        number: step.ordinal + 1,
+        status: step.status,
+        rounds: [],
+      }
+    }
+
+    const turnRounds = rounds
+      .filter(round => round.turnId === turn.id)
+      .sort((left, right) => left.roundIndex - right.roundIndex)
+    return buildTurnNode(turn, turnRounds, allParts, mode, isDirectLookup)
+  }
+
+  const stepParts = allParts
+    .filter(part => part.turnId === step.id && part.roundId === null && isPublicPartType(part.partType))
+    .sort((left, right) => left.ordinal - right.ordinal)
+    .map(part => buildPartNode(part, [], mode, true))
+    .filter((node): node is object => node !== null)
+
+  const compactionEvidence = step.stepTypeKey === 'compaction'
+    ? buildCompactionStepEvidence(step, allParts, mode)
+    : {}
+
+  return {
+    id: step.id,
+    type: step.stepTypeKey,
+    number: step.ordinal + 1,
+    status: step.status,
+    strategy: typeof step.params.strategy === 'string' ? step.params.strategy : null,
+    source_turn_id: typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null,
+    source_turn_number: typeof step.params.sourceTurnSequenceNumber === 'number' ? step.params.sourceTurnSequenceNumber : null,
+    stripped_part_count: typeof step.state.strippedPartCount === 'number' ? step.state.strippedPartCount : null,
+    context_tokens_before: typeof step.state.contextTokensAtTurnEnd === 'number' ? step.state.contextTokensAtTurnEnd : step.state.contextTokensAtTurnEnd ?? null,
+    context_tokens_after: typeof step.state.contextTokensAfterCompaction === 'number' ? step.state.contextTokensAfterCompaction : step.state.contextTokensAfterCompaction ?? null,
+    tokens_removed: typeof step.state.compactionTokensRemoved === 'number' ? step.state.compactionTokensRemoved : step.state.compactionTokensRemoved ?? null,
+    ...compactionEvidence,
+    parts: stepParts,
   }
 }
 
@@ -241,6 +348,7 @@ export function resolveHierarchicalId(
 
     const turns = listTurnRecordsBySession(connection, session.id)
       .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+    const steps = listStepRecordsBySession(connection, session.id)
     const allParts = listPartRecordsBySession(connection, session.id)
     const setupParts = allParts.filter(p => p.turnId === null).sort((a, b) => a.ordinal - b.ordinal)
     const allRounds = listRoundRecordsBySession(connection, session.id)
@@ -266,6 +374,7 @@ export function resolveHierarchicalId(
         used: deriveContextWindowUsed(turns),
       },
       setup: buildSetupNode(session.id, setupParts, mode, false),
+      steps: steps.map(step => buildStepNode(step, turns, allRounds, allParts, mode, false)),
       turns: turnNodes,
     }
 
@@ -306,6 +415,19 @@ export function resolveHierarchicalId(
     const data = buildTurnNode(turn, allRounds, allParts, mode, false)
 
     return { status: 'ok', payload: { id: turn.id, type: 'turn', mode, data } }
+  }
+
+  // ─── Step ──────────────────────────────────────────────────────────────────
+  if (parsed.type === 'step') {
+    const step = getStepRecord(connection, parsed.raw)
+    if (!step) return { status: 'not_found', message: `Step not found: ${parsed.raw}` }
+
+    const turns = listTurnRecordsBySession(connection, step.sessionId)
+    const rounds = listRoundRecordsBySession(connection, step.sessionId)
+    const parts = listPartRecordsBySession(connection, step.sessionId)
+    const data = buildStepNode(step, turns, rounds, parts, mode, true)
+
+    return { status: 'ok', payload: { id: step.id, type: 'step', mode, data } }
   }
 
   // ─── Round ─────────────────────────────────────────────────────────────────
