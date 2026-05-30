@@ -1,0 +1,330 @@
+/**
+ * Domain vocabulary for the session-backed execution model.
+ *
+ * This module defines the canonical domain abstractions:
+ *   - SessionContainer  — domain-level ownership container
+ *   - Session           — execution container (also a SessionContainer)
+ *   - Step              — abstract execution unit
+ *   - Turn              — LLM-specific Step subtype
+ *   - VisibleContext    — the model-visible slice of session state
+ *   - Artifact          — content-oriented artifact hierarchy
+ *
+ * These types define the target execution model.  The mapping boundary to the
+ * current persistence-layer record shapes (SessionRecord, TurnRecord, etc.) is
+ * declared in `executionModelMapping.ts`.  Existing record types remain active
+ * until behavior is ported in later steps.
+ */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Branded type-key helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A ContainerTypeKey identifies a concrete SessionContainer class.
+ * Generic persistence stores these keys alongside parameter/state payloads so
+ * that new container types can be added without schema changes by default.
+ */
+export type ContainerTypeKey = string & { readonly __brand: 'ContainerTypeKey' }
+
+/**
+ * A SessionTypeKey identifies a concrete Session class.
+ */
+export type SessionTypeKey = string & { readonly __brand: 'SessionTypeKey' }
+
+/**
+ * A StepTypeKey identifies a concrete Step class.
+ */
+export type StepTypeKey = string & { readonly __brand: 'StepTypeKey' }
+
+/**
+ * An ArtifactTypeKey identifies a concrete Artifact content type.
+ */
+export type ArtifactTypeKey = string & { readonly __brand: 'ArtifactTypeKey' }
+
+export function containerTypeKey(key: string): ContainerTypeKey {
+  return key as ContainerTypeKey
+}
+
+export function sessionTypeKey(key: string): SessionTypeKey {
+  return key as SessionTypeKey
+}
+
+export function stepTypeKey(key: string): StepTypeKey {
+  return key as StepTypeKey
+}
+
+export function artifactTypeKey(key: string): ArtifactTypeKey {
+  return key as ArtifactTypeKey
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Generic parameter and state payload shapes
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A generic parameter bag for containers, sessions, and steps.
+ * Concrete types narrow this to their own validated input shapes.
+ * Stored in persistence as JSON alongside the type key.
+ */
+export type GenericParams = Record<string, unknown>
+
+/**
+ * A generic state bag for containers, sessions, and steps.
+ * Concrete types narrow this to their own resumable state shape.
+ * Stored in persistence as JSON alongside the type key.
+ */
+export type GenericState = Record<string, unknown>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SessionContainer
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The domain-level ownership abstraction for sessions.
+ *
+ * Sessions belong to a SessionContainer.  A Session is itself a
+ * SessionContainer, enabling parent-session ownership.  Benchmark is the other
+ * concrete container type introduced in this increment.
+ *
+ * This keeps container ownership as a domain concept while leaving foreign-key
+ * details to persistence mapping.
+ */
+export interface SessionContainer {
+  readonly containerId: string
+  readonly containerTypeKey: ContainerTypeKey
+}
+
+/** Known container type keys (as const for exhaustiveness checks). */
+export const CONTAINER_TYPE = {
+  SESSION: containerTypeKey('session'),
+  BENCHMARK: containerTypeKey('benchmark'),
+} as const
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Artifact hierarchy  (content-oriented, not workflow-semantic)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Artifacts are first-class persisted objects.
+ * Polymorphism follows content representation, not workflow semantics.
+ *
+ * Semantic schema and usage rules belong to the session/step types that consume
+ * the artifacts, not to the artifact type itself.
+ */
+export interface Artifact {
+  readonly artifactId: string
+  readonly artifactTypeKey: ArtifactTypeKey
+}
+
+/** Known artifact content type keys. */
+export const ARTIFACT_TYPE = {
+  JSON: artifactTypeKey('json'),
+  TEXT: artifactTypeKey('text'),
+  MARKDOWN: artifactTypeKey('markdown'),
+  IMAGE: artifactTypeKey('image'),
+} as const
+
+export interface JsonArtifact extends Artifact {
+  readonly artifactTypeKey: typeof ARTIFACT_TYPE.JSON
+  readonly content: unknown
+}
+
+export interface TextArtifact extends Artifact {
+  readonly artifactTypeKey: typeof ARTIFACT_TYPE.TEXT
+  readonly content: string
+}
+
+export interface MarkdownArtifact extends Artifact {
+  readonly artifactTypeKey: typeof ARTIFACT_TYPE.MARKDOWN
+  readonly content: string
+}
+
+export interface ImageArtifact extends Artifact {
+  readonly artifactTypeKey: typeof ARTIFACT_TYPE.IMAGE
+  readonly mimeType: string
+  /** Base64-encoded bytes or a data URL. */
+  readonly data: string
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VisibleContext
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The model-visible slice of session state.
+ *
+ * VisibleContext is:
+ *   - explicit in the domain model
+ *   - derived from persisted state at execution time
+ *   - controlled by persisted visibility rules when needed
+ *
+ * It is NOT a duplicated persisted copy of the full underlying data structures.
+ */
+export interface VisibleContext {
+  /** Token count of the currently visible context. */
+  readonly usedTokens: number | null
+  /** Total available context window for the model. */
+  readonly availableTokens: number | null
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Lifecycle status for a step within a session. */
+export type StepStatus = 'pending' | 'running' | 'complete' | 'error' | 'aborted'
+
+/**
+ * The execution context passed to Step.execute().
+ * Contains the information the step needs to run its unit of work.
+ */
+export interface StepExecutionContext {
+  readonly sessionId: string
+  readonly visibleContext: VisibleContext
+  readonly artifacts: ReadonlyArray<Artifact>
+}
+
+/**
+ * The result of executing a step.
+ */
+export interface StepResult {
+  readonly status: StepStatus
+  readonly outputArtifacts: ReadonlyArray<Artifact>
+  readonly error?: string
+}
+
+/**
+ * Step is the abstract execution unit.
+ *
+ * Concrete step types own unit-of-work execution semantics.
+ *   - `Turn` is the LLM-specific Step subtype.
+ *   - Deterministic work is represented by other Step subtypes.
+ *
+ * Generic persistence stores type keys plus parameter/state payloads.
+ * New concrete step types do not require schema changes by default.
+ */
+export interface Step {
+  readonly stepId: string
+  readonly stepTypeKey: StepTypeKey
+  readonly status: StepStatus
+  readonly params: GenericParams
+  readonly state: GenericState
+
+  /**
+   * Execute this step with the given context.
+   * Unit-of-work execution: runs exactly once when inputs are populated.
+   */
+  execute(context: StepExecutionContext): Promise<StepResult>
+}
+
+/** Known step type keys. */
+export const STEP_TYPE = {
+  TURN: stepTypeKey('turn'),
+} as const
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Turn  (LLM-specific Step)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Turn is the LLM-specific subtype of Step.
+ *
+ * Turn owns LLM-specific structures: rounds, parts, and raw exchanges.
+ * Turn has dedicated persistence infrastructure because these structures
+ * are infrastructure-relevant, not merely workflow-semantic.
+ */
+export interface Turn extends Step {
+  readonly stepTypeKey: typeof STEP_TYPE.TURN
+  /** The user message content that prompted this turn. */
+  readonly userMessage: string
+  /** Stable sequence number within the session. */
+  readonly sequenceNumber: number
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Session
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Lifecycle status for a session. */
+export type SessionLifecycleStatus =
+  | 'draft'
+  | 'ready'
+  | 'active'
+  | 'complete'
+  | 'error'
+  | 'archived'
+
+/**
+ * Session is the execution container.
+ *
+ * A Session is itself a SessionContainer, enabling parent-session ownership.
+ * Session types own orchestration semantics.
+ *
+ * Method contract:
+ *   - `execute()`     — runs the session until it can no longer continue;
+ *                       loops while canContinue() is true, calling advance()
+ *   - `advance()`     — orchestration step: decides what step comes next and
+ *                       performs one advancement of execution
+ *   - `canContinue()` — returns true when the session can still advance
+ *
+ * Generic persistence stores type keys plus parameter/state payloads.
+ * New concrete session types do not require schema changes by default.
+ */
+export interface Session extends SessionContainer {
+  /** Stable session identifier. */
+  readonly sessionId: string
+  /** Identifies the concrete session class for generic persistence. */
+  readonly sessionTypeKey: SessionTypeKey
+  readonly status: SessionLifecycleStatus
+  /** Owning container (another Session, or a Benchmark), or null for top-level. */
+  readonly parent: SessionContainer | null
+  /** Ordered execution trace (steps executed so far). */
+  readonly steps: ReadonlyArray<Step>
+  readonly params: GenericParams
+  readonly state: GenericState
+
+  /** Returns true when the session can advance further. */
+  canContinue(): boolean
+
+  /**
+   * Performs one orchestration advancement.
+   * Decides what step comes next and runs it.
+   */
+  advance(): Promise<void>
+
+  /**
+   * Runs the full session loop.
+   * Calls advance() repeatedly while canContinue() returns true.
+   */
+  execute(): Promise<void>
+}
+
+/** Known session type keys (matching current SessionType values in model.ts). */
+export const SESSION_TYPE = {
+  PRIMARY: sessionTypeKey('primary'),
+  SESSION_ANALYSIS: sessionTypeKey('session_analysis'),
+  SESSION_COMPACTION: sessionTypeKey('session_compaction'),
+  BENCHMARK_ANALYSIS: sessionTypeKey('benchmark_analysis'),
+} as const
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Benchmark container
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Benchmark is a minimal SessionContainer that is not itself a Session.
+ *
+ * Sessions may belong to a Benchmark as their parent container.
+ * Benchmark support in this increment validates the container model only;
+ * full benchmark-domain design is future work.
+ */
+export interface Benchmark extends SessionContainer {
+  readonly containerTypeKey: typeof CONTAINER_TYPE.BENCHMARK
+  /** Stable benchmark identifier. */
+  readonly benchmarkId: string
+  readonly title: string
+  readonly params: GenericParams
+  readonly state: GenericState
+  readonly createdAt: number
+  readonly updatedAt: number
+}
