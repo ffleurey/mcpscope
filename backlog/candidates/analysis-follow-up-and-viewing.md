@@ -5,7 +5,7 @@ This increment adds the interactive user workflow around analysis sessions.
 ## Dependencies
 
 - `backlog/completed/session-analysis-launch-and-report.md`
-- `backlog/specification/session-analysis-evidence-protocol.md`
+- `backlog/candidates/session-analysis-evidence-protocol.md`
 
 ## Goal
 

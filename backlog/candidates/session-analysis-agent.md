@@ -19,7 +19,7 @@ This is **not** a deterministic oracle and **not** a generic agent framework. It
 This feature depends on:
 
 - the completed `backlog/completed/mcpscope-mcp-interface.md` work
-- the parent-link foundation from `backlog/specification/session-types-and-parent-links.md`
+- the parent-link foundation from `backlog/candidates/session-types-and-parent-links.md`
 
 In practice, it should build on:
 
@@ -74,7 +74,7 @@ This is the first increment that should produce a real end-to-end analysis resul
 
 This increment is now complete, with the remaining backend-owned launch/CLI/MCP refactor tracked separately below.
 
-### 3. `backlog/specification/session-analysis-evidence-protocol.md`
+### 3. `backlog/candidates/session-analysis-evidence-protocol.md`
 
 Experimental protocol-discovery increment:
 
@@ -85,7 +85,7 @@ Experimental protocol-discovery increment:
 
 This increment should happen before later analysis tasks freeze detailed contracts around prompt shape, intermediate artifacts, or report structure.
 
-### 4. `backlog/specification/session-analysis-backend-owned-launch.md`
+### 4. `backlog/candidates/session-analysis-backend-owned-launch.md`
 
 Backend ownership and automation increment:
 
@@ -95,7 +95,7 @@ Backend ownership and automation increment:
 
 This increment depends on the evidence-protocol task to clarify what the backend-owned workflow should actually launch and what stages or artifacts it must preserve.
 
-### 5. `backlog/specification/analysis-follow-up-and-viewing.md`
+### 5. `backlog/candidates/analysis-follow-up-and-viewing.md`
 
 Interactive UI increment:
 

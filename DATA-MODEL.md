@@ -83,7 +83,7 @@ The table above describes the currently implemented runtime-session shape.
 
 Current implementations may also expose metadata around the session tree such as session type and parent reference, but those fields are not part of the canonical setup/turn/round/part tree itself. See:
 
-- `backlog/specification/session-types-and-parent-links.md`
+- `backlog/candidates/session-types-and-parent-links.md`
 
 ### Setup
 
@@ -282,4 +282,4 @@ What remains future work:
 
 See:
 
-- `backlog/specification/session-analysis-agent.md`
+- `backlog/candidates/session-analysis-agent.md`

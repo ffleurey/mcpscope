@@ -13,9 +13,9 @@ The main consolidation goals from this task are now in place:
 
 Related follow-up work was intentionally split into separate backlog items:
 
-- `backlog/specification/model-load-recovery.md`
-- `backlog/fixme/streaming-error-and-sse-payloads.md`
-- `backlog/specification/mcp-tool-drift-detection.md`
+- `backlog/candidates/model-load-recovery.md`
+- `backlog/candidates/streaming-error-and-sse-payloads.md`
+- `backlog/candidates/mcp-tool-drift-detection.md`
 
 Visual polish and UX refinement of some error dialogs is also separate from this completed consolidation pass.
 

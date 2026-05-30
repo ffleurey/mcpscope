@@ -2,9 +2,9 @@ This folder is the lightweight product and implementation board for mcpscope.
 
 Use this file for backlog process only.
 
-Use [ROADMAP.md](ROADMAP.md) for the current product roadmap, active queue, and next planning priorities.
+Use [ROADMAP.md](ROADMAP.md) for the current product direction and whether any near-term queue is active.
 
-When roadmap direction is still uncertain, the relevant task should stay in `specification/` until experiments clarify the right workflow and contract.
+When roadmap direction is still uncertain, or when planning is intentionally paused, keep work in `candidates/` until it is deliberately selected for active specification.
 
 ## States
 
@@ -32,6 +32,7 @@ Use `candidates/` for:
 - ideas worth keeping on the radar
 - deferred features
 - background concepts that are not yet selected for active specification
+- parked backlog during roadmap reset or planning pauses
 
 Candidate files should focus on product value, major dependencies, and open questions rather than detailed implementation instructions.
 
@@ -88,7 +89,7 @@ Keep completed files as historical references for:
 Move a task forward when:
 
 - it has clear enough product value to spend planning time on it
-- it fits the current or near-term direction
+- it fits the current product direction once one is explicitly chosen
 - the major dependencies are understood well enough to specify it
 
 ### `specification/` -> `implementation/`
@@ -123,15 +124,3 @@ Tasks can move backward when needed.
 - Move from `implementation/` back to `specification/` if scope turns out to be unclear, too large, or blocked on unresolved decisions.
 - Move from `fixme/` back to `specification/` if the fix is broader than expected.
 - Move from `specification/` back to `candidates/` if the work is no longer near-term.
-
-## Current agreed decisions
-
-These decisions currently shape the parent-link and analysis work:
-
-1. `turn` parents are deferred from v1
-2. v1 parent kinds are limited to `session` and `benchmark`
-3. follow-up questions stay in the same analysis conversation as the initial evaluation
-4. execution stays fully sequential across all session types in v1
-5. parent deletion cascades to attached child sessions
-6. analysis configuration starts simple: named analysis profiles plus one default
-7. the tree view should sort siblings newest-first and show compact date/time

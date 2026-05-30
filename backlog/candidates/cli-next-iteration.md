@@ -1,6 +1,6 @@
 # CLI next iteration
 
-This task tracks the **next CLI increment after the shipped v3 session lifecycle MVP**.
+This candidate tracks a plausible future CLI increment after the shipped v3 session lifecycle MVP.
 
 Completed CLI increments:
 
@@ -30,7 +30,7 @@ The backend already supports:
 - detached turn start for non-streaming polling
 - session-centric lifecycle status
 
-## Recommended next active scope
+## Potential future scope
 
 The next increment should focus on **richer lifecycle control**, not on reworking the shipped v3 surface.
 

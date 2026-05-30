@@ -576,7 +576,7 @@ What remains intentionally limited in the current release:
 
 Tracked tasks:
 
-- `backlog/specification/session-analysis-agent.md`
+- `backlog/candidates/session-analysis-agent.md`
 - `backlog/candidates/session-compaction-agent.md`
 - `backlog/candidates/session-batch-runs.md`
 - `backlog/candidates/benchmark-automation.md`

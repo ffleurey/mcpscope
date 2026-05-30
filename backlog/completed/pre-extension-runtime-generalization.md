@@ -143,7 +143,7 @@ Required validation path:
 
 - [backlog/completed/session-metadata-foundation.md](backlog/completed/session-metadata-foundation.md)
 - [backlog/completed/session-analysis-launch-and-report.md](backlog/completed/session-analysis-launch-and-report.md)
-- [backlog/specification/session-analysis-agent.md](backlog/specification/session-analysis-agent.md)
+- [backlog/candidates/session-analysis-agent.md](backlog/candidates/session-analysis-agent.md)
 
 ## Expected result
 

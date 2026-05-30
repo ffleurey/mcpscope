@@ -58,7 +58,7 @@ This is the first increment because it gives a useful, testable result without r
 
 This increment is now complete.
 
-### 2. `backlog/specification/session-tree-navigation.md`
+### 2. `backlog/candidates/session-tree-navigation.md`
 
 UI/navigation increment:
 
@@ -73,7 +73,7 @@ UI/navigation increment:
 
 This foundation is required by:
 
-- `backlog/specification/session-analysis-agent.md`
+- `backlog/candidates/session-analysis-agent.md`
 - `backlog/candidates/session-compaction-agent.md`
 - `backlog/candidates/benchmark-automation.md`
 - `backlog/candidates/session-batch-runs.md`

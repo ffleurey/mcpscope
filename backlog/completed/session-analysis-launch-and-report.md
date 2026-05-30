@@ -2,14 +2,14 @@
 
 This increment delivers the first end-to-end analysis workflow.
 
-Status: completed in the current PR, with the remaining backend-owned launch orchestration and CLI/MCP trigger work deferred to `backlog/specification/session-analysis-backend-owned-launch.md`.
+Status: completed in the current PR, with the remaining backend-owned launch orchestration and CLI/MCP trigger work deferred to `backlog/candidates/session-analysis-backend-owned-launch.md`.
 
 ## Dependencies
 
 - `backlog/completed/session-metadata-foundation.md`
 - `backlog/completed/analysis-configurations.md`
 
-For the MVP, this task also absorbs the minimum tree-navigation work needed to show analysis child sessions beneath their parent. Use `backlog/specification/session-tree-navigation.md` as a design reference for tree shaping and display rules, not as a separate prerequisite branch.
+For the MVP, this task also absorbs the minimum tree-navigation work needed to show analysis child sessions beneath their parent. Use `backlog/candidates/session-tree-navigation.md` as a design reference for tree shaping and display rules, not as a separate prerequisite branch.
 
 ## Goal
 
@@ -207,7 +207,7 @@ After this increment:
 The coding agent should start from these files and patterns before editing:
 
 - `backlog/completed/session-analysis-launch-and-report.md` — this task, the source of truth for the increment
-- `backlog/specification/session-tree-navigation.md` — design reference for tree shaping and display rules used by this MVP
+- `backlog/candidates/session-tree-navigation.md` — design reference for tree shaping and display rules used by this MVP
 - `backlog/completed/mcpscope-mcp-interface.md` — source of truth for the internal mcpscope MCP surface
 - `backend/src/app.ts` — existing session routes, child-session route, and HTTP wiring patterns
 - `backend/src/operations/createExplicit.ts` — backend-owned HTTP execution pattern to mirror for a frontend-consumed action
@@ -230,6 +230,6 @@ Recommended reading order:
 2. `backlog/completed/mcpscope-mcp-interface.md`
 3. existing backend session routes, operations, and tests
 4. existing frontend session store, list rendering, and chat view
-5. `backlog/specification/session-tree-navigation.md` only as supporting guidance for the tree UI details that this MVP absorbs
+5. `backlog/candidates/session-tree-navigation.md` only as supporting guidance for the tree UI details that this MVP absorbs
 
 The agent should implement the smallest end-to-end slice that makes backend launch real first, then wire the tree/UI navigation on top of that backend-owned path.

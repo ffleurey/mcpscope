@@ -35,9 +35,9 @@ Add a first-class **benchmark automation** workflow that can:
 
 This task should build on:
 
-- `backlog/specification/session-types-and-parent-links.md`
-- `backlog/specification/session-analysis-agent.md`
-- `backlog/specification/session-analysis-evidence-protocol.md`
+- `backlog/candidates/session-types-and-parent-links.md`
+- `backlog/candidates/session-analysis-agent.md`
+- `backlog/candidates/session-analysis-evidence-protocol.md`
 - `backlog/candidates/session-batch-runs.md`
 - the completed `backlog/completed/mcpscope-mcp-interface.md` work
 

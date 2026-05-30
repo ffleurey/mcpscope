@@ -144,6 +144,6 @@ It also overlaps conceptually with future naming and metadata work because exper
 
 It should also align with:
 
-- `backlog/specification/session-types-and-parent-links.md`
+- `backlog/candidates/session-types-and-parent-links.md`
 
 so benchmark/experiment grouping and child analysis/synthesis sessions do not end up with competing ownership models.

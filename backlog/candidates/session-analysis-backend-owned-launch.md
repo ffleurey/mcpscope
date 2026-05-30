@@ -6,7 +6,7 @@ This increment closes the main architecture gap left intentionally after the shi
 
 - `backlog/completed/session-analysis-launch-and-report.md`
 - `backlog/completed/mcpscope-mcp-interface.md`
-- `backlog/specification/session-analysis-evidence-protocol.md`
+- `backlog/candidates/session-analysis-evidence-protocol.md`
 
 ## Problem
 
