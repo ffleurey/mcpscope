@@ -15,8 +15,10 @@ import {
 import {
   insertJsonArtifact,
 } from './artifactRepository.js'
-import type { McpGateway } from '../runtime/toolTurns.js'
-import { runDeterministicMcpToolCall } from '../runtime/toolTurns.js'
+import {
+  runDeterministicMcpToolCallsInSingleTurn,
+  type McpGateway,
+} from '../runtime/toolTurns.js'
 import { runAnalysisTurn } from './boundedTurn.js'
 import {
   SCHEMA_KEY,
@@ -66,33 +68,30 @@ export async function runToolCallAssessmentTurn(
     throw new Error(`Assessment turn: analysis session not found: ${analysisSessionId}`)
   }
 
-  // ── Load packet evidence through deterministic inspect calls ─────────────
-  // Each call creates a proper tool_call + tool_result turn in the analysis session
-  // so that evidence is first-class, inspectable, and excludable from future context.
+  // ── Load packet evidence through one deterministic inspect turn ──────────
+  // Evidence is materialized as a single deterministic turn with multiple inspect
+  // rounds so the step does not explode into one turn per inspected part.
   const injectPartIds: string[] = []
 
-  // Ordered list of part IDs to inspect: user request, reasoning before, tool call,
-  // tool result, reasoning after (nulls filtered out).
+  // Packet-local evidence only: reasoning before, the tool call itself (which exposes
+  // the attached result on direct inspect), and reasoning after.
   const evidencePartIds: string[] = [
-    analysisTarget.user_request_part_id,
     packet.reasoning_before_part_id,
     packet.tool_call_part_id,
-    packet.tool_result_part_id,
     packet.reasoning_after_part_id,
   ].filter((id): id is string => id !== null)
 
-  for (const partId of evidencePartIds) {
-    const { toolCallPartId, toolResultPartId } = await runDeterministicMcpToolCall(
-      database,
-      mcpGateway,
-      analysisSession,
-      'mcpscope_inspect',
-      { id: partId },
-      `Load evidence for packet ${packet.packet_index + 1} (${packet.tool_name}): inspect part ${partId}`,
-      emitEvent,
-    )
-    injectPartIds.push(toolCallPartId, toolResultPartId)
-  }
+  const { toolCallPartIds, toolResultPartIds } = await runDeterministicMcpToolCallsInSingleTurn(
+    database,
+    mcpGateway,
+    analysisSession,
+    evidencePartIds.map(partId => ({
+      toolName: 'mcpscope_inspect',
+      toolArgs: { id: partId },
+    })),
+    emitEvent,
+  )
+  injectPartIds.push(...toolCallPartIds, ...toolResultPartIds)
 
   // ── Assessment question ───────────────────────────────────────────────────
   const assessmentQuestion = buildAssessmentQuestion(packet, analysisTarget)
@@ -258,3 +257,4 @@ function extractJsonBlock(text: string): string {
 
   return trimmed
 }
+

@@ -109,6 +109,8 @@ export const analysisTargetSchema = z.object({
   analysis_goal: z.string(),
   /** IDs of turns included in the analysis scope (up to and including target_turn_id). */
   analyzed_turn_ids: z.array(z.string()),
+  target_mcp_instructions_part_id: z.string().nullable(),
+  target_tool_definitions_part_id: z.string().nullable(),
   user_request_part_id: z.string().nullable(),
   final_answer_part_id: z.string().nullable(),
 })

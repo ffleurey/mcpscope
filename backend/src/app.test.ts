@@ -3581,7 +3581,7 @@ describe('analysis launch', () => {
    * MCP endpoint (restricted to mcpscope_inspect and mcpscope_status).
    * The callTool mock handles mcpscope_inspect by returning a minimal session stub.
    */
-  function makeAnalysisMcpGateway() {
+  function makeAnalysisMcpGateway(inspectIds: string[] = []) {
     const rawExchange = {
       requestUrl: 'http://localhost:3030/mcp/analysis',
       requestMethod: 'POST',
@@ -3604,6 +3604,9 @@ describe('analysis launch', () => {
         }
       },
       async callTool(_url: string, _sessionId: string | null, _name: string, args: Record<string, unknown>) {
+        if (typeof args['id'] === 'string') {
+          inspectIds.push(args['id'])
+        }
         return {
           content: JSON.stringify({ id: args['id'] ?? 'unknown', type: 'session', data: { status: 'complete' } }),
           structuredContent: null,
@@ -3616,13 +3619,14 @@ describe('analysis launch', () => {
   }
 
   /**
-   * Insert a complete turn with one round and one tool-call + tool-result part.
-   * Returns the turn ID.
+   * Insert a complete turn with one round, reasoning around a tool call,
+   * and a final answer. Returns the turn ID.
    */
   function createCompleteTurnWithToolCall(appInst: FastifyInstance, sessionId: string): string {
     const ts = Date.now()
     const turnId = `${sessionId}-T1`
     const roundId = `${sessionId}-T1-R1`
+    const roundId2 = `${sessionId}-T1-R2`
 
     insertTurnRecord(appInst.backendDb.connection, {
       id: turnId,
@@ -3652,6 +3656,19 @@ describe('analysis launch', () => {
       completedAt: ts,
     })
 
+    insertRoundRecord(appInst.backendDb.connection, {
+      id: roundId2,
+      turnId,
+      roundIndex: 2,
+      status: 'complete',
+      finishReason: 'stop',
+      usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+      requestPayloadJson: null,
+      responseTraceJson: null,
+      startedAt: ts,
+      completedAt: ts,
+    })
+
     // user-message part
     insertPartRecord(appInst.backendDb.connection, {
       id: `${turnId}-P1`,
@@ -3671,8 +3688,7 @@ describe('analysis launch', () => {
       updatedAt: ts,
     })
 
-    // tool-call part
-    const toolCallId = 'call-001'
+    // assistant-reasoning before tool call
     insertPartRecord(appInst.backendDb.connection, {
       id: `${turnId}-P2`,
       sessionId,
@@ -3680,6 +3696,26 @@ describe('analysis launch', () => {
       roundId,
       parentPartId: null,
       ordinal: 2,
+      partType: 'assistant-reasoning',
+      roleLabel: 'assistant',
+      payload: { text: 'I should check the weather tool for Paris.', json: null, mimeType: 'text/plain', summary: null },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    // tool-call part
+    const toolCallId = 'call-001'
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P3`,
+      sessionId,
+      turnId,
+      roundId,
+      parentPartId: null,
+      ordinal: 3,
       partType: 'tool-call',
       roleLabel: 'assistant',
       payload: { text: null, json: { id: toolCallId, name: 'test_tool', arguments: { city: 'Paris' } }, mimeType: 'application/json', summary: 'test_tool({city: Paris})' },
@@ -3693,12 +3729,12 @@ describe('analysis launch', () => {
 
     // tool-result part
     insertPartRecord(appInst.backendDb.connection, {
-      id: `${turnId}-P3`,
+      id: `${turnId}-P4`,
       sessionId,
       turnId,
       roundId,
       parentPartId: null,
-      ordinal: 3,
+      ordinal: 4,
       partType: 'tool-result',
       roleLabel: 'tool',
       payload: { text: null, json: { tool_call_id: toolCallId, content: 'Sunny, 22°C' }, mimeType: 'application/json', summary: 'tool result' },
@@ -3710,14 +3746,33 @@ describe('analysis launch', () => {
       updatedAt: ts,
     })
 
-    // assistant-content (final answer)
+    // assistant-reasoning after tool result
     insertPartRecord(appInst.backendDb.connection, {
-      id: `${turnId}-P4`,
+      id: `${turnId}-P5`,
       sessionId,
       turnId,
-      roundId,
+      roundId: roundId2,
       parentPartId: null,
-      ordinal: 4,
+      ordinal: 5,
+      partType: 'assistant-reasoning',
+      roleLabel: 'assistant',
+      payload: { text: 'The tool result is clear enough to answer directly.', json: null, mimeType: 'text/plain', summary: null },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    // assistant-content (final answer)
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P6`,
+      sessionId,
+      turnId,
+      roundId: roundId2,
+      parentPartId: null,
+      ordinal: 6,
       partType: 'assistant-content',
       roleLabel: 'assistant',
       payload: { text: 'The weather in Paris is sunny and 22°C.', json: null, mimeType: 'text/plain', summary: null },
@@ -4116,6 +4171,7 @@ describe('analysis launch', () => {
   it('v2 full flow with tool calls: produces assessment, turn_summary, and final_report artifacts via deterministic inspect turns', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
+    const inspectIds: string[] = []
 
     // Build the gateway lazily — turnId is set after createCompleteTurnWithToolCall.
     // We capture it via a shared mutable ref.
@@ -4192,7 +4248,7 @@ describe('analysis launch', () => {
           }
         },
       },
-      mcpGateway: makeAnalysisMcpGateway(),
+      mcpGateway: makeAnalysisMcpGateway(inspectIds),
     })
     const targetId = await createReadySession(app)
     await createAnalysisProfile(app)
@@ -4238,13 +4294,51 @@ describe('analysis launch', () => {
     // Final aggregation report
     expect(schemaKeys).toContain('analysis.final_analysis_report.v1')
 
-    // Evidence is loaded through deterministic inspect turns (tool-call + tool-result parts
-    // committed as proper turns, not synthetic inject parts).
-    // Bootstrap inspect + packet-specific inspect calls should produce deterministic turns.
+    // Evidence is loaded through deterministic inspect turns (user prompt + tool-call +
+    // tool-result parts committed as proper turns, not synthetic inject parts).
     const deterministicTurns = app.backendDb.connection
       .prepare(`SELECT v2_steps.id, v2_turns.outcome FROM v2_turns JOIN v2_steps ON v2_steps.id = v2_turns.step_id WHERE v2_steps.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call'`)
       .all(childId) as Array<{ id: string; outcome: string }>
-    expect(deterministicTurns.length).toBeGreaterThanOrEqual(1)
+    expect(deterministicTurns).toHaveLength(2)
+
+    expect(inspectIds).toEqual([
+      targetId,
+      `${targetId}.S`,
+      `${turnId}-P2`,
+      `${turnId}-P3`,
+      `${turnId}-P5`,
+    ])
+
+    const deterministicRounds = app.backendDb.connection
+      .prepare(`SELECT v2_turns.sequence_number AS turn_number, v2_rounds.round_index AS round_index FROM v2_rounds JOIN v2_turns ON v2_turns.step_id = v2_rounds.step_id JOIN v2_steps ON v2_steps.id = v2_turns.step_id WHERE v2_steps.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call' ORDER BY v2_turns.sequence_number, v2_rounds.round_index`)
+      .all(childId) as Array<{ turn_number: number; round_index: number }>
+    expect(deterministicRounds).toEqual([
+      { turn_number: 1, round_index: 0 },
+      { turn_number: 1, round_index: 1 },
+      { turn_number: 2, round_index: 0 },
+      { turn_number: 2, round_index: 1 },
+      { turn_number: 2, round_index: 2 },
+    ])
+
+    const deterministicParts = app.backendDb.connection
+      .prepare(`SELECT token_count FROM v2_parts WHERE session_id = ? AND step_id IN (SELECT step_id FROM v2_turns WHERE session_id = ? AND outcome = 'deterministic-tool-call')`)
+      .all(childId, childId) as Array<{ token_count: number | null }>
+    expect(deterministicParts.length).toBeGreaterThan(0)
+    expect(deterministicParts.every(part => part.token_count !== null)).toBe(true)
+
+    // The recovery should not leave a bootstrap root inspect of the full target session
+    // in context once packet-specific evidence loading is in place.
+    const rootInspectTurns = app.backendDb.connection
+      .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND part_type = 'user-message' AND payload_text LIKE ?`)
+      .all(childId, 'Inspect the target session to load its trace for analysis.%') as Array<{ id: string }>
+    expect(rootInspectTurns).toHaveLength(0)
+
+    // Packet-local deterministic evidence should be excluded after the corresponding
+    // assessment completes so it does not accumulate in active context.
+    const lingeringPacketInspectParts = app.backendDb.connection
+      .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND step_id = ? AND context_state = 'included'`)
+      .all(childId, deterministicTurns[1]?.id) as Array<{ id: string }>
+    expect(lingeringPacketInspectParts).toHaveLength(0)
 
     // No synthetic evidence inject parts (old prompt-bundle pattern)
     const injectParts = app.backendDb.connection

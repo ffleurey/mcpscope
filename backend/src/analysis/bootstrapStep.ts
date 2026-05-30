@@ -31,8 +31,10 @@ import {
   type CoverageMap,
   type AnalysisSessionState,
 } from './schemas.js'
-import type { McpGateway } from '../runtime/toolTurns.js'
-import { runDeterministicMcpToolCall } from '../runtime/toolTurns.js'
+import {
+  runDeterministicMcpToolCallsInSingleTurn,
+  type McpGateway,
+} from '../runtime/toolTurns.js'
 import type { TurnStreamEventSink } from '../runtime/streamEvents.js'
 
 function uuid(): string {
@@ -104,7 +106,24 @@ export async function runBootstrapStep(
     }
   }
 
+  const partsByTurn = new Map<string, typeof allParts>()
+  for (const part of allParts) {
+    if (part.turnId) {
+      const existing = partsByTurn.get(part.turnId)
+      if (existing) {
+        existing.push(part)
+      } else {
+        partsByTurn.set(part.turnId, [part])
+      }
+    }
+  }
+
   // ── 4. Find user request + final answer parts ─────────────────────────────
+  const targetMcpInstructionsPartId = allParts
+    .find(p => p.turnId === null && p.partType === 'mcp-instructions')?.id ?? null
+  const targetToolDefinitionsPartId = allParts
+    .find(p => p.turnId === null && p.partType === 'tool-definitions')?.id ?? null
+
   // User request: first user-message in the first in-scope turn
   const inScopeTurnIdSet = new Set(inScopeTurnIds)
   const userMessageParts = allParts
@@ -128,10 +147,12 @@ export async function runBootstrapStep(
 
   for (const round of inScopeRounds) {
     const roundParts = (partsByRound.get(round.id) ?? []).sort((a, b) => a.ordinal - b.ordinal)
+    const turnParts = (partsByTurn.get(round.turnId) ?? []).sort((a, b) => a.ordinal - b.ordinal)
     const toolCallParts = roundParts.filter(p => p.partType === 'tool-call')
-    const toolResultParts = roundParts.filter(p => p.partType === 'tool-result')
-    const reasoningParts = roundParts.filter(p => p.partType === 'assistant-reasoning')
-    const contentParts = roundParts.filter(p => p.partType === 'assistant-content')
+    const toolResultParts = turnParts.filter(p => p.partType === 'tool-result')
+    const reasoningAndContentParts = turnParts
+      .filter(p => p.partType === 'assistant-reasoning' || p.partType === 'assistant-content')
+      .sort((a, b) => a.ordinal - b.ordinal)
 
     for (const toolCallPart of toolCallParts) {
       // Extract tool name from part payload JSON
@@ -147,19 +168,17 @@ export async function runBootstrapStep(
           const tcJson = toolCallPart.payload.json as { id?: string } | null
           return trJson.tool_call_id === tcJson?.id
         }
-        // Fall back: use first unmatched result
-        return true
+        return tr.roundId === round.id && tr.ordinal > toolCallPart.ordinal
       })
 
-      // Reasoning before: last assistant-reasoning or content part before this tool call
-      const reasoningBeforePart = [...reasoningParts, ...contentParts]
-        .sort((a, b) => a.ordinal - b.ordinal)
+      // Reasoning before: last reasoning/content part earlier in the turn.
+      const reasoningBeforePart = reasoningAndContentParts
         .findLast(p => p.ordinal < toolCallPart.ordinal) ?? null
 
-      // Reasoning after: first reasoning/content part after the tool result
+      // Reasoning after: first reasoning/content part later in the turn, which may
+      // live in the next round rather than the tool-call round itself.
       const afterOrdinal = toolResultPart ? toolResultPart.ordinal : toolCallPart.ordinal
-      const reasoningAfterPart = [...reasoningParts, ...contentParts]
-        .sort((a, b) => a.ordinal - b.ordinal)
+      const reasoningAfterPart = reasoningAndContentParts
         .find(p => p.ordinal > afterOrdinal) ?? null
 
       packets.push({
@@ -183,6 +202,8 @@ export async function runBootstrapStep(
     target_turn_id: targetTurnId,
     analysis_goal: analysisGoal,
     analyzed_turn_ids: inScopeTurnIds,
+    target_mcp_instructions_part_id: targetMcpInstructionsPartId,
+    target_tool_definitions_part_id: targetToolDefinitionsPartId,
     user_request_part_id: userRequestPartId,
     final_answer_part_id: finalAnswerPartId,
   }
@@ -233,28 +254,23 @@ export async function runBootstrapStep(
     })
   })()
 
-  // ── 7. Deterministically call mcpscope_inspect to inject the target session
-  //       trace as a proper tool_call part in the analysis session context ────
-  // The analysis LLM will see this as prior tool evidence in subsequent turns,
-  // correctly framing the trace data as the output of an inspect call.
   const analysisSession = getSessionRecord(database.connection, analysisSessionId)
-  if (analysisSession?.mcpProfileSnapshot) {
-    const userMessage =
-      `Inspect the target session to load its trace for analysis.\n` +
-      `Target session ID: ${targetSessionId}\n` +
-      `Analysis goal: ${analysisGoal}`
-    await runDeterministicMcpToolCall(
-      database,
-      mcpGateway,
-      analysisSession,
-      'mcpscope_inspect',
-      { id: targetSessionId },
-      userMessage,
-      emitEvent,
-    )
+  if (!analysisSession) {
+    throw new Error(`Bootstrap: analysis session not found: ${analysisSessionId}`)
   }
 
-  // Mark bootstrap as complete, seed packet counts
+  await runDeterministicMcpToolCallsInSingleTurn(
+    database,
+    mcpGateway,
+    analysisSession,
+    [
+      { toolName: 'mcpscope_inspect', toolArgs: { id: targetSessionId } },
+      { toolName: 'mcpscope_inspect', toolArgs: { id: `${targetSessionId}.S` } },
+    ],
+    emitEvent,
+  )
+
+  // ── 7. Mark bootstrap as complete, seed packet counts ───────────────────
   const updatedState: AnalysisSessionState = {
     ...state,
     phase: packets.length > 0 ? 'assessing' : 'coverage_validation',

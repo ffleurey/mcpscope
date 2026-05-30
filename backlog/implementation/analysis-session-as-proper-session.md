@@ -164,6 +164,196 @@ analysis session context.
 
 It must not rebuild the workflow state into another large synthetic prompt bundle.
 
+## Concrete reference session: CXQJ
+
+Use session `CXQJ` as a concrete reference example when checking whether the runtime matches
+this specification.
+
+`CXQJ` is the source session. The analysis session is expected to be a child
+`session_analysis` session whose prelude and deterministic evidence-loading trace make the
+analysis behavior inspectable.
+
+### Source session shape
+
+The relevant source setup for `CXQJ` is:
+
+- `CXQJ.S.1-MI`: Home Assistant MCP instructions
+- `CXQJ.S.2-TD`: Home Assistant tool definitions
+
+The relevant source turn for the first analysis examples is `CXQJ.1`.
+
+That turn contains these packets:
+
+- packet 1: entity discovery
+  - `CXQJ.1.1.2-R`: reasoning before discovery call
+  - `CXQJ.1.1.3-T`: `ha_history_list_entities` call and result
+  - `CXQJ.1.2.1-R`: reasoning after discovery result / before first stats call
+- packet 2: first stats attempt
+  - `CXQJ.1.2.1-R`: reasoning before first stats call
+  - `CXQJ.1.2.2-T`: first `ha_history_get_sensor_stats` call and result
+  - `CXQJ.1.3.1-R`: reasoning after first stats result / before retry
+- packet 3: retry of stats call
+  - `CXQJ.1.3.1-R`: reasoning before retry
+  - `CXQJ.1.3.2-T`: retry `ha_history_get_sensor_stats` call and result
+  - `CXQJ.1.4.1-R`: reasoning after retry / before broader query
+- packet 4: broader stats call leading to final answer
+  - `CXQJ.1.4.1-R`: reasoning before broader query
+  - `CXQJ.1.4.2-T`: broader `ha_history_get_sensor_stats` call and result
+  - `CXQJ.1.5.1-R`: reasoning after broader query
+
+In `CXQJ`, tool results are embedded in the inspected `tool_call` parts rather than stored as
+separate `tool_result` parts, so the evidence unit for a tool interaction is a single
+inspected part such as `CXQJ.1.1.3-T` or `CXQJ.1.2.2-T`.
+
+### Expected analysis initialization
+
+Before any packet assessment, the analysis session should have a normal prelude and one
+bootstrap deterministic evidence-loading turn.
+
+The expected initialization state is:
+
+1. Normal session prelude exists in the analysis session.
+2. The prelude contains:
+  - `system-prompt`
+  - `tool-definitions`
+3. The analysis MCP tools available in the prelude are `mcpscope_inspect` and
+   `mcpscope_status`.
+4. Token counts are populated for the prelude parts.
+5. The target session's own MCP instructions and tool definitions do not live in the
+  analysis-session prelude. They are introduced as inspected evidence through the bootstrap
+  deterministic turn.
+6. Bootstrap injects exactly 2 deterministic inspect calls:
+   - inspect `CXQJ`
+   - inspect `CXQJ.S`
+7. Those bootstrap deterministic inspect calls appear as first-class tool interaction parts in
+   the analysis session trace.
+8. No synthetic prompt bundle is used to carry setup or source-session evidence.
+
+This distinction matters:
+
+- the analysis-session prelude contains the prompt and analysis tools for the analysis session
+  itself
+- the analyzed session's MCP instructions and tool definitions appear as content inside the
+  bootstrap-inspected evidence, typically in the first deterministic turn
+
+### Expected first deterministic evidence-loading turn
+
+The first deterministic evidence-loading turn is the bootstrap turn.
+
+Expected rounds in that turn:
+
+1. round 0: inspect `CXQJ`
+2. round 1: inspect `CXQJ.S`
+
+Expected context after bootstrap and before the first packet assessment:
+
+- analysis prelude parts remain included
+- bootstrap deterministic inspect evidence remains included
+- source-session setup evidence is available through the inspected `CXQJ` and `CXQJ.S` data
+  carried by the bootstrap deterministic turn
+- no packet-local evidence has been loaded yet
+- no packet assessment prompt has run yet
+
+Using `LLDD` as the concrete example:
+
+- `LLDD.S` is the prelude for the analysis session itself
+- `LLDD.1.1.1-T` is the bootstrap inspect of `CXQJ`
+- `LLDD.1.2.1-T` is the bootstrap inspect of `CXQJ.S`
+- the analyzed session's `mcp_instructions` and `tool_definitions` are visible inside the
+  inspected payloads of `LLDD.1`, not as parts under `LLDD.S`
+
+### Expected first tool analysis for CXQJ
+
+The first packet assessment should analyze the entity-discovery step.
+
+The deterministic step should inspect exactly these source parts:
+
+1. `CXQJ.1.1.2-R`
+2. `CXQJ.1.1.3-T`
+3. `CXQJ.1.2.1-R`
+
+What those parts mean:
+
+- `CXQJ.1.1.2-R`: the model decides it must resolve the outdoor temperature entity before
+  fetching statistics
+- `CXQJ.1.1.3-T`: `ha_history_list_entities` is called with outdoor temperature search
+  parameters and returns `sensor.ruuvitag_fc8f_temperature`
+- `CXQJ.1.2.1-R`: the model uses that entity result to prepare the first stats call
+
+Expected rounds and context shape for this first packet analysis:
+
+1. Deterministic inspect round for `CXQJ.1.1.2-R`
+2. Deterministic inspect round for `CXQJ.1.1.3-T`
+3. Deterministic inspect round for `CXQJ.1.2.1-R`
+4. A bounded assessment turn runs with a short referential prompt
+5. An `analysis.tool_call_assessment.v1` artifact is produced for packet 1
+6. After the assessment completes, those 3 packet-local inspected evidence parts are excluded
+   or masked from active LLM context
+7. The bootstrap evidence remains available
+
+So immediately before the first packet-assessment turn starts, the active context should
+contain:
+
+- the normal analysis prelude
+- bootstrap inspect evidence for `CXQJ` and `CXQJ.S`
+- packet-local inspected evidence for `CXQJ.1.1.2-R`, `CXQJ.1.1.3-T`, and `CXQJ.1.2.1-R`
+- no synthetic textual restatement of those parts
+
+### Expected second tool analysis for CXQJ
+
+The second packet assessment should analyze the first stats attempt.
+
+The deterministic step should inspect exactly these source parts:
+
+1. `CXQJ.1.2.1-R`
+2. `CXQJ.1.2.2-T`
+3. `CXQJ.1.3.1-R`
+
+What those parts mean:
+
+- `CXQJ.1.2.1-R`: the model plans to fetch daily max statistics for
+  `sensor.ruuvitag_fc8f_temperature`
+- `CXQJ.1.2.2-T`: the first `ha_history_get_sensor_stats` call returns the contradictory error
+  `Invalid aggregation "max". Valid values: mean, min, max, median, count.`
+- `CXQJ.1.3.1-R`: the model notices the contradiction and chooses to retry
+
+Expected rounds and context shape for this second packet analysis:
+
+1. Deterministic inspect round for `CXQJ.1.2.1-R`
+2. Deterministic inspect round for `CXQJ.1.2.2-T`
+3. Deterministic inspect round for `CXQJ.1.3.1-R`
+4. A bounded assessment turn runs with a short referential prompt
+5. A second `analysis.tool_call_assessment.v1` artifact is produced for packet 2
+6. After the assessment completes, those 3 packet-local inspected evidence parts are excluded
+   or masked from active LLM context
+7. Bootstrap evidence remains available for later steps
+
+So immediately before the second packet-assessment turn starts, the active context should
+contain:
+
+- the normal analysis prelude
+- bootstrap inspect evidence for `CXQJ` and `CXQJ.S`
+- packet-local inspected evidence for `CXQJ.1.2.1-R`, `CXQJ.1.2.2-T`, and `CXQJ.1.3.1-R`
+- the accepted output of the first packet assessment if later steps keep prior assessments in
+  context
+- no lingering included packet-local parts from the first packet
+
+### What should not appear while checking CXQJ
+
+When manually checking the analysis child session for `CXQJ`, these are signs the runtime is
+still wrong:
+
+- more than the 2 bootstrap inspect calls appear before the first packet-local assessment
+- packet-local assessment reloads broad root session/setup evidence together with local packet
+  evidence
+- packet-local evidence is flattened into a synthetic `user-message` prompt bundle
+- the bounded assessment prompt restates the inspected evidence instead of referring to it
+- packet-local inspected parts remain included in active context after their assessment
+- deterministic evidence parts are missing token counts
+- inspected reasoning around the tool call is absent from the evidence loaded for assessment
+- the analyzed session's MCP instructions or tool definitions are expected under the
+  analysis-session prelude instead of under the bootstrap inspect evidence
+
 ## Context management rules
 
 Context mutation should become a pure visibility manager.

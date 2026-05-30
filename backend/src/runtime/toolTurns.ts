@@ -184,6 +184,34 @@ function serializeAssistantContentWeight(part: PartRecord): number {
   return (part.payload.text ?? '').length
 }
 
+function estimateTokenCountFromText(text: string): number {
+  return Math.max(1, Math.ceil(text.length / 4))
+}
+
+function estimateDeterministicToolCallTokens(toolCall: ToolCallRecord): PartRecord['tokens'] {
+  return {
+    count: estimateTokenCountFromText(JSON.stringify({
+      id: toolCall.id,
+      name: toolCall.name,
+      arguments: toolCall.argumentsJson,
+    })),
+    source: 'estimated',
+    confidence: 'estimated',
+    note: 'Estimated from deterministic tool-call payload size',
+  }
+}
+
+function estimateDeterministicToolResultTokens(toolResult: McpToolCallResult): PartRecord['tokens'] {
+  const serialized = toolResult.content
+    ?? (toolResult.structuredContent == null ? '' : JSON.stringify(toolResult.structuredContent))
+  return {
+    count: estimateTokenCountFromText(serialized),
+    source: 'estimated',
+    confidence: 'estimated',
+    note: 'Estimated from deterministic tool-result payload size',
+  }
+}
+
 function updatePartTokens(
   part: PartRecord,
   tokens: PartRecord['tokens'],
@@ -886,21 +914,49 @@ export async function runDeterministicMcpToolCall(
   session: SessionRecord,
   toolName: string,
   toolArgs: Record<string, unknown>,
-  userContextMessage: string,
+  userContextMessage: string | null,
   emitEvent?: TurnStreamEventSink,
-): Promise<{ turnId: string; roundId: string; toolCallPartId: string; toolResultPartId: string; resultContent: string }> {
+  reservedTurnId?: string,
+  roundIndexOverride?: number,
+  commitTurn = true,
+): Promise<{
+  turnId: string
+  roundId: string
+  userPartId: string | null
+  toolCallPartId: string
+  toolResultPartId: string
+  resultContent: string
+}> {
   if (!session.mcpProfileSnapshot) {
     throw new Error('MCP profile is required for deterministic tool calls')
   }
   const ts = now()
-  const turnSequenceNumber = getNextTurnSequenceNumber(database.connection, session.id)
-  const turnId = formatTurnId(session.id, turnSequenceNumber)
-  const roundId = formatRoundId(session.id, turnSequenceNumber, 1)
+  const turnSequenceNumber = reservedTurnId
+    ? parseInt(reservedTurnId.split('.')[1] ?? '1', 10) || 1
+    : getNextTurnSequenceNumber(database.connection, session.id)
+  const turnId = reservedTurnId ?? formatTurnId(session.id, turnSequenceNumber)
+  const roundNumber = (roundIndexOverride ?? 0) + 1
+  const roundId = formatRoundId(session.id, turnSequenceNumber, roundNumber)
 
   const userPartOrdinal = getNextPartOrdinal(database.connection, session.id)
-  const userPartId = formatPartId(session.id, turnSequenceNumber, 1, 1, 'user-message')
-  const toolCallPartId = formatPartId(session.id, turnSequenceNumber, 1, 2, 'tool-call')
-  const toolResultPartId = formatPartId(session.id, turnSequenceNumber, 1, 3, 'tool-result')
+  const nextRoundPartSequence = getNextRoundPartSequence(database.connection, roundId)
+  const userPartId = userContextMessage
+    ? formatPartId(session.id, turnSequenceNumber, roundNumber, nextRoundPartSequence, 'user-message')
+    : null
+  const toolCallPartId = formatPartId(
+    session.id,
+    turnSequenceNumber,
+    roundNumber,
+    nextRoundPartSequence + (userContextMessage ? 1 : 0),
+    'tool-call',
+  )
+  const toolResultPartId = formatPartId(
+    session.id,
+    turnSequenceNumber,
+    roundNumber,
+    nextRoundPartSequence + (userContextMessage ? 2 : 1),
+    'tool-result',
+  )
 
   const toolCallId = createUuid()
   const toolCall: ToolCallRecord = {
@@ -909,24 +965,41 @@ export async function runDeterministicMcpToolCall(
     argumentsJson: JSON.stringify(toolArgs),
   }
 
-  const turn: TurnRecord = {
-    id: turnId,
-    sessionId: session.id,
-    sequenceNumber: turnSequenceNumber,
-    status: 'streaming',
-    outcome: null,
-    usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
-    contextTokensAtTurnEnd: null,
-    contextTokensAfterCompaction: null,
-    compactionApplied: 'none',
-    compactionTokensRemoved: null,
-    createdAt: ts,
-    completedAt: null,
-  }
+  const turn: TurnRecord = reservedTurnId
+    ? {
+        ...(listTurnRecordsBySession(database.connection, session.id).find(t => t.id === turnId) ?? {
+          id: turnId,
+          sessionId: session.id,
+          sequenceNumber: turnSequenceNumber,
+          status: 'streaming',
+          outcome: null,
+          usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+          contextTokensAtTurnEnd: null,
+          contextTokensAfterCompaction: null,
+          compactionApplied: 'none',
+          compactionTokensRemoved: null,
+          createdAt: ts,
+          completedAt: null,
+        }),
+      }
+    : {
+        id: turnId,
+        sessionId: session.id,
+        sequenceNumber: turnSequenceNumber,
+        status: 'streaming',
+        outcome: null,
+        usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+        contextTokensAtTurnEnd: null,
+        contextTokensAfterCompaction: null,
+        compactionApplied: 'none',
+        compactionTokensRemoved: null,
+        createdAt: ts,
+        completedAt: null,
+      }
   const round: RoundRecord = {
     id: roundId,
     turnId,
-    roundIndex: 0,
+    roundIndex: roundNumber - 1,
     status: 'streaming',
     finishReason: 'tool_calls',
     usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -935,19 +1008,34 @@ export async function runDeterministicMcpToolCall(
     startedAt: ts,
     completedAt: null,
   }
-  const userPart = createUserPart(session, userPartId, turnId, roundId, userPartOrdinal, userContextMessage, ts)
-  const toolCallPart = createToolCallPart(session, toolCallPartId, turnId, roundId, userPartOrdinal + 1, toolCall, ts)
+  const userPart = userPartId && userContextMessage
+    ? createUserPart(session, userPartId, turnId, roundId, userPartOrdinal, userContextMessage, ts)
+    : null
+  const toolCallOrdinal = userPart ? userPartOrdinal + 1 : userPartOrdinal
+  const toolResultOrdinal = toolCallOrdinal + 1
+  const toolCallPart = createToolCallPart(session, toolCallPartId, turnId, roundId, toolCallOrdinal, toolCall, ts)
+  toolCallPart.tokens = estimateDeterministicToolCallTokens(toolCall)
+  toolCallPart.provenanceJson = {
+    ...(toolCallPart.provenanceJson as Record<string, unknown> | null ?? {}),
+    derivedFrom: 'deterministic-tool-call-payload-estimate',
+  }
 
   database.connection.transaction(() => {
-    insertTurnRecord(database.connection, turn)
+    if (!reservedTurnId) {
+      insertTurnRecord(database.connection, turn)
+    } else {
+      updateTurnRecord(database.connection, turn)
+    }
     insertRoundRecord(database.connection, round)
-    insertPartRecord(database.connection, userPart)
+    if (userPart) insertPartRecord(database.connection, userPart)
     insertPartRecord(database.connection, toolCallPart)
   })()
 
-  emitEvent?.({ type: 'turn-started', turn: { ...turn } })
+  if (!reservedTurnId) {
+    emitEvent?.({ type: 'turn-started', turn: { ...turn } })
+  }
   emitEvent?.({ type: 'round-started', round: { ...round } })
-  emitEvent?.({ type: 'part-committed', part: { ...userPart } })
+  if (userPart) emitEvent?.({ type: 'part-committed', part: { ...userPart } })
   emitEvent?.({ type: 'part-committed', part: { ...toolCallPart } })
 
   // Perform the actual MCP tool call
@@ -965,12 +1053,17 @@ export async function runDeterministicMcpToolCall(
     toolResultPartId,
     turnId,
     roundId,
-    userPartOrdinal + 2,
+    toolResultOrdinal,
     toolCallPartId,
     toolCall,
     toolResult,
     completedAt,
   )
+  toolResultPart.tokens = estimateDeterministicToolResultTokens(toolResult)
+  toolResultPart.provenanceJson = {
+    ...(toolResultPart.provenanceJson as Record<string, unknown> | null ?? {}),
+    derivedFrom: 'deterministic-tool-result-payload-estimate',
+  }
 
   turn.status = 'complete'
   turn.outcome = 'deterministic-tool-call'
@@ -1003,9 +1096,59 @@ export async function runDeterministicMcpToolCall(
     transcript: deriveTranscriptEntries(persistedParts),
     context: deriveContextEntries(persistedParts),
   })
-  emitEvent?.({ type: 'turn-committed', turn: { ...turn }, trace })
+  if (commitTurn) {
+    emitEvent?.({ type: 'turn-committed', turn: { ...turn }, trace })
+  }
 
-  return { turnId, roundId, toolCallPartId, toolResultPartId, resultContent: toolResult.content }
+  return {
+    turnId,
+    roundId,
+    userPartId,
+    toolCallPartId,
+    toolResultPartId,
+    resultContent: toolResult.content,
+  }
+}
+
+export async function runDeterministicMcpToolCallsInSingleTurn(
+  database: BackendDatabase,
+  mcpGateway: McpGateway,
+  session: SessionRecord,
+  calls: Array<{ toolName: string; toolArgs: Record<string, unknown> }>,
+  emitEvent?: TurnStreamEventSink,
+): Promise<{ turnId: string; toolCallPartIds: string[]; toolResultPartIds: string[] }> {
+  const toolCallPartIds: string[] = []
+  const toolResultPartIds: string[] = []
+
+  let reservedTurnId: string | null = null
+
+  for (const [index, call] of calls.entries()) {
+    const result = await runDeterministicMcpToolCall(
+      database,
+      mcpGateway,
+      session,
+      call.toolName,
+      call.toolArgs,
+      null,
+      emitEvent,
+      reservedTurnId ?? undefined,
+      index,
+      index === calls.length - 1,
+    )
+    reservedTurnId = result.turnId
+    toolCallPartIds.push(result.toolCallPartId)
+    toolResultPartIds.push(result.toolResultPartId)
+  }
+
+  if (!reservedTurnId) {
+    throw new Error('Expected at least one deterministic MCP call')
+  }
+
+  return {
+    turnId: reservedTurnId,
+    toolCallPartIds,
+    toolResultPartIds,
+  }
 }
 
 export async function createToolEnabledTurn(

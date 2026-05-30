@@ -2,8 +2,8 @@
  * AnalysisContextMutationStep
  *
  * After each assessment LLM turn:
- *  1. Exclude the evidence inject part(s) written before the assessment so they
- *     are not carried into the next LLM call.
+ *  1. Exclude the deterministic inspect prompt/tool/result parts written before
+ *     the assessment so they are not carried into the next LLM call.
  *  2. Exclude the assessment turn's assistant-reasoning parts (keep the
  *     assistant-content JSON result in context for the final aggregation).
  *  3. Mark the assessment turn's user-message as 'historical-only' to prevent
@@ -52,7 +52,7 @@ export function runContextMutationStep(
 
   const mutatedAt = Date.now()
 
-  // ── 1. Exclude inject evidence parts ─────────────────────────────────────
+  // ── 1. Exclude deterministic inspect evidence parts ─────────────────────
   for (const partId of pendingInjectPartIds) {
     const part = getPartRecord(database.connection, partId)
     if (part) {
@@ -61,7 +61,7 @@ export function runContextMutationStep(
         context: {
           ...part.context,
           state: 'excluded',
-          note: 'Evidence inject excluded after assessment completed',
+          note: 'Deterministic inspect evidence excluded after assessment completed',
         },
         updatedAt: mutatedAt,
       })
