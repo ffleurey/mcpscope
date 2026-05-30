@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const DOMAIN_MODEL_VERSION = 1
+export const DOMAIN_MODEL_VERSION = 2
 
 export const sessionTypeValues = ['primary', 'session_analysis', 'session_compaction', 'benchmark_analysis'] as const
 export const parentKindValues = ['session', 'benchmark'] as const
@@ -221,10 +221,35 @@ export type RoundRecord = z.infer<typeof roundRecordSchema>
 export type PartRecord = z.infer<typeof partRecordSchema>
 export type RawExchangeRecord = z.infer<typeof rawExchangeRecordSchema>
 
+// ─── Benchmark container record ───────────────────────────────────────────────
+
+/**
+ * BenchmarkRecord is the minimal persistence record for a Benchmark container.
+ * Stored in the `session_containers` table with container_type_key = 'benchmark'.
+ *
+ * Sessions may reference a benchmark by setting parentKind='benchmark' and
+ * parentId to the benchmark's id.  Benchmark is a `SessionContainer` that is
+ * not itself a Session.
+ */
+export const benchmarkRecordSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  params: z.record(z.string(), z.unknown()).default({}),
+  state: z.record(z.string(), z.unknown()).default({}),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+})
+
+export type BenchmarkRecord = z.infer<typeof benchmarkRecordSchema>
+
 export function getDomainModelSummary() {
   return {
     version: DOMAIN_MODEL_VERSION,
-    entities: ['session', 'turn', 'round', 'part', 'raw-exchange'],
+    // Canonical execution-model entities in the landed implementation.
+    // session-container and benchmark are SessionContainer types;
+    // session is the execution container (also a SessionContainer);
+    // step is the abstract execution unit; turn is the LLM-specific step subtype.
+    entities: ['session-container', 'session', 'step', 'turn', 'round', 'part', 'raw-exchange', 'benchmark'],
     enums: {
       sessionTypeValues,
       parentKindValues,

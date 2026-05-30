@@ -21,8 +21,8 @@ export function applyContextCompaction(
   const tokenSumRow = connection
     .prepare<[string], { total: number | null }>(`
       SELECT SUM(token_count) AS total
-      FROM parts
-      WHERE session_id = (SELECT session_id FROM turns WHERE id = ?)
+      FROM v2_parts
+      WHERE session_id = (SELECT session_id FROM v2_turns WHERE step_id = ?)
         AND context_state IN ('included', 'round-only')
     `)
     .get(completedTurn.id) as { total: number | null }
@@ -37,8 +37,8 @@ export function applyContextCompaction(
     const reasoningParts = connection
       .prepare<[string], { id: string; token_count: number | null }>(`
         SELECT id, token_count
-        FROM parts
-        WHERE turn_id = ?
+        FROM v2_parts
+        WHERE step_id = ?
           AND part_type = 'assistant-reasoning'
           AND context_state = 'included'
       `)
@@ -52,9 +52,9 @@ export function applyContextCompaction(
 
       // Update each reasoning part: mark as stripped, record which turn's compaction did it.
       const updatePart = connection.prepare(`
-        UPDATE parts
+        UPDATE v2_parts
         SET context_state = 'stripped',
-            stripped_by_compaction_at_turn_id = ?,
+            stripped_by_compaction_at_step_id = ?,
             updated_at = ?
         WHERE id = ?
       `)
@@ -83,12 +83,12 @@ export function applyContextCompaction(
 
   connection
     .prepare(`
-      UPDATE turns
+      UPDATE v2_turns
       SET context_tokens_at_turn_end = @contextTokensAtTurnEnd,
           context_tokens_after_compaction = @contextTokensAfterCompaction,
           compaction_applied = @compactionApplied,
           compaction_tokens_removed = @compactionTokensRemoved
-      WHERE id = @id
+      WHERE step_id = @id
     `)
     .run({
       id: completedTurn.id,

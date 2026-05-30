@@ -1,7 +1,7 @@
 import type { ParentKind, SessionType } from './model.js'
 
 /**
- * Validates the session type / parent combination against the v1 rules.
+ * Validates the current session type / parent combination rules.
  *
  * Returns an error message string if the combination is invalid, or null if valid.
  *

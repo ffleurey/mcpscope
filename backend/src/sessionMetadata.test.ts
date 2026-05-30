@@ -23,6 +23,8 @@ import { openBackendDatabase } from './persistence/db.js'
 import { initializeBackendSchema, validateBackendSchema } from './persistence/schema.js'
 import { importTraceBundle } from './runtime/traceImport.js'
 
+const LEGACY_RUNTIME_TABLES = ['sessions', 'turns', 'rounds', 'parts', 'raw_exchanges']
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeTestConfig() {
@@ -138,6 +140,23 @@ describe('session metadata repository', () => {
       fs.rmSync(dataDir, { recursive: true, force: true })
       dataDir = undefined
     }
+  })
+
+  it('openBackendDatabase initializes shared defaults and canonical runtime tables without legacy runtime tables', () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+
+    const db = openBackendDatabase(config.sqlitePath)
+
+    expect(db.schema.tables).toContain('session_creation_defaults')
+    expect(db.schema.tables).toContain('analysis_defaults')
+    expect(db.schema.tables).toContain('v2_sessions')
+
+    for (const table of LEGACY_RUNTIME_TABLES) {
+      expect(db.schema.tables).not.toContain(table)
+    }
+
+    db.connection.close()
   })
 
   it('persists and reads back session_type, parent_kind, parent_id', () => {

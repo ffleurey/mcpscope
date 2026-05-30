@@ -240,6 +240,91 @@ export function initializeBackendSchema(connection: Database.Database): void {
   upsertMeta.run('domain_model_version', String(DOMAIN_MODEL_VERSION))
 }
 
+export function initializeBackendSupportSchema(connection: Database.Database): void {
+  connection.exec(`
+    CREATE TABLE IF NOT EXISTS schema_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS model_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS mcp_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS lm_connections (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS model_configs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS mcp_server_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS session_creation_defaults (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      default_model_config_id TEXT,
+      default_mcp_profile_id TEXT,
+      updated_at INTEGER NOT NULL
+    );
+
+    INSERT OR IGNORE INTO session_creation_defaults (id, default_model_config_id, default_mcp_profile_id, updated_at)
+    VALUES (1, NULL, NULL, 0);
+
+    CREATE TABLE IF NOT EXISTS analysis_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS analysis_defaults (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      default_analysis_profile_id TEXT,
+      updated_at INTEGER NOT NULL
+    );
+
+    INSERT OR IGNORE INTO analysis_defaults (id, default_analysis_profile_id, updated_at)
+    VALUES (1, NULL, 0);
+  `)
+
+  const upsertMeta = connection.prepare(`
+    INSERT INTO schema_meta (key, value)
+    VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `)
+
+  upsertMeta.run('sqlite_schema_version', String(SQLITE_SCHEMA_VERSION))
+  upsertMeta.run('domain_model_version', String(DOMAIN_MODEL_VERSION))
+}
+
 export function validateBackendSchema(connection: Database.Database): void {
   const getColumns = (table: string): Set<string> => {
     const rows = connection

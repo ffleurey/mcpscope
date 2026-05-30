@@ -95,15 +95,22 @@ describe('backend foundation', () => {
 
     const body = response.json()
     expect(body).toMatchObject({
-      version: 1,
-      entities: ['session', 'turn', 'round', 'part', 'raw-exchange'],
+      version: 2,
+      entities: ['session-container', 'session', 'step', 'turn', 'round', 'part', 'raw-exchange', 'benchmark'],
     })
     expect(body.schema.tables).toEqual(
-      expect.arrayContaining(['sessions', 'turns', 'rounds', 'parts', 'raw_exchanges', 'session_creation_defaults', 'analysis_profiles', 'analysis_defaults'])
+      expect.arrayContaining([
+        // Shared config/default tables
+        'session_creation_defaults', 'analysis_profiles', 'analysis_defaults',
+        // Canonical execution-model tables
+        'session_containers', 'v2_sessions', 'v2_steps', 'v2_turns',
+        'v2_rounds', 'v2_parts', 'v2_raw_exchanges', 'artifacts',
+      ])
     )
     expect(body.schema.meta).toMatchObject({
-      domain_model_version: '1',
+      domain_model_version: '2',
       sqlite_schema_version: '7',
+      new_schema_version: '1',
     })
   })
 

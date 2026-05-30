@@ -85,7 +85,7 @@ export async function executeAnalysisLaunch(
     const target = getSessionRecord(db.connection, targetSessionId)
     if (!target) return { kind: 'target_not_found' }
 
-    // Only sessions whose init has completed are eligible in v1
+    // Only sessions whose init has completed are currently eligible.
     if (target.initStatus !== 'ready' && target.initStatus !== 'error') {
       return {
         kind: 'target_not_eligible',
