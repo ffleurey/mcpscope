@@ -8,8 +8,7 @@ import {
   listTurnRecordsBySession,
   updateTurnRecord,
 } from '../persistence/repository.js'
-import { createModelOnlyTurn } from '../runtime/modelTurns.js'
-import { createToolEnabledTurn } from '../runtime/toolTurns.js'
+import { ChatSession } from '../runtime/chatSession.js'
 import { formatTurnId } from '../domain/hierarchicalIds.js'
 import type { TurnRecord } from '../domain/model.js'
 import type { OperationContext } from './context.js'
@@ -123,20 +122,17 @@ export const sendOperation = {
 
     const { session, turn } = reservation
 
-    const runTurn = session!.mcpProfileSnapshot
-      ? createToolEnabledTurn(db, lmStudioGateway, mcpGateway, {
-          sessionId,
-          userContent,
-          maxToolRounds,
-          reservedTurn: turn,
-        })
-      : createModelOnlyTurn(db, lmStudioGateway, {
-          sessionId,
-          userContent,
-          reservedTurn: turn,
-        })
+    const chatSession = new ChatSession(
+      session!,
+      db,
+      lmStudioGateway,
+      session!.mcpProfileSnapshot ? mcpGateway : null,
+      maxToolRounds,
+      turn,
+      userContent,
+    )
 
-    runTurn.catch((err: unknown) => {
+    chatSession.execute().catch((err: unknown) => {
       logger?.error(
         { sessionId, turnId: turn.id, err: err instanceof Error ? err.message : String(err) },
         'Detached turn failed',
