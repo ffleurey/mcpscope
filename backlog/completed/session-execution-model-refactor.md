@@ -2,7 +2,7 @@
 
 This task defines the implementation plan for refactoring mcpscope from the current chat-centered runtime model to the specified session-backed execution model.
 
-It is intentionally implementation-oriented. The target design and fixed architectural decisions live in [backlog/specification/session-backed-deterministic-harness-data-model.md](backlog/specification/session-backed-deterministic-harness-data-model.md).
+It is intentionally implementation-oriented. The target design and fixed architectural decisions live in [backlog/completed/session-backed-deterministic-harness-data-model.md](backlog/completed/session-backed-deterministic-harness-data-model.md).
 
 ## Why this task exists
 
@@ -373,8 +373,8 @@ Recommended focused validation areas:
 
 ## Dependencies
 
-- [backlog/implementation/pre-extension-runtime-generalization.md](backlog/implementation/pre-extension-runtime-generalization.md)
-- [backlog/specification/session-backed-deterministic-harness-data-model.md](backlog/specification/session-backed-deterministic-harness-data-model.md)
+- [backlog/completed/pre-extension-runtime-generalization.md](backlog/completed/pre-extension-runtime-generalization.md)
+- [backlog/completed/session-backed-deterministic-harness-data-model.md](backlog/completed/session-backed-deterministic-harness-data-model.md)
 - [backlog/completed/session-metadata-foundation.md](backlog/completed/session-metadata-foundation.md)
 - [backlog/completed/session-analysis-launch-and-report.md](backlog/completed/session-analysis-launch-and-report.md)
 

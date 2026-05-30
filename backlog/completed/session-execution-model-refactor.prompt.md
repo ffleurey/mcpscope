@@ -1,11 +1,11 @@
 # Coding agent prompt: session execution model refactor
 
-Use the [Coding Agent](.github/agents/coding.agent.md) to implement [backlog/implementation/session-execution-model-refactor.md](backlog/implementation/session-execution-model-refactor.md).
+Use the [Coding Agent](.github/agents/coding.agent.md) to implement [backlog/completed/session-execution-model-refactor.md](backlog/completed/session-execution-model-refactor.md).
 
 Start by reading, in order:
 
-- [backlog/implementation/session-execution-model-refactor.md](backlog/implementation/session-execution-model-refactor.md)
-- [backlog/specification/session-backed-deterministic-harness-data-model.md](backlog/specification/session-backed-deterministic-harness-data-model.md)
+- [backlog/completed/session-execution-model-refactor.md](backlog/completed/session-execution-model-refactor.md)
+- [backlog/completed/session-backed-deterministic-harness-data-model.md](backlog/completed/session-backed-deterministic-harness-data-model.md)
 - [AGENTS.md](AGENTS.md)
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [DATA-MODEL.md](DATA-MODEL.md)

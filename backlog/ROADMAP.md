@@ -25,6 +25,12 @@ Recent completed work has established three important pillars:
 - session metadata groundwork for parent/child relationships
 - a first end-to-end analysis-session MVP that proves mcpscope can inspect its own sessions through a restricted internal MCP workflow
 
+That baseline now also includes the execution-model refactor:
+
+- the canonical runtime vocabulary is `SessionContainer`, `Session`, `Step`, and `Turn`
+- the backend runtime loop is explicit through `Session.execute()` / `advance()` / `canContinue()`
+- persistence is generic by default for containers, sessions, and steps, with `Turn` retaining infrastructure-specific subtype persistence
+
 Those completed increments matter because they define the shape of the next decisions. New work should build on the canonical runtime and operation layers rather than introducing parallel frontend-owned or adapter-owned flows.
 
 ## Current Direction

@@ -2,14 +2,14 @@
 
 Use the [Coding Agent](.github/agents/coding.agent.md) to land a focused follow-up increment on the existing `session-execution-model-refactor` branch / PR.
 
-This is not a restart of the task. Treat it as a review-driven completion pass for the already-open implementation of [backlog/implementation/session-execution-model-refactor.md](backlog/implementation/session-execution-model-refactor.md).
+This is not a restart of the task. Treat it as a review-driven completion pass for the already-open implementation of [backlog/completed/session-execution-model-refactor.md](backlog/completed/session-execution-model-refactor.md).
 
 ## Read first
 
 Read these in order before editing:
 
-- [backlog/implementation/session-execution-model-refactor.md](backlog/implementation/session-execution-model-refactor.md)
-- [backlog/specification/session-backed-deterministic-harness-data-model.md](backlog/specification/session-backed-deterministic-harness-data-model.md)
+- [backlog/completed/session-execution-model-refactor.md](backlog/completed/session-execution-model-refactor.md)
+- [backlog/completed/session-backed-deterministic-harness-data-model.md](backlog/completed/session-backed-deterministic-harness-data-model.md)
 - [AGENTS.md](AGENTS.md)
 - [.github/agents/coding.agent.md](.github/agents/coding.agent.md)
 - [ARCHITECTURE.md](ARCHITECTURE.md)
@@ -89,7 +89,7 @@ Default preference:
 
 Concrete guidance:
 
-- review Step 7 through Step 9 in [backlog/implementation/session-execution-model-refactor.md](backlog/implementation/session-execution-model-refactor.md)
+- review Step 7 through Step 9 in [backlog/completed/session-execution-model-refactor.md](backlog/completed/session-execution-model-refactor.md)
 - inspect whether CLI, MCP, and frontend truly need code changes for this refactor, or whether they already ride unchanged on stable backend contracts
 - if they need changes, implement the minimal required updates
 - if they do not need changes, add the validation evidence and task/PR wording needed to make that explicit and reviewable
