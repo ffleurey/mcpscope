@@ -221,6 +221,27 @@ export type RoundRecord = z.infer<typeof roundRecordSchema>
 export type PartRecord = z.infer<typeof partRecordSchema>
 export type RawExchangeRecord = z.infer<typeof rawExchangeRecordSchema>
 
+// ─── Benchmark container record ───────────────────────────────────────────────
+
+/**
+ * BenchmarkRecord is the minimal persistence record for a Benchmark container.
+ * Stored in the `session_containers` table with container_type_key = 'benchmark'.
+ *
+ * Sessions may reference a benchmark by setting parentKind='benchmark' and
+ * parentId to the benchmark's id.  Benchmark is a `SessionContainer` that is
+ * not itself a Session.
+ */
+export const benchmarkRecordSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  params: z.record(z.string(), z.unknown()).default({}),
+  state: z.record(z.string(), z.unknown()).default({}),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+})
+
+export type BenchmarkRecord = z.infer<typeof benchmarkRecordSchema>
+
 export function getDomainModelSummary() {
   return {
     version: DOMAIN_MODEL_VERSION,

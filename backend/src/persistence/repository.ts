@@ -36,6 +36,11 @@ export {
   getNextPartOrdinal,
   getNextRoundPartSequence,
   getNextPreludePartSequence,
+  // Benchmark container CRUD
+  createBenchmarkRecord,
+  getBenchmarkRecord,
+  listBenchmarkRecords,
+  deleteBenchmarkRecord,
 } from './repositoryCompat.js'
 
 

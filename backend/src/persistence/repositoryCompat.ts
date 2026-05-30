@@ -1123,3 +1123,92 @@ export function getNextPreludePartSequence(connection: Database.Database, sessio
 
   return row.part_count + 1
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Benchmark container CRUD  (session_containers table, type_key = 'benchmark')
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { BenchmarkRecord } from '../domain/model.js'
+
+export function createBenchmarkRecord(
+  connection: Database.Database,
+  benchmark: BenchmarkRecord,
+): void {
+  connection.prepare(`
+    INSERT INTO session_containers (
+      id, container_type_key, title, params_json, state_json, created_at, updated_at
+    ) VALUES (
+      @id, 'benchmark', @title, @paramsJson, @stateJson, @createdAt, @updatedAt
+    )
+  `).run({
+    id: benchmark.id,
+    title: benchmark.title,
+    paramsJson: JSON.stringify(benchmark.params ?? {}),
+    stateJson: JSON.stringify(benchmark.state ?? {}),
+    createdAt: benchmark.createdAt,
+    updatedAt: benchmark.updatedAt,
+  })
+}
+
+export function getBenchmarkRecord(
+  connection: Database.Database,
+  id: string,
+): BenchmarkRecord | null {
+  const row = connection.prepare(`
+    SELECT * FROM session_containers WHERE id = ? AND container_type_key = 'benchmark'
+  `).get(id) as {
+    id: string
+    title: string
+    params_json: string
+    state_json: string
+    created_at: number
+    updated_at: number
+  } | undefined
+
+  if (!row) return null
+
+  return {
+    id: row.id,
+    title: row.title,
+    params: JSON.parse(row.params_json) as Record<string, unknown>,
+    state: JSON.parse(row.state_json) as Record<string, unknown>,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function listBenchmarkRecords(
+  connection: Database.Database,
+): BenchmarkRecord[] {
+  const rows = connection.prepare(`
+    SELECT * FROM session_containers
+    WHERE container_type_key = 'benchmark'
+    ORDER BY created_at DESC
+  `).all() as Array<{
+    id: string
+    title: string
+    params_json: string
+    state_json: string
+    created_at: number
+    updated_at: number
+  }>
+
+  return rows.map(row => ({
+    id: row.id,
+    title: row.title,
+    params: JSON.parse(row.params_json) as Record<string, unknown>,
+    state: JSON.parse(row.state_json) as Record<string, unknown>,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }))
+}
+
+export function deleteBenchmarkRecord(
+  connection: Database.Database,
+  id: string,
+): boolean {
+  const result = connection.prepare(`
+    DELETE FROM session_containers WHERE id = ? AND container_type_key = 'benchmark'
+  `).run(id)
+  return result.changes > 0
+}
