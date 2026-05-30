@@ -375,8 +375,8 @@ export async function buildBackendApp(
   })
 
   // ─── Launch analysis session ────────────────────────────────────────────────
-  // Creates a session_analysis child session bound to mcpscope's own restricted
-  // MCP endpoint, ready for the frontend to initialize and run the first turn.
+  // Runs the full backend-owned analysis v2 workflow for a target session and turn.
+  // Returns the completed (or errored) analysis child session when the workflow finishes.
   app.post('/api/sessions/:sessionId/analyze', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     try {
@@ -384,7 +384,6 @@ export async function buildBackendApp(
       reply.code(201)
       return {
         session: result.session,
-        analysis_prompt: result.analysis_prompt,
       }
     } catch (err) {
       return handleOperationError(err, reply)

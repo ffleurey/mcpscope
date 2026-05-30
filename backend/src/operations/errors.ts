@@ -48,6 +48,8 @@ export function operationErrorToHttpStatus(code: string | undefined): number {
     case 'no_analysis_profile':
     case 'analysis_profile_not_found':
     case 'target_session_not_eligible':
+    case 'target_turn_not_found':
+    case 'target_turn_not_complete':
     case 'analysis_model_config_not_found':
     case 'analysis_lm_connection_not_found':
       return 422

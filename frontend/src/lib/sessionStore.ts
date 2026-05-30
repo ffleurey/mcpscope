@@ -411,47 +411,37 @@ function applyTurnStreamEvent(
  */
 export async function launchAnalysis(input: {
   targetSessionId: string
+  targetTurnId: string
+  analysisGoal: string
   analysisProfileId?: string
-  analysisPrompt: string
 }): Promise<void> {
   clearSessionError()
   isLaunchingAnalysis.set(true)
   try {
-    // 1. Create the child session (backend binds it to the restricted analysis MCP endpoint)
-    const { session, analysis_prompt } = await launchBackendAnalysis(
+    // The backend now owns the full analysis workflow: it creates the child session,
+    // runs every step, and returns the completed session.
+    const { session } = await launchBackendAnalysis(
       input.targetSessionId,
       {
+        target_turn_id: input.targetTurnId,
+        analysis_goal: input.analysisGoal,
         analysis_profile_id: input.analysisProfileId,
-        analysis_prompt: input.analysisPrompt,
       },
     )
 
-    // 2. Navigate to the new session immediately (shows it in tree and switches to chat view)
+    // Add the completed session to the session list and navigate to it
     const summary = toSessionSummary(session)
     chatSessions.update((sessions) => {
       const filtered = sessions.filter((s) => s.id !== summary.id)
       return [...filtered, summary]
     })
     activeChatId.set(session.id)
-    activeTrace.set(createEmptyTrace(summary))
 
-    // 3. Stream the prelude initialization
-    await streamPreludeInit(session.id, (event) => applyPreludeStreamEvent(event))
-
-    // 4. Auto-send the analysis prompt as the first turn
-    const sessionSummary = get(chatSessions).find((s) => s.id === session.id) ?? summary
-    activeTurnStream.set(createTurnStreamingState(session.id, analysis_prompt))
-
-    await streamBackendTurn(session.id, analysis_prompt, async (event) => {
-      applyTurnStreamEvent(sessionSummary, analysis_prompt, event)
-    })
-
-    // 5. Refresh the full session list so the tree is accurate
+    // Refresh to load the full session trace
     await refreshSessions()
   } catch (error) {
     setSessionError(toAppError(error))
   } finally {
     isLaunchingAnalysis.set(false)
-    activeTurnStream.set(null)
   }
 }

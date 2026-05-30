@@ -509,7 +509,7 @@ export function putAnalysisDefaults(input: {
 
 export function launchAnalysis(
   targetSessionId: string,
-  input: { analysis_profile_id?: string; analysis_prompt: string },
+  input: { target_turn_id: string; analysis_goal: string; analysis_profile_id?: string },
 ) {
   return request(`/api/sessions/${targetSessionId}/analyze`, {
     method: 'POST',

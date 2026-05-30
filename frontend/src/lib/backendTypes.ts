@@ -420,7 +420,6 @@ export const analysisDefaultsResponseSchema = z.object({
 
 export const launchAnalysisResponseSchema = z.object({
   session: sessionRecordSchema,
-  analysis_prompt: z.string(),
 })
 
 export type SessionCreationDefaults = z.infer<typeof sessionCreationDefaultsSchema>

@@ -229,12 +229,23 @@ export function initializeNewSchema(connection: Database.Database): void {
       content_json TEXT,   -- for 'json' artifacts (serialized JSON)
       content_data TEXT,   -- for 'image' artifacts (base64 or data URL)
       mime_type TEXT,
+      -- Semantic metadata (schema_key, target_session_id, etc.) for analysis artifacts
+      metadata_json TEXT,
       created_at INTEGER NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_artifacts_session_id ON artifacts(session_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_step_id ON artifacts(step_id);
   `)
+
+  // Migration: add metadata_json column if missing (for existing databases created before this change)
+  const artifactColumns = connection
+    .prepare<[], { name: string }>(`PRAGMA table_info(artifacts)`)
+    .all()
+    .map(r => r.name)
+  if (!artifactColumns.includes('metadata_json')) {
+    connection.exec(`ALTER TABLE artifacts ADD COLUMN metadata_json TEXT`)
+  }
 
   const upsertMeta = connection.prepare(`
     INSERT INTO schema_meta (key, value)
@@ -287,7 +298,7 @@ export function validateNewSchema(connection: Database.Database): void {
       'request_url', 'request_method', 'request_headers_json', 'request_body',
       'response_status', 'response_headers_json', 'response_body', 'created_at',
     ],
-    artifacts: ['id', 'session_id', 'step_id', 'artifact_type_key', 'content_text', 'content_json', 'content_data', 'mime_type', 'created_at'],
+    artifacts: ['id', 'session_id', 'step_id', 'artifact_type_key', 'content_text', 'content_json', 'content_data', 'mime_type', 'metadata_json', 'created_at'],
   }
 
   const missing: string[] = []
