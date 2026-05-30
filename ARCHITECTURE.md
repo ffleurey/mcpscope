@@ -81,42 +81,48 @@ Important rules:
 
 The canonical runtime model is defined in [DATA-MODEL.md](DATA-MODEL.md).
 
-The backend persistence layer stores the runtime as internal records:
+The backend persistence layer is organized around the execution model:
+
+- `SessionContainer` — the domain-level ownership abstraction (see `backend/src/domain/executionModel.ts`)
+- `Session` — the execution container; also a `SessionContainer`
+- `Step` — the abstract execution unit; `Turn` is the LLM-specific subtype
+- `Turn` — owns `Round`, `Part`, and `RawExchange` records (infrastructure-driven subtype persistence)
+- `Benchmark` — a minimal `SessionContainer` that is not itself a `Session`
+
+The persistence-layer record types remain the authoritative source for runtime behavior and replay:
 
 - `SessionRecord`
 - `TurnRecord`
 - `RoundRecord`
 - `PartRecord`
 - `RawExchangeRecord`
+- `BenchmarkRecord`
 
-These records are the source of truth for runtime behavior and replay.
+These map to the v2 persistence schema (`v2_sessions`, `v2_steps`, `v2_turns`, `v2_rounds`, `v2_parts`, `v2_raw_exchanges`, `session_containers`).
 
 ### Current implementation
 
-Today, mcpscope persists and exposes sessions as ordinary runtime sessions with:
+Today, mcpscope persists and exposes sessions as execution containers running on top of the canonical execution model:
 
-- setup
-- turns
-- rounds
-- parts
-- raw exchanges
+- `Session.execute()` runs the execution loop by calling `advance()` while `canContinue()` is true
+- `Session.advance()` executes the next `Step` (a `ChatTurnStep` for interactive chat sessions)
+- `Step.execute(context)` runs the unit of work, delegating to `createModelOnlyTurn` / `createToolEnabledTurn`
 
-The shipped product **does** implement the first session-metadata foundation:
+The shipped product implements:
 
-- persisted `session_type`
-- persisted `parent_kind` and `parent_id`
-- primary-only default list behavior
-- child-session lookup and cascade delete for session-parent trees
-- shipped `session_analysis` child sessions used by the analysis workflow
+- `Session` and `Step` / `Turn` execution model with explicit loop boundaries
+- `SessionContainer` ownership: sessions may belong to a parent session or a `Benchmark` container
+- `Benchmark` as a minimal `SessionContainer` for grouping sessions (full benchmark domain design is future work)
+- generic container/session/step persistence without table-per-subtype growth
+- the current runtime tree (setup / turn / round / part) unchanged from user perspective
+- `session_analysis` child sessions used by the analysis workflow
+- compaction and context bookkeeping
 
-What it does **not** implement yet is a broader generalized workflow/runtime model beyond chat-style sessions.
+What is **not** implemented yet:
 
-That means:
-
-- the runtime tree is still session/setup/turn/round/part
-- special session kinds exist, but they still run on the same chat-centered execution machinery
-- benchmark/experiment ownership is only partially represented through the current parent-link metadata
-- deterministic workflow stages inside a session are not yet modeled as first-class runtime entities
+- deterministic non-LLM step types beyond `Turn`
+- full benchmark product work beyond minimal container support
+- broader workflow automation
 
 The important rule is:
 
@@ -159,11 +165,12 @@ So the current architecture is not a dual-master model. It is better described a
 
 These records are the authoritative mcpscope runtime state:
 
-- `SessionRecord`
-- `TurnRecord`
-- `RoundRecord`
-- `PartRecord`
-- `RawExchangeRecord`
+- `SessionRecord` (maps to `v2_sessions` + `session_containers`)
+- `TurnRecord` (maps to `v2_steps` + `v2_turns`)
+- `RoundRecord` (maps to `v2_rounds`)
+- `PartRecord` (maps to `v2_parts`)
+- `RawExchangeRecord` (maps to `v2_raw_exchanges`)
+- `BenchmarkRecord` (maps to `session_containers` with `container_type_key = 'benchmark'`)
 
 #### Derived in-memory request state
 

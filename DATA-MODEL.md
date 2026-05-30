@@ -10,27 +10,25 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 
 **Implemented today:**
 
-- the runtime tree described below for persisted sessions
+- `SessionContainer` — the domain-level ownership abstraction for sessions
+- `Session` — the execution container (also a `SessionContainer`); runs its loop via `execute()` / `advance()` / `canContinue()`
+- `Step` — the abstract execution unit; concrete unit of work is `Turn` for LLM interaction
+- `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records
+- the runtime tree described below for persisted sessions (unchanged from user perspective)
 - one session contains one setup and zero or more turns
 - hierarchical IDs for session/setup/turn/round/part runtime nodes
-- session metadata around the tree: persisted `session_type`, `parent_kind`, and `parent_id`
-- v1 child-session behavior used today by analysis sessions
+- session ownership modeled through `SessionContainer`; a session may belong to another session or to a `Benchmark` container
+- `Benchmark` — a minimal `SessionContainer` for grouping sessions; full benchmark domain design is future work
+- generic persistence for containers, sessions, and steps (`session_containers`, `v2_sessions`, `v2_steps`, `v2_turns`)
+- `v1` child-session behavior still works through the new model
 
 **Not implemented yet:**
 
-- a generalized execution model beyond chat-style session turns
-- `turn` parents or richer non-session parent objects
-- a broader workflow/runtime abstraction for deterministic non-LLM steps inside a session
+- deterministic non-LLM step types beyond `Turn`
+- full benchmark-domain product work beyond minimal container support
+- broader workflow automation for session sequencing
 
-The existing session metadata is still **around** the runtime tree, not a replacement for it.
-
-Relevant future tasks:
-
-- `backlog/specification/session-types-and-parent-links.md`
-- `backlog/specification/session-analysis-agent.md`
-- `backlog/candidates/session-compaction-agent.md`
-- `backlog/candidates/session-batch-runs.md`
-- `backlog/candidates/benchmark-automation.md`
+The canonical vocabulary is now `SessionContainer`, `Session`, `Step`, and `Turn`.
 
 ## Canonical tree
 
@@ -39,7 +37,7 @@ The runtime is a tree:
 - `Session`
   - one `Setup`
     - setup `Part[]`
-  - `Turn[]`
+  - `Turn[]` (each Turn is a `Step`)
     - `Round[]`
       - round `Part[]`
 
@@ -47,13 +45,15 @@ This is the main mental model for mcpscope.
 
 This runtime tree is the model for **what happens inside a session**.
 
-Future session typing / parent-link metadata should sit around this model rather than changing the setup/turn/round/part hierarchy itself.
+Sessions may be nested: a session may belong to a parent `Session` (e.g. analysis child sessions) or to a `Benchmark` container.
 
 ## Node meanings
 
-- **Session** — one persisted conversation workspace
+- **SessionContainer** — the domain-level ownership container; a Session is itself a SessionContainer
+- **Benchmark** — a minimal SessionContainer that is not itself a Session (groups related sessions)
+- **Session** — one persisted execution container; runs its execution loop via `execute()` / `advance()` / `canContinue()`
 - **Setup** — session-level prelude shared by the whole session
-- **Turn** — one full user request lifecycle
+- **Turn** — one full user request lifecycle; the LLM-specific Step subtype
 - **Round** — one model iteration inside a turn
 - **Part** — one committed semantic content node inside setup or a round
 
