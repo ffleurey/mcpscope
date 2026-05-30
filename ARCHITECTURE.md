@@ -100,6 +100,8 @@ The persistence-layer record types remain the authoritative source for runtime b
 
 These map to the v2 persistence schema (`v2_sessions`, `v2_steps`, `v2_turns`, `v2_rounds`, `v2_parts`, `v2_raw_exchanges`, `session_containers`).
 
+Normal startup initializes that runtime schema plus the shared config/default tables only. The legacy `sessions` / `turns` / `rounds` / `parts` / `raw_exchanges` tables remain available only through the explicit legacy initializer used by old-schema validation tests; they are not part of the normal runtime path.
+
 ### Current implementation
 
 Today, mcpscope persists and exposes sessions as execution containers running on top of the canonical execution model:
@@ -549,9 +551,9 @@ It is:
 - how to generalize the already mcpscope-owned runtime so that deterministic workflow nodes can live beside LLM turns
 - how to make layered context ownership explicit enough that future session-backed workflow execution stays coherent
 
-### Future work: session types and parent links
+### Current session classification limits
 
-Future work will likely add generalized session metadata around the runtime tree:
+Session metadata around the runtime tree is already implemented:
 
 - `session_type`
 - `parent_ref`
@@ -560,16 +562,20 @@ The important architectural rule is:
 
 > the setup/turn/round/part runtime tree stays the same; session type and parent link are metadata around the session, not a replacement for the runtime model
 
-This is intended to support future features such as:
+Implemented parent rules today:
 
-- per-session analysis sessions attached to a base session
-- compaction sessions attached to a session or turn
-- primary run sessions optionally attached to a benchmark/experiment
-- benchmark-analysis sessions attached to a benchmark/experiment
+- `primary` sessions may optionally belong to a `benchmark`
+- `session_analysis` and `session_compaction` sessions must belong to a parent `session`
+- `benchmark_analysis` sessions must belong to a `benchmark`
+
+What remains intentionally limited in the current release:
+
+- parent kinds are still limited to `session` and `benchmark`
+- there is no turn-level or broader container-parent model yet
+- benchmark support is still limited to the minimal container shape
 
 Tracked tasks:
 
-- `backlog/specification/session-types-and-parent-links.md`
 - `backlog/specification/session-analysis-agent.md`
 - `backlog/candidates/session-compaction-agent.md`
 - `backlog/candidates/session-batch-runs.md`

@@ -40,6 +40,13 @@ mcpscope currently ships as one product with four main surfaces:
 
 Those surfaces share the same backend-owned session model and canonical hierarchical IDs. The CLI is not a separate product or package line; it is another entrypoint into the same distribution.
 
+## Current deliberate limits
+
+- runtime state persists on `session_containers` plus the `v2_*` tables; normal startup does not create the obsolete `sessions` / `turns` / `rounds` / `parts` / `raw_exchanges` runtime tables
+- session parent rules remain intentionally narrow: parents are limited to `session` and `benchmark`, depending on `session_type`
+- deterministic non-LLM step types and broader workflow automation are still future work
+- benchmark support is currently limited to the minimal container model, not a fuller benchmark product surface
+
 ## Developer setup
 
 Clone the repo, install dependencies, then run mcpscope locally from source:

@@ -1,9 +1,9 @@
 /**
- * Fresh schema for the session-backed execution model.
+ * Canonical runtime schema for the current session-backed execution model.
  *
- * This schema introduces the new table layout alongside the existing schema.
- * Table names use a `v2_` prefix to avoid conflicts during the porting phase.
- * Once all behavior is ported (Step 9), the old tables and this prefix are removed.
+ * The `v2_` table names remain because they are the landed runtime storage
+ * names for this branch. Normal startup initializes this runtime path plus the
+ * shared config/default tables in schema.ts.
  *
  * Key design decisions:
  *   - `session_containers`  — generic container ownership (Benchmark etc.)
@@ -15,9 +15,7 @@
  *   - `v2_raw_exchanges`    — diagnostics/replay layer (linked to step_id)
  *   - `artifacts`           — content-oriented first-class persisted objects
  *
- * No backward migration is required; no database migration path is needed for
- * this increment.  The schema is initialized alongside the existing schema and
- * behavior is ported in Steps 4–7.
+ * No backward migration is required for the current implementation increment.
  */
 
 import type Database from 'better-sqlite3'

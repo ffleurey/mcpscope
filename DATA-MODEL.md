@@ -28,6 +28,12 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 - full benchmark-domain product work beyond minimal container support
 - broader workflow automation for session sequencing
 
+**Current deliberate limits:**
+
+- normal runtime persistence lives on `session_containers` plus the `v2_*` runtime tables
+- session parent rules remain intentionally limited to `session` and `benchmark`
+- the current classification rules still follow the existing session-focused parent model rather than a broader container graph
+
 The canonical vocabulary is now `SessionContainer`, `Session`, `Step`, and `Turn`.
 
 ## Canonical tree

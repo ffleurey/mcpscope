@@ -6,7 +6,7 @@ import type {
   AnalysisProfile as AnalysisProfileRecord,
 } from '../domain/configuration.js'
 
-export type { ActiveSessionInfo } from './repositoryCompat.js'
+export type { ActiveSessionInfo } from './repositoryRuntime.js'
 export {
   createSessionRecord,
   getSessionRecord,
@@ -41,7 +41,7 @@ export {
   getBenchmarkRecord,
   listBenchmarkRecords,
   deleteBenchmarkRecord,
-} from './repositoryCompat.js'
+} from './repositoryRuntime.js'
 
 
 function upsertJsonRecord(

@@ -1,11 +1,12 @@
 /**
- * Repository implementations for the new schema (v2 tables).
+ * Repository implementations for the generic v2 persistence contract.
  *
  * Implements the repository interfaces from `domain/persistenceContract.ts`
  * against the new table layout defined in `persistence/schemaV2.ts`.
  *
- * Old repository functions in `persistence/repository.ts` remain active for
- * current behavior until each slice is ported in Steps 4–7.
+ * The canonical runtime CRUD used by current behavior lives in
+ * `persistence/repositoryRuntime.ts`; this file remains the lower-level generic
+ * container/session/step persistence surface for the execution model.
  *
  * All repository functions are pure database operations:
  *   - no transport semantics
