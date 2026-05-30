@@ -2,6 +2,10 @@
 
 This is the **epic/background spec** for a first-class analysis agent that evaluates one finished session against explicit expectations and returns a compact, trace-grounded report.
 
+The active standalone specification for the next concrete version now lives in:
+
+- `backlog/specification/session-analysis-agent-v2.md`
+
 The implementation should be delivered in smaller increments rather than as one broad feature branch.
 
 ## Goal
@@ -84,6 +88,10 @@ Experimental protocol-discovery increment:
 - clarify what the exact analysis inputs and outputs should be before locking them into later product increments
 
 This increment should happen before later analysis tasks freeze detailed contracts around prompt shape, intermediate artifacts, or report structure.
+
+Current concrete follow-up candidate for the first implementation-sized hybrid workflow:
+
+- `backlog/candidates/session-analysis-hybrid-workflow-v1.md`
 
 ### 4. `backlog/candidates/session-analysis-backend-owned-launch.md`
 

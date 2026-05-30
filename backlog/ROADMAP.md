@@ -31,15 +31,32 @@ Future work should build on those constraints rather than reopening them casuall
 
 ## Current Planning Posture
 
-There is intentionally no active near-term roadmap at the moment.
+Planning is active again with one explicit specification task:
 
-The current backlog state is a parked inventory of candidate ideas accumulated over time. Those ideas may still be valuable, but they should not be treated as selected priorities, active specifications, or implied commitments.
+- `backlog/specification/session-analysis-agent-v2.md`
 
-Until a new direction is chosen explicitly:
+The backlog should still stay selective.
 
-- `candidates/` is the only active planning queue
-- `specification/`, `implementation/`, and `fixme/` should stay empty unless work is deliberately reactivated
+All other backlog items remain parked candidate ideas unless they are deliberately promoted later.
+
+Until another direction is explicitly chosen:
+
+- `session-analysis-agent-v2.md` is the only active specification task
+- the remaining backlog inventory should be treated as background, not as parallel active priorities
 - no candidate file should be read as the current roadmap by itself
+
+## Current Direction
+
+The current direction is to replace the analysis MVP's one-shot prompt flow with a more trustworthy session-backed hybrid workflow.
+
+That means:
+
+- deterministic steps should control workflow shape and context mutation
+- bounded LLM turns should handle only narrow judgment tasks
+- structured JSON artifacts should hold the working state of the analysis
+- backend-owned orchestration should replace the current split launch flow
+
+The immediate planning focus is to finish and then split the standalone specification for that new analysis-agent version.
 
 ## Longer-Term Themes
 

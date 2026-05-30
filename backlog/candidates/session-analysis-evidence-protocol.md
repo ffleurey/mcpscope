@@ -1,5 +1,9 @@
 # Session analysis evidence protocol
 
+The active standalone specification that incorporates the useful conclusions from this protocol work now lives in:
+
+- `backlog/specification/session-analysis-agent-v2.md`
+
 This task is an experimentation and specification task.
 
 Its purpose is to use the current shipped analysis workflow to discover what process, workflow shape, and prompt discipline are actually needed for trustworthy session analysis before mcpscope locks down detailed product contracts.
@@ -312,3 +316,7 @@ After this task:
 - later analysis tasks can define exact inputs and outputs with much less guesswork
 - single-session analysis becomes trustworthy enough to serve as the base layer for future repeated-run and benchmark workflows
 - future batch and benchmark work can build on a stronger analysis primitive instead of amplifying bad judgments
+
+Concrete first implementation candidate derived from this protocol work:
+
+- `backlog/candidates/session-analysis-hybrid-workflow-v1.md`
