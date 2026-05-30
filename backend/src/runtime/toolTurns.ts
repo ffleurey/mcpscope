@@ -872,6 +872,142 @@ function allocateAssistantContentTokenMetadata(
   }))
 }
 
+/**
+ * Runs a single MCP tool call deterministically (without an LLM deciding to call it).
+ * Writes a complete turn (user-message → tool-call → tool-result) into the session so
+ * that subsequent LLM turns see the result as prior context.
+ *
+ * Used by orchestration step implementations (e.g. bootstrap) to inject tool evidence
+ * into the session context without waiting for the LLM to decide to call the tool.
+ */
+export async function runDeterministicMcpToolCall(
+  database: BackendDatabase,
+  mcpGateway: McpGateway,
+  session: SessionRecord,
+  toolName: string,
+  toolArgs: Record<string, unknown>,
+  userContextMessage: string,
+  emitEvent?: TurnStreamEventSink,
+): Promise<{ turnId: string; roundId: string; toolCallPartId: string; toolResultPartId: string; resultContent: string }> {
+  if (!session.mcpProfileSnapshot) {
+    throw new Error('MCP profile is required for deterministic tool calls')
+  }
+  const ts = now()
+  const turnSequenceNumber = getNextTurnSequenceNumber(database.connection, session.id)
+  const turnId = formatTurnId(session.id, turnSequenceNumber)
+  const roundId = formatRoundId(session.id, turnSequenceNumber, 1)
+
+  const userPartOrdinal = getNextPartOrdinal(database.connection, session.id)
+  const userPartId = formatPartId(session.id, turnSequenceNumber, 1, 1, 'user-message')
+  const toolCallPartId = formatPartId(session.id, turnSequenceNumber, 1, 2, 'tool-call')
+  const toolResultPartId = formatPartId(session.id, turnSequenceNumber, 1, 3, 'tool-result')
+
+  const toolCallId = createUuid()
+  const toolCall: ToolCallRecord = {
+    id: toolCallId,
+    name: toolName,
+    argumentsJson: JSON.stringify(toolArgs),
+  }
+
+  const turn: TurnRecord = {
+    id: turnId,
+    sessionId: session.id,
+    sequenceNumber: turnSequenceNumber,
+    status: 'streaming',
+    outcome: null,
+    usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+    contextTokensAtTurnEnd: null,
+    contextTokensAfterCompaction: null,
+    compactionApplied: 'none',
+    compactionTokensRemoved: null,
+    createdAt: ts,
+    completedAt: null,
+  }
+  const round: RoundRecord = {
+    id: roundId,
+    turnId,
+    roundIndex: 0,
+    status: 'streaming',
+    finishReason: 'tool_calls',
+    usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+    requestPayloadJson: null,
+    responseTraceJson: null,
+    startedAt: ts,
+    completedAt: null,
+  }
+  const userPart = createUserPart(session, userPartId, turnId, roundId, userPartOrdinal, userContextMessage, ts)
+  const toolCallPart = createToolCallPart(session, toolCallPartId, turnId, roundId, userPartOrdinal + 1, toolCall, ts)
+
+  database.connection.transaction(() => {
+    insertTurnRecord(database.connection, turn)
+    insertRoundRecord(database.connection, round)
+    insertPartRecord(database.connection, userPart)
+    insertPartRecord(database.connection, toolCallPart)
+  })()
+
+  emitEvent?.({ type: 'turn-started', turn: { ...turn } })
+  emitEvent?.({ type: 'round-started', round: { ...round } })
+  emitEvent?.({ type: 'part-committed', part: { ...userPart } })
+  emitEvent?.({ type: 'part-committed', part: { ...toolCallPart } })
+
+  // Perform the actual MCP tool call
+  const mcpSession = await mcpGateway.initializeSession(session.mcpProfileSnapshot.url)
+  const toolResult = await mcpGateway.callTool(
+    session.mcpProfileSnapshot.url,
+    mcpSession.sessionId,
+    toolName,
+    toolArgs,
+  )
+
+  const completedAt = now()
+  const toolResultPart = createToolResultPart(
+    session,
+    toolResultPartId,
+    turnId,
+    roundId,
+    userPartOrdinal + 2,
+    toolCallPartId,
+    toolCall,
+    toolResult,
+    completedAt,
+  )
+
+  turn.status = 'complete'
+  turn.outcome = 'deterministic-tool-call'
+  turn.completedAt = completedAt
+
+  round.status = 'complete'
+  round.completedAt = completedAt
+
+  database.connection.transaction(() => {
+    updateTurnRecord(database.connection, turn)
+    updateRoundRecord(database.connection, round)
+    insertPartRecord(database.connection, toolResultPart)
+    insertRawExchangeRecord(database.connection, makeRawExchangeRecord(session.id, turnId, roundId, 'mcp-request', mcpSession.rawExchange, ts))
+    insertRawExchangeRecord(database.connection, makeRawExchangeRecord(session.id, turnId, roundId, 'mcp-response', mcpSession.rawExchange, ts))
+    insertRawExchangeRecord(database.connection, makeRawExchangeRecord(session.id, turnId, roundId, 'mcp-request', toolResult.rawExchange, completedAt))
+    insertRawExchangeRecord(database.connection, makeRawExchangeRecord(session.id, turnId, roundId, 'mcp-response', toolResult.rawExchange, completedAt))
+  })()
+
+  emitEvent?.({ type: 'part-committed', part: { ...toolResultPart } })
+  emitEvent?.({ type: 'round-committed', round: { ...round } })
+
+  const persistedParts = listPartRecordsBySession(database.connection, session.id)
+  const trace = buildSessionTraceBundle({
+    session,
+    steps: listStepRecordsBySession(database.connection, session.id),
+    turns: listTurnRecordsBySession(database.connection, session.id),
+    rounds: listRoundRecordsBySession(database.connection, session.id),
+    parts: persistedParts,
+    rawExchanges: listRawExchangeRecordsBySession(database.connection, session.id),
+    transcript: deriveTranscriptEntries(persistedParts),
+    context: deriveContextEntries(persistedParts),
+  })
+  emitEvent?.({ type: 'turn-committed', turn: { ...turn }, trace })
+
+  return { turnId, roundId, toolCallPartId, toolResultPartId, resultContent: toolResult.content }
+}
+
 export async function createToolEnabledTurn(
   database: BackendDatabase,
   lmStudioGateway: LmStudioGateway,

@@ -31,6 +31,9 @@ import {
   type CoverageMap,
   type AnalysisSessionState,
 } from './schemas.js'
+import type { McpGateway } from '../runtime/toolTurns.js'
+import { runDeterministicMcpToolCall } from '../runtime/toolTurns.js'
+import type { TurnStreamEventSink } from '../runtime/streamEvents.js'
 
 function uuid(): string {
   return crypto.randomUUID()
@@ -52,7 +55,9 @@ export interface BootstrapResult {
 
 export async function runBootstrapStep(
   database: BackendDatabase,
+  mcpGateway: McpGateway,
   input: BootstrapInput,
+  emitEvent?: TurnStreamEventSink,
 ): Promise<BootstrapResult> {
   const { state, stepId } = input
   const { targetSessionId, targetTurnId, analysisSessionId, analysisGoal } = state
@@ -228,6 +233,27 @@ export async function runBootstrapStep(
     })
   })()
 
+  // ── 7. Deterministically call mcpscope_inspect to inject the target session
+  //       trace as a proper tool_call part in the analysis session context ────
+  // The analysis LLM will see this as prior tool evidence in subsequent turns,
+  // correctly framing the trace data as the output of an inspect call.
+  const analysisSession = getSessionRecord(database.connection, analysisSessionId)
+  if (analysisSession?.mcpProfileSnapshot) {
+    const userMessage =
+      `Inspect the target session to load its trace for analysis.\n` +
+      `Target session ID: ${targetSessionId}\n` +
+      `Analysis goal: ${analysisGoal}`
+    await runDeterministicMcpToolCall(
+      database,
+      mcpGateway,
+      analysisSession,
+      'mcpscope_inspect',
+      { id: targetSessionId },
+      userMessage,
+      emitEvent,
+    )
+  }
+
   // Mark bootstrap as complete, seed packet counts
   const updatedState: AnalysisSessionState = {
     ...state,
@@ -237,6 +263,7 @@ export async function runBootstrapStep(
     nextPacketIndex: 0,
     awaitingContextMutation: false,
     pendingMutationTurnId: null,
+    currentTurnId: null,
   }
 
   return { updatedState, packetCount: packets.length }

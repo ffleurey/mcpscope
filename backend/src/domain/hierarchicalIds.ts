@@ -176,3 +176,7 @@ export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
 
   return { raw: trimmed, type: 'part', sessionId, stepNumber: null, turnNumber, roundNumber, partNumber, isSetupPart: false }
 }
+
+export function formatStepId(sessionId: string, ordinal: number): string {
+  return `${sessionId}.wf${ordinal}`
+}

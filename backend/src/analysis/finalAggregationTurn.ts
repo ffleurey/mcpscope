@@ -9,7 +9,6 @@ import crypto from 'node:crypto'
 import type { BackendDatabase } from '../persistence/db.js'
 import type { LmStudioGateway } from '../runtime/modelTurns.js'
 import {
-  getPartRecord,
   getSessionRecord,
 } from '../persistence/repository.js'
 import {
@@ -17,7 +16,9 @@ import {
   getLatestArtifactBySchemaKey,
   listArtifactsBySessionAndSchemaKey,
 } from './artifactRepository.js'
-import { runBoundedAnalysisTurn } from './boundedTurn.js'
+import type { McpGateway } from '../runtime/toolTurns.js'
+import { runAnalysisTurn } from './boundedTurn.js'
+import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
 import {
   SCHEMA_KEY,
   finalAnalysisReportSchema,
@@ -58,7 +59,9 @@ function extractJsonBlock(text: string): string {
 export async function runFinalAggregationTurn(
   database: BackendDatabase,
   lmGateway: LmStudioGateway,
+  mcpGateway: McpGateway,
   input: FinalAggregationInput,
+  emitEvent?: AnalysisStreamEventSink,
 ): Promise<FinalAggregationResult> {
   const { state, stepId } = input
   const { analysisSessionId } = state
@@ -83,36 +86,15 @@ export async function runFinalAggregationTurn(
     database.connection,
     analysisSessionId,
     SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
-  ).map(a => a.content)
+  )
 
-  // Load user request and final answer text
-  const userRequestPart = analysisTarget.user_request_part_id
-    ? getPartRecord(database.connection, analysisTarget.user_request_part_id)
-    : null
-  const finalAnswerPart = analysisTarget.final_answer_part_id
-    ? getPartRecord(database.connection, analysisTarget.final_answer_part_id)
-    : null
-
-  const userRequestText = userRequestPart?.payload.text ?? '(not available)'
-  const finalAnswerText = finalAnswerPart?.payload.text ?? '(not available)'
-
-  // ── Build prompt ──────────────────────────────────────────────────────────
-  const systemMessage = `You are a precise analysis assistant. Your job is to synthesize per-tool-call assessments into a coherent final analysis report.
+  // ── Build synthesis question ──────────────────────────────────────────────
+  // The accumulated context already contains: system-prompt, mcp-instructions,
+  // all evidence inject + assessment results. Ask the LLM to synthesize.
+  const synthesisQuestion = `You have assessed ${assessments.length} tool call(s) above. Synthesize the results into a final analysis report.
 
 Analysis goal: ${analysisTarget.analysis_goal}
 
-You MUST respond with a single, valid JSON object that exactly matches the required schema. Do not include any prose, markdown, or explanation outside the JSON object.`
-
-  const userMessage = `=== USER REQUEST ===
-${userRequestText}
-
-=== FINAL ANSWER PROVIDED BY THE LLM ===
-${finalAnswerText}
-
-=== PER-TOOL-CALL ASSESSMENTS (${assessments.length} total) ===
-${JSON.stringify(assessments, null, 2)}
-
-=== REQUIRED OUTPUT ===
 Return exactly one JSON object with this shape (no prose, just JSON):
 {
   "outcome": "answered" | "partially_answered" | "unsupported" | "unanswered",
@@ -126,22 +108,14 @@ Return exactly one JSON object with this shape (no prose, just JSON):
   "total_packets_assessed": ${assessments.length}
 }`
 
-  // ── Run bounded LLM call ──────────────────────────────────────────────────
-  const turnResult = await runBoundedAnalysisTurn(
+  // ── Run context-aware LLM turn ────────────────────────────────────────────
+  const turnResult = await runAnalysisTurn(
     database,
     lmGateway,
-    {
-      id: analysisSession.id,
-      modelProfileSnapshot: {
-        connectionBaseUrl: analysisSession.modelProfileSnapshot.connectionBaseUrl,
-        modelKey: analysisSession.modelProfileSnapshot.modelKey,
-        apiKey: analysisSession.modelProfileSnapshot.apiKey,
-      },
-    },
-    [
-      { role: 'system', content: systemMessage },
-      { role: 'user', content: userMessage },
-    ],
+    mcpGateway,
+    analysisSessionId,
+    synthesisQuestion,
+    emitEvent,
   )
 
   // ── Parse and validate ────────────────────────────────────────────────────

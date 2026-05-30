@@ -35,7 +35,15 @@ export function applyContextCompaction(
     `)
     .get(completedTurn.id) as { total: number | null }
 
-  const contextTokensAtTurnEnd = tokenSumRow.total ?? null
+  // Prefer the LLM-reported promptTokens when it's larger than the part-sum.
+  // The part-sum undercounts whenever parts lack token attribution (e.g. inject
+  // parts, deterministic tool-call parts). promptTokens from the LLM is exact.
+  const tokenSum = tokenSumRow.total ?? null
+  const promptTokens = completedTurn.usage.promptTokens ?? null
+  const contextTokensAtTurnEnd =
+    tokenSum !== null && promptTokens !== null
+      ? Math.max(tokenSum, promptTokens)
+      : (tokenSum ?? promptTokens)
 
   let contextTokensAfterCompaction: number | null = contextTokensAtTurnEnd
   let compactionTokensRemoved: number | null = 0

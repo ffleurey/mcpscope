@@ -10,15 +10,14 @@ import crypto from 'node:crypto'
 import type { BackendDatabase } from '../persistence/db.js'
 import type { LmStudioGateway } from '../runtime/modelTurns.js'
 import {
-  getPartRecord,
   getSessionRecord,
 } from '../persistence/repository.js'
 import {
   insertJsonArtifact,
-  getLatestArtifactBySchemaKey,
-  listArtifactsBySessionAndSchemaKey,
 } from './artifactRepository.js'
-import { runBoundedAnalysisTurn } from './boundedTurn.js'
+import type { McpGateway } from '../runtime/toolTurns.js'
+import { runDeterministicMcpToolCall } from '../runtime/toolTurns.js'
+import { runAnalysisTurn } from './boundedTurn.js'
 import {
   SCHEMA_KEY,
   toolCallAssessmentSchema,
@@ -27,6 +26,7 @@ import {
   type AnalysisTarget,
 } from './schemas.js'
 import type { ZodError } from 'zod'
+import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
 
 function uuid(): string {
   return crypto.randomUUID()
@@ -51,17 +51,12 @@ export interface AssessmentTurnResult {
   turnId: string
 }
 
-function formatPartContent(part: { payload: { text: string | null; json: unknown } } | null | undefined): string {
-  if (!part) return '(not available)'
-  if (part.payload.text) return part.payload.text
-  if (part.payload.json != null) return JSON.stringify(part.payload.json, null, 2)
-  return '(empty)'
-}
-
 export async function runToolCallAssessmentTurn(
   database: BackendDatabase,
   lmGateway: LmStudioGateway,
+  mcpGateway: McpGateway,
   input: AssessmentTurnInput,
+  emitEvent?: AnalysisStreamEventSink,
 ): Promise<AssessmentTurnResult> {
   const { state, stepId, packet, analysisTarget } = input
   const { analysisSessionId } = state
@@ -71,63 +66,49 @@ export async function runToolCallAssessmentTurn(
     throw new Error(`Assessment turn: analysis session not found: ${analysisSessionId}`)
   }
 
-  // ── Load packet evidence from parent session ──────────────────────────────
-  const toolCallPart = getPartRecord(database.connection, packet.tool_call_part_id)
-  const toolResultPart = packet.tool_result_part_id
-    ? getPartRecord(database.connection, packet.tool_result_part_id)
-    : null
-  const reasoningBeforePart = packet.reasoning_before_part_id
-    ? getPartRecord(database.connection, packet.reasoning_before_part_id)
-    : null
-  const reasoningAfterPart = packet.reasoning_after_part_id
-    ? getPartRecord(database.connection, packet.reasoning_after_part_id)
-    : null
+  // ── Load packet evidence through deterministic inspect calls ─────────────
+  // Each call creates a proper tool_call + tool_result turn in the analysis session
+  // so that evidence is first-class, inspectable, and excludable from future context.
+  const injectPartIds: string[] = []
 
-  // ── Load prior accepted assessments (for context) ─────────────────────────
-  const priorAssessments = listArtifactsBySessionAndSchemaKey(
-    database.connection,
-    analysisSessionId,
-    SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
-  ).map(a => a.content)
+  // Ordered list of part IDs to inspect: user request, reasoning before, tool call,
+  // tool result, reasoning after (nulls filtered out).
+  const evidencePartIds: string[] = [
+    analysisTarget.user_request_part_id,
+    packet.reasoning_before_part_id,
+    packet.tool_call_part_id,
+    packet.tool_result_part_id,
+    packet.reasoning_after_part_id,
+  ].filter((id): id is string => id !== null)
 
-  // ── Load user request text ────────────────────────────────────────────────
-  const userRequestPart = analysisTarget.user_request_part_id
-    ? getPartRecord(database.connection, analysisTarget.user_request_part_id)
-    : null
+  for (const partId of evidencePartIds) {
+    const { toolCallPartId, toolResultPartId } = await runDeterministicMcpToolCall(
+      database,
+      mcpGateway,
+      analysisSession,
+      'mcpscope_inspect',
+      { id: partId },
+      `Load evidence for packet ${packet.packet_index + 1} (${packet.tool_name}): inspect part ${partId}`,
+      emitEvent,
+    )
+    injectPartIds.push(toolCallPartId, toolResultPartId)
+  }
 
-  // ── Build assessment prompt ───────────────────────────────────────────────
-  const systemMessage = buildSystemMessage(analysisTarget)
-  const userMessage = buildUserMessage({
-    analysisTarget,
-    packet,
-    userRequestPart,
-    toolCallPart,
-    toolResultPart,
-    reasoningBeforePart,
-    reasoningAfterPart,
-    priorAssessments,
-  })
+  // ── Assessment question ───────────────────────────────────────────────────
+  const assessmentQuestion = buildAssessmentQuestion(packet, analysisTarget)
 
-  // ── Run bounded LLM call ──────────────────────────────────────────────────
-  const turnResult = await runBoundedAnalysisTurn(
+  // ── Run context-aware LLM turn ────────────────────────────────────────────
+  const turnResult = await runAnalysisTurn(
     database,
     lmGateway,
-    {
-      id: analysisSession.id,
-      modelProfileSnapshot: {
-        connectionBaseUrl: analysisSession.modelProfileSnapshot.connectionBaseUrl,
-        modelKey: analysisSession.modelProfileSnapshot.modelKey,
-        apiKey: analysisSession.modelProfileSnapshot.apiKey,
-      },
-    },
-    [
-      { role: 'system', content: systemMessage },
-      { role: 'user', content: userMessage },
-    ],
+    mcpGateway,
+    analysisSessionId,
+    assessmentQuestion,
+    emitEvent,
   )
 
   // ── Parse and validate the response ──────────────────────────────────────
-  const ts = now()
+  const parseTs = now()
   let parsedJson: unknown
   try {
     parsedJson = JSON.parse(extractJsonBlock(turnResult.responseText))
@@ -144,13 +125,15 @@ export async function runToolCallAssessmentTurn(
         detail: { raw_response: turnResult.responseText, error: String(e) },
       },
       metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, packet_index: packet.packet_index },
-      createdAt: ts,
+      createdAt: parseTs,
     })
     const updatedState: AnalysisSessionState = {
       ...state,
       phase: 'error',
       awaitingContextMutation: false,
       pendingMutationTurnId: null,
+      pendingInjectPartIds: [],
+      pendingReasoningPartIds: [],
     }
     return {
       updatedState,
@@ -177,13 +160,15 @@ export async function runToolCallAssessmentTurn(
         },
       },
       metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, packet_index: packet.packet_index },
-      createdAt: ts,
+      createdAt: parseTs,
     })
     const updatedState: AnalysisSessionState = {
       ...state,
       phase: 'error',
       awaitingContextMutation: false,
       pendingMutationTurnId: null,
+      pendingInjectPartIds: [],
+      pendingReasoningPartIds: [],
     }
     return {
       updatedState,
@@ -207,13 +192,15 @@ export async function runToolCallAssessmentTurn(
       round_id: packet.round_id,
       tool_call_part_id: packet.tool_call_part_id,
     },
-    createdAt: ts,
+    createdAt: parseTs,
   })
 
   const updatedState: AnalysisSessionState = {
     ...state,
     awaitingContextMutation: true,
     pendingMutationTurnId: turnResult.turnId,
+    pendingInjectPartIds: injectPartIds,
+    pendingReasoningPartIds: turnResult.assistantReasoningPartIds,
   }
 
   return {
@@ -228,70 +215,14 @@ export async function runToolCallAssessmentTurn(
 // Prompt builders
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildSystemMessage(analysisTarget: AnalysisTarget): string {
-  return `You are a precise analysis assistant. Your job is to assess individual tool calls made by an LLM during a session, given the conversation context and the specific analysis goal.
+/**
+ * Builds the short assessment question that becomes the LLM turn's user message.
+ */
+function buildAssessmentQuestion(packet: EvidencePacket, analysisTarget: AnalysisTarget): string {
+  return `Based on the evidence above, assess the tool call in packet ${packet.packet_index + 1} (${packet.tool_name}).
 
 Analysis goal: ${analysisTarget.analysis_goal}
 
-You will be given:
-- The user's original request
-- Prior assessments already completed
-- Evidence for a single tool call (reasoning before, tool invocation, tool result, reasoning after)
-
-You MUST respond with a single, valid JSON object that exactly matches the required schema. Do not include any prose, markdown, or explanation outside the JSON object.`
-}
-
-interface UserMessageInput {
-  analysisTarget: AnalysisTarget
-  packet: EvidencePacket
-  userRequestPart: { payload: { text: string | null; json: unknown } } | null | undefined
-  toolCallPart: { payload: { text: string | null; json: unknown } } | null | undefined
-  toolResultPart: { payload: { text: string | null; json: unknown } } | null | undefined
-  reasoningBeforePart: { payload: { text: string | null; json: unknown } } | null | undefined
-  reasoningAfterPart: { payload: { text: string | null; json: unknown } } | null | undefined
-  priorAssessments: unknown[]
-}
-
-function buildUserMessage(input: UserMessageInput): string {
-  const {
-    packet,
-    userRequestPart,
-    toolCallPart,
-    toolResultPart,
-    reasoningBeforePart,
-    reasoningAfterPart,
-    priorAssessments,
-  } = input
-
-  const priorSection =
-    priorAssessments.length === 0
-      ? '(none yet)'
-      : JSON.stringify(priorAssessments, null, 2)
-
-  return `=== USER REQUEST ===
-${formatPartContent(userRequestPart)}
-
-=== TOOL CALL TO ASSESS (packet ${packet.packet_index + 1}) ===
-Turn: ${packet.turn_id}
-Round: ${packet.round_id}
-Tool: ${packet.tool_name}
-
-[Reasoning before call]
-${formatPartContent(reasoningBeforePart)}
-
-[Tool call]
-${formatPartContent(toolCallPart)}
-
-[Tool result]
-${formatPartContent(toolResultPart)}
-
-[Reasoning after result]
-${formatPartContent(reasoningAfterPart)}
-
-=== PRIOR ACCEPTED ASSESSMENTS ===
-${priorSection}
-
-=== REQUIRED OUTPUT ===
 Return exactly one JSON object with this shape (no prose, just JSON):
 {
   "packet_index": ${packet.packet_index},
@@ -327,6 +258,3 @@ function extractJsonBlock(text: string): string {
 
   return trimmed
 }
-
-// Re-export for use in coverage validation
-export { getLatestArtifactBySchemaKey }

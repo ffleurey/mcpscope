@@ -18,7 +18,6 @@ import {
   listAnalysisProfiles,
   listLmConnections,
   listModelConfigs,
-  updateSessionRecord,
 } from '../persistence/repository.js'
 import {
   createSession,
@@ -26,9 +25,10 @@ import {
   SessionIdGenerationError,
   SessionIdInputError,
 } from '../runtime/modelTurns.js'
-import type { ModelProfileSnapshot, SessionRecord } from '../domain/model.js'
+import type { McpProfileSnapshot, ModelProfileSnapshot, SessionRecord } from '../domain/model.js'
 import type { OperationContext } from './context.js'
 import { AnalysisSession } from '../analysis/analysisSession.js'
+import { runSessionInitialization } from '../runtime/sessionInit.js'
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
 
@@ -146,22 +146,48 @@ export async function executeAnalysisLaunch(
     const title = `Analysis: ${profile.name}`
 
     try {
+      // Build a synthetic MCP profile snapshot pointing to the restricted analysis
+      // endpoint (/mcp/analysis), which exposes mcpscope_inspect and mcpscope_status.
+      // The analysis LLM can call these tools during assessment turns if it needs detail,
+      // and the bootstrap step calls inspect deterministically to load the trace.
+      const ts = Date.now()
+      const analysisMcpSnapshot: McpProfileSnapshot | null = ctx.analysisMcpUrl
+        ? {
+            id: 'analysis-mcp-built-in',
+            name: 'mcpscope-analysis',
+            url: ctx.analysisMcpUrl,
+            transport: 'streamable-http',
+            authType: null,
+            authValue: null,
+            createdAt: ts,
+            updatedAt: ts,
+          }
+        : null
+
       const session = createSession(db, {
         title,
         modelProfileSnapshot,
-        mcpProfileSnapshot: null, // analysis v2 uses no MCP tools
+        mcpProfileSnapshot: analysisMcpSnapshot,
         compactionStrategy: 'strip-reasoning',
         sessionType: 'session_analysis',
         parentKind: 'session',
         parentId: targetSessionId,
       })
 
-      // Mark session as active and initialized immediately
-      session.status = 'active'
-      session.initStatus = 'ready'
-      session.updatedAt = Date.now()
-      updateSessionRecord(db.connection, session)
+      // Pre-create the cursor step so the execute endpoint can always use rehydrateFromDb.
+      // This persists targetTurnId and analysisGoal into the cursor step params.
+      const analysisInstance = new AnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, {
+        analysisSessionId: session.id,
+        targetSessionId,
+        targetTurnId: input.target_turn_id,
+        analysisGoal: input.analysis_goal,
+      })
+      analysisInstance.initializeCursorStep()
 
+      // Leave initStatus as 'pending' — runSessionInitialization (called below, outside
+      // the transaction) will initialize the MCP context (writing mcp-instructions +
+      // tool-definitions for the analysis tools) and probe token counts, then set
+      // initStatus = 'ready'.
       return { kind: 'created', session }
     } catch (error) {
       if (error instanceof SessionIdInputError) return { kind: 'id_input_error', error }
@@ -220,33 +246,18 @@ export async function executeAnalysisLaunch(
     case 'id_generation_error':
       throw new OperationError(result.error.message, 'session_id_generation_failed')
     case 'created': {
-      // ── Run the backend-owned analysis workflow ───────────────────────────
-      const analysisSession = new AnalysisSession(db, ctx.lmStudioGateway, {
-        analysisSessionId: result.session.id,
-        targetSessionId,
-        targetTurnId: input.target_turn_id,
-        analysisGoal: input.analysis_goal,
-      })
-
-      try {
-        await analysisSession.execute()
-      } catch (_err) {
-        // Execution errors are persisted in the cursor step; swallow here
-        // so the caller receives the session (in 'error' phase) rather than a 500.
-      }
-
-      // Re-read the session record to pick up any status updates from execute()
-      const finalSession = getSessionRecord(db.connection, result.session.id)
-        ?? result.session
-
-      // Mark session as no longer active
-      if (finalSession.status === 'active') {
-        finalSession.status = 'ready'
-        finalSession.updatedAt = Date.now()
-        updateSessionRecord(db.connection, finalSession)
-      }
-
-      return { session: finalSession }
+      const { session } = result
+      // Full session initialization: initializes the analysis MCP context
+      // (writes mcp-instructions + tool-definitions for mcpscope_inspect and
+      // mcpscope_status), probes token counts, and sets initStatus = 'ready'.
+      await runSessionInitialization(
+        db,
+        ctx.lmStudioGateway,
+        ctx.mcpGateway,
+        session.id,
+        () => { /* no streaming during launch */ },
+      )
+      return { session }
     }
   }
 }

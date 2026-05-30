@@ -1,15 +1,20 @@
 /**
  * AnalysisContextMutationStep
  *
- * After each assessment LLM turn, mark the user-message part of that turn as
- * 'historical-only' so it is excluded from subsequent LLM calls (preventing
- * consecutive-assistant-message API errors), and update the coverage_map
- * artifact to record that the packet has been assessed.
+ * After each assessment LLM turn:
+ *  1. Exclude the evidence inject part(s) written before the assessment so they
+ *     are not carried into the next LLM call.
+ *  2. Exclude the assessment turn's assistant-reasoning parts (keep the
+ *     assistant-content JSON result in context for the final aggregation).
+ *  3. Mark the assessment turn's user-message as 'historical-only' to prevent
+ *     consecutive-assistant-message API errors on subsequent calls.
+ *  4. Update the coverage_map artifact to record that the packet was assessed.
  */
 
 import type { BackendDatabase } from '../persistence/db.js'
 import {
   updatePartRecord,
+  getPartRecord,
   listPartRecordsBySession,
 } from '../persistence/repository.js'
 import {
@@ -20,6 +25,7 @@ import {
   SCHEMA_KEY,
   type AnalysisSessionState,
   type CoverageMap,
+  type EvidencePacketIndex,
 } from './schemas.js'
 
 export interface ContextMutationInput {
@@ -36,29 +42,68 @@ export function runContextMutationStep(
   input: ContextMutationInput,
 ): ContextMutationResult {
   const { state, assessmentArtifactId } = input
-  const { analysisSessionId, pendingMutationTurnId, nextPacketIndex, packetCount } = state
+  const {
+    analysisSessionId,
+    pendingMutationTurnId,
+    pendingInjectPartIds,
+    pendingReasoningPartIds,
+    nextPacketIndex,
+  } = state
 
-  // ── 1. Mark user-message part as historical-only ──────────────────────────
+  const mutatedAt = Date.now()
+
+  // ── 1. Exclude inject evidence parts ─────────────────────────────────────
+  for (const partId of pendingInjectPartIds) {
+    const part = getPartRecord(database.connection, partId)
+    if (part) {
+      updatePartRecord(database.connection, {
+        ...part,
+        context: {
+          ...part.context,
+          state: 'excluded',
+          note: 'Evidence inject excluded after assessment completed',
+        },
+        updatedAt: mutatedAt,
+      })
+    }
+  }
+
+  // ── 2. Exclude assessment reasoning parts ─────────────────────────────────
+  for (const partId of pendingReasoningPartIds) {
+    const part = getPartRecord(database.connection, partId)
+    if (part) {
+      updatePartRecord(database.connection, {
+        ...part,
+        context: {
+          ...part.context,
+          state: 'excluded',
+          note: 'Assessment reasoning excluded after assessment completed (keeping assistant-content)',
+        },
+        updatedAt: mutatedAt,
+      })
+    }
+  }
+
+  // ── 3. Mark assessment turn user-message as historical-only ───────────────
   if (pendingMutationTurnId) {
     const sessionParts = listPartRecordsBySession(database.connection, analysisSessionId)
     const userPart = sessionParts.find(
       p => p.turnId === pendingMutationTurnId && p.partType === 'user-message',
     )
     if (userPart) {
-      const updated = {
+      updatePartRecord(database.connection, {
         ...userPart,
         context: {
           ...userPart.context,
-          state: 'historical-only' as const,
-          note: 'Analysis assessment prompt stripped from active context after assessment completed',
+          state: 'historical-only',
+          note: 'Assessment question excluded from active context after assessment completed',
         },
-        updatedAt: Date.now(),
-      }
-      updatePartRecord(database.connection, updated)
+        updatedAt: mutatedAt,
+      })
     }
   }
 
-  // ── 2. Update coverage map ────────────────────────────────────────────────
+  // ── 4. Update coverage map ────────────────────────────────────────────────
   const completedPacketIndex = nextPacketIndex - 1 // we just finished this packet
   const coverageArtifact = getLatestArtifactBySchemaKey(
     database.connection,
@@ -85,15 +130,30 @@ export function runContextMutationStep(
     )
   }
 
-  // ── 3. Advance state ──────────────────────────────────────────────────────
-  const nextIdx = nextPacketIndex // nextPacketIndex was already incremented before mutation
-  const isLastPacket = nextIdx >= packetCount
+  // ── 5. Determine next phase based on turn boundaries ─────────────────────
+  // Load packet index to check what turn the next packet belongs to.
+  const nextIdx = nextPacketIndex
+  const packetIndexArtifact = getLatestArtifactBySchemaKey(
+    database.connection,
+    analysisSessionId,
+    SCHEMA_KEY.EVIDENCE_PACKET_INDEX,
+  )
+  const packetIndex = packetIndexArtifact?.content as EvidencePacketIndex | undefined
+  const nextPacket = packetIndex?.packets[nextIdx]
+
+  // Determine next phase:
+  // - If no more packets, or next packet is in a different turn → turn_summary
+  // - If next packet is in the same turn → stay in assessing
+  const isTurnComplete = !nextPacket || nextPacket.turn_id !== state.currentTurnId
+  const nextPhase = isTurnComplete ? 'turn_summary' : 'assessing'
 
   const updatedState: AnalysisSessionState = {
     ...state,
-    phase: isLastPacket ? 'coverage_validation' : 'assessing',
+    phase: nextPhase,
     awaitingContextMutation: false,
     pendingMutationTurnId: null,
+    pendingInjectPartIds: [],
+    pendingReasoningPartIds: [],
   }
 
   return { updatedState }

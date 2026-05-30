@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import { buildBackendApp } from './app.js'
 import type { SessionTraceBundle } from './domain/trace.js'
-import { getSessionRecord, insertTurnRecord, updateSessionRecord } from './persistence/repository.js'
+import { getSessionRecord, insertTurnRecord, insertRoundRecord, insertPartRecord, updateSessionRecord } from './persistence/repository.js'
 import {
   capturedReasoningThreeBatchParts,
   capturedReasoningThreeBatchRounds,
@@ -3551,7 +3551,185 @@ describe('analysis launch', () => {
           usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
         }
       },
+      async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+        const messages = (body.messages as unknown[]) ?? []
+        const promptTokens = messages.length * 5
+        return {
+          promptTokens,
+          completion: {
+            id: 'probe-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+            choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+            usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+          },
+          rawExchange: {
+            requestUrl: 'https://example.com/v1/chat/completions',
+            requestMethod: 'POST',
+            requestHeadersJson: {},
+            requestBody: JSON.stringify(body),
+            responseStatus: 200,
+            responseHeadersJson: {},
+            responseBody: '{}',
+          },
+        }
+      },
     }
+  }
+
+  /**
+   * Returns a mock McpGateway for analysis session tests.
+   * Supports initializeSession, listTools, and callTool for the analysis
+   * MCP endpoint (restricted to mcpscope_inspect and mcpscope_status).
+   * The callTool mock handles mcpscope_inspect by returning a minimal session stub.
+   */
+  function makeAnalysisMcpGateway() {
+    const rawExchange = {
+      requestUrl: 'http://localhost:3030/mcp/analysis',
+      requestMethod: 'POST',
+      requestBodyText: '{}',
+      responseStatus: 200,
+      responseBody: {},
+    }
+    return {
+      async initializeSession(_url: string) {
+        return { sessionId: 'mcp-session-analysis', instructions: undefined, rawExchange }
+      },
+      async listTools(_url: string, _sessionId: string | null) {
+        return {
+          tools: [
+            { name: 'mcpscope_inspect', description: 'Inspect session objects', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
+            { name: 'mcpscope_status', description: 'Get server status', inputSchema: { type: 'object', properties: {} } },
+          ],
+          rawResult: {},
+          rawExchange,
+        }
+      },
+      async callTool(_url: string, _sessionId: string | null, _name: string, args: Record<string, unknown>) {
+        return {
+          content: JSON.stringify({ id: args['id'] ?? 'unknown', type: 'session', data: { status: 'complete' } }),
+          structuredContent: null,
+          isError: false,
+          rawResult: {},
+          rawExchange,
+        }
+      },
+    }
+  }
+
+  /**
+   * Insert a complete turn with one round and one tool-call + tool-result part.
+   * Returns the turn ID.
+   */
+  function createCompleteTurnWithToolCall(appInst: FastifyInstance, sessionId: string): string {
+    const ts = Date.now()
+    const turnId = `${sessionId}-T1`
+    const roundId = `${sessionId}-T1-R1`
+
+    insertTurnRecord(appInst.backendDb.connection, {
+      id: turnId,
+      sessionId,
+      sequenceNumber: 1,
+      status: 'complete',
+      outcome: 'model-response',
+      usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+      contextTokensAtTurnEnd: null,
+      contextTokensAfterCompaction: null,
+      compactionApplied: 'none',
+      compactionTokensRemoved: null,
+      createdAt: ts,
+      completedAt: ts,
+    })
+
+    insertRoundRecord(appInst.backendDb.connection, {
+      id: roundId,
+      turnId,
+      roundIndex: 1,
+      status: 'complete',
+      finishReason: 'stop',
+      usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+      requestPayloadJson: null,
+      responseTraceJson: null,
+      startedAt: ts,
+      completedAt: ts,
+    })
+
+    // user-message part
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P1`,
+      sessionId,
+      turnId,
+      roundId: null,
+      parentPartId: null,
+      ordinal: 1,
+      partType: 'user-message',
+      roleLabel: 'user',
+      payload: { text: 'What is the weather?', json: null, mimeType: 'text/plain', summary: null },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    // tool-call part
+    const toolCallId = 'call-001'
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P2`,
+      sessionId,
+      turnId,
+      roundId,
+      parentPartId: null,
+      ordinal: 2,
+      partType: 'tool-call',
+      roleLabel: 'assistant',
+      payload: { text: null, json: { id: toolCallId, name: 'test_tool', arguments: { city: 'Paris' } }, mimeType: 'application/json', summary: 'test_tool({city: Paris})' },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    // tool-result part
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P3`,
+      sessionId,
+      turnId,
+      roundId,
+      parentPartId: null,
+      ordinal: 3,
+      partType: 'tool-result',
+      roleLabel: 'tool',
+      payload: { text: null, json: { tool_call_id: toolCallId, content: 'Sunny, 22°C' }, mimeType: 'application/json', summary: 'tool result' },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    // assistant-content (final answer)
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P4`,
+      sessionId,
+      turnId,
+      roundId,
+      parentPartId: null,
+      ordinal: 4,
+      partType: 'assistant-content',
+      roleLabel: 'assistant',
+      payload: { text: 'The weather in Paris is sunny and 22°C.', json: null, mimeType: 'text/plain', summary: null },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    return turnId
   }
 
   it('returns 404 when target session does not exist', async () => {
@@ -3609,11 +3787,7 @@ describe('analysis launch', () => {
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
       lmStudioGateway: makeAnalysisMockGateway(),
-      mcpGateway: {
-        initializeSession: async () => { throw new Error('not used') },
-        listTools: async () => { throw new Error('not used') },
-        callTool: async () => { throw new Error('not used') },
-      },
+      mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
     await createAnalysisProfile(app)
@@ -3639,8 +3813,9 @@ describe('analysis launch', () => {
     // Title derived from profile name
     expect(body.session.title).toBe('Analysis: Standard Analysis')
 
-    // v2: no MCP binding (analysis is deterministic + bounded turns only)
-    expect(body.session.mcpProfileSnapshot).toBeNull()
+    // Analysis sessions now have a built-in MCP binding (analysis MCP endpoint)
+    expect(body.session.mcpProfileSnapshot).not.toBeNull()
+    expect(body.session.mcpProfileSnapshot.name).toBe('mcpscope-analysis')
 
     // Session is persisted and retrievable
     const stored = getSessionRecord(app.backendDb.connection, body.session.id)
@@ -3654,11 +3829,7 @@ describe('analysis launch', () => {
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
       lmStudioGateway: makeAnalysisMockGateway(),
-      mcpGateway: {
-        initializeSession: async () => { throw new Error('not used') },
-        listTools: async () => { throw new Error('not used') },
-        callTool: async () => { throw new Error('not used') },
-      },
+      mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
     await createAnalysisProfile(app)
@@ -3687,11 +3858,7 @@ describe('analysis launch', () => {
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
       lmStudioGateway: makeAnalysisMockGateway(),
-      mcpGateway: {
-        initializeSession: async () => { throw new Error('not used') },
-        listTools: async () => { throw new Error('not used') },
-        callTool: async () => { throw new Error('not used') },
-      },
+      mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
     await createAnalysisProfile(app)
@@ -3764,11 +3931,7 @@ describe('analysis launch', () => {
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
       lmStudioGateway: makeAnalysisMockGateway(),
-      mcpGateway: {
-        initializeSession: async () => { throw new Error('not used') },
-        listTools: async () => { throw new Error('not used') },
-        callTool: async () => { throw new Error('not used') },
-      },
+      mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
     await createAnalysisProfile(app)
@@ -3904,16 +4067,13 @@ describe('analysis launch', () => {
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
       lmStudioGateway: makeAnalysisMockGateway(),
-      mcpGateway: {
-        initializeSession: async () => { throw new Error('not used') },
-        listTools: async () => { throw new Error('not used') },
-        callTool: async () => { throw new Error('not used') },
-      },
+      mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
     await createAnalysisProfile(app)
     const turnId = createCompleteTurn(app, targetId)
 
+    // Step 1: launch (creates analysis session, pre-initializes cursor step)
     const res = await app.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
@@ -3923,9 +4083,17 @@ describe('analysis launch', () => {
     expect(res.statusCode).toBe(201)
     const body = res.json()
     expect(body.session.sessionType).toBe('session_analysis')
-
-    // Child session should have artifacts
     const childId = body.session.id as string
+
+    // Step 2: execute (runs the full analysis workflow via SSE endpoint)
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(execRes.statusCode).toBe(200)
+    expect(execRes.headers['content-type']).toContain('text/event-stream')
+
+    // Child session should have artifacts after execution
     const artifacts = app.backendDb.connection
       .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
       .all(childId) as Array<{ id: string; metadata_json: string }>
@@ -3943,5 +4111,145 @@ describe('analysis launch', () => {
     expect(schemaKeys.filter(k => k === 'analysis.tool_call_assessment.v1')).toHaveLength(0)
     // Final report should be present since coverage_validation passes trivially (0 packets)
     expect(schemaKeys).toContain('analysis.final_analysis_report.v1')
+  })
+
+  it('v2 full flow with tool calls: produces assessment, turn_summary, and final_report artifacts via deterministic inspect turns', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+
+    // Build the gateway lazily — turnId is set after createCompleteTurnWithToolCall.
+    // We capture it via a shared mutable ref.
+    const turnRef = { id: '' }
+    let callCount = 0
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          let content: string
+          if (idx === 0) {
+            content = JSON.stringify({
+              packet_index: 0,
+              turn_id: turnRef.id,
+              round_id: `${turnRef.id}-R1`,
+              tool_name: 'test_tool',
+              expectation_match: 'match',
+              expectation_rationale: 'Tool was called correctly.',
+              most_direct_cause: null,
+              result_usage_quality: 'good',
+              result_usage_rationale: 'Result was used well.',
+              notable_observations: null,
+            })
+          } else if (idx === 1) {
+            content = JSON.stringify({
+              turn_id: turnRef.id,
+              total_tool_calls_assessed: 1,
+              turn_outcome: 'successful',
+              turn_outcome_rationale: 'The single tool call matched expectations.',
+              per_tool_findings: [{ packet_index: 0, tool_name: 'test_tool', expectation_match: 'match', brief_finding: 'OK.' }],
+              notable_observations: null,
+            })
+          } else {
+            content = JSON.stringify({
+              outcome: 'answered',
+              outcome_rationale: 'The session answered the question.',
+              primary_issue: null,
+              primary_issue_rationale: null,
+              path_efficiency: 'efficient',
+              path_efficiency_rationale: 'No unnecessary tool calls.',
+              findings: ['Session was efficient.'],
+              improvement_suggestions: [],
+              total_packets_assessed: 1,
+            })
+          }
+          return {
+            id: `cmpl-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const targetId = await createReadySession(app)
+    await createAnalysisProfile(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId  // wire the ref so the gateway can use it
+
+    // Launch analysis session
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: 'Evaluate this tool call.' },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    // Execute the full workflow
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(execRes.statusCode).toBe(200)
+
+    // Check artifacts produced
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ id: string; metadata_json: string }>
+    const schemaKeys = artifacts.map(a => {
+      const meta = JSON.parse(a.metadata_json) as { schema_key: string }
+      return meta.schema_key
+    })
+
+    // Core structural artifacts
+    expect(schemaKeys).toContain('analysis.analysis_target.v1')
+    expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
+    expect(schemaKeys).toContain('analysis.coverage_map.v1')
+
+    // Per-packet assessment
+    expect(schemaKeys.filter(k => k === 'analysis.tool_call_assessment.v1')).toHaveLength(1)
+
+    // Per-turn summary (new)
+    expect(schemaKeys).toContain('analysis.turn_summary.v1')
+
+    // Final aggregation report
+    expect(schemaKeys).toContain('analysis.final_analysis_report.v1')
+
+    // Evidence is loaded through deterministic inspect turns (tool-call + tool-result parts
+    // committed as proper turns, not synthetic inject parts).
+    // Bootstrap inspect + packet-specific inspect calls should produce deterministic turns.
+    const deterministicTurns = app.backendDb.connection
+      .prepare(`SELECT v2_steps.id, v2_turns.outcome FROM v2_turns JOIN v2_steps ON v2_steps.id = v2_turns.step_id WHERE v2_steps.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call'`)
+      .all(childId) as Array<{ id: string; outcome: string }>
+    expect(deterministicTurns.length).toBeGreaterThanOrEqual(1)
+
+    // No synthetic evidence inject parts (old prompt-bundle pattern)
+    const injectParts = app.backendDb.connection
+      .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND payload_summary LIKE 'Evidence for packet%'`)
+      .all(childId) as Array<{ id: string }>
+    expect(injectParts).toHaveLength(0)
   })
 })

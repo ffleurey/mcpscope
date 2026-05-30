@@ -21,6 +21,7 @@ export const SCHEMA_KEY = {
   COVERAGE_MAP: 'analysis.coverage_map.v1',
   EVIDENCE_PACKET_INDEX: 'analysis.evidence_packet_index.v1',
   TOOL_CALL_ASSESSMENT: 'analysis.tool_call_assessment.v1',
+  TURN_SUMMARY: 'analysis.turn_summary.v1',
   FINAL_ANALYSIS_REPORT: 'analysis.final_analysis_report.v1',
   DIAGNOSTIC: 'analysis.diagnostic.v1',
 } as const
@@ -43,6 +44,7 @@ export type LaunchAnalysisV2Input = z.infer<typeof launchAnalysisV2InputSchema>
 export type AnalysisPhase =
   | 'bootstrap'
   | 'assessing'
+  | 'turn_summary'
   | 'coverage_validation'
   | 'final_aggregation'
   | 'complete'
@@ -60,6 +62,12 @@ export interface AnalysisSessionState {
   awaitingContextMutation: boolean
   /** ID of the analysis turn whose user-message part needs mutation. */
   pendingMutationTurnId: string | null
+  /** IDs of synthetic evidence inject parts to exclude after the current assessment. */
+  pendingInjectPartIds: string[]
+  /** IDs of assistant-reasoning parts from the current assessment to exclude. */
+  pendingReasoningPartIds: string[]
+  /** The turn_id of the target session turn currently being assessed. */
+  currentTurnId: string | null
   /** True after AnalysisCoverageValidationStep completes successfully. */
   coverageValidated: boolean
   /** True after AnalysisFinalAggregationTurn completes. */
@@ -169,9 +177,33 @@ export const toolCallAssessmentSchema = z.object({
    */
   result_usage_quality: z.enum(['good', 'partial', 'poor', 'not_applicable', 'unclear']),
   result_usage_rationale: z.string(),
-  notable_observations: z.string().optional(),
+  notable_observations: z.string().nullish(),
 })
 export type ToolCallAssessment = z.infer<typeof toolCallAssessmentSchema>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// analysis.turn_summary.v1
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const turnSummarySchema = z.object({
+  turn_id: z.string(),
+  total_tool_calls_assessed: z.number().int().nonnegative(),
+  /**
+   * Overall outcome for this turn's tool usage.
+   * successful | partially_successful | failed | unclear
+   */
+  turn_outcome: z.enum(['successful', 'partially_successful', 'failed', 'unclear']),
+  turn_outcome_rationale: z.string(),
+  /** One-line finding per assessed tool call (packet_index → brief). */
+  per_tool_findings: z.array(z.object({
+    packet_index: z.number().int().nonnegative(),
+    tool_name: z.string(),
+    expectation_match: z.enum(['match', 'partial_match', 'mismatch', 'unclear']),
+    brief_finding: z.string(),
+  })),
+  notable_observations: z.string().nullish(),
+})
+export type TurnSummary = z.infer<typeof turnSummarySchema>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // analysis.final_analysis_report.v1

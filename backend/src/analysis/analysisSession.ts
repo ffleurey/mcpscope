@@ -12,14 +12,18 @@
  * session can be inspected after completion or failure.
  */
 
-import crypto from 'node:crypto'
 import type { BackendDatabase } from '../persistence/db.js'
 import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { McpGateway } from '../runtime/toolTurns.js'
 import {
   insertStepRecord,
   updateStepRecord,
   getNextStepOrdinal,
+  listStepRecordsBySession,
 } from '../persistence/repositoryV2.js'
+import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
+import { stepTypeKey as mkStepTypeKey } from '../domain/executionModel.js'
+import { formatStepId } from '../domain/hierarchicalIds.js'
 import {
   getLatestArtifactBySchemaKey,
 } from './artifactRepository.js'
@@ -27,16 +31,14 @@ import { runBootstrapStep } from './bootstrapStep.js'
 import { runToolCallAssessmentTurn } from './toolCallAssessmentTurn.js'
 import { runContextMutationStep } from './contextMutationStep.js'
 import { runCoverageValidationStep } from './coverageValidationStep.js'
+import { runTurnSummaryTurn } from './turnSummaryTurn.js'
 import { runFinalAggregationTurn } from './finalAggregationTurn.js'
 import {
   SCHEMA_KEY,
   type AnalysisSessionState,
   type EvidencePacketIndex,
 } from './schemas.js'
-
-function uuid(): string {
-  return crypto.randomUUID()
-}
+import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
 
 function now(): number {
   return Date.now()
@@ -54,17 +56,20 @@ export interface AnalysisSessionInput {
 export class AnalysisSession {
   private readonly database: BackendDatabase
   private readonly lmGateway: LmStudioGateway
+  private readonly mcpGateway: McpGateway
   private state: AnalysisSessionState
   private cursorStepId: string
 
   constructor(
     database: BackendDatabase,
     lmGateway: LmStudioGateway,
+    mcpGateway: McpGateway,
     input: AnalysisSessionInput,
   ) {
     this.database = database
     this.lmGateway = lmGateway
-    this.cursorStepId = uuid()
+    this.mcpGateway = mcpGateway
+    this.cursorStepId = '' // set in initializeCursorStep()
 
     this.state = {
       phase: 'bootstrap',
@@ -73,6 +78,9 @@ export class AnalysisSession {
       packetCount: 0,
       awaitingContextMutation: false,
       pendingMutationTurnId: null,
+      pendingInjectPartIds: [],
+      pendingReasoningPartIds: [],
+      currentTurnId: null,
       coverageValidated: false,
       finalAggregationComplete: false,
       analysisSessionId: input.analysisSessionId,
@@ -83,12 +91,13 @@ export class AnalysisSession {
   }
 
   /** Initialize the cursor step record in the database. */
-  private initializeCursorStep(): void {
+  initializeCursorStep(): void {
     const ordinal = getNextStepOrdinal(this.database.connection, this.state.analysisSessionId)
+    this.cursorStepId = formatStepId(this.state.analysisSessionId, ordinal)
     insertStepRecord(this.database.connection, {
       id: this.cursorStepId,
       sessionId: this.state.analysisSessionId,
-      stepTypeKey: CURSOR_STEP_TYPE as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      stepTypeKey: mkStepTypeKey(CURSOR_STEP_TYPE),
       ordinal,
       status: 'running',
       params: {
@@ -107,7 +116,7 @@ export class AnalysisSession {
     updateStepRecord(this.database.connection, {
       id: this.cursorStepId,
       sessionId: this.state.analysisSessionId,
-      stepTypeKey: CURSOR_STEP_TYPE as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      stepTypeKey: mkStepTypeKey(CURSOR_STEP_TYPE),
       ordinal: 0, // not changed by updateStepRecord
       status: this.state.phase === 'complete'
         ? 'complete'
@@ -127,8 +136,9 @@ export class AnalysisSession {
 
   /**
    * Execute the full analysis workflow until complete or error.
+   * Emits SSE-style events via the optional callback for live UI updates.
    */
-  async execute(): Promise<void> {
+  async execute(emitEvent?: AnalysisStreamEventSink): Promise<void> {
     this.initializeCursorStep()
 
     const MAX_ITERATIONS = 1000 // safety valve
@@ -141,63 +151,158 @@ export class AnalysisSession {
         throw new Error('AnalysisSession: exceeded maximum iteration limit')
       }
 
-      await this.advance()
+      await this.advance(emitEvent)
     }
   }
 
-  private async advance(): Promise<void> {
+  /**
+   * Resume execution from persisted cursor state (for the separate execute endpoint).
+   * Reads the cursor step from the DB by analysisSessionId and continues from the
+   * current phase.
+   */
+  static rehydrateFromDb(
+    database: BackendDatabase,
+    lmGateway: LmStudioGateway,
+    mcpGateway: McpGateway,
+    analysisSessionId: string,
+  ): AnalysisSession | null {
+    const steps = listStepRecordsBySession(database.connection, analysisSessionId)
+    const cursorStep = steps.find(s => s.stepTypeKey === CURSOR_STEP_TYPE)
+    if (!cursorStep) return null
+
+    const instance = new AnalysisSession(database, lmGateway, mcpGateway, {
+      analysisSessionId,
+      targetSessionId: '',
+      targetTurnId: '',
+      analysisGoal: '',
+    })
+    instance.cursorStepId = cursorStep.id
+    instance.state = cursorStep.state as unknown as AnalysisSessionState
+    return instance
+  }
+
+  /**
+   * Resume an already-initialized session (cursor step exists in DB).
+   * Continues execution from the current phase without re-initializing the cursor.
+   */
+  async resume(emitEvent?: AnalysisStreamEventSink): Promise<void> {
+    const MAX_ITERATIONS = 1000
+    let iterations = 0
+
+    while (this.state.phase !== 'complete' && this.state.phase !== 'error') {
+      if (iterations++ > MAX_ITERATIONS) {
+        this.state = { ...this.state, phase: 'error' }
+        this.persistState()
+        throw new Error('AnalysisSession: exceeded maximum iteration limit')
+      }
+      await this.advance(emitEvent)
+    }
+  }
+
+  /**
+   * Advance the workflow by exactly one step (one call to advance()), then stop.
+   * Used by the step-by-step debug mode in the frontend.
+   */
+  async resumeOneStep(emitEvent?: AnalysisStreamEventSink): Promise<void> {
+    if (this.state.phase === 'complete' || this.state.phase === 'error') return
+    await this.advance(emitEvent)
+  }
+
+  private async advance(emitEvent?: AnalysisStreamEventSink): Promise<void> {
     const phase = this.state.phase
 
     if (phase === 'bootstrap') {
-      await this.runBootstrap()
+      await this.runBootstrap(emitEvent)
     } else if (phase === 'assessing') {
-      await this.runNextAssessment()
+      await this.runNextAssessment(emitEvent)
+    } else if (phase === 'turn_summary') {
+      await this.runTurnSummary(emitEvent)
     } else if (phase === 'coverage_validation') {
-      this.runCoverageValidation()
+      this.runCoverageValidation(emitEvent)
     } else if (phase === 'final_aggregation') {
-      await this.runFinalAggregation()
+      await this.runFinalAggregation(emitEvent)
     }
-    // 'complete' and 'error' are terminal — the execute() loop will stop
+    // 'complete' and 'error' are terminal — the loop will stop
   }
 
-  private async runBootstrap(): Promise<void> {
-    const stepId = uuid()
+  private async runBootstrap(emitEvent?: AnalysisStreamEventSink): Promise<void> {
     const ordinal = getNextStepOrdinal(this.database.connection, this.state.analysisSessionId)
-    insertStepRecord(this.database.connection, {
+    const stepId = formatStepId(this.state.analysisSessionId, ordinal)
+    const startedAt = now()
+    const stepRecord: StepPersistenceRecord = {
       id: stepId,
       sessionId: this.state.analysisSessionId,
-      stepTypeKey: 'analysis_bootstrap' as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      stepTypeKey: mkStepTypeKey('analysis_bootstrap'),
       ordinal,
       status: 'running',
       params: {},
       state: {},
-      createdAt: now(),
+      createdAt: startedAt,
       completedAt: null,
-    })
+    }
+    insertStepRecord(this.database.connection, stepRecord)
+    emitEvent?.({ type: 'analysis-step-started', step: { ...stepRecord } })
+    emitEvent?.({ type: 'analysis-phase-changed', phase: 'bootstrap' })
 
-    const result = await runBootstrapStep(this.database, {
+    const result = await runBootstrapStep(this.database, this.mcpGateway, {
       state: this.state,
       stepId,
-    })
+    }, emitEvent)
 
     this.state = result.updatedState
 
-    updateStepRecord(this.database.connection, {
-      id: stepId,
-      sessionId: this.state.analysisSessionId,
-      stepTypeKey: 'analysis_bootstrap' as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-      ordinal,
+    const completedStep: StepPersistenceRecord = {
+      ...stepRecord,
       status: 'complete',
-      params: {},
       state: { packetCount: result.packetCount },
-      createdAt: now(),
       completedAt: now(),
-    })
+    }
+    updateStepRecord(this.database.connection, completedStep)
+    emitEvent?.({ type: 'analysis-step-completed', step: completedStep })
+    emitEvent?.({ type: 'analysis-phase-changed', phase: this.state.phase })
 
     this.persistState()
   }
 
-  private async runNextAssessment(): Promise<void> {
+  private async runTurnSummary(emitEvent?: AnalysisStreamEventSink): Promise<void> {
+    const ordinal = getNextStepOrdinal(this.database.connection, this.state.analysisSessionId)
+    const stepId = formatStepId(this.state.analysisSessionId, ordinal)
+    const startedAt = now()
+    const stepRecord: StepPersistenceRecord = {
+      id: stepId,
+      sessionId: this.state.analysisSessionId,
+      stepTypeKey: mkStepTypeKey('analysis_turn_summary'),
+      ordinal,
+      status: 'running',
+      params: { turn_id: this.state.currentTurnId },
+      state: {},
+      createdAt: startedAt,
+      completedAt: null,
+    }
+    insertStepRecord(this.database.connection, stepRecord)
+    emitEvent?.({ type: 'analysis-step-started', step: { ...stepRecord } })
+    emitEvent?.({ type: 'analysis-phase-changed', phase: 'turn_summary' })
+
+    const result = await runTurnSummaryTurn(this.database, this.lmGateway, this.mcpGateway, {
+      state: this.state,
+      stepId,
+    }, emitEvent)
+    this.state = result.updatedState
+
+    const completedStep: StepPersistenceRecord = {
+      ...stepRecord,
+      status: result.success ? 'complete' : 'error',
+      state: { summary_artifact_id: result.summaryArtifactId },
+      completedAt: now(),
+    }
+    updateStepRecord(this.database.connection, completedStep)
+    emitEvent?.({ type: 'analysis-step-completed', step: completedStep })
+    emitEvent?.({ type: 'analysis-phase-changed', phase: this.state.phase })
+
+    this.persistState()
+  }
+
+  private async runNextAssessment(emitEvent?: AnalysisStreamEventSink): Promise<void> {
     const { state } = this
 
     if (state.awaitingContextMutation) {
@@ -209,11 +314,32 @@ export class AnalysisSession {
       )
       const assessmentArtifactId = assessmentArtifacts?.id ?? ''
 
+      const ordinal = getNextStepOrdinal(this.database.connection, state.analysisSessionId)
+      const stepId = formatStepId(state.analysisSessionId, ordinal)
+      const startedAt = now()
+      const mutStep: StepPersistenceRecord = {
+        id: stepId,
+        sessionId: state.analysisSessionId,
+        stepTypeKey: mkStepTypeKey('analysis_context_mutation'),
+        ordinal,
+        status: 'running',
+        params: { assessment_artifact_id: assessmentArtifactId },
+        state: {},
+        createdAt: startedAt,
+        completedAt: null,
+      }
+      insertStepRecord(this.database.connection, mutStep)
+      emitEvent?.({ type: 'analysis-step-started', step: { ...mutStep } })
+
       const mutationResult = runContextMutationStep(this.database, {
         state,
         assessmentArtifactId,
       })
       this.state = mutationResult.updatedState
+
+      const completedMutStep: StepPersistenceRecord = { ...mutStep, status: 'complete', completedAt: now() }
+      updateStepRecord(this.database.connection, completedMutStep)
+      emitEvent?.({ type: 'analysis-step-completed', step: completedMutStep })
       this.persistState()
       return
     }
@@ -238,10 +364,12 @@ export class AnalysisSession {
     const packetIndex = packetIndexArtifact.content as EvidencePacketIndex
     const packet = packetIndex.packets[state.nextPacketIndex]
     if (!packet) {
-      // No more packets — move to coverage validation
+      // No more packets in this turn — the contextMutationStep already
+      // transitioned to turn_summary; this path should not be reached normally.
+      // As a safety fallback, transition to turn_summary if still in assessing.
       this.state = {
         ...state,
-        phase: 'coverage_validation',
+        phase: 'turn_summary',
         awaitingContextMutation: false,
         pendingMutationTurnId: null,
       }
@@ -249,26 +377,31 @@ export class AnalysisSession {
       return
     }
 
-    const stepId = uuid()
     const ordinal = getNextStepOrdinal(this.database.connection, state.analysisSessionId)
-    insertStepRecord(this.database.connection, {
+    const stepId = formatStepId(state.analysisSessionId, ordinal)
+    const startedAt = now()
+    const assessStep: StepPersistenceRecord = {
       id: stepId,
       sessionId: state.analysisSessionId,
-      stepTypeKey: 'analysis_tool_call_assessment' as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      stepTypeKey: mkStepTypeKey('analysis_tool_call_assessment'),
       ordinal,
       status: 'running',
       params: { packet_index: packet.packet_index },
       state: {},
-      createdAt: now(),
+      createdAt: startedAt,
       completedAt: null,
-    })
+    }
+    insertStepRecord(this.database.connection, assessStep)
+    emitEvent?.({ type: 'analysis-step-started', step: { ...assessStep } })
 
-    const result = await runToolCallAssessmentTurn(this.database, this.lmGateway, {
-      state,
+    const result = await runToolCallAssessmentTurn(this.database, this.lmGateway, this.mcpGateway, {
+      // Set currentTurnId from this packet's turn when entering a new turn boundary.
+      // (Previously turn_inject set this; now the assessment phase owns it.)
+      state: state.currentTurnId === packet.turn_id ? state : { ...state, currentTurnId: packet.turn_id },
       stepId,
       packet,
       analysisTarget: targetArtifact.content as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-    })
+    }, emitEvent)
 
     // Advance packet index regardless of success/failure
     this.state = {
@@ -276,35 +409,35 @@ export class AnalysisSession {
       nextPacketIndex: state.nextPacketIndex + 1,
     }
 
-    updateStepRecord(this.database.connection, {
-      id: stepId,
-      sessionId: state.analysisSessionId,
-      stepTypeKey: 'analysis_tool_call_assessment' as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-      ordinal,
+    const completedAssessStep: StepPersistenceRecord = {
+      ...assessStep,
       status: result.success ? 'complete' : 'error',
-      params: { packet_index: packet.packet_index },
       state: { assessment_artifact_id: result.assessmentArtifactId },
-      createdAt: now(),
       completedAt: now(),
-    })
+    }
+    updateStepRecord(this.database.connection, completedAssessStep)
+    emitEvent?.({ type: 'analysis-step-completed', step: completedAssessStep })
 
     this.persistState()
   }
 
-  private runCoverageValidation(): void {
-    const stepId = uuid()
+  private runCoverageValidation(emitEvent?: AnalysisStreamEventSink): void {
     const ordinal = getNextStepOrdinal(this.database.connection, this.state.analysisSessionId)
-    insertStepRecord(this.database.connection, {
+    const stepId = formatStepId(this.state.analysisSessionId, ordinal)
+    const startedAt = now()
+    const stepRecord: StepPersistenceRecord = {
       id: stepId,
       sessionId: this.state.analysisSessionId,
-      stepTypeKey: 'analysis_coverage_validation' as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      stepTypeKey: mkStepTypeKey('analysis_coverage_validation'),
       ordinal,
       status: 'running',
       params: {},
       state: {},
-      createdAt: now(),
+      createdAt: startedAt,
       completedAt: null,
-    })
+    }
+    insertStepRecord(this.database.connection, stepRecord)
+    emitEvent?.({ type: 'analysis-step-started', step: { ...stepRecord } })
 
     const result = runCoverageValidationStep(this.database, {
       state: this.state,
@@ -313,54 +446,54 @@ export class AnalysisSession {
 
     this.state = result.updatedState
 
-    updateStepRecord(this.database.connection, {
-      id: stepId,
-      sessionId: this.state.analysisSessionId,
-      stepTypeKey: 'analysis_coverage_validation' as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-      ordinal,
+    const completedStep: StepPersistenceRecord = {
+      ...stepRecord,
       status: result.passed ? 'complete' : 'error',
-      params: {},
       state: { passed: result.passed },
-      createdAt: now(),
       completedAt: now(),
-    })
+    }
+    updateStepRecord(this.database.connection, completedStep)
+    emitEvent?.({ type: 'analysis-step-completed', step: completedStep })
+    emitEvent?.({ type: 'analysis-phase-changed', phase: this.state.phase })
 
     this.persistState()
   }
 
-  private async runFinalAggregation(): Promise<void> {
-    const stepId = uuid()
+  private async runFinalAggregation(emitEvent?: AnalysisStreamEventSink): Promise<void> {
     const ordinal = getNextStepOrdinal(this.database.connection, this.state.analysisSessionId)
-    insertStepRecord(this.database.connection, {
+    const stepId = formatStepId(this.state.analysisSessionId, ordinal)
+    const startedAt = now()
+    const stepRecord: StepPersistenceRecord = {
       id: stepId,
       sessionId: this.state.analysisSessionId,
-      stepTypeKey: 'analysis_final_aggregation' as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      stepTypeKey: mkStepTypeKey('analysis_final_aggregation'),
       ordinal,
       status: 'running',
       params: {},
       state: {},
-      createdAt: now(),
+      createdAt: startedAt,
       completedAt: null,
-    })
+    }
+    insertStepRecord(this.database.connection, stepRecord)
+    emitEvent?.({ type: 'analysis-step-started', step: { ...stepRecord } })
+    emitEvent?.({ type: 'analysis-phase-changed', phase: 'final_aggregation' })
 
-    const result = await runFinalAggregationTurn(this.database, this.lmGateway, {
+    const result = await runFinalAggregationTurn(this.database, this.lmGateway, this.mcpGateway, {
       state: this.state,
       stepId,
-    })
+    }, emitEvent)
 
     this.state = result.updatedState
 
-    updateStepRecord(this.database.connection, {
-      id: stepId,
-      sessionId: this.state.analysisSessionId,
-      stepTypeKey: 'analysis_final_aggregation' as any, // eslint-disable-line @typescript-eslint/no-explicit-any
-      ordinal,
+    const completedStep: StepPersistenceRecord = {
+      ...stepRecord,
       status: result.success ? 'complete' : 'error',
-      params: {},
       state: { report_artifact_id: result.reportArtifactId },
-      createdAt: now(),
       completedAt: now(),
-    })
+    }
+    updateStepRecord(this.database.connection, completedStep)
+    emitEvent?.({ type: 'analysis-step-completed', step: completedStep })
+    emitEvent?.({ type: 'analysis-phase-changed', phase: this.state.phase })
 
     this.persistState()
   }
