@@ -2,12 +2,13 @@ export const SESSION_ID_LENGTH = 4
 export const SESSION_ID_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 export const SESSION_ID_REGEX = /^[A-HJ-NP-Z2-9]{4}$/
 
-export type HierarchicalIdType = 'session' | 'setup' | 'turn' | 'round' | 'part'
+export type HierarchicalIdType = 'session' | 'setup' | 'step' | 'turn' | 'round' | 'part'
 
 export interface ParsedHierarchicalId {
   raw: string
   type: HierarchicalIdType
   sessionId: string
+  stepNumber: number | null
   turnNumber: number | null
   roundNumber: number | null
   partNumber: number | null
@@ -68,6 +69,21 @@ export function formatTurnId(sessionId: string, turnNumber: number): string {
   return `${sessionId}.${turnNumber}`
 }
 
+export function formatCompactionStepId(sessionId: string, stepNumber: number): string {
+  return `${sessionId}.C${stepNumber}`
+}
+
+export function formatCompactionPartId(
+  sessionId: string,
+  stepNumber: number,
+  partNumber: number,
+  partType?: string,
+): string {
+  const suffix = partType ? PART_TYPE_SUFFIX[partType] : undefined
+  const base = `${sessionId}.C${stepNumber}.${partNumber}`
+  return suffix ? `${base}-${suffix}` : base
+}
+
 export function formatRoundId(sessionId: string, turnNumber: number, roundNumber: number): string {
   return `${sessionId}.${turnNumber}.${roundNumber}`
 }
@@ -110,18 +126,33 @@ export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
   if (!isValidSessionId(sessionId)) return null
 
   if (segments.length === 1) {
-    return { raw: trimmed, type: 'session', sessionId, turnNumber: null, roundNumber: null, partNumber: null, isSetupPart: false }
+    return { raw: trimmed, type: 'session', sessionId, stepNumber: null, turnNumber: null, roundNumber: null, partNumber: null, isSetupPart: false }
   }
 
   // Setup node: AB12.S or setup part: AB12.S.n[-XX]
   if (segments[1] === 'S') {
     if (segments.length === 2) {
-      return { raw: trimmed, type: 'setup', sessionId, turnNumber: null, roundNumber: null, partNumber: null, isSetupPart: false }
+      return { raw: trimmed, type: 'setup', sessionId, stepNumber: null, turnNumber: null, roundNumber: null, partNumber: null, isSetupPart: false }
     }
     if (segments.length === 3) {
       const partNumber = parseNumberWithSuffix(segments[2] ?? '')
       if (partNumber == null || partNumber < 1) return null
-      return { raw: trimmed, type: 'part', sessionId, turnNumber: null, roundNumber: null, partNumber, isSetupPart: true }
+      return { raw: trimmed, type: 'part', sessionId, stepNumber: null, turnNumber: null, roundNumber: null, partNumber, isSetupPart: true }
+    }
+    return null
+  }
+
+  const compactionStepMatch = /^(?:C)(\d+)$/.exec(segments[1] ?? '')
+  if (compactionStepMatch) {
+    const stepNumber = parseNumber(compactionStepMatch[1] ?? '')
+    if (stepNumber == null || stepNumber < 1) return null
+    if (segments.length === 2) {
+      return { raw: trimmed, type: 'step', sessionId, stepNumber, turnNumber: null, roundNumber: null, partNumber: null, isSetupPart: false }
+    }
+    if (segments.length === 3) {
+      const partNumber = parseNumberWithSuffix(segments[2] ?? '')
+      if (partNumber == null || partNumber < 1) return null
+      return { raw: trimmed, type: 'part', sessionId, stepNumber, turnNumber: null, roundNumber: null, partNumber, isSetupPart: false }
     }
     return null
   }
@@ -130,18 +161,18 @@ export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
   if (turnNumber == null || turnNumber < 0) return null
 
   if (segments.length === 2) {
-    return { raw: trimmed, type: 'turn', sessionId, turnNumber, roundNumber: null, partNumber: null, isSetupPart: false }
+    return { raw: trimmed, type: 'turn', sessionId, stepNumber: null, turnNumber, roundNumber: null, partNumber: null, isSetupPart: false }
   }
 
   const roundNumber = parseNumber(segments[2] ?? '')
   if (roundNumber == null || roundNumber < 0) return null
 
   if (segments.length === 3) {
-    return { raw: trimmed, type: 'round', sessionId, turnNumber, roundNumber, partNumber: null, isSetupPart: false }
+    return { raw: trimmed, type: 'round', sessionId, stepNumber: null, turnNumber, roundNumber, partNumber: null, isSetupPart: false }
   }
 
   const partNumber = parseNumberWithSuffix(segments[3] ?? '')
   if (partNumber == null || partNumber < 1) return null
 
-  return { raw: trimmed, type: 'part', sessionId, turnNumber, roundNumber, partNumber, isSetupPart: false }
+  return { raw: trimmed, type: 'part', sessionId, stepNumber: null, turnNumber, roundNumber, partNumber, isSetupPart: false }
 }

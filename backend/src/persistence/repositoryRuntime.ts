@@ -36,6 +36,7 @@ import type {
   SessionRecord,
   SessionSummary,
   TurnRecord,
+  StepRecord,
 } from '../domain/model.js'
 import { validateSessionParent } from '../domain/sessionValidation.js'
 
@@ -65,6 +66,18 @@ function assertValidSessionParent(session: Pick<SessionRecord, 'sessionType' | '
 export interface ActiveSessionInfo {
   id: string
   state: 'initializing' | 'running'
+}
+
+type V2StepRow = {
+  id: string
+  session_id: string
+  step_type_key: string
+  ordinal: number
+  status: string
+  params_json: string
+  state_json: string
+  created_at: number
+  completed_at: number | null
 }
 
 type V2SessionRow = {
@@ -111,6 +124,20 @@ function buildSessionState(session: SessionRecord): string {
     isContextExhausted: session.isContextExhausted,
   }
   return JSON.stringify(state)
+}
+
+function mapV2StepRow(row: V2StepRow): StepRecord {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    stepTypeKey: row.step_type_key,
+    ordinal: row.ordinal,
+    status: row.status,
+    params: parseJson<Record<string, unknown>>(row.params_json) ?? {},
+    state: parseJson<Record<string, unknown>>(row.state_json) ?? {},
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+  }
 }
 
 function mapV2SessionRow(row: V2SessionRow): SessionRecord {
@@ -162,6 +189,37 @@ function mapV2SessionSummaryRow(row: V2SessionRow): SessionSummary {
     modelProfileSnapshot: { name: params.modelProfileSnapshot?.name ?? '' },
     mcpProfileSnapshot: params.mcpProfileSnapshot ? { name: params.mcpProfileSnapshot.name } : null,
   }
+}
+
+export function getStepRecord(connection: Database.Database, stepId: string): StepRecord | null {
+  const row = connection.prepare(`
+    SELECT *
+    FROM v2_steps
+    WHERE id = ?
+  `).get(stepId) as V2StepRow | undefined
+
+  return row ? mapV2StepRow(row) : null
+}
+
+export function listStepRecordsBySession(connection: Database.Database, sessionId: string): StepRecord[] {
+  const rows = connection.prepare(`
+    SELECT *
+    FROM v2_steps
+    WHERE session_id = ?
+    ORDER BY ordinal ASC
+  `).all(sessionId) as V2StepRow[]
+
+  return rows.map(mapV2StepRow)
+}
+
+export function getNextStepOrdinal(connection: Database.Database, sessionId: string): number {
+  const row = connection.prepare(`
+    SELECT COALESCE(MAX(ordinal), -1) AS max_ordinal
+    FROM v2_steps
+    WHERE session_id = ?
+  `).get(sessionId) as { max_ordinal: number }
+
+  return row.max_ordinal + 1
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -395,7 +453,7 @@ export function recoverInterruptedState(connection: Database.Database): void {
 
 export function insertTurnRecord(connection: Database.Database, turn: TurnRecord): void {
   // ordinal is 0-based; sequenceNumber is 1-based
-  const ordinal = turn.sequenceNumber - 1
+  const ordinal = getNextStepOrdinal(connection, turn.sessionId)
 
   connection.prepare(`
     INSERT INTO v2_steps (

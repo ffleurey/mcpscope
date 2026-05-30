@@ -6,6 +6,8 @@ import type {
   AnalysisProfile as AnalysisProfileRecord,
 } from '../domain/configuration.js'
 
+export { insertStepRecord } from './repositoryV2.js'
+
 export type { ActiveSessionInfo } from './repositoryRuntime.js'
 export {
   createSessionRecord,
@@ -18,6 +20,9 @@ export {
   listAllSessionSummaries,
   findActiveSession,
   recoverInterruptedState,
+  getStepRecord,
+  listStepRecordsBySession,
+  getNextStepOrdinal,
   insertTurnRecord,
   updateTurnRecord,
   getTurnRecord,

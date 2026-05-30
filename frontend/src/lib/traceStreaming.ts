@@ -149,6 +149,7 @@ function withDerivedEntries(trace: SessionTraceBundle): SessionTraceBundle {
 export function createEmptyTrace(session: SessionSummary): SessionTraceBundle {
   return {
     session: session as unknown as SessionRecord,
+    steps: [],
     turns: [],
     rounds: [],
     parts: [],

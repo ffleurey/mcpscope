@@ -358,6 +358,7 @@ describe('backend foundation', () => {
 
     const capturedTrace: SessionTraceBundle = {
       session: capturedReasoningThreeBatchSession,
+      steps: [],
       turns: [
         {
           id: capturedReasoningThreeBatchRounds[0]!.turnId,
@@ -421,6 +422,7 @@ describe('backend foundation', () => {
         ...capturedReasoningThreeBatchSession,
         initStatus: 'initializing',
       },
+      steps: [],
       turns: [
         {
           id: 'captured-reasoning-turn',
@@ -492,6 +494,247 @@ describe('backend foundation', () => {
       },
     })
     expect(createResponse.statusCode).toBe(201)
+  })
+
+  it('imports deterministic compaction steps so they remain visible in trace and lookup APIs', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const sourceSessionId = 'SRC1'
+    const sourceTurnId = `${sourceSessionId}.1`
+    const sourceStepId = `${sourceSessionId}.C1`
+    const sourceRoundId = `${sourceSessionId}.1.1`
+    const sourceStrippedPartId = `${sourceSessionId}.1.1.1-R`
+    const sourceStepPartId = `${sourceSessionId}.C1.1-DN`
+    const capturedTrace: SessionTraceBundle = {
+      session: {
+        ...capturedReasoningThreeBatchSession,
+        id: sourceSessionId,
+      },
+      steps: [
+        {
+          id: sourceTurnId,
+          sessionId: sourceSessionId,
+          stepTypeKey: 'turn',
+          ordinal: 0,
+          status: 'complete',
+          params: {},
+          state: {},
+          createdAt: 1,
+          completedAt: 2,
+        },
+        {
+          id: sourceStepId,
+          sessionId: sourceSessionId,
+          stepTypeKey: 'compaction',
+          ordinal: 1,
+          status: 'complete',
+          params: {
+            strategy: 'strip-reasoning',
+            sourceTurnId: sourceTurnId,
+            sourceTurnSequenceNumber: 1,
+          },
+          state: {
+            strippedPartIds: [sourceStrippedPartId],
+            strippedPartCount: 1,
+            contextTokensAtTurnEnd: 120,
+            contextTokensAfterCompaction: 72,
+            compactionTokensRemoved: 48,
+          },
+          createdAt: 3,
+          completedAt: 4,
+        },
+      ],
+      turns: [
+        {
+          id: sourceTurnId,
+          sessionId: sourceSessionId,
+          sequenceNumber: 1,
+          status: 'complete',
+          createdAt: 1,
+          completedAt: 2,
+          outcome: 'assistant-response',
+          usage: {
+            promptTokens: 12,
+            completionTokens: 8,
+            reasoningTokens: 0,
+            totalTokens: 20,
+          },
+          contextTokensAtTurnEnd: 120,
+          contextTokensAfterCompaction: 72,
+          compactionApplied: 'strip-reasoning',
+          compactionTokensRemoved: 48,
+        },
+      ],
+      rounds: [
+        {
+          id: sourceRoundId,
+          turnId: sourceTurnId,
+          roundIndex: 0,
+          status: 'complete',
+          finishReason: 'stop',
+          startedAt: 1,
+          completedAt: 2,
+          usage: {
+            promptTokens: 12,
+            completionTokens: 8,
+            reasoningTokens: 0,
+            totalTokens: 20,
+          },
+          requestPayloadJson: null,
+          responseTraceJson: null,
+        },
+      ],
+      parts: [
+        {
+          id: `${sourceSessionId}.S.1-SP`,
+          sessionId: sourceSessionId,
+          turnId: null,
+          roundId: null,
+          parentPartId: null,
+          ordinal: 0,
+          partType: 'system-prompt',
+          roleLabel: 'system',
+          payload: { text: 'Be concise.', json: null, mimeType: 'text/plain', summary: null },
+          display: { state: 'transcript', collapsedByDefault: false },
+          context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+          tokens: { count: 4, source: 'manual', confidence: 'estimated', note: null },
+          provenanceJson: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: sourceStrippedPartId,
+          sessionId: sourceSessionId,
+          turnId: sourceTurnId,
+          roundId: sourceRoundId,
+          parentPartId: null,
+          ordinal: 1,
+          partType: 'assistant-reasoning',
+          roleLabel: 'assistant',
+          payload: { text: 'Internal chain of thought', json: null, mimeType: 'text/plain', summary: null },
+          display: { state: 'diagnostic', collapsedByDefault: true },
+          context: { state: 'stripped', note: null, strippedByCompactionAtTurnId: sourceTurnId },
+          tokens: { count: 48, source: 'manual', confidence: 'estimated', note: null },
+          provenanceJson: null,
+          createdAt: 2,
+          updatedAt: 4,
+        },
+        {
+          id: sourceStepPartId,
+          sessionId: sourceSessionId,
+          turnId: sourceStepId,
+          roundId: null,
+          parentPartId: null,
+          ordinal: 0,
+          partType: 'diagnostic-note',
+          roleLabel: null,
+          payload: {
+            text: 'Compaction removed 48 tokens after turn 1.',
+            json: { strippedPartCount: 1 },
+            mimeType: 'text/plain',
+            summary: 'Compaction summary',
+          },
+          display: { state: 'transcript', collapsedByDefault: false },
+          context: { state: 'excluded', note: 'deterministic step', strippedByCompactionAtTurnId: null },
+          tokens: { count: 8, source: 'manual', confidence: 'estimated', note: null },
+          provenanceJson: null,
+          createdAt: 4,
+          updatedAt: 4,
+        },
+      ],
+      rawExchanges: [],
+      transcript: [],
+      context: [],
+    }
+
+    const importResponse = await app.inject({
+      method: 'POST',
+      url: '/api/traces/import',
+      payload: capturedTrace,
+    })
+    expect(importResponse.statusCode).toBe(201)
+    const importedSessionId = importResponse.json().session.id as string
+
+    const traceResponse = await app.inject({
+      method: 'GET',
+      url: `/api/sessions/${importedSessionId}/trace`,
+    })
+    expect(traceResponse.statusCode).toBe(200)
+    expect(traceResponse.json()).toMatchObject({
+      steps: expect.arrayContaining([
+        expect.objectContaining({ id: `${importedSessionId}.1`, stepTypeKey: 'turn', ordinal: 0 }),
+        expect.objectContaining({ id: `${importedSessionId}.C1`, stepTypeKey: 'compaction', ordinal: 1 }),
+      ]),
+    })
+    expect(traceResponse.json().parts.some((part: { id: string }) => part.id === `${importedSessionId}.C1.1-DN`)).toBe(false)
+
+    const sessionLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}?mode=full` })
+    expect(sessionLookup.statusCode).toBe(200)
+    expect(sessionLookup.json()).toMatchObject({
+      id: importedSessionId,
+      type: 'session',
+      data: {
+        steps: expect.arrayContaining([
+          expect.objectContaining({ id: `${importedSessionId}.1`, type: 'turn' }),
+          expect.objectContaining({
+            id: `${importedSessionId}.C1`,
+            type: 'compaction',
+            source_turn_id: `${importedSessionId}.1`,
+            source_turn_number: 1,
+            tokens_removed: 48,
+            stripped_part_ids: [`${importedSessionId}.1.1.1-R`],
+            stripped_parts: expect.arrayContaining([
+              expect.objectContaining({
+                id: `${importedSessionId}.1.1.1-R`,
+                type: 'reasoning',
+                token_count: 48,
+                reason: expect.stringContaining('strip-reasoning'),
+              }),
+            ]),
+            parts: [],
+          }),
+        ]),
+      },
+    })
+
+    const stepSummary = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.C1?mode=summary` })
+    expect(stepSummary.statusCode).toBe(200)
+    expect(stepSummary.json()).toMatchObject({
+      id: `${importedSessionId}.C1`,
+      type: 'step',
+      mode: 'summary',
+      data: {
+        stripped_part_ids: [`${importedSessionId}.1.1.1-R`],
+      },
+    })
+    expect(stepSummary.json().data.stripped_parts).toBeUndefined()
+
+    const stepLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.C1?mode=full` })
+    expect(stepLookup.statusCode).toBe(200)
+    expect(stepLookup.json()).toMatchObject({
+      id: `${importedSessionId}.C1`,
+      type: 'step',
+      data: {
+        id: `${importedSessionId}.C1`,
+        type: 'compaction',
+        source_turn_id: `${importedSessionId}.1`,
+        stripped_part_ids: [`${importedSessionId}.1.1.1-R`],
+        stripped_parts: expect.arrayContaining([
+          expect.objectContaining({
+            id: `${importedSessionId}.1.1.1-R`,
+            type: 'reasoning',
+            token_count: 48,
+            reason: expect.stringContaining('strip-reasoning'),
+          }),
+        ]),
+        parts: [],
+      },
+    })
+
+    const stepPartLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.C1.1-DN?mode=full` })
+    expect(stepPartLookup.statusCode).toBe(404)
   })
 
   it('returns expected lookup payloads for session/turn/round/part on exported multi-turn tool baseline', async () => {

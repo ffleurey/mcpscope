@@ -17,6 +17,7 @@
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import IdBadge from './IdBadge.svelte'
   import NewSessionPanel from './NewSessionPanel.svelte'
+  import SessionCompactionStepBlock from './SessionCompactionStepBlock.svelte'
   import SessionPreludeBlock from './SessionPreludeBlock.svelte'
   import SessionTurnBlock from './SessionTurnBlock.svelte'
 
@@ -32,6 +33,7 @@
   let titleDraft = $state('')
   let titleInputEl = $state<HTMLInputElement | null>(null)
   let session = $derived($activeSession)
+  let traceSteps = $derived([...($activeTrace?.steps ?? [])].sort((a, b) => a.ordinal - b.ordinal))
   let visibleParts = $derived.by(() =>
     ($activeTrace?.parts ?? [])
       .filter((p) => p.display.state !== 'hidden')
@@ -66,6 +68,16 @@
     }
     return m
   })
+  let compactionStepsByTurn = $derived.by(() => {
+    const m = new Map<string, typeof traceSteps>()
+    for (const step of traceSteps) {
+      if (step.stepTypeKey !== 'compaction') continue
+      const sourceTurnId = typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null
+      if (!sourceTurnId) continue
+      m.set(sourceTurnId, [...(m.get(sourceTurnId) ?? []), step])
+    }
+    return m
+  })
   let roundStreamsByTurn = $derived.by(() => {
     const m = new Map<string, StreamingRoundState[]>()
     for (const rs of ($activeTurnStream?.rounds ?? [])) {
@@ -74,6 +86,14 @@
     return m
   })
   let sessionPreludeRawExchanges = $derived(traceRawExchanges.filter((x) => x.turnId === null))
+  let partsByStep = $derived.by(() => {
+    const m = new Map<string, typeof visibleParts>()
+    for (const p of visibleParts) {
+      if (!p.turnId) continue
+      m.set(p.turnId, [...(m.get(p.turnId) ?? []), p])
+    }
+    return m
+  })
 
   let allParts = $derived($activeTrace?.parts ?? [])
   let contextSnapshotsByRound = $derived.by(() => {
@@ -271,6 +291,13 @@
             {contextSnapshotsByRound}
             loadedContextLength={session.loaded_context_length ?? null}
           />
+          {#each compactionStepsByTurn.get(turn.id) ?? [] as step (step.id)}
+            <SessionCompactionStepBlock
+              {step}
+              parts={partsByStep.get(step.id) ?? []}
+              mode={viewMode}
+            />
+          {/each}
         {/each}
       {/if}
     </div>

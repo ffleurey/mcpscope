@@ -220,6 +220,7 @@ export interface Step {
 /** Known step type keys. */
 export const STEP_TYPE = {
   TURN: stepTypeKey('turn'),
+  COMPACTION: stepTypeKey('compaction'),
 } as const
 
 // ─────────────────────────────────────────────────────────────────────────────

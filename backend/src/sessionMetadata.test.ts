@@ -448,6 +448,7 @@ describe('session metadata repository', () => {
         parentKind: null,
         parentId: null,
       }),
+      steps: [],
       turns: [],
       rounds: [],
       parts: [],
