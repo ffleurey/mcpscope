@@ -316,9 +316,9 @@ function buildStepNode(
     source_turn_id: typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null,
     source_turn_number: typeof step.params.sourceTurnSequenceNumber === 'number' ? step.params.sourceTurnSequenceNumber : null,
     stripped_part_count: typeof step.state.strippedPartCount === 'number' ? step.state.strippedPartCount : null,
-    context_tokens_before: typeof step.state.contextTokensAtTurnEnd === 'number' ? step.state.contextTokensAtTurnEnd : step.state.contextTokensAtTurnEnd ?? null,
-    context_tokens_after: typeof step.state.contextTokensAfterCompaction === 'number' ? step.state.contextTokensAfterCompaction : step.state.contextTokensAfterCompaction ?? null,
-    tokens_removed: typeof step.state.compactionTokensRemoved === 'number' ? step.state.compactionTokensRemoved : step.state.compactionTokensRemoved ?? null,
+    context_tokens_before: typeof step.state.contextTokensAtTurnEnd === 'number' ? step.state.contextTokensAtTurnEnd : null,
+    context_tokens_after: typeof step.state.contextTokensAfterCompaction === 'number' ? step.state.contextTokensAfterCompaction : null,
+    tokens_removed: typeof step.state.compactionTokensRemoved === 'number' ? step.state.compactionTokensRemoved : null,
     ...compactionEvidence,
     parts: stepParts,
   }
