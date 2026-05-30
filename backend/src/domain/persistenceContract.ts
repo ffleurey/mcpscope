@@ -13,8 +13,9 @@
  *
  * Relationship to current records:
  *   - The generic persistence types here replace the flat `SessionRecord`,
- *     `TurnRecord`, etc. in the new schema layer (introduced in Step 3).
- *   - The old record types remain active during the porting steps (4–7).
+ *     `TurnRecord`, etc. in the new schema layer.
+ *   - Legacy record terminology still appears only where needed for current
+ *     compatibility types and tests.
  *
  * Naming conventions:
  *   - `*Persistence*` types represent the raw persisted shapes (what goes in DB).

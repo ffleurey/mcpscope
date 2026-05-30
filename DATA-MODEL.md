@@ -20,7 +20,7 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 - session ownership modeled through `SessionContainer`; a session may belong to another session or to a `Benchmark` container
 - `Benchmark` — a minimal `SessionContainer` for grouping sessions; full benchmark domain design is future work
 - generic persistence for containers, sessions, and steps (`session_containers`, `v2_sessions`, `v2_steps`, `v2_turns`)
-- `v1` child-session behavior still works through the new model
+- existing child-session behavior still works through the new model
 
 **Not implemented yet:**
 

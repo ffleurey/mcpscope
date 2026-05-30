@@ -100,9 +100,9 @@ describe('backend foundation', () => {
     })
     expect(body.schema.tables).toEqual(
       expect.arrayContaining([
-        // Config/singleton tables (still managed by legacy schema init)
+        // Shared config/default tables
         'session_creation_defaults', 'analysis_profiles', 'analysis_defaults',
-        // V2 canonical execution-model tables
+        // Canonical execution-model tables
         'session_containers', 'v2_sessions', 'v2_steps', 'v2_turns',
         'v2_rounds', 'v2_parts', 'v2_raw_exchanges', 'artifacts',
       ])
