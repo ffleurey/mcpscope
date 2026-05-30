@@ -29,9 +29,11 @@ import {
 import type {
   McpProfileSnapshot,
   ModelProfileSnapshot,
+  ParentKind,
   PartRecord,
   RoundRecord,
   SessionRecord,
+  SessionType,
   TurnRecord,
 } from '../domain/model.js'
 import { deriveContextEntries, deriveTranscriptEntries, buildModelMessages } from '../domain/selectors.js'
@@ -89,6 +91,12 @@ export interface CreateSessionInput {
   modelProfileSnapshot: ModelProfileSnapshot
   mcpProfileSnapshot?: McpProfileSnapshot | null | undefined
   compactionStrategy?: 'none' | 'strip-reasoning' | undefined
+  /** Session type. Defaults to 'primary' when omitted. */
+  sessionType?: SessionType | undefined
+  /** Parent object kind. Must be provided together with parentId. */
+  parentKind?: ParentKind | null | undefined
+  /** Parent object id. Must be provided together with parentKind. */
+  parentId?: string | null | undefined
 }
 
 export interface CreateTurnInput {
@@ -160,9 +168,9 @@ export function createSession(
     title: input.title?.trim() || DEFAULT_SESSION_TITLE,
     status: 'ready',
     initStatus: 'pending',
-    sessionType: 'primary',
-    parentKind: null,
-    parentId: null,
+    sessionType: input.sessionType ?? 'primary',
+    parentKind: input.parentKind ?? null,
+    parentId: input.parentId ?? null,
     createdAt: timestamp,
     updatedAt: timestamp,
     modelProfileSnapshot: input.modelProfileSnapshot,

@@ -246,35 +246,34 @@ The exact base still needs to be fixed once for the whole public model, but the 
 - full mode adds allowed content; it does not invent a different object model
 - the tables above describe the canonical properties expected on those nodes
 
-## Future session classification and parent model
+## Session classification and parent model
 
-This section is **future work**, not current implementation.
+mcpscope persists typed sessions with a parent-link model. This is already implemented:
 
-mcpscope will likely need a generalized session metadata layer for:
+- each session has a `session_type`: `primary`, `session_analysis`, `session_compaction`, or `benchmark_analysis`
+- some session types carry a `parent_kind` and `parent_id`
+- the allowed parent kinds depend on the session type and are enforced at the application-validation layer
 
-- normal primary sessions
-- session-analysis sessions
-- session-compaction sessions
-- benchmark-analysis sessions
+Implemented rules:
 
-The intended direction is:
+- `primary` → optional `benchmark` parent
+- `session_analysis` → mandatory `session` parent
+- `session_compaction` → mandatory `session` parent
+- `benchmark_analysis` → mandatory `benchmark` parent
 
-- each session has a `session_type`
-- some session types also carry a `parent_ref`
-- the allowed parent kinds depend on the session type
-
-Examples:
-
-- `primary` → optional benchmark parent
-- `session_analysis` → mandatory session parent
-- `session_compaction` → mandatory session or turn parent
-- `benchmark_analysis` → mandatory benchmark parent
+The backend runtime session-creation flow — including the analysis-launch flow — uses one unified validated `createSession(...)` path. Session type and parent metadata are validated before persistence and never patched afterward in that flow.
 
 Important boundary:
 
 - this is metadata **about sessions**
 - it does not change the canonical setup/turn/round/part tree inside the session
 
+What remains future work:
+
+- deterministic non-LLM step modeling inside a session
+- richer parent object support (e.g. turn-level parents)
+- broader workflow/runtime generalization beyond chat-style sessions
+
 See:
 
-- `backlog/specification/session-types-and-parent-links.md`
+- `backlog/specification/session-analysis-agent.md`
