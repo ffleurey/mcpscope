@@ -19,6 +19,7 @@ The value of the project depends on correctness and inspectability:
 ## Documentation boundaries
 
 - [DATA-MODEL.md](DATA-MODEL.md) — compact canonical runtime tree, public part taxonomy, canonical IDs, and lookup-model rules
+- [SESSION-ANALYSIS.md](SESSION-ANALYSIS.md) — shipped `session_analysis` workflow and evidence-loading rules
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) — current SQLite tables, foreign keys, singleton defaults, and ER diagram
 - [CLI.md](CLI.md) — CLI command reference: commands, flags, output format, exit codes
 - `ARCHITECTURE.md` — system design, persistence model, streaming model, replay model, and API overview
@@ -33,6 +34,7 @@ The value of the project depends on correctness and inspectability:
 
 - the backend owns the canonical runtime state
 - SQLite is the canonical persistent store
+- every mcpscope session remains an LLM session, even when deterministic steps steer it
 - transcript and context are two views over the same runtime, not separate systems
 - exported traces must stay replayable without reconstruction
 - the frontend is a thin client over backend state
@@ -107,8 +109,15 @@ Normal startup initializes that runtime schema plus the shared config/default ta
 Today, mcpscope persists and exposes sessions as execution containers running on top of the canonical execution model:
 
 - `Session.execute()` runs the execution loop by calling `advance()` while `canContinue()` is true
-- `Session.advance()` executes the next `Step` (a `ChatTurnStep` for interactive chat sessions)
+- `Session.advance()` executes the next `Step`
 - `Step.execute(context)` runs the unit of work, delegating to `createModelOnlyTurn` / `createToolEnabledTurn`
+
+The important distinction is architectural rather than cosmetic:
+
+- determinism does not require moving workflow state outside the session model
+- a session can remain the visible, canonical LLM session while deterministic steps steer what the
+	next bounded turn sees and does
+- the analysis workflow is the shipped proof of that model
 
 The shipped product implements:
 
@@ -118,19 +127,18 @@ The shipped product implements:
 - generic container/session/step persistence without table-per-subtype growth
 - the current runtime tree (setup / turn / round / part) unchanged from user perspective
 - `session_analysis` child sessions used by the analysis workflow
+- deterministic non-LLM workflow steps used by the shipped analysis-session orchestration
 - compaction and context bookkeeping
 
 What is **not** implemented yet:
 
-- deterministic non-LLM step types beyond `Turn`
 - full benchmark product work beyond minimal container support
-- broader workflow automation
+- broader workflow automation and cleanup beyond the shipped analysis-session workflow
 
-The important rule is:
-
-- mcpscope should have one canonical model across persistence, API, UI, and CLI
-- provider-specific transport structures are normalized into that model at the integration boundary
-- `RawExchangeRecord` belongs to the diagnostic and replay layer, not to the canonical runtime tree
+The important rule is that mcpscope keeps one canonical model across persistence, API, UI, and
+CLI. Provider-specific transport structures are normalized into that model at the integration
+boundary, and `RawExchangeRecord` stays in the diagnostic/replay layer rather than the canonical
+runtime tree.
 
 ## Actual runtime ownership today
 
@@ -156,10 +164,8 @@ The one place where there is a real external session handle today is MCP:
 - the returned MCP `sessionId` is then reused for tool calls within that turn
 - that MCP session handle is transient runtime state, not the canonical persisted mcpscope session model
 
-So the current architecture is not a dual-master model. It is better described as:
-
-- one canonical mcpscope runtime model
-- plus transient and diagnostic transport-layer structures around it
+So the current architecture is not a dual-master model. It is one canonical mcpscope runtime model
+plus transient and diagnostic transport-layer structures around it.
 
 ### What is canonical vs derived vs transport
 
@@ -202,27 +208,13 @@ Some of these are partially persisted for diagnostics:
 
 That diagnostic persistence does **not** make those transport structures canonical. The canonical runtime still lives in session/turn/round/part records.
 
-### The practical consequence
+### Practical consequence
 
-For LM Studio, mcpscope is already much closer to "our representation is the master" than to "the provider's session is the master".
-
-Before each model turn:
-
-- mcpscope loads persisted parts for the session
-- mcpscope derives the model-visible history from part `context_state`
-- mcpscope builds a fresh `messages` array
-- mcpscope sends that fresh request to LM Studio
-
-After each model turn:
-
-- mcpscope normalizes streamed/provider output into canonical `PartRecord`s
-- mcpscope stores raw request/response exchanges for replay and debugging
-- mcpscope applies its own compaction rules to canonical parts
-
-So the main gap is not "move ownership away from LM Studio". The main gap is:
-
-- generalize the mcpscope-owned runtime so it can represent more than LLM turns
-- make the layered state model explicit enough to support deterministic workflow turns and richer context management
+Before each model turn, mcpscope rebuilds the request from persisted parts and current
+`context_state`. After each turn, it normalizes provider output back into canonical parts, stores
+raw exchanges, and applies its own compaction. The main remaining gap is therefore not ownership,
+but broader generalization of the runtime so deterministic workflow steps and layered context
+management stay coherent.
 
 ## Runtime structures and lifecycles
 
@@ -376,115 +368,8 @@ classDiagram
 	McpGateway --> MCPTransport
 ```
 
-### Lifecycle by structure
-
-#### `SessionRecord`
-
-Lifecycle:
-
-- created by `createSession(...)`
-- persists session-level configuration snapshots and compaction strategy
-- updated as turns complete and session metadata changes
-- remains the root of the canonical runtime tree
-
-Dependency role:
-
-- owns model-profile snapshot used to build LM Studio request bodies
-- optionally owns MCP-profile snapshot used to initialize tool-enabled turns
-
-#### `TurnRecord`
-
-Lifecycle:
-
-- created at the start of a user request
-- moves through `streaming` to `complete` or `error`
-- stores aggregate usage and post-turn compaction accounting
-
-Dependency role:
-
-- parent for one or more `RoundRecord`s
-- anchor for turn-level outcomes and post-turn compaction metadata
-
-#### `RoundRecord`
-
-Lifecycle:
-
-- created once per model iteration within a turn
-- for model-only turns there is normally one round
-- for tool-enabled turns there may be multiple rounds in a tool-call loop
-- stores diagnostic copies of `requestPayloadJson` and `responseTraceJson`
-
-Dependency role:
-
-- binds one LM Studio request/response cycle to canonical persisted state
-- links canonical parts to the provider round that produced them
-
-#### `PartRecord`
-
-Lifecycle:
-
-- setup parts are created at session creation or MCP initialization time
-- user parts are created at turn start
-- assistant reasoning/content/tool-call/tool-result parts are created from provider outputs and tool activity
-- compaction later mutates `context.state` on canonical parts instead of deleting transcript history
-
-Dependency role:
-
-- this is the most important structure for context reconstruction
-- future model-visible context is derived from part `context.state`, not from provider-held session memory
-- transcript and context views are both projections over the same parts table
-
-#### `RawExchangeRecord`
-
-Lifecycle:
-
-- created whenever LM Studio or MCP traffic is captured
-- persisted for replay, debugging, and auditability
-- never becomes the authoritative semantic runtime model
-
-Dependency role:
-
-- diagnostic mirror of transport activity
-- useful for replay and inspection, but subordinate to the canonical runtime tree
-
-#### `ApiMessage[]` / `ModelMessage[]`
-
-Lifecycle:
-
-- rebuilt from persisted parts immediately before model calls
-- never treated as the persistent source of truth
-- discarded after request construction
-
-Dependency role:
-
-- bridge between canonical parts and provider chat-completion transport
-
-#### LM Studio transport structures
-
-Lifecycle:
-
-- created for a single request/response exchange
-- parsed into segments/deltas/chunks during streaming
-- normalized into canonical parts
-- persisted only as raw/diagnostic mirrors where needed
-
-Dependency role:
-
-- transport only
-- no LM Studio-native session handle is used as authoritative runtime state today
-
-#### MCP session handle
-
-Lifecycle:
-
-- created by `initializeSession(...)` at the start of a tool-enabled turn
-- reused for MCP tool calls within that turn
-- not part of the canonical persisted session model
-
-Dependency role:
-
-- external server-owned session handle for MCP interaction
-- currently the main example of true external session state in runtime execution
+These diagrams are the architectural overview only. For the canonical runtime tree and field-level
+contracts, use `DATA-MODEL.md`. For storage details, use `DATABASE-SCHEMA.md`.
 
 ## What is actually used during a session
 
@@ -526,60 +411,22 @@ Important conclusion:
 - even in tool mode, later rounds are built from mcpscope-owned reconstructed messages
 - the external MCP session handle is real, but it is scoped to tool interaction rather than replacing the mcpscope runtime tree
 
-## Architectural assessment of the current gap
+## Current architectural gap
 
-The current implementation is already partway toward a session-backed deterministic runtime.
+The current implementation is already a session-backed deterministic runtime in one concrete case:
+analysis sessions. The remaining gap is broader cleanup and generalization:
 
-What is already true today:
-
-- mcpscope owns the canonical runtime model
-- mcpscope decides what remains in future model-visible context via `context_state`
-- mcpscope rebuilds LM Studio requests from its own persisted state
-- compaction is already a backend-owned post-turn transformation over canonical parts
-
-What is not yet generalized:
-
-- turns are still structurally assumed to be LLM turns or tool-loop rounds
-- deterministic workflow steps are not yet first-class turn types in the canonical runtime
-- the distinction between transcript state, broader working state, and LLM-visible context is only partially explicit
-- round/request diagnostic structures exist, but there is not yet a generalized runtime abstraction for non-LLM workflow nodes
-
-So the main architecture question going forward is not "can mcpscope take ownership away from LM Studio?".
-
-It is:
-
-- how to generalize the already mcpscope-owned runtime so that deterministic workflow nodes can live beside LLM turns
-- how to make layered context ownership explicit enough that future session-backed workflow execution stays coherent
+- deterministic workflow steps are shipped, but not yet generalized across more workflow types
+- transcript state, broader working state, and LLM-visible context are clearer than before, but not
+	yet fully minimal in the implementation surface
+- round/request diagnostic structures exist, but there is still room to make non-turn workflow
+	nodes cleaner and more uniform
 
 ### Current session classification limits
 
-Session metadata around the runtime tree is already implemented:
+Session type and parent link are metadata around the runtime tree, not a replacement for it.
 
-- `session_type`
-- `parent_ref`
-
-The important architectural rule is:
-
-> the setup/turn/round/part runtime tree stays the same; session type and parent link are metadata around the session, not a replacement for the runtime model
-
-Implemented parent rules today:
-
-- `primary` sessions may optionally belong to a `benchmark`
-- `session_analysis` and `session_compaction` sessions must belong to a parent `session`
-- `benchmark_analysis` sessions must belong to a `benchmark`
-
-What remains intentionally limited in the current release:
-
-- parent kinds are still limited to `session` and `benchmark`
-- there is no turn-level or broader container-parent model yet
-- benchmark support is still limited to the minimal container shape
-
-Tracked tasks:
-
-- `backlog/candidates/session-analysis-agent.md`
-- `backlog/candidates/session-compaction-agent.md`
-- `backlog/candidates/session-batch-runs.md`
-- `backlog/candidates/benchmark-automation.md`
+For the implemented session-classification and parent rules, use `DATA-MODEL.md`.
 
 ## Transcript vs context
 
@@ -698,19 +545,17 @@ The goal is not to force fake exactness where the upstream API does not provide 
 
 ## Frontend role
 
-The frontend is a thin client over backend state. Its responsibilities:
+The frontend is a thin client over backend state. Its responsibilities are to:
 
 - render backend trace snapshots
 - initiate actions such as session creation and turn submission
 - support trace export/import workflows
 
-Future UI work around session types and parent links should preserve the same principle:
+UI work around session types and parent links should preserve the same principle:
 
-- normal session views stay focused on normal primary sessions by default
-- internal workflow sessions remain inspectable, but should appear from their parent object or in dedicated debug/development views
-
-That behavior is future work, not part of the currently shipped UI model.
-- expose inspect workflows over backend-owned IDs and lookup data
+- normal primary-session workflows stay simple
+- internal workflow sessions remain inspectable through the same backend-owned IDs and lookup model
+- session-type-specific UI should not create a parallel runtime model in the frontend
 
 The frontend must not maintain its own parallel runtime model or re-implement runtime logic.
 

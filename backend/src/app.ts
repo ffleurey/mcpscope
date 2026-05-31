@@ -89,6 +89,7 @@ import {
 } from './operations/index.js'
 import { executeCreateExplicit } from './operations/createExplicit.js'
 import { executeAnalysisLaunch } from './operations/launchAnalysis.js'
+import { executeAnalysisWorkflow } from './operations/executeAnalysis.js'
 
 interface RuntimeDependencies {
   lmStudioGateway: LmStudioGateway
@@ -375,8 +376,8 @@ export async function buildBackendApp(
   })
 
   // ─── Launch analysis session ────────────────────────────────────────────────
-  // Creates a session_analysis child session bound to mcpscope's own restricted
-  // MCP endpoint, ready for the frontend to initialize and run the first turn.
+  // Runs the full backend-owned analysis v2 workflow for a target session and turn.
+  // Returns the completed (or errored) analysis child session when the workflow finishes.
   app.post('/api/sessions/:sessionId/analyze', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     try {
@@ -384,10 +385,43 @@ export async function buildBackendApp(
       reply.code(201)
       return {
         session: result.session,
-        analysis_prompt: result.analysis_prompt,
       }
     } catch (err) {
       return handleOperationError(err, reply)
+    }
+  })
+
+  // ─── Execute analysis session (SSE streaming) ─────────────────────────────
+  // Starts or resumes the backend-owned analysis workflow for a session_analysis
+  // session. Streams progress events (turn tokens + deterministic step events)
+  // back as server-sent events in the same format as regular turns.
+  app.post('/api/sessions/:sessionId/execute', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const { single_step } = z.object({ single_step: z.string().optional() }).parse(request.query)
+    const singleStep = single_step === 'true'
+
+    reply.hijack()
+    reply.raw.statusCode = 200
+    reply.raw.setHeader('content-type', 'text/event-stream; charset=utf-8')
+    reply.raw.setHeader('cache-control', 'no-cache, no-transform')
+    reply.raw.setHeader('connection', 'keep-alive')
+
+    const emitEvent = (event: { type: string; [key: string]: unknown }) => {
+      reply.raw.write(`event: ${event.type}\n`)
+      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
+    }
+
+    try {
+      await executeAnalysisWorkflow(opCtx, sessionId, emitEvent, { singleStep })
+    } catch (error) {
+      app.log.error({ sessionId, err: error instanceof Error ? error.message : String(error) }, 'Analysis execution failed')
+      emitEvent({
+        type: 'analysis-failed',
+        errorType: 'internal',
+        message: error instanceof Error ? error.message : 'Unknown execution failure',
+      })
+    } finally {
+      reply.raw.end()
     }
   })
 

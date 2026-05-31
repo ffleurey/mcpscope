@@ -7,10 +7,12 @@ import {
   launchAnalysis as launchBackendAnalysis,
   listSessions,
   preflightSession,
+  streamExecuteAnalysis as streamBackendExecuteAnalysis,
   streamPreludeInit,
   streamTurn as streamBackendTurn,
 } from './api/backendClient'
 import type {
+  AnalysisStreamEvent,
   PreludeStreamEvent,
   SessionRecord,
   SessionSummary,
@@ -48,6 +50,8 @@ export const isSendingTurn = writable(false)
 export const isStartingSession = writable(false)
 export const isImportingTrace = writable(false)
 export const isLaunchingAnalysis = writable(false)
+export const isExecutingAnalysis = writable(false)
+export const isSteppingAnalysis = writable(false)
 export const activeTurnStream = writable<TurnStreamingState | null>(null)
 
 export const activeSession = derived(
@@ -411,47 +415,165 @@ function applyTurnStreamEvent(
  */
 export async function launchAnalysis(input: {
   targetSessionId: string
+  targetTurnId: string
+  analysisGoal: string
   analysisProfileId?: string
-  analysisPrompt: string
 }): Promise<void> {
   clearSessionError()
   isLaunchingAnalysis.set(true)
   try {
-    // 1. Create the child session (backend binds it to the restricted analysis MCP endpoint)
-    const { session, analysis_prompt } = await launchBackendAnalysis(
+    // The backend now owns the full analysis workflow: it creates the child session,
+    // runs every step, and returns the completed session.
+    const { session } = await launchBackendAnalysis(
       input.targetSessionId,
       {
+        target_turn_id: input.targetTurnId,
+        analysis_goal: input.analysisGoal,
         analysis_profile_id: input.analysisProfileId,
-        analysis_prompt: input.analysisPrompt,
       },
     )
 
-    // 2. Navigate to the new session immediately (shows it in tree and switches to chat view)
+    // Add the completed session to the session list and navigate to it
     const summary = toSessionSummary(session)
     chatSessions.update((sessions) => {
       const filtered = sessions.filter((s) => s.id !== summary.id)
       return [...filtered, summary]
     })
     activeChatId.set(session.id)
-    activeTrace.set(createEmptyTrace(summary))
 
-    // 3. Stream the prelude initialization
-    await streamPreludeInit(session.id, (event) => applyPreludeStreamEvent(event))
-
-    // 4. Auto-send the analysis prompt as the first turn
-    const sessionSummary = get(chatSessions).find((s) => s.id === session.id) ?? summary
-    activeTurnStream.set(createTurnStreamingState(session.id, analysis_prompt))
-
-    await streamBackendTurn(session.id, analysis_prompt, async (event) => {
-      applyTurnStreamEvent(sessionSummary, analysis_prompt, event)
-    })
-
-    // 5. Refresh the full session list so the tree is accurate
+    // Refresh to load the full session trace
     await refreshSessions()
   } catch (error) {
     setSessionError(toAppError(error))
   } finally {
     isLaunchingAnalysis.set(false)
+  }
+}
+
+/**
+ * Execute (or resume) the analysis workflow for the active analysis session.
+ * Streams progress events back: LLM turn tokens (same as regular sessions)
+ * and deterministic analysis step events.
+ */
+export async function executeAnalysis(): Promise<void> {
+  const sessionId = get(activeChatId)
+  if (!sessionId) {
+    setSessionError(new AppError('No active analysis session', 'internal', 0))
+    return
+  }
+
+  clearSessionError()
+  isExecutingAnalysis.set(true)
+  activeTurnStream.set(null)
+
+  const sessionSummary = get(activeSession)
+
+  try {
+    await streamBackendExecuteAnalysis(sessionId, async (event: AnalysisStreamEvent) => {
+      applyAnalysisStreamEvent(sessionSummary, event)
+    })
+
+    await refreshSessions()
+  } catch (error) {
+    setSessionError(toAppError(error))
+    await refreshSessions().catch(() => undefined)
+    await refreshActiveTrace().catch(() => undefined)
+  } finally {
     activeTurnStream.set(null)
+    isExecutingAnalysis.set(false)
+  }
+}
+
+/**
+ * Advance the analysis workflow by exactly one step, then stop.
+ * Used by the Step button for step-by-step debugging.
+ */
+export async function executeAnalysisStep(): Promise<void> {
+  const sessionId = get(activeChatId)
+  if (!sessionId) {
+    setSessionError(new AppError('No active analysis session', 'internal', 0))
+    return
+  }
+
+  clearSessionError()
+  isSteppingAnalysis.set(true)
+  activeTurnStream.set(null)
+
+  const sessionSummary = get(activeSession)
+
+  try {
+    await streamBackendExecuteAnalysis(sessionId, async (event: AnalysisStreamEvent) => {
+      applyAnalysisStreamEvent(sessionSummary, event)
+    }, { singleStep: true })
+
+    await refreshSessions()
+  } catch (error) {
+    setSessionError(toAppError(error))
+    await refreshSessions().catch(() => undefined)
+    await refreshActiveTrace().catch(() => undefined)
+  } finally {
+    activeTurnStream.set(null)
+    isSteppingAnalysis.set(false)
+  }
+}
+
+function applyAnalysisStreamEvent(
+  session: SessionSummary | null,
+  event: AnalysisStreamEvent,
+): void {
+  // Route turn-stream events to the existing handler
+  if (
+    event.type === 'turn-started'
+    || event.type === 'round-started'
+    || event.type === 'part-delta'
+    || event.type === 'part-committed'
+    || event.type === 'round-committed'
+    || event.type === 'turn-committed'
+    || event.type === 'turn-failed'
+  ) {
+    if (session) {
+      applyTurnStreamEvent(session, '', event as TurnStreamEvent)
+    }
+    return
+  }
+
+  if (event.type === 'analysis-step-started' || event.type === 'analysis-step-completed') {
+    // Upsert the step record into the active trace
+    activeTrace.update((trace) => {
+      if (!trace) return trace
+      const existing = trace.steps.findIndex((s) => s.id === event.step.id)
+      const steps = existing >= 0
+        ? trace.steps.map((s, i) => (i === existing ? event.step : s))
+        : [...trace.steps, event.step]
+      return { ...trace, steps }
+    })
+    return
+  }
+
+  if (event.type === 'analysis-phase-changed') {
+    // Update the cursor step state in the trace
+    activeTrace.update((trace) => {
+      if (!trace) return trace
+      const steps = trace.steps.map((s) => {
+        if (s.stepTypeKey === 'analysis_v2_cursor') {
+          return { ...s, state: { ...(s.state as Record<string, unknown>), phase: event.phase } }
+        }
+        return s
+      })
+      return { ...trace, steps }
+    })
+    return
+  }
+
+  if (event.type === 'analysis-complete') {
+    activeTurnStream.set(null)
+    activeTrace.set(event.trace)
+    upsertSessionSummary(event.trace.session)
+    return
+  }
+
+  if (event.type === 'analysis-failed') {
+    activeTurnStream.set(null)
+    setSessionError(new AppError(event.message, 'internal', 0))
   }
 }

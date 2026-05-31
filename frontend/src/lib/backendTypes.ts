@@ -340,6 +340,32 @@ export const preludeStreamEventSchema = z.discriminatedUnion('type', [
   }),
 ])
 
+export const analysisStreamEventSchema = z.discriminatedUnion('type', [
+  ...turnStreamEventSchema.options,
+  z.object({
+    type: z.literal('analysis-step-started'),
+    step: stepRecordSchema,
+  }),
+  z.object({
+    type: z.literal('analysis-step-completed'),
+    step: stepRecordSchema,
+  }),
+  z.object({
+    type: z.literal('analysis-phase-changed'),
+    phase: z.string(),
+  }),
+  z.object({
+    type: z.literal('analysis-complete'),
+    trace: sessionTraceBundleSchema,
+  }),
+  z.object({
+    type: z.literal('analysis-failed'),
+    message: z.string(),
+  }),
+])
+
+export type AnalysisStreamEvent = z.infer<typeof analysisStreamEventSchema>
+
 export const listSessionsResponseSchema = z.object({
   api_version: z.literal(1),
   sessions: z.array(sessionSummarySchema),
@@ -420,7 +446,6 @@ export const analysisDefaultsResponseSchema = z.object({
 
 export const launchAnalysisResponseSchema = z.object({
   session: sessionRecordSchema,
-  analysis_prompt: z.string(),
 })
 
 export type SessionCreationDefaults = z.infer<typeof sessionCreationDefaultsSchema>

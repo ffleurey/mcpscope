@@ -102,11 +102,23 @@ Inside Docker:
 http://localhost:3030/mcp
 ```
 
-## Future analysis-specific MCP work
+## Internal analysis MCP endpoint
 
-`MCP.md` documents the **currently shipped** MCP interface only.
+mcpscope also exposes an internal restricted MCP endpoint for analysis sessions:
 
-Future analysis-specific prompt guidance and the restricted analysis MCP tool subset are tracked with the session-analysis backlog increments:
+```
+http://localhost:3030/mcp/analysis
+```
 
-- `backlog/candidates/session-analysis-agent.md`
-- `backlog/candidates/session-analysis-backend-owned-launch.md`
+This endpoint is backend-owned and used by `session_analysis` sessions.
+
+Its tool surface is intentionally restricted to:
+
+- `mcpscope_inspect`
+- `mcpscope_status`
+
+It is not the general public MCP surface for normal agent use. Its purpose is to let the analysis
+workflow inspect persisted mcpscope evidence without exposing broader session-management tools.
+
+See `SESSION-ANALYSIS.md` for how this restricted endpoint is used in the shipped analysis
+workflow.

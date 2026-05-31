@@ -26,37 +26,20 @@ Completed work has already established the main architectural constraints for fu
 - an explicit backend execution loop through `Session.execute()` / `advance()` / `canContinue()`
 - generic persistence for containers, sessions, and steps, with `Turn` retaining infrastructure-specific subtype persistence
 - a first end-to-end analysis-session MVP proving mcpscope can inspect its own sessions through a restricted internal MCP workflow
+- a shipped session-analysis workflow in which deterministic inspect turns and bounded analysis turns remain visible in the normal session model
 
 Future work should build on those constraints rather than reopening them casually.
 
 ## Current Planning Posture
 
-Planning is active again with one explicit specification task:
+There is no active near-term specification task at the moment.
 
-- `backlog/specification/session-analysis-agent-v2.md`
+The backlog is intentionally parked again until the next direction is chosen explicitly.
 
-The backlog should still stay selective.
+The shipped session-analysis workflow should now be treated as established project behavior, not as
+an open specification exercise.
 
-All other backlog items remain parked candidate ideas unless they are deliberately promoted later.
-
-Until another direction is explicitly chosen:
-
-- `session-analysis-agent-v2.md` is the only active specification task
-- the remaining backlog inventory should be treated as background, not as parallel active priorities
-- no candidate file should be read as the current roadmap by itself
-
-## Current Direction
-
-The current direction is to replace the analysis MVP's one-shot prompt flow with a more trustworthy session-backed hybrid workflow.
-
-That means:
-
-- deterministic steps should control workflow shape and context mutation
-- bounded LLM turns should handle only narrow judgment tasks
-- structured JSON artifacts should hold the working state of the analysis
-- backend-owned orchestration should replace the current split launch flow
-
-The immediate planning focus is to finish and then split the standalone specification for that new analysis-agent version.
+Use `SESSION-ANALYSIS.md` for the current contract before reading historical backlog notes.
 
 ## Longer-Term Themes
 

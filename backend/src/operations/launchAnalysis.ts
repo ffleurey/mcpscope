@@ -1,13 +1,12 @@
 /**
  * launchAnalysis — backend-owned operation for POST /api/sessions/:sessionId/analyze.
  *
- * Creates a session_analysis child session bound to mcpscope's own restricted
- * analysis MCP endpoint. The caller (frontend or CLI) is responsible for
- * running the prelude init and sending the first analysis turn through the
- * existing streaming infrastructure.
+ * v2: Creates a session_analysis child session and runs the full analysis
+ * workflow synchronously on the backend. Returns the completed analysis session
+ * once the workflow finishes (or errors).
  *
- * This operation is NOT part of the CLI/MCP catalog. It is a backend-owned
- * execution function consumed only by the /api/sessions/:sessionId/analyze route.
+ * Supersedes the v1 split-ownership model where the frontend drove prelude
+ * init and the first turn.
  */
 import { z } from 'zod'
 import { OperationError } from './errors.js'
@@ -15,6 +14,7 @@ import {
   findActiveSession,
   getAnalysisDefaults,
   getSessionRecord,
+  getTurnRecord,
   listAnalysisProfiles,
   listLmConnections,
   listModelConfigs,
@@ -27,14 +27,18 @@ import {
 } from '../runtime/modelTurns.js'
 import type { McpProfileSnapshot, ModelProfileSnapshot, SessionRecord } from '../domain/model.js'
 import type { OperationContext } from './context.js'
+import { AnalysisSession } from '../analysis/analysisSession.js'
+import { runSessionInitialization } from '../runtime/sessionInit.js'
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
 
 export const launchAnalysisInputSchema = z.object({
+  /** The turn in the target session at which analysis should stop (inclusive). */
+  target_turn_id: z.string().min(1, 'target_turn_id must not be empty'),
+  /** Freeform description of what the analysis should evaluate. */
+  analysis_goal: z.string().min(1, 'analysis_goal must not be empty'),
   /** Analysis profile to use. If omitted the backend default is used. */
   analysis_profile_id: z.string().optional(),
-  /** Freeform evaluation instructions and expectations for this session. */
-  analysis_prompt: z.string().min(1, 'Analysis prompt must not be empty'),
 })
 
 export type LaunchAnalysisInput = z.infer<typeof launchAnalysisInputSchema>
@@ -42,10 +46,8 @@ export type LaunchAnalysisInput = z.infer<typeof launchAnalysisInputSchema>
 // ─── Result ───────────────────────────────────────────────────────────────────
 
 export interface LaunchAnalysisResult {
-  /** The created analysis child session. */
+  /** The completed (or errored) analysis child session. */
   session: SessionRecord
-  /** The analysis prompt the frontend should auto-send as the first turn. */
-  analysis_prompt: string
 }
 
 // ─── Execution ────────────────────────────────────────────────────────────────
@@ -58,16 +60,11 @@ export async function executeAnalysisLaunch(
   const { db } = ctx
   const input = launchAnalysisInputSchema.parse(rawInput)
 
-  if (!ctx.analysisMcpUrl) {
-    throw new OperationError(
-      'Analysis MCP endpoint is not configured on this backend.',
-      'analysis_mcp_not_configured',
-    )
-  }
-
   type TxResult =
     | { kind: 'target_not_found' }
     | { kind: 'target_not_eligible'; reason: string }
+    | { kind: 'target_turn_not_found' }
+    | { kind: 'target_turn_not_complete' }
     | { kind: 'profile_not_found'; profileId: string }
     | { kind: 'no_default_profile' }
     | { kind: 'model_config_not_found'; modelConfigId: string }
@@ -76,7 +73,7 @@ export async function executeAnalysisLaunch(
     | { kind: 'id_input_error'; error: SessionIdInputError }
     | { kind: 'id_conflict_error'; error: SessionIdConflictError }
     | { kind: 'id_generation_error'; error: SessionIdGenerationError }
-    | { kind: 'created'; session: SessionRecord; modelName: string }
+    | { kind: 'created'; session: SessionRecord }
 
   const analysisProfileId = input.analysis_profile_id
 
@@ -85,13 +82,17 @@ export async function executeAnalysisLaunch(
     const target = getSessionRecord(db.connection, targetSessionId)
     if (!target) return { kind: 'target_not_found' }
 
-    // Only sessions whose init has completed are currently eligible.
     if (target.initStatus !== 'ready' && target.initStatus !== 'error') {
       return {
         kind: 'target_not_eligible',
         reason: `Target session is not yet initialized (initStatus = '${target.initStatus}'). Wait for initialization to complete before running analysis.`,
       }
     }
+
+    // Validate target turn
+    const targetTurn = getTurnRecord(db.connection, input.target_turn_id)
+    if (!targetTurn) return { kind: 'target_turn_not_found' }
+    if (targetTurn.status !== 'complete') return { kind: 'target_turn_not_complete' }
 
     // Resolve analysis profile
     const profiles = listAnalysisProfiles(db.connection)
@@ -110,7 +111,7 @@ export async function executeAnalysisLaunch(
       return { kind: 'profile_not_found', profileId: resolvedProfileId }
     }
 
-    // Resolve model config and LM connection for the analysis profile
+    // Resolve model config and LM connection
     const modelConfigs = listModelConfigs(db.connection)
     const modelConfig = modelConfigs.find(c => c.id === profile.modelConfigId)
     if (!modelConfig) {
@@ -127,7 +128,7 @@ export async function executeAnalysisLaunch(
     const active = findActiveSession(db.connection)
     if (active) return { kind: 'another_session_active', active }
 
-    // Build model profile snapshot from the analysis profile settings
+    // Build model profile snapshot
     const modelProfileSnapshot: ModelProfileSnapshot = {
       id: modelConfig.id,
       name: modelConfig.name,
@@ -135,7 +136,6 @@ export async function executeAnalysisLaunch(
       apiKey: lmConnection.apiKey ?? null,
       modelKey: modelConfig.modelKey,
       modelDisplayName: modelConfig.modelDisplayName,
-      // Use the analysis profile's system prompt, not the model config's default
       systemPrompt: profile.systemPrompt,
       temperature: profile.temperature,
       reasoning: profile.reasoning ?? null,
@@ -143,34 +143,52 @@ export async function executeAnalysisLaunch(
       updatedAt: modelConfig.updatedAt,
     }
 
-    // Build MCP snapshot pointing to mcpscope's own restricted analysis endpoint
-    const now = Date.now()
-    const mcpProfileSnapshot: McpProfileSnapshot = {
-      id: `mcpscope-analysis`,
-      name: 'mcpscope (analysis)',
-      url: ctx.analysisMcpUrl!,
-      transport: 'streamable-http',
-      authType: null,
-      authValue: null,
-      createdAt: now,
-      updatedAt: now,
-    }
-
-    // Title: "Analysis: <profile name>"
     const title = `Analysis: ${profile.name}`
 
     try {
+      // Build a synthetic MCP profile snapshot pointing to the restricted analysis
+      // endpoint (/mcp/analysis), which exposes mcpscope_inspect and mcpscope_status.
+      // The analysis LLM can call these tools during assessment turns if it needs detail,
+      // and the bootstrap step calls inspect deterministically to load the trace.
+      const ts = Date.now()
+      const analysisMcpSnapshot: McpProfileSnapshot | null = ctx.analysisMcpUrl
+        ? {
+            id: 'analysis-mcp-built-in',
+            name: 'mcpscope-analysis',
+            url: ctx.analysisMcpUrl,
+            transport: 'streamable-http',
+            authType: null,
+            authValue: null,
+            createdAt: ts,
+            updatedAt: ts,
+          }
+        : null
+
       const session = createSession(db, {
         title,
         modelProfileSnapshot,
-        mcpProfileSnapshot,
+        mcpProfileSnapshot: analysisMcpSnapshot,
         compactionStrategy: 'strip-reasoning',
         sessionType: 'session_analysis',
         parentKind: 'session',
         parentId: targetSessionId,
       })
 
-      return { kind: 'created', session, modelName: modelConfig.name }
+      // Pre-create the cursor step so the execute endpoint can always use rehydrateFromDb.
+      // This persists targetTurnId and analysisGoal into the cursor step params.
+      const analysisInstance = new AnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, {
+        analysisSessionId: session.id,
+        targetSessionId,
+        targetTurnId: input.target_turn_id,
+        analysisGoal: input.analysis_goal,
+      })
+      analysisInstance.initializeCursorStep()
+
+      // Leave initStatus as 'pending' — runSessionInitialization (called below, outside
+      // the transaction) will initialize the MCP context (writing mcp-instructions +
+      // tool-definitions for the analysis tools) and probe token counts, then set
+      // initStatus = 'ready'.
+      return { kind: 'created', session }
     } catch (error) {
       if (error instanceof SessionIdInputError) return { kind: 'id_input_error', error }
       if (error instanceof SessionIdConflictError) return { kind: 'id_conflict_error', error }
@@ -184,6 +202,16 @@ export async function executeAnalysisLaunch(
       throw new OperationError('Target session not found.', 'not_found')
     case 'target_not_eligible':
       throw new OperationError(result.reason, 'target_session_not_eligible')
+    case 'target_turn_not_found':
+      throw new OperationError(
+        `Target turn "${input.target_turn_id}" not found.`,
+        'target_turn_not_found',
+      )
+    case 'target_turn_not_complete':
+      throw new OperationError(
+        `Target turn "${input.target_turn_id}" is not yet complete.`,
+        'target_turn_not_complete',
+      )
     case 'no_default_profile':
       throw new OperationError(
         'No analysis profile supplied and no default analysis profile is configured. '
@@ -217,7 +245,19 @@ export async function executeAnalysisLaunch(
       throw new OperationError(result.error.message, 'duplicate_session_id')
     case 'id_generation_error':
       throw new OperationError(result.error.message, 'session_id_generation_failed')
-    case 'created':
-      return { session: result.session, analysis_prompt: input.analysis_prompt }
+    case 'created': {
+      const { session } = result
+      // Full session initialization: initializes the analysis MCP context
+      // (writes mcp-instructions + tool-definitions for mcpscope_inspect and
+      // mcpscope_status), probes token counts, and sets initStatus = 'ready'.
+      await runSessionInitialization(
+        db,
+        ctx.lmStudioGateway,
+        ctx.mcpGateway,
+        session.id,
+        () => { /* no streaming during launch */ },
+      )
+      return { session }
+    }
   }
 }

@@ -74,6 +74,22 @@ Live runtime integration now saves the exported trace bundle to `backend-data/te
 3. Add a local replay test that feeds that trace bundle to the replay harness.
 4. Add a separate pure or focused runtime test only if a smaller direct assertion is clearer.
 
+## Analysis workflow checks
+
+The recovered `session_analysis` workflow has one focused backend regression that should stay
+green when changing analysis evidence loading or context mutation:
+
+```bash
+npx vitest run backend/src/app.test.ts -t "v2 full flow with tool calls: produces assessment, turn_summary, and final_report artifacts via deterministic inspect turns" --reporter=dot
+```
+
+Use that test before widening to a broader suite when the change is specifically about:
+
+- deterministic inspect evidence loading
+- packet-local context mutation
+- analysis artifacts and summary generation
+- reasoning slices around analyzed tool calls
+
 ## What we keep
 
 - pure logic tests

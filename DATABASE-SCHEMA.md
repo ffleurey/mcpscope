@@ -274,7 +274,7 @@ The canonical runtime path is:
 Current deliberate limitations:
 
 - runtime table names still carry the `v2_` prefix even though they are the canonical shipped path
-- deterministic non-LLM steps do not yet have additional subtype tables or broader workflow semantics
+- deterministic workflow steps currently reuse the shared `v2_steps` model; the shipped analysis flow does not require separate subtype tables
 - parent/container relationships are still intentionally limited by the current session classification rules
 - benchmark support is still limited to the minimal container model
 

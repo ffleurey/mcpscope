@@ -1,4 +1,4 @@
-import type { PartRecord, RoundRecord, TurnRecord } from '../domain/model.js'
+import type { PartRecord, RoundRecord, StepRecord, TurnRecord } from '../domain/model.js'
 import type { SessionTraceBundle } from '../domain/trace.js'
 import type { LmStudioStreamDelta } from '../services/lmstudio/client.js'
 
@@ -37,3 +37,30 @@ export type TurnStreamEvent =
     }
 
 export type TurnStreamEventSink = (event: TurnStreamEvent) => void
+
+// ── Analysis execution stream events ────────────────────────────────────────
+
+export type AnalysisStreamEvent =
+  | TurnStreamEvent
+  | {
+      type: 'analysis-step-started'
+      step: StepRecord
+    }
+  | {
+      type: 'analysis-step-completed'
+      step: StepRecord
+    }
+  | {
+      type: 'analysis-phase-changed'
+      phase: string
+    }
+  | {
+      type: 'analysis-complete'
+      trace: SessionTraceBundle
+    }
+  | {
+      type: 'analysis-failed'
+      message: string
+    }
+
+export type AnalysisStreamEventSink = (event: AnalysisStreamEvent) => void

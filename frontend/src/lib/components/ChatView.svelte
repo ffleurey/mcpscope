@@ -6,7 +6,11 @@
     activeTraceLoading,
     activeTurnStream,
     chatSessions,
+    executeAnalysis,
+    executeAnalysisStep,
     exportActiveTrace,
+    isExecutingAnalysis,
+    isSteppingAnalysis,
     isSendingTurn,
     sendMessage,
   } from '../sessionStore'
@@ -14,6 +18,7 @@
   import type { StreamingRoundState } from '../traceStreaming'
   import { deriveContextSnapshotAtRound } from '../traceStreaming'
   import { patchSessionTitle } from '../api/backendClient'
+  import AnalysisStepBlock from './AnalysisStepBlock.svelte'
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import IdBadge from './IdBadge.svelte'
   import NewSessionPanel from './NewSessionPanel.svelte'
@@ -120,6 +125,16 @@
   )
 
   let isInitializing = $derived(session != null && session.init_status !== 'ready')
+  let isAnalysisSession = $derived(session?.session_type === 'session_analysis')
+  let analysisPhase = $derived.by(() => {
+    if (!isAnalysisSession) return null
+    const cursorStep = traceSteps.find((s) => s.stepTypeKey === 'analysis_v2_cursor')
+    return typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : 'bootstrap'
+  })
+  let analysisComplete = $derived(analysisPhase === 'complete')
+  let analysisSteps = $derived(
+    isAnalysisSession ? traceSteps.filter((s) => s.stepTypeKey !== 'compaction') : [],
+  )
   let hasTraceContent = $derived(
     isInitializing || sessionPreludeParts.length > 0 || sessionPreludeRawExchanges.length > 0 || traceTurns.length > 0,
   )
@@ -270,8 +285,28 @@
         <div class="empty-state"><span>Loading trace…</span></div>
       {:else if !hasTraceContent}
         <div class="empty-state">
-          <span class="empty-hint">Session ready — type your first message below</span>
+          {#if isAnalysisSession}
+            <span class="empty-hint">Analysis session ready — click Run Analysis to start</span>
+          {:else}
+            <span class="empty-hint">Session ready — type your first message below</span>
+          {/if}
         </div>
+      {:else if isAnalysisSession}
+        <!-- ── Analysis session: render all steps + turns by ordinal ───── -->
+        {#each analysisSteps as step (step.id)}
+          <AnalysisStepBlock {step} mode={viewMode} />
+        {/each}
+        {#each traceTurns as turn (turn.id)}
+          <SessionTurnBlock
+            {turn}
+            rounds={roundsByTurn.get(turn.id) ?? []}
+            parts={partsByTurn.get(turn.id) ?? []}
+            roundStreams={roundStreamsByTurn.get(turn.id) ?? []}
+            mode={viewMode}
+            {contextSnapshotsByRound}
+            loadedContextLength={session.loaded_context_length ?? null}
+          />
+        {/each}
       {:else}
         {#if sessionPreludeParts.length > 0 || isInitializing}
           <SessionPreludeBlock
@@ -310,35 +345,66 @@
 
     <!-- Composer: hidden while initializing -->
     {#if !isInitializing}
-      <div class="composer">
-        <div class="composer-bubble" class:is-disabled={$isSendingTurn || isExhausted}>
-          <textarea
-            bind:this={textareaEl}
-            bind:value={composerText}
-            placeholder={
-              isExhausted
-                ? 'Context window full — start a new session'
-                : $isSendingTurn
-                ? 'Waiting for response…'
-                : 'Message… (Ctrl+Enter to send)'
-            }
-            rows="2"
-            disabled={$isSendingTurn || isExhausted}
-            oninput={resizeTextarea}
-            onkeydown={handleKeydown}
-          ></textarea>
-        </div>
-        <div class="composer-footer">
-          <div class="composer-config">
-            <span class="config-label">
-              Model: {displayModelName || '—'}
-              {#if displayMcpName} · MCP: {displayMcpName}{:else} · MCP: none{/if}
-              {#if displayCompaction && displayCompaction !== 'none'} · Compaction: {displayCompaction}{:else} · Compaction: none{/if}
-            </span>
+      {#if isAnalysisSession}
+        <!-- ── Analysis control bar ──────────────────────────────────── -->
+        <div class="analysis-bar">
+          <div class="analysis-bar-info">
+            <span class="analysis-bar-label">Analysis session</span>
+            {#if analysisPhase}
+              <span class="analysis-bar-phase">Phase: <strong>{analysisPhase}</strong></span>
+            {/if}
           </div>
-          <span class="composer-hint">v{$appVersion} · Ctrl+Enter to send</span>
+          {#if !analysisComplete}
+            <button
+              class="btn btn-primary"
+              disabled={$isExecutingAnalysis || $isSteppingAnalysis}
+              onclick={() => void executeAnalysis()}
+            >
+              {$isExecutingAnalysis ? '⏳ Running…' : '▶ Run Analysis'}
+            </button>
+            <button
+              class="btn btn-secondary"
+              disabled={$isExecutingAnalysis || $isSteppingAnalysis}
+              onclick={() => void executeAnalysisStep()}
+              title="Advance one workflow step"
+            >
+              {$isSteppingAnalysis ? '⏳ Stepping…' : '⏭ Step'}
+            </button>
+          {:else}
+            <span class="analysis-bar-done">✓ Analysis complete</span>
+          {/if}
         </div>
-      </div>
+      {:else}
+        <div class="composer">
+          <div class="composer-bubble" class:is-disabled={$isSendingTurn || isExhausted}>
+            <textarea
+              bind:this={textareaEl}
+              bind:value={composerText}
+              placeholder={
+                isExhausted
+                  ? 'Context window full — start a new session'
+                  : $isSendingTurn
+                  ? 'Waiting for response…'
+                  : 'Message… (Ctrl+Enter to send)'
+              }
+              rows="2"
+              disabled={$isSendingTurn || isExhausted}
+              oninput={resizeTextarea}
+              onkeydown={handleKeydown}
+            ></textarea>
+          </div>
+          <div class="composer-footer">
+            <div class="composer-config">
+              <span class="config-label">
+                Model: {displayModelName || '—'}
+                {#if displayMcpName} · MCP: {displayMcpName}{:else} · MCP: none{/if}
+                {#if displayCompaction && displayCompaction !== 'none'} · Compaction: {displayCompaction}{:else} · Compaction: none{/if}
+              </span>
+            </div>
+            <span class="composer-hint">v{$appVersion} · Ctrl+Enter to send</span>
+          </div>
+        </div>
+      {/if}
     {/if}
 
     <!-- Context bar at the bottom — shown when session is active -->
@@ -544,5 +610,40 @@
     color: var(--text-muted);
     opacity: 0.55;
     flex-shrink: 0;
+  }
+
+  /* ── Analysis control bar ──────────────────────────────────────────────── */
+  .analysis-bar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.6rem 1.25rem;
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  .analysis-bar-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .analysis-bar-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .analysis-bar-phase {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+
+  .analysis-bar-done {
+    font-size: 0.82rem;
+    color: var(--color-success, #4caf50);
+    font-weight: 600;
   }
 </style>

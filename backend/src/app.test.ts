@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import { buildBackendApp } from './app.js'
 import type { SessionTraceBundle } from './domain/trace.js'
-import { getSessionRecord, insertTurnRecord, updateSessionRecord } from './persistence/repository.js'
+import { getSessionRecord, insertTurnRecord, insertRoundRecord, insertPartRecord, updateSessionRecord } from './persistence/repository.js'
 import {
   capturedReasoningThreeBatchParts,
   capturedReasoningThreeBatchRounds,
@@ -3496,13 +3496,304 @@ describe('analysis launch', () => {
     return 'ap-1'
   }
 
+  // Helper to insert a complete turn into the target session so the v2 endpoint has a valid target_turn_id.
+  function createCompleteTurn(appInst: FastifyInstance, sessionId: string): string {
+    const ts = Date.now()
+    const turnId = `${sessionId}-T1`
+    insertTurnRecord(appInst.backendDb.connection, {
+      id: turnId,
+      sessionId,
+      sequenceNumber: 1,
+      status: 'complete',
+      outcome: 'model-response',
+      usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+      contextTokensAtTurnEnd: null,
+      contextTokensAfterCompaction: null,
+      compactionApplied: 'none',
+      compactionTokensRemoved: null,
+      createdAt: ts,
+      completedAt: ts,
+    })
+    return turnId
+  }
+
+  // A minimal mock LMStudio gateway that returns a valid final_analysis_report JSON.
+  // Used for analysis v2 tests with sessions that have 0 tool-call packets
+  // (only the final aggregation turn is called; assessment turns are skipped).
+  function makeAnalysisMockGateway() {
+    return {
+      async createChatCompletion() {
+        return {
+          id: 'cmpl-test',
+          object: 'chat.completion',
+          created: Date.now(),
+          model: 'test-model',
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: JSON.stringify({
+                  outcome: 'answered',
+                  outcome_rationale: 'The session answered the question.',
+                  primary_issue: null,
+                  primary_issue_rationale: null,
+                  path_efficiency: 'efficient',
+                  path_efficiency_rationale: 'No unnecessary tool calls.',
+                  findings: ['Session was efficient.'],
+                  improvement_suggestions: [],
+                  total_packets_assessed: 0,
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }
+      },
+      async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+        const messages = (body.messages as unknown[]) ?? []
+        const promptTokens = messages.length * 5
+        return {
+          promptTokens,
+          completion: {
+            id: 'probe-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+            choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+            usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+          },
+          rawExchange: {
+            requestUrl: 'https://example.com/v1/chat/completions',
+            requestMethod: 'POST',
+            requestHeadersJson: {},
+            requestBody: JSON.stringify(body),
+            responseStatus: 200,
+            responseHeadersJson: {},
+            responseBody: '{}',
+          },
+        }
+      },
+    }
+  }
+
+  /**
+   * Returns a mock McpGateway for analysis session tests.
+   * Supports initializeSession, listTools, and callTool for the analysis
+   * MCP endpoint (restricted to mcpscope_inspect and mcpscope_status).
+   * The callTool mock handles mcpscope_inspect by returning a minimal session stub.
+   */
+  function makeAnalysisMcpGateway(inspectIds: string[] = []) {
+    const rawExchange = {
+      requestUrl: 'http://localhost:3030/mcp/analysis',
+      requestMethod: 'POST',
+      requestBodyText: '{}',
+      responseStatus: 200,
+      responseBody: {},
+    }
+    return {
+      async initializeSession(_url: string) {
+        return { sessionId: 'mcp-session-analysis', instructions: undefined, rawExchange }
+      },
+      async listTools(_url: string, _sessionId: string | null) {
+        return {
+          tools: [
+            { name: 'mcpscope_inspect', description: 'Inspect session objects', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
+            { name: 'mcpscope_status', description: 'Get server status', inputSchema: { type: 'object', properties: {} } },
+          ],
+          rawResult: {},
+          rawExchange,
+        }
+      },
+      async callTool(_url: string, _sessionId: string | null, _name: string, args: Record<string, unknown>) {
+        if (typeof args['id'] === 'string') {
+          inspectIds.push(args['id'])
+        }
+        return {
+          content: JSON.stringify({ id: args['id'] ?? 'unknown', type: 'session', data: { status: 'complete' } }),
+          structuredContent: null,
+          isError: false,
+          rawResult: {},
+          rawExchange,
+        }
+      },
+    }
+  }
+
+  /**
+   * Insert a complete turn with one round, reasoning around a tool call,
+   * and a final answer. Returns the turn ID.
+   */
+  function createCompleteTurnWithToolCall(appInst: FastifyInstance, sessionId: string): string {
+    const ts = Date.now()
+    const turnId = `${sessionId}-T1`
+    const roundId = `${sessionId}-T1-R1`
+    const roundId2 = `${sessionId}-T1-R2`
+
+    insertTurnRecord(appInst.backendDb.connection, {
+      id: turnId,
+      sessionId,
+      sequenceNumber: 1,
+      status: 'complete',
+      outcome: 'model-response',
+      usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+      contextTokensAtTurnEnd: null,
+      contextTokensAfterCompaction: null,
+      compactionApplied: 'none',
+      compactionTokensRemoved: null,
+      createdAt: ts,
+      completedAt: ts,
+    })
+
+    insertRoundRecord(appInst.backendDb.connection, {
+      id: roundId,
+      turnId,
+      roundIndex: 1,
+      status: 'complete',
+      finishReason: 'stop',
+      usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+      requestPayloadJson: null,
+      responseTraceJson: null,
+      startedAt: ts,
+      completedAt: ts,
+    })
+
+    insertRoundRecord(appInst.backendDb.connection, {
+      id: roundId2,
+      turnId,
+      roundIndex: 2,
+      status: 'complete',
+      finishReason: 'stop',
+      usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+      requestPayloadJson: null,
+      responseTraceJson: null,
+      startedAt: ts,
+      completedAt: ts,
+    })
+
+    // user-message part
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P1`,
+      sessionId,
+      turnId,
+      roundId: null,
+      parentPartId: null,
+      ordinal: 1,
+      partType: 'user-message',
+      roleLabel: 'user',
+      payload: { text: 'What is the weather?', json: null, mimeType: 'text/plain', summary: null },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    // assistant-reasoning before tool call
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P2`,
+      sessionId,
+      turnId,
+      roundId,
+      parentPartId: null,
+      ordinal: 2,
+      partType: 'assistant-reasoning',
+      roleLabel: 'assistant',
+      payload: { text: 'I should check the weather tool for Paris.', json: null, mimeType: 'text/plain', summary: null },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    // tool-call part
+    const toolCallId = 'call-001'
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P3`,
+      sessionId,
+      turnId,
+      roundId,
+      parentPartId: null,
+      ordinal: 3,
+      partType: 'tool-call',
+      roleLabel: 'assistant',
+      payload: { text: null, json: { id: toolCallId, name: 'test_tool', arguments: { city: 'Paris' } }, mimeType: 'application/json', summary: 'test_tool({city: Paris})' },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    // tool-result part
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P4`,
+      sessionId,
+      turnId,
+      roundId,
+      parentPartId: null,
+      ordinal: 4,
+      partType: 'tool-result',
+      roleLabel: 'tool',
+      payload: { text: null, json: { tool_call_id: toolCallId, content: 'Sunny, 22°C' }, mimeType: 'application/json', summary: 'tool result' },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    // assistant-reasoning after tool result
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P5`,
+      sessionId,
+      turnId,
+      roundId: roundId2,
+      parentPartId: null,
+      ordinal: 5,
+      partType: 'assistant-reasoning',
+      roleLabel: 'assistant',
+      payload: { text: 'The tool result is clear enough to answer directly.', json: null, mimeType: 'text/plain', summary: null },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    // assistant-content (final answer)
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P6`,
+      sessionId,
+      turnId,
+      roundId: roundId2,
+      parentPartId: null,
+      ordinal: 6,
+      partType: 'assistant-content',
+      roleLabel: 'assistant',
+      payload: { text: 'The weather in Paris is sunny and 22°C.', json: null, mimeType: 'text/plain', summary: null },
+      display: { state: 'transcript', collapsedByDefault: false },
+      context: { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: 'unknown', confidence: 'unknown', note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    })
+
+    return turnId
+  }
+
   it('returns 404 when target session does not exist', async () => {
     const { app: appInst } = await setupBackendApp()
 
     const res = await appInst.inject({
       method: 'POST',
       url: '/api/sessions/NONE/analyze',
-      payload: { analysis_prompt: 'Evaluate this session.' },
+      payload: { target_turn_id: 'NONE-T1', analysis_goal: 'Evaluate this session.' },
     })
 
     expect(res.statusCode).toBe(404)
@@ -3512,11 +3803,12 @@ describe('analysis launch', () => {
   it('returns 422 when no analysis profile is configured and none is supplied', async () => {
     const { app: appInst } = await setupBackendApp()
     const targetId = await createReadySession(appInst)
+    const turnId = createCompleteTurn(appInst, targetId)
 
     const res = await appInst.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_prompt: 'Evaluate this session.' },
+      payload: { target_turn_id: turnId, analysis_goal: 'Evaluate this session.' },
     })
 
     expect(res.statusCode).toBe(422)
@@ -3538,22 +3830,28 @@ describe('analysis launch', () => {
     const res = await appInst.inject({
       method: 'POST',
       url: `/api/sessions/${notReadySessionId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', analysis_prompt: 'Evaluate.' },
+      payload: { analysis_profile_id: 'ap-1', target_turn_id: `${notReadySessionId}-T1`, analysis_goal: 'Evaluate.' },
     })
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.code).toBe('target_session_not_eligible')
   })
 
-  it('creates a session_analysis child session with correct parent link and internal MCP binding', async () => {
-    const { app: appInst } = await setupBackendApp()
-    const targetId = await createReadySession(appInst)
-    await createAnalysisProfile(appInst)
+  it('creates a session_analysis child session with correct parent link (v2 backend-owned workflow)', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const targetId = await createReadySession(app)
+    await createAnalysisProfile(app)
+    const turnId = createCompleteTurn(app, targetId)
 
-    const res = await appInst.inject({
+    const res = await app.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', analysis_prompt: 'Evaluate this session carefully.' },
+      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: 'Evaluate this session carefully.' },
     })
 
     expect(res.statusCode).toBe(201)
@@ -3564,41 +3862,46 @@ describe('analysis launch', () => {
     expect(body.session.parentKind).toBe('session')
     expect(body.session.parentId).toBe(targetId)
 
-    // Analysis prompt echoed back for frontend to auto-send
-    expect(body.analysis_prompt).toBe('Evaluate this session carefully.')
+    // v2: no analysis_prompt in response
+    expect(body.analysis_prompt).toBeUndefined()
 
     // Title derived from profile name
     expect(body.session.title).toBe('Analysis: Standard Analysis')
 
-    // MCP binding points to internal analysis endpoint (not an arbitrary external MCP profile)
+    // Analysis sessions now have a built-in MCP binding (analysis MCP endpoint)
     expect(body.session.mcpProfileSnapshot).not.toBeNull()
-    expect(body.session.mcpProfileSnapshot.url).toContain('/mcp/analysis')
-    expect(body.session.mcpProfileSnapshot.name).toContain('mcpscope')
+    expect(body.session.mcpProfileSnapshot.name).toBe('mcpscope-analysis')
 
     // Session is persisted and retrievable
-    const stored = getSessionRecord(appInst.backendDb.connection, body.session.id)
+    const stored = getSessionRecord(app.backendDb.connection, body.session.id)
     expect(stored).not.toBeNull()
     expect(stored?.sessionType).toBe('session_analysis')
     expect(stored?.parentId).toBe(targetId)
   })
 
   it('uses the default analysis profile when none is explicitly supplied', async () => {
-    const { app: appInst } = await setupBackendApp()
-    const targetId = await createReadySession(appInst)
-    await createAnalysisProfile(appInst)
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const targetId = await createReadySession(app)
+    await createAnalysisProfile(app)
+    const turnId = createCompleteTurn(app, targetId)
 
     // Set as default
-    await appInst.inject({
+    await app.inject({
       method: 'PUT',
       url: '/api/analysis-defaults',
       payload: { defaultAnalysisProfileId: 'ap-1' },
     })
 
     // Launch without specifying the profile
-    const res = await appInst.inject({
+    const res = await app.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_prompt: 'Check the session.' },
+      payload: { target_turn_id: turnId, analysis_goal: 'Check the session.' },
     })
 
     expect(res.statusCode).toBe(201)
@@ -3606,12 +3909,18 @@ describe('analysis launch', () => {
   })
 
   it('prefers an explicitly supplied profile over the default', async () => {
-    const { app: appInst } = await setupBackendApp()
-    const targetId = await createReadySession(appInst)
-    await createAnalysisProfile(appInst)
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const targetId = await createReadySession(app)
+    await createAnalysisProfile(app)
+    const turnId = createCompleteTurn(app, targetId)
 
     // Create a second profile
-    await appInst.inject({
+    await app.inject({
       method: 'PUT',
       url: '/api/analysis-profiles/ap-2',
       payload: {
@@ -3625,17 +3934,17 @@ describe('analysis launch', () => {
       },
     })
     // Set ap-1 as default
-    await appInst.inject({
+    await app.inject({
       method: 'PUT',
       url: '/api/analysis-defaults',
       payload: { defaultAnalysisProfileId: 'ap-1' },
     })
 
     // Explicitly request ap-2
-    const res = await appInst.inject({
+    const res = await app.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-2', analysis_prompt: 'Deep check.' },
+      payload: { analysis_profile_id: 'ap-2', target_turn_id: turnId, analysis_goal: 'Deep check.' },
     })
 
     expect(res.statusCode).toBe(201)
@@ -3645,53 +3954,61 @@ describe('analysis launch', () => {
   it('returns 422 when the supplied analysis profile id does not exist', async () => {
     const { app: appInst } = await setupBackendApp()
     const targetId = await createReadySession(appInst)
+    const turnId = createCompleteTurn(appInst, targetId)
 
     const res = await appInst.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'nonexistent', analysis_prompt: 'Eval.' },
+      payload: { analysis_profile_id: 'nonexistent', target_turn_id: turnId, analysis_goal: 'Eval.' },
     })
 
     expect(res.statusCode).toBe(422)
     expect(res.json().error.code).toBe('analysis_profile_not_found')
   })
 
-  it('rejects an empty analysis_prompt', async () => {
+  it('rejects an empty analysis_goal', async () => {
     const { app: appInst } = await setupBackendApp()
     const targetId = await createReadySession(appInst)
     await createAnalysisProfile(appInst)
+    const turnId = createCompleteTurn(appInst, targetId)
 
     const res = await appInst.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', analysis_prompt: '' },
+      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: '' },
     })
 
     expect(res.statusCode).toBe(400)
   })
 
   it('analysis child session appears in GET /api/sessions?include_children=true but not in the primary list', async () => {
-    const { app: appInst } = await setupBackendApp()
-    const targetId = await createReadySession(appInst)
-    await createAnalysisProfile(appInst)
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const targetId = await createReadySession(app)
+    await createAnalysisProfile(app)
+    const turnId = createCompleteTurn(app, targetId)
 
-    const launchRes = await appInst.inject({
+    const launchRes = await app.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', analysis_prompt: 'Check it.' },
+      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: 'Check it.' },
     })
     expect(launchRes.statusCode).toBe(201)
     const childId = launchRes.json().session.id as string
 
     // Primary-only list should NOT include the analysis child
-    const primaryList = await appInst.inject({ method: 'GET', url: '/api/sessions' })
+    const primaryList = await app!.inject({ method: 'GET', url: '/api/sessions' })
     expect(primaryList.statusCode).toBe(200)
     const primaryIds = primaryList.json().sessions.map((s: { id: string }) => s.id)
     expect(primaryIds).toContain(targetId)
     expect(primaryIds).not.toContain(childId)
 
     // include_children=true list SHOULD include both
-    const fullList = await appInst.inject({ method: 'GET', url: '/api/sessions?include_children=true' })
+    const fullList = await app!.inject({ method: 'GET', url: '/api/sessions?include_children=true' })
     expect(fullList.statusCode).toBe(200)
     const fullIds = fullList.json().sessions.map((s: { id: string }) => s.id)
     expect(fullIds).toContain(targetId)
@@ -3750,5 +4067,283 @@ describe('analysis launch', () => {
     }
     // If toolNames is empty the endpoint used a different response shape;
     // the structural test above (status code) is still a meaningful assertion.
+  })
+
+  it('returns 422 when target_turn_id does not exist', async () => {
+    const { app: appInst } = await setupBackendApp()
+    const targetId = await createReadySession(appInst)
+    await createAnalysisProfile(appInst)
+
+    const res = await appInst.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: { analysis_profile_id: 'ap-1', target_turn_id: 'NOTEXIST-T1', analysis_goal: 'Eval.' },
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.code).toBe('target_turn_not_found')
+  })
+
+  it('returns 422 when target_turn is not complete', async () => {
+    const { app: appInst } = await setupBackendApp()
+    const targetId = await createReadySession(appInst)
+    await createAnalysisProfile(appInst)
+
+    // Insert a turn in 'streaming' status (not complete)
+    const ts = Date.now()
+    const turnId = `${targetId}-T1`
+    insertTurnRecord(appInst.backendDb.connection, {
+      id: turnId,
+      sessionId: targetId,
+      sequenceNumber: 1,
+      status: 'streaming',
+      outcome: null,
+      usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+      contextTokensAtTurnEnd: null,
+      contextTokensAfterCompaction: null,
+      compactionApplied: 'none',
+      compactionTokensRemoved: null,
+      createdAt: ts,
+      completedAt: null,
+    })
+
+    const res = await appInst.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: 'Eval.' },
+    })
+
+    expect(res.statusCode).toBe(422)
+    expect(res.json().error.code).toBe('target_turn_not_complete')
+  })
+
+  it('v2 bootstrap creates analysis artifacts for a session with no tool calls', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const targetId = await createReadySession(app)
+    await createAnalysisProfile(app)
+    const turnId = createCompleteTurn(app, targetId)
+
+    // Step 1: launch (creates analysis session, pre-initializes cursor step)
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: 'Did the session do the right thing?' },
+    })
+
+    expect(res.statusCode).toBe(201)
+    const body = res.json()
+    expect(body.session.sessionType).toBe('session_analysis')
+    const childId = body.session.id as string
+
+    // Step 2: execute (runs the full analysis workflow via SSE endpoint)
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(execRes.statusCode).toBe(200)
+    expect(execRes.headers['content-type']).toContain('text/event-stream')
+
+    // Child session should have artifacts after execution
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ id: string; metadata_json: string }>
+
+    // At minimum: analysis_target, evidence_packet_index, coverage_map
+    expect(artifacts.length).toBeGreaterThanOrEqual(3)
+    const schemaKeys = artifacts.map(a => {
+      const meta = JSON.parse(a.metadata_json) as { schema_key: string }
+      return meta.schema_key
+    })
+    expect(schemaKeys).toContain('analysis.analysis_target.v1')
+    expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
+    expect(schemaKeys).toContain('analysis.coverage_map.v1')
+    // No tool-call packets means no tool_call_assessment artifacts
+    expect(schemaKeys.filter(k => k === 'analysis.tool_call_assessment.v1')).toHaveLength(0)
+    // Final report should be present since coverage_validation passes trivially (0 packets)
+    expect(schemaKeys).toContain('analysis.final_analysis_report.v1')
+  })
+
+  it('v2 full flow with tool calls: produces assessment, turn_summary, and final_report artifacts via deterministic inspect turns', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const inspectIds: string[] = []
+
+    // Build the gateway lazily — turnId is set after createCompleteTurnWithToolCall.
+    // We capture it via a shared mutable ref.
+    const turnRef = { id: '' }
+    let callCount = 0
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          let content: string
+          if (idx === 0) {
+            content = JSON.stringify({
+              packet_index: 0,
+              turn_id: turnRef.id,
+              round_id: `${turnRef.id}-R1`,
+              tool_name: 'test_tool',
+              expectation_match: 'match',
+              expectation_rationale: 'Tool was called correctly.',
+              most_direct_cause: null,
+              result_usage_quality: 'good',
+              result_usage_rationale: 'Result was used well.',
+              notable_observations: null,
+            })
+          } else if (idx === 1) {
+            content = JSON.stringify({
+              turn_id: turnRef.id,
+              total_tool_calls_assessed: 1,
+              turn_outcome: 'successful',
+              turn_outcome_rationale: 'The single tool call matched expectations.',
+              per_tool_findings: [{ packet_index: 0, tool_name: 'test_tool', expectation_match: 'match', brief_finding: 'OK.' }],
+              notable_observations: null,
+            })
+          } else {
+            content = JSON.stringify({
+              outcome: 'answered',
+              outcome_rationale: 'The session answered the question.',
+              primary_issue: null,
+              primary_issue_rationale: null,
+              path_efficiency: 'efficient',
+              path_efficiency_rationale: 'No unnecessary tool calls.',
+              findings: ['Session was efficient.'],
+              improvement_suggestions: [],
+              total_packets_assessed: 1,
+            })
+          }
+          return {
+            id: `cmpl-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(inspectIds),
+    })
+    const targetId = await createReadySession(app)
+    await createAnalysisProfile(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId  // wire the ref so the gateway can use it
+
+    // Launch analysis session
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: 'Evaluate this tool call.' },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    // Execute the full workflow
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(execRes.statusCode).toBe(200)
+
+    // Check artifacts produced
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ id: string; metadata_json: string }>
+    const schemaKeys = artifacts.map(a => {
+      const meta = JSON.parse(a.metadata_json) as { schema_key: string }
+      return meta.schema_key
+    })
+
+    // Core structural artifacts
+    expect(schemaKeys).toContain('analysis.analysis_target.v1')
+    expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
+    expect(schemaKeys).toContain('analysis.coverage_map.v1')
+
+    // Per-packet assessment
+    expect(schemaKeys.filter(k => k === 'analysis.tool_call_assessment.v1')).toHaveLength(1)
+
+    // Per-turn summary (new)
+    expect(schemaKeys).toContain('analysis.turn_summary.v1')
+
+    // Final aggregation report
+    expect(schemaKeys).toContain('analysis.final_analysis_report.v1')
+
+    // Evidence is loaded through deterministic inspect turns (user prompt + tool-call +
+    // tool-result parts committed as proper turns, not synthetic inject parts).
+    const deterministicTurns = app.backendDb.connection
+      .prepare(`SELECT v2_steps.id, v2_turns.outcome FROM v2_turns JOIN v2_steps ON v2_steps.id = v2_turns.step_id WHERE v2_steps.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call'`)
+      .all(childId) as Array<{ id: string; outcome: string }>
+    expect(deterministicTurns).toHaveLength(2)
+
+    expect(inspectIds).toEqual([
+      targetId,
+      `${targetId}.S`,
+      `${turnId}-P2`,
+      `${turnId}-P3`,
+      `${turnId}-P5`,
+    ])
+
+    const deterministicRounds = app.backendDb.connection
+      .prepare(`SELECT v2_turns.sequence_number AS turn_number, v2_rounds.round_index AS round_index FROM v2_rounds JOIN v2_turns ON v2_turns.step_id = v2_rounds.step_id JOIN v2_steps ON v2_steps.id = v2_turns.step_id WHERE v2_steps.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call' ORDER BY v2_turns.sequence_number, v2_rounds.round_index`)
+      .all(childId) as Array<{ turn_number: number; round_index: number }>
+    expect(deterministicRounds).toEqual([
+      { turn_number: 1, round_index: 0 },
+      { turn_number: 1, round_index: 1 },
+      { turn_number: 2, round_index: 0 },
+      { turn_number: 2, round_index: 1 },
+      { turn_number: 2, round_index: 2 },
+    ])
+
+    const deterministicParts = app.backendDb.connection
+      .prepare(`SELECT token_count FROM v2_parts WHERE session_id = ? AND step_id IN (SELECT step_id FROM v2_turns WHERE session_id = ? AND outcome = 'deterministic-tool-call')`)
+      .all(childId, childId) as Array<{ token_count: number | null }>
+    expect(deterministicParts.length).toBeGreaterThan(0)
+    expect(deterministicParts.every(part => part.token_count !== null)).toBe(true)
+
+    // The recovery should not leave a bootstrap root inspect of the full target session
+    // in context once packet-specific evidence loading is in place.
+    const rootInspectTurns = app.backendDb.connection
+      .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND part_type = 'user-message' AND payload_text LIKE ?`)
+      .all(childId, 'Inspect the target session to load its trace for analysis.%') as Array<{ id: string }>
+    expect(rootInspectTurns).toHaveLength(0)
+
+    // Packet-local deterministic evidence should be excluded after the corresponding
+    // assessment completes so it does not accumulate in active context.
+    const lingeringPacketInspectParts = app.backendDb.connection
+      .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND step_id = ? AND context_state = 'included'`)
+      .all(childId, deterministicTurns[1]?.id) as Array<{ id: string }>
+    expect(lingeringPacketInspectParts).toHaveLength(0)
+
+    // No synthetic evidence inject parts (old prompt-bundle pattern)
+    const injectParts = app.backendDb.connection
+      .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND payload_summary LIKE 'Evidence for packet%'`)
+      .all(childId) as Array<{ id: string }>
+    expect(injectParts).toHaveLength(0)
   })
 })

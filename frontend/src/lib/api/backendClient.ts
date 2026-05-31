@@ -29,6 +29,8 @@ import {
   type TurnStreamEvent,
   type AnalysisProfile,
   type AnalysisDefaults,
+  analysisStreamEventSchema,
+  type AnalysisStreamEvent,
 } from '../backendTypes'
 import { AppError } from '../errors'
 
@@ -509,11 +511,76 @@ export function putAnalysisDefaults(input: {
 
 export function launchAnalysis(
   targetSessionId: string,
-  input: { analysis_profile_id?: string; analysis_prompt: string },
+  input: { target_turn_id: string; analysis_goal: string; analysis_profile_id?: string },
 ) {
   return request(`/api/sessions/${targetSessionId}/analyze`, {
     method: 'POST',
     body: input,
     schema: launchAnalysisResponseSchema,
   })
+}
+
+export async function streamExecuteAnalysis(
+  analysisSessionId: string,
+  onEvent: (event: AnalysisStreamEvent) => void | Promise<void>,
+  options: { singleStep?: boolean } = {},
+): Promise<void> {
+  const url = options.singleStep
+    ? buildUrl(`/api/sessions/${analysisSessionId}/execute?single_step=true`)
+    : buildUrl(`/api/sessions/${analysisSessionId}/execute`)
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'text/event-stream',
+    },
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    const payload = text.length > 0 ? JSON.parse(text) : null
+    const message = (
+      payload
+      && typeof payload === 'object'
+      && 'error' in payload
+      && typeof payload.error === 'string'
+    )
+      ? payload.error
+      : `Backend request failed (${response.status})`
+    throw new Error(message)
+  }
+
+  if (!response.body) {
+    throw new Error('Streaming response body is missing')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+
+    let separatorIndex = buffer.search(/\r?\n\r?\n/)
+    while (separatorIndex >= 0) {
+      const block = buffer.slice(0, separatorIndex)
+      buffer = buffer.slice(separatorIndex + (buffer[separatorIndex] === '\r' ? 4 : 2))
+      const parsed = parseSseBlock(block)
+      if (parsed?.dataText) {
+        const event = analysisStreamEventSchema.parse(JSON.parse(parsed.dataText))
+        await onEvent(event)
+      }
+      separatorIndex = buffer.search(/\r?\n\r?\n/)
+    }
+
+    if (done) {
+      break
+    }
+  }
+
+  const trailing = parseSseBlock(buffer.trim())
+  if (trailing?.dataText) {
+    const event = analysisStreamEventSchema.parse(JSON.parse(trailing.dataText))
+    await onEvent(event)
+  }
 }

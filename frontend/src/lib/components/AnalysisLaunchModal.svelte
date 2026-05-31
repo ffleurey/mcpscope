@@ -1,8 +1,11 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import { analysisProfiles, analysisDefaults } from '../connectionStore'
   import { isLaunchingAnalysis, launchAnalysis, sessionError } from '../sessionStore'
   import { currentView } from '../navStore'
+  import { getSessionTrace } from '../api/backendClient'
   import DialogShell from './DialogShell.svelte'
+  import type { TurnRecord } from '../backendTypes'
 
   interface Props {
     targetSessionId: string
@@ -13,8 +16,26 @@
   let { targetSessionId, targetSessionTitle, onClose }: Props = $props()
 
   let selectedProfileId = $state('')
-  let analysisPrompt = $state('')
+  let analysisGoal = $state('')
+  let selectedTurnId = $state('')
+  let completedTurns = $state<TurnRecord[]>([])
+  let loadingTurns = $state(true)
   let hasInitialized = $state(false)
+
+  onMount(async () => {
+    try {
+      const trace = await getSessionTrace(targetSessionId)
+      completedTurns = trace.turns.filter(t => t.status === 'complete')
+      // Default to the last complete turn
+      if (completedTurns.length > 0) {
+        selectedTurnId = completedTurns[completedTurns.length - 1]!.id
+      }
+    } catch {
+      // ignore — user can type a turn ID manually
+    } finally {
+      loadingTurns = false
+    }
+  })
 
   $effect(() => {
     if (!hasInitialized) {
@@ -29,12 +50,13 @@
   })
 
   async function handleLaunch() {
-    if (!analysisPrompt.trim() || !selectedProfileId) return
+    if (!analysisGoal.trim() || !selectedProfileId || !selectedTurnId.trim()) return
 
     await launchAnalysis({
       targetSessionId,
+      targetTurnId: selectedTurnId.trim(),
+      analysisGoal: analysisGoal.trim(),
       analysisProfileId: selectedProfileId,
-      analysisPrompt: analysisPrompt.trim(),
     })
 
     if (!$sessionError) {
@@ -75,18 +97,48 @@
     </div>
 
     <div class="field">
-      <label class="field-label" for="analysis-prompt">Evaluation instructions</label>
+      <label class="field-label" for="analysis-turn-select">Analyze through turn</label>
+      <p class="field-hint">
+        Select the turn to analyze up to (inclusive). The analysis will cover all tool calls from the beginning of the session.
+      </p>
+      {#if loadingTurns}
+        <p class="field-hint">Loading turns…</p>
+      {:else if completedTurns.length === 0}
+        <input
+          id="analysis-turn-select"
+          class="field-select"
+          type="text"
+          placeholder="Turn ID (e.g. ABCD-T1)"
+          bind:value={selectedTurnId}
+          disabled={$isLaunchingAnalysis}
+        />
+      {:else}
+        <select
+          id="analysis-turn-select"
+          class="field-select"
+          bind:value={selectedTurnId}
+          disabled={$isLaunchingAnalysis}
+        >
+          {#each completedTurns as turn, i (turn.id)}
+            <option value={turn.id}>Turn {i + 1} — {turn.id}</option>
+          {/each}
+        </select>
+      {/if}
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="analysis-goal">Analysis goal</label>
       <p class="field-hint">
         Describe what you expected this session to do, which tools should have been used,
         any failure modes to watch for, or any other evaluation guidance.
       </p>
       <!-- svelte-ignore a11y_autofocus -->
       <textarea
-        id="analysis-prompt"
+        id="analysis-goal"
         class="prompt-textarea"
-        placeholder="e.g. The agent should have called get_weather before answering. It should not have hallucinated tool results. Evaluate whether it cited evidence from the trace."
-        rows={6}
-        bind:value={analysisPrompt}
+        placeholder="e.g. The agent should have called get_weather before answering. It should not have hallucinated tool results."
+        rows={5}
+        bind:value={analysisGoal}
         disabled={$isLaunchingAnalysis}
         onkeydown={handleKeydown}
         autofocus
@@ -104,9 +156,9 @@
       <button
         class="btn-primary"
         onclick={handleLaunch}
-        disabled={$isLaunchingAnalysis || !analysisPrompt.trim() || !selectedProfileId}
+        disabled={$isLaunchingAnalysis || !analysisGoal.trim() || !selectedProfileId || !selectedTurnId.trim()}
       >
-        {$isLaunchingAnalysis ? 'Launching…' : 'Launch analysis'}
+        {$isLaunchingAnalysis ? 'Running analysis…' : 'Launch analysis'}
       </button>
     </div>
   </div>

@@ -1,8 +1,9 @@
 # Session analysis evidence protocol
 
-The active standalone specification that incorporates the useful conclusions from this protocol work now lives in:
+The shipped workflow that absorbed the main conclusions from this protocol work is now documented in:
 
-- `backlog/specification/session-analysis-agent-v2.md`
+- `SESSION-ANALYSIS.md`
+- `backlog/completed/analysis-session-as-proper-session.md`
 
 This task is an experimentation and specification task.
 

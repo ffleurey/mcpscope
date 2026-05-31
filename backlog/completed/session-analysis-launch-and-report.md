@@ -1,5 +1,9 @@
 # Session analysis launch and report
 
+Historical note: this file captures the earlier MVP launch increment. The current shipped
+workflow and evidence model are documented in `SESSION-ANALYSIS.md` and the completed recovery
+record `backlog/completed/analysis-session-as-proper-session.md`.
+
 This increment delivers the first end-to-end analysis workflow.
 
 Status: completed in the current PR, with the remaining backend-owned launch orchestration and CLI/MCP trigger work deferred to `backlog/candidates/session-analysis-backend-owned-launch.md`.
