@@ -178,6 +178,10 @@ export function applyExternalStreamEvent(
   event: TurnStreamEvent | AnalysisStreamEvent,
 ): void {
   if (get(activeChatId) !== sessionId) return
+  // Skip when the frontend is already streaming this session via its own SSE
+  // call (sendTurn, executeAnalysis, executeAnalysisStep). Those paths handle
+  // the events themselves; we only drive activeTurnStream for external turns.
+  if (get(isSendingTurn) || get(isExecutingAnalysis) || get(isSteppingAnalysis)) return
   const session = get(chatSessions).find(s => s.id === sessionId) ?? null
   const isTurnEvent = (
     event.type === 'turn-started'
@@ -546,7 +550,9 @@ export async function executeAnalysis(): Promise<void> {
 
   clearSessionError()
   isExecutingAnalysis.set(true)
-  activeTurnStream.set(null)
+  // Initialize streaming state so part-delta events render immediately.
+  // Analysis sessions use '' as userContent (no single user message).
+  activeTurnStream.set(createTurnStreamingState(sessionId, ''))
 
   const sessionSummary = get(activeSession)
 
@@ -579,7 +585,7 @@ export async function executeAnalysisStep(): Promise<void> {
 
   clearSessionError()
   isSteppingAnalysis.set(true)
-  activeTurnStream.set(null)
+  activeTurnStream.set(createTurnStreamingState(sessionId, ''))
 
   const sessionSummary = get(activeSession)
 

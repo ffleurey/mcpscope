@@ -510,13 +510,15 @@ export async function buildBackendApp(
           }
           return
         }
+        if (schedulerEvent.type === 'scheduler-job-failed' && schedulerEvent.job.jobId === job.jobId) {
+          emitSseEvent({ type: 'analysis-failed', message: schedulerEvent.job.error ?? 'Job failed' })
+          unsubscribe()
+          resolve()
+        }
         if (
-          (schedulerEvent.type === 'scheduler-job-failed' || schedulerEvent.type === 'scheduler-job-removed')
-          && ('jobId' in schedulerEvent ? schedulerEvent.jobId === job.jobId : false)
+          schedulerEvent.type === 'scheduler-job-removed'
+          && schedulerEvent.jobId === job.jobId
         ) {
-          if (schedulerEvent.type === 'scheduler-job-failed') {
-            emitSseEvent({ type: 'analysis-failed', message: schedulerEvent.job.error ?? 'Job failed' })
-          }
           unsubscribe()
           resolve()
         }
