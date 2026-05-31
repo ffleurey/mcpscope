@@ -183,6 +183,7 @@ export function applyExternalStreamEvent(
   // the events themselves; we only drive activeTurnStream for external turns.
   if (get(isSendingTurn) || get(isExecutingAnalysis) || get(isSteppingAnalysis)) return
   const session = get(chatSessions).find(s => s.id === sessionId) ?? null
+  const isAnalysis = session?.session_type === 'session_analysis'
   const isTurnEvent = (
     event.type === 'turn-started'
     || event.type === 'round-started'
@@ -192,7 +193,11 @@ export function applyExternalStreamEvent(
     || event.type === 'turn-committed'
     || event.type === 'turn-failed'
   )
-  if (isTurnEvent && session) {
+  // For analysis sessions, route all events (including turn-committed) through
+  // applyAnalysisStreamEvent so it can keep activeTurnStream alive between turns.
+  if (isAnalysis) {
+    applyAnalysisStreamEvent(session, event as AnalysisStreamEvent)
+  } else if (isTurnEvent && session) {
     applyTurnStreamEvent(session, prompt, event as TurnStreamEvent)
   } else if (!isTurnEvent) {
     applyAnalysisStreamEvent(session, event as AnalysisStreamEvent)
@@ -609,14 +614,24 @@ export function applyAnalysisStreamEvent(
   session: SessionSummary | null,
   event: AnalysisStreamEvent,
 ): void {
-  // Route turn-stream events to the existing handler
+  // Route turn-stream events to the existing handler, with a special case for
+  // turn-committed: primary sessions clear activeTurnStream on turn-committed,
+  // but analysis sessions may run multiple turns. Reset to a fresh streaming
+  // state so the next turn-started can bind its turn ID correctly.
+  if (event.type === 'turn-committed') {
+    activeTrace.set(event.trace)
+    upsertSessionSummary(event.trace.session)
+    if (session) {
+      activeTurnStream.set(createTurnStreamingState(session.id, ''))
+    }
+    return
+  }
   if (
     event.type === 'turn-started'
     || event.type === 'round-started'
     || event.type === 'part-delta'
     || event.type === 'part-committed'
     || event.type === 'round-committed'
-    || event.type === 'turn-committed'
     || event.type === 'turn-failed'
   ) {
     if (session) {
