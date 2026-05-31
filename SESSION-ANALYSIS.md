@@ -11,21 +11,17 @@ For historical planning context, see the completed backlog records in `backlog/c
 Session analysis lets mcpscope inspect one finished parent session through a child
 `session_analysis` session that stays visible in the normal runtime tree.
 
-The analysis session is not a hidden batch job and not a synthetic prompt wrapper.
-It is a real session with:
+The analysis session is not a hidden batch job and not a synthetic prompt wrapper. It is a real
+session with:
 
 - its own setup
 - normal turns, rounds, and parts
 - deterministic orchestration steps between turns
 - inspectable evidence loaded through restricted MCP tools
 
-This distinction matters:
-
-- the workflow is deterministic where it needs to be
-- but the determinism lives inside the analysis session through normal steps, turns, parts, and
-  context state
-- the implementation should not drift back toward a half-in, half-out design where important
-  workflow state or model-visible evidence is carried outside the session model
+The important distinction is that the workflow is deterministic where it needs to be, but that
+determinism still lives inside the analysis session through normal steps, turns, parts, and
+context state.
 
 ## Current workflow
 
@@ -44,9 +40,7 @@ At a high level:
 
 ## Analysis-session prelude
 
-The analysis session itself has a normal setup.
-
-Its setup contains:
+The analysis session itself has a normal setup containing:
 
 - a system prompt for the analysis model
 - tool definitions for the restricted analysis MCP surface
@@ -56,23 +50,16 @@ The restricted analysis MCP surface currently exposes only:
 - `mcpscope_inspect`
 - `mcpscope_status`
 
-Important distinction:
-
-- the analysis-session prelude belongs to the analysis session itself
-- the analyzed session's MCP instructions and tool definitions do not live in the analysis-session prelude
-- those analyzed-session setup parts are introduced later as inspected evidence during bootstrap
+The analysis-session prelude belongs to the analysis session itself. The analyzed session's MCP
+instructions and tool definitions are introduced later as inspected bootstrap evidence.
 
 ## Deterministic evidence path
 
 Model-visible evidence must be loaded through deterministic `mcpscope_inspect` calls that are
 committed into the analysis session as ordinary `tool_call` parts with embedded results.
 
-This is the key rule that keeps the workflow inspectable.
-
-The workflow does not use synthetic prompt bundles to flatten parent-session evidence into one
-large user message.
-
-Instead:
+This is the key rule that keeps the workflow inspectable. The workflow does not flatten
+parent-session evidence into one large synthetic prompt. Instead:
 
 - bootstrap inspect calls load the target session and target setup
 - packet-local inspect calls load exact parent-session parts needed for one assessment
@@ -81,9 +68,7 @@ Instead:
 
 ## Core artifacts
 
-Bootstrap persists the deterministic working state as artifacts.
-
-Current key artifacts are:
+Bootstrap persists deterministic working state as artifacts:
 
 - `analysis.analysis_target.v1`
 - `analysis.evidence_packet_index.v1`
@@ -92,7 +77,7 @@ Current key artifacts are:
 - `analysis.turn_summary.v1`
 - `analysis.final_analysis_report.v1`
 
-These artifacts hold durable workflow state while normal turns and parts hold the model-visible
+These artifacts hold durable workflow state while normal turns and parts hold model-visible
 conversation and evidence.
 
 ## Packet model
@@ -108,8 +93,7 @@ tool interaction. Depending on what exists in the parent session, that slice can
 - the downstream final answer when result usage needs to be judged directly
 
 The current runtime resolves surrounding reasoning at turn scope rather than only within the
-tool-call round. This matters because post-call reasoning often lives in the next round of the
-same source turn.
+tool-call round, because post-call reasoning often lives in the next round of the same source turn.
 
 ## Context policy
 
@@ -128,9 +112,7 @@ analysis session.
 
 ## Example: V2EH analyzing CXQJ
 
-`V2EH` is a good concrete reference session.
-
-The source session is `CXQJ`.
+`V2EH` is a good concrete reference session analyzing source session `CXQJ`.
 
 ### Bootstrap
 
@@ -141,8 +123,8 @@ The first deterministic evidence-loading turn is `V2EH.1`:
 - `V2EH.1.1.1-T` inspects `CXQJ`
 - `V2EH.1.2.1-T` inspects `CXQJ.S`
 
-This means the analyzed session's own setup enters the analysis session as inspected evidence,
-not as part of `V2EH.S`.
+So the analyzed session's own setup enters the analysis session as inspected evidence, not as part
+of `V2EH.S`.
 
 ### Packet assessments for `CXQJ.1`
 
@@ -172,8 +154,8 @@ Packet 4 uses `V2EH.8` and loads:
 - `CXQJ.1.4.2-T`
 - `CXQJ.1.5.1-R`
 
-This example is important because it shows the shipped fix for cross-round post-call reasoning.
-Packets 1 through 4 all include the reasoning that lives in the next source round.
+This shows the shipped fix for cross-round post-call reasoning: packets 1 through 4 all include
+the reasoning that lives in the next source round.
 
 ### Packet assessment for `CXQJ.2`
 
@@ -183,8 +165,8 @@ Packets 1 through 4 all include the reasoning that lives in the next source roun
 - `CXQJ.2.1.3-T`
 - `CXQJ.2.2.1-A`
 
-That packet directly supports judging whether the successful stats query was used correctly in the
-follow-up answer.
+That packet supports judging whether the successful stats query was used correctly in the follow-up
+answer.
 
 ### Summaries and final report
 
@@ -232,5 +214,5 @@ It does not freeze every future analysis product decision. Broader benchmark aut
 resumable frontiers across later parent-session growth, richer viewers, and other higher-level
 analysis product work remain backlog topics.
 
-Current status is intentionally modest: this is the minimum coherent shipped solution, not the end
-state. The direction is now correct, but some cleanup and generalization work still remains.
+Current status is intentionally modest: this is the minimum coherent shipped solution. The
+direction is now correct, but cleanup and generalization work still remains.

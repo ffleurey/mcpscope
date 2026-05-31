@@ -29,9 +29,9 @@ separate substrate.
 
 ## Audience
 
-This file is for **developers working on mcpscope itself**.
+This file is for developers working on mcpscope itself.
 
-If you want to **use** a released mcpscope build to evaluate an MCP server, start with:
+If you want to use a released mcpscope build to evaluate an MCP server, start with:
 
 - [TUTORIAL.md](TUTORIAL.md) for the Docker/user workflow
 - [RELEASING.md](RELEASING.md) for GHCR image usage and tags
