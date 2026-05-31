@@ -47,9 +47,28 @@ export const sendOperation = {
   schema: sendInputSchema,
   outputSchema: sendOutputSchema,
   async execute(ctx: OperationContext, input: SendInput): Promise<SendResult> {
-    const { db, lmStudioGateway, mcpGateway, maxToolRounds, logger } = ctx
     const sessionId = input.session_id
     const userContent = input.prompt
+
+    // ── Scheduler path (preferred): delegate admission + enqueue to the scheduler
+    if (ctx.scheduler) {
+      const job = ctx.scheduler.enqueueSession(ctx, sessionId, userContent)
+      // The worker may have promoted the draft turn to 'streaming' synchronously
+      // before this line runs, so accept either status.
+      const reservedTurn = listTurnRecordsBySession(ctx.db.connection, sessionId)
+        .find(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
+      return {
+        api_version: 1,
+        session_id: sessionId,
+        turn: {
+          id: reservedTurn?.id ?? job.jobId,
+          status: 'running',
+        },
+      }
+    }
+
+    // ── Legacy path (no scheduler, e.g. unit-test contexts without scheduler) ──
+    const { db, lmStudioGateway, mcpGateway, maxToolRounds, logger } = ctx
 
     type ReservationResult =
       | { kind: 'not_found' }
@@ -154,3 +173,4 @@ export const sendOperation = {
     }
   },
 }
+
