@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
+  import type { StepRecord, TurnRecord } from '../backendTypes'
   import {
     activeSession,
     activeTrace,
@@ -26,6 +27,22 @@
   import SessionPreludeBlock from './SessionPreludeBlock.svelte'
   import SessionTurnBlock from './SessionTurnBlock.svelte'
 
+  type TimelineItem =
+    | {
+        kind: 'turn'
+        id: string
+        timelineKey: string
+        sortTime: number
+        turn: TurnRecord
+      }
+    | {
+        kind: 'step'
+        id: string
+        timelineKey: string
+        sortTime: number
+        step: StepRecord
+      }
+
   let transcriptEl = $state<HTMLElement | null>(null)
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let composerText = $state('')
@@ -48,6 +65,9 @@
   let sessionPreludeParts = $derived(visibleParts.filter((p) => p.turnId === null))
   let traceTurns = $derived(
     [...($activeTrace?.turns ?? [])].sort((a, b) => a.sequenceNumber - b.sequenceNumber),
+  )
+  let renderableSteps = $derived.by(() =>
+    traceSteps.filter((step) => step.stepTypeKey !== 'analysis_v2_cursor'),
   )
   let traceRounds = $derived.by(() => {
     const turnSeq = new Map(($activeTrace?.turns ?? []).map((t) => [t.id, t.sequenceNumber]))
@@ -73,16 +93,6 @@
     }
     return m
   })
-  let compactionStepsByTurn = $derived.by(() => {
-    const m = new Map<string, typeof traceSteps>()
-    for (const step of traceSteps) {
-      if (step.stepTypeKey !== 'compaction') continue
-      const sourceTurnId = typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null
-      if (!sourceTurnId) continue
-      m.set(sourceTurnId, [...(m.get(sourceTurnId) ?? []), step])
-    }
-    return m
-  })
   let roundStreamsByTurn = $derived.by(() => {
     const m = new Map<string, StreamingRoundState[]>()
     for (const rs of ($activeTurnStream?.rounds ?? [])) {
@@ -91,13 +101,41 @@
     return m
   })
   let sessionPreludeRawExchanges = $derived(traceRawExchanges.filter((x) => x.turnId === null))
-  let partsByStep = $derived.by(() => {
-    const m = new Map<string, typeof visibleParts>()
-    for (const p of visibleParts) {
-      if (!p.turnId) continue
-      m.set(p.turnId, [...(m.get(p.turnId) ?? []), p])
-    }
-    return m
+  let timelineItems = $derived.by((): TimelineItem[] => {
+    const items: TimelineItem[] = [
+      ...traceTurns.map((turn) => ({
+        kind: 'turn' as const,
+        id: turn.id,
+        timelineKey: `turn:${turn.id}`,
+        sortTime: turn.createdAt,
+        turn,
+      })),
+      ...renderableSteps.map((step) => ({
+        kind: 'step' as const,
+        id: step.id,
+        timelineKey: `step:${step.id}`,
+        sortTime: step.createdAt,
+        step,
+      })),
+    ]
+
+    items.sort((left, right) => {
+      if (left.sortTime !== right.sortTime) {
+        return left.sortTime - right.sortTime
+      }
+      if (left.kind !== right.kind) {
+        return left.kind === 'step' ? -1 : 1
+      }
+      if (left.kind === 'step' && right.kind === 'step') {
+        return left.step.ordinal - right.step.ordinal
+      }
+      if (left.kind === 'turn' && right.kind === 'turn') {
+        return left.turn.sequenceNumber - right.turn.sequenceNumber
+      }
+      return left.id.localeCompare(right.id)
+    })
+
+    return items
   })
 
   let allParts = $derived($activeTrace?.parts ?? [])
@@ -132,11 +170,8 @@
     return typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : 'bootstrap'
   })
   let analysisComplete = $derived(analysisPhase === 'complete')
-  let analysisSteps = $derived(
-    isAnalysisSession ? traceSteps.filter((s) => s.stepTypeKey !== 'compaction') : [],
-  )
   let hasTraceContent = $derived(
-    isInitializing || sessionPreludeParts.length > 0 || sessionPreludeRawExchanges.length > 0 || traceTurns.length > 0,
+    isInitializing || sessionPreludeParts.length > 0 || sessionPreludeRawExchanges.length > 0 || timelineItems.length > 0,
   )
   let isExhausted = $derived(session?.is_context_exhausted === true)
   let displayModelName = $derived(session?.model_profile_snapshot?.name ?? '')
@@ -291,32 +326,6 @@
             <span class="empty-hint">Session ready — type your first message below</span>
           {/if}
         </div>
-      {:else if isAnalysisSession}
-        <!-- ── Analysis session: turns are the primary view; step details are inspect/debug only ── -->
-        {#if sessionPreludeParts.length > 0 || isInitializing}
-          <SessionPreludeBlock
-            parts={sessionPreludeParts}
-            mode={viewMode}
-            loadedContextLength={session.loaded_context_length ?? null}
-            {isInitializing}
-          />
-        {/if}
-        {#if viewMode === 'inspect'}
-          {#each analysisSteps as step (step.id)}
-            <AnalysisStepBlock {step} mode={viewMode} />
-          {/each}
-        {/if}
-        {#each traceTurns as turn (turn.id)}
-          <SessionTurnBlock
-            {turn}
-            rounds={roundsByTurn.get(turn.id) ?? []}
-            parts={partsByTurn.get(turn.id) ?? []}
-            roundStreams={roundStreamsByTurn.get(turn.id) ?? []}
-            mode={viewMode}
-            {contextSnapshotsByRound}
-            loadedContextLength={session.loaded_context_length ?? null}
-          />
-        {/each}
       {:else}
         {#if sessionPreludeParts.length > 0 || isInitializing}
           <SessionPreludeBlock
@@ -326,23 +335,26 @@
             {isInitializing}
           />
         {/if}
-        {#each traceTurns as turn (turn.id)}
-          <SessionTurnBlock
-            {turn}
-            rounds={roundsByTurn.get(turn.id) ?? []}
-            parts={partsByTurn.get(turn.id) ?? []}
-            roundStreams={roundStreamsByTurn.get(turn.id) ?? []}
-            mode={viewMode}
-            {contextSnapshotsByRound}
-            loadedContextLength={session.loaded_context_length ?? null}
-          />
-          {#each compactionStepsByTurn.get(turn.id) ?? [] as step (step.id)}
+        {#each timelineItems as item (item.timelineKey)}
+          {#if item.kind === 'turn'}
+            <SessionTurnBlock
+              turn={item.turn}
+              rounds={roundsByTurn.get(item.turn.id) ?? []}
+              parts={partsByTurn.get(item.turn.id) ?? []}
+              roundStreams={roundStreamsByTurn.get(item.turn.id) ?? []}
+              mode={viewMode}
+              {contextSnapshotsByRound}
+              loadedContextLength={session.loaded_context_length ?? null}
+            />
+          {:else if item.step.stepTypeKey === 'compaction'}
             <SessionCompactionStepBlock
-              {step}
-              parts={partsByStep.get(step.id) ?? []}
+              step={item.step}
+              parts={[]}
               mode={viewMode}
             />
-          {/each}
+          {:else}
+            <AnalysisStepBlock step={item.step} mode={viewMode} />
+          {/if}
         {/each}
       {/if}
     </div>

@@ -11,8 +11,8 @@
   import IdBadge from './IdBadge.svelte'
   import MarkdownPreviewDialog from './MarkdownPreviewDialog.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
-  import { highlightMarkdown } from '../markdownHighlight'
   import { looksLikeMarkdown } from '../markdownRender'
+  import { highlightStructuredText } from '../textHighlight'
 
   interface Props {
     turn: TurnRecord
@@ -128,10 +128,11 @@
       {#each assistantContentParts as part (part.id)}
         {@const text = normalizeText(part.payload.text)}
         {#if text}
+          {@const rendered = highlightStructuredText(text)}
           <div class="chat-answer-block">
             <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-            <pre class="chat-answer-text">{@html highlightMarkdown(text)}</pre>
-            {#if looksLikeMarkdown(text)}
+            <pre class="chat-answer-text" class:is-json={rendered.format === 'json'}>{@html rendered.html}</pre>
+            {#if rendered.format === 'markdown' && looksLikeMarkdown(text)}
               <button class="preview-btn" onclick={() => openMarkdownPreview(text)} aria-label="Render preview" title="Render preview">
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
@@ -352,6 +353,10 @@
     white-space: pre-wrap;
     word-break: break-word;
     margin: 0;
+  }
+
+  .chat-answer-text.is-json {
+    font-family: var(--font-mono, monospace);
   }
 
   .preview-btn {
