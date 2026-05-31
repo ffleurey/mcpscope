@@ -304,8 +304,6 @@ export interface Session extends SessionContainer {
 export const SESSION_TYPE = {
   PRIMARY: sessionTypeKey('primary'),
   SESSION_ANALYSIS: sessionTypeKey('session_analysis'),
-  SESSION_COMPACTION: sessionTypeKey('session_compaction'),
-  BENCHMARK_ANALYSIS: sessionTypeKey('benchmark_analysis'),
 } as const
 
 // ─────────────────────────────────────────────────────────────────────────────

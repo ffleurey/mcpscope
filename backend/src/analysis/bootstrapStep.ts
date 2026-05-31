@@ -5,7 +5,6 @@
  * analysis artifacts:
  *   - analysis_target  (summary of what is being analyzed)
  *   - evidence_packet_index  (ordered list of tool-call packets)
- *   - coverage_map  (tracking which packets have been assessed)
  *
  * After this step completes, the analysis state transitions so the session
  * can begin assessing packets one by one.
@@ -28,7 +27,6 @@ import {
   type AnalysisTarget,
   type EvidencePacket,
   type EvidencePacketIndex,
-  type CoverageMap,
   type AnalysisSessionState,
 } from './schemas.js'
 import {
@@ -62,7 +60,15 @@ export async function runBootstrapStep(
   emitEvent?: TurnStreamEventSink,
 ): Promise<BootstrapResult> {
   const { state, stepId } = input
-  const { targetSessionId, targetTurnId, analysisSessionId, analysisGoal } = state
+  const {
+    targetSessionId,
+    targetTurnId,
+    analysisSessionId,
+    analysisGoal,
+    selectedToolNames,
+    onlyFailedToolCalls,
+    evaluationCriteria,
+  } = state
 
   // ── 1. Validate target session + turn ──────────────────────────────────────
   const targetSession = getSessionRecord(database.connection, targetSessionId)
@@ -140,7 +146,7 @@ export async function runBootstrapStep(
 
   // ── 5. Build evidence packets (one per tool-call part in scope) ───────────
   const packets: EvidencePacket[] = []
-  let packetIndex = 0
+  const selectedToolNameSet = new Set(selectedToolNames)
 
   // Rounds in scope are those whose turnId is in inScopeTurnIds
   const inScopeRounds = allRounds.filter(r => inScopeTurnIds.includes(r.turnId))
@@ -181,8 +187,17 @@ export async function runBootstrapStep(
       const reasoningAfterPart = reasoningAndContentParts
         .find(p => p.ordinal > afterOrdinal) ?? null
 
+      const toolResultIsError = (toolResultPart?.provenanceJson as { isError?: boolean } | null)?.isError === true
+
+      if (selectedToolNameSet.size > 0 && !selectedToolNameSet.has(toolName)) {
+        continue
+      }
+
+      if (onlyFailedToolCalls && !toolResultIsError) {
+        continue
+      }
+
       packets.push({
-        packet_index: packetIndex++,
         turn_id: round.turnId,
         round_id: round.id,
         tool_call_part_id: toolCallPart.id,
@@ -201,6 +216,9 @@ export async function runBootstrapStep(
     target_session_id: targetSessionId,
     target_turn_id: targetTurnId,
     analysis_goal: analysisGoal,
+    selected_tool_names: selectedToolNames,
+    only_failed_tool_calls: onlyFailedToolCalls,
+    evaluation_criteria: evaluationCriteria,
     analyzed_turn_ids: inScopeTurnIds,
     target_mcp_instructions_part_id: targetMcpInstructionsPartId,
     target_tool_definitions_part_id: targetToolDefinitionsPartId,
@@ -210,18 +228,8 @@ export async function runBootstrapStep(
 
   const evidencePacketIndex: EvidencePacketIndex = { packets }
 
-  const coverageMap: CoverageMap = {
-    entries: packets.map(p => ({
-      packet_index: p.packet_index,
-      tool_call_part_id: p.tool_call_part_id,
-      assessment_artifact_id: null,
-      assessed: false,
-    })),
-  }
-
   const targetArtifactId = uuid()
   const packetIndexArtifactId = uuid()
-  const coverageMapArtifactId = uuid()
 
   database.connection.transaction(() => {
     insertJsonArtifact(database.connection, {
@@ -240,18 +248,6 @@ export async function runBootstrapStep(
       metadata: { schema_key: SCHEMA_KEY.EVIDENCE_PACKET_INDEX },
       createdAt: ts,
     })
-    insertJsonArtifact(database.connection, {
-      id: coverageMapArtifactId,
-      sessionId: analysisSessionId,
-      stepId,
-      content: coverageMap,
-      metadata: {
-        schema_key: SCHEMA_KEY.COVERAGE_MAP,
-        target_artifact_id: targetArtifactId,
-        packet_index_artifact_id: packetIndexArtifactId,
-      },
-      createdAt: ts,
-    })
   })()
 
   const analysisSession = getSessionRecord(database.connection, analysisSessionId)
@@ -259,14 +255,23 @@ export async function runBootstrapStep(
     throw new Error(`Bootstrap: analysis session not found: ${analysisSessionId}`)
   }
 
+  const bootstrapInspectCalls: Array<{ toolName: string; toolArgs: Record<string, unknown> }> = [
+    { toolName: 'mcpscope_inspect', toolArgs: { id: targetSessionId } },
+  ]
+
+  if (targetMcpInstructionsPartId) {
+    bootstrapInspectCalls.push({ toolName: 'mcpscope_inspect', toolArgs: { id: targetMcpInstructionsPartId } })
+  }
+
+  if (targetToolDefinitionsPartId) {
+    bootstrapInspectCalls.push({ toolName: 'mcpscope_inspect', toolArgs: { id: targetToolDefinitionsPartId } })
+  }
+
   await runDeterministicMcpToolCallsInSingleTurn(
     database,
     mcpGateway,
     analysisSession,
-    [
-      { toolName: 'mcpscope_inspect', toolArgs: { id: targetSessionId } },
-      { toolName: 'mcpscope_inspect', toolArgs: { id: `${targetSessionId}.S` } },
-    ],
+    bootstrapInspectCalls,
     emitEvent,
   )
 

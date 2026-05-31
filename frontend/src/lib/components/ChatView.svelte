@@ -292,10 +292,20 @@
           {/if}
         </div>
       {:else if isAnalysisSession}
-        <!-- ── Analysis session: render all steps + turns by ordinal ───── -->
-        {#each analysisSteps as step (step.id)}
-          <AnalysisStepBlock {step} mode={viewMode} />
-        {/each}
+        <!-- ── Analysis session: turns are the primary view; step details are inspect/debug only ── -->
+        {#if sessionPreludeParts.length > 0 || isInitializing}
+          <SessionPreludeBlock
+            parts={sessionPreludeParts}
+            mode={viewMode}
+            loadedContextLength={session.loaded_context_length ?? null}
+            {isInitializing}
+          />
+        {/if}
+        {#if viewMode === 'inspect'}
+          {#each analysisSteps as step (step.id)}
+            <AnalysisStepBlock {step} mode={viewMode} />
+          {/each}
+        {/if}
         {#each traceTurns as turn (turn.id)}
           <SessionTurnBlock
             {turn}
@@ -362,14 +372,16 @@
             >
               {$isExecutingAnalysis ? '⏳ Running…' : '▶ Run Analysis'}
             </button>
-            <button
-              class="btn btn-secondary"
-              disabled={$isExecutingAnalysis || $isSteppingAnalysis}
-              onclick={() => void executeAnalysisStep()}
-              title="Advance one workflow step"
-            >
-              {$isSteppingAnalysis ? '⏳ Stepping…' : '⏭ Step'}
-            </button>
+            {#if viewMode === 'inspect'}
+              <button
+                class="btn btn-secondary"
+                disabled={$isExecutingAnalysis || $isSteppingAnalysis}
+                onclick={() => void executeAnalysisStep()}
+                title="Advance one workflow step (debug)"
+              >
+                {$isSteppingAnalysis ? '⏳ Stepping…' : '⏭ Step (Debug)'}
+              </button>
+            {/if}
           {:else}
             <span class="analysis-bar-done">✓ Analysis complete</span>
           {/if}

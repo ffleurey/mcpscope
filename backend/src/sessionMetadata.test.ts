@@ -104,26 +104,6 @@ describe('session type / parent validation', () => {
     expect(validateSessionParent('session_analysis', 'benchmark', 'bench-1')).toMatch(/session/)
   })
 
-  it('session_compaction with session parent is valid', () => {
-    expect(validateSessionParent('session_compaction', 'session', 'sess-1')).toBeNull()
-  })
-
-  it('session_compaction without parent is rejected', () => {
-    expect(validateSessionParent('session_compaction', null, null)).toMatch(/require a parent/)
-  })
-
-  it('benchmark_analysis with benchmark parent is valid', () => {
-    expect(validateSessionParent('benchmark_analysis', 'benchmark', 'bench-1')).toBeNull()
-  })
-
-  it('benchmark_analysis without parent is rejected', () => {
-    expect(validateSessionParent('benchmark_analysis', null, null)).toMatch(/require a parent/)
-  })
-
-  it('benchmark_analysis with session parent is rejected', () => {
-    expect(validateSessionParent('benchmark_analysis', 'session', 'sess-1')).toMatch(/benchmark/)
-  })
-
   it('parent_kind and parent_id must both be set or both null', () => {
     expect(validateSessionParent('primary', 'benchmark', null)).toMatch(/both/)
     expect(validateSessionParent('primary', null, 'bench-1')).toMatch(/both/)
@@ -149,7 +129,6 @@ describe('session metadata repository', () => {
     const db = openBackendDatabase(config.sqlitePath)
 
     expect(db.schema.tables).toContain('session_creation_defaults')
-    expect(db.schema.tables).toContain('analysis_defaults')
     expect(db.schema.tables).toContain('v2_sessions')
 
     for (const table of LEGACY_RUNTIME_TABLES) {
@@ -249,18 +228,10 @@ describe('session metadata repository', () => {
       createdAt: ts + 1,
       updatedAt: ts + 1,
     }))
-    createSessionRecord(db.connection, makeSessionRecord({
-      id: 'CH02',
-      sessionType: 'session_compaction',
-      parentKind: 'session',
-      parentId: 'PRNT',
-      createdAt: ts + 2,
-      updatedAt: ts + 2,
-    }))
     createSessionRecord(db.connection, makeSessionRecord({ id: 'UNRL', sessionType: 'primary', createdAt: ts + 3, updatedAt: ts + 3 }))
 
     const children = listChildSessionSummaries(db.connection, 'session', 'PRNT')
-    expect(children.map(c => c.id)).toEqual(['CH01', 'CH02'])
+    expect(children.map(c => c.id)).toEqual(['CH01'])
     expect(children.every(c => c.parentId === 'PRNT')).toBe(true)
 
     db.connection.close()
@@ -309,7 +280,7 @@ describe('session metadata repository', () => {
     }))
     createSessionRecord(db.connection, makeSessionRecord({
       id: 'GC11',
-      sessionType: 'session_compaction',
+      sessionType: 'session_analysis',
       parentKind: 'session',
       parentId: 'CHD1',
       createdAt: ts + 2,
@@ -380,8 +351,8 @@ describe('session metadata repository', () => {
     const ts = Date.now()
     createSessionRecord(db.connection, makeSessionRecord({ id: 'UPD2', sessionType: 'primary', createdAt: ts, updatedAt: ts }))
     const record = getSessionRecord(db.connection, 'UPD2')!
-    record.sessionType = 'benchmark_analysis'
-    record.parentKind = 'session'
+    record.sessionType = 'session_analysis'
+    record.parentKind = 'benchmark'
     record.parentId = 'SOME'
 
     expect(() => updateSessionRecord(db.connection, record)).toThrow(/Invalid session metadata/)

@@ -11,14 +11,17 @@
 
   const STEP_TYPE_LABELS: Record<string, string> = {
     analysis_v2_cursor: 'Analysis cursor',
-    analysis_bootstrap: 'Bootstrap',
-    analysis_context_mutation: 'Context mutation',
-    analysis_tool_call_assessment: 'Tool-call assessment',
-    analysis_coverage_validation: 'Coverage validation',
-    analysis_final_aggregation: 'Final aggregation',
   }
 
-  const label = $derived(STEP_TYPE_LABELS[step.stepTypeKey] ?? step.stepTypeKey.replace(/_/g, ' '))
+  function humanizeStepType(stepTypeKey: string): string {
+    return stepTypeKey
+      .replace(/^analysis_/, '')
+      .replace(/^analysis_v2_/, '')
+      .replace(/_/g, ' ')
+      .trim()
+  }
+
+  const label = $derived(STEP_TYPE_LABELS[step.stepTypeKey] ?? humanizeStepType(step.stepTypeKey))
   const phase = $derived(
     step.stepTypeKey === 'analysis_v2_cursor'
       ? (typeof step.state.phase === 'string' ? step.state.phase : null)
@@ -26,7 +29,7 @@
   )
   const assessedPacket = $derived(
     step.stepTypeKey === 'analysis_tool_call_assessment'
-      ? (typeof step.params.toolCallId === 'string' ? step.params.toolCallId : null)
+      ? (typeof step.params.packet_index === 'number' ? `packet ${step.params.packet_index + 1}` : null)
       : null,
   )
   const showState = $derived(mode === 'inspect')

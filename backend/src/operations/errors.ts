@@ -45,8 +45,6 @@ export function operationErrorToHttpStatus(code: string | undefined): number {
     case 'default_model_config_not_found':
     case 'default_lm_connection_not_found':
     case 'default_mcp_profile_not_found':
-    case 'no_analysis_profile':
-    case 'analysis_profile_not_found':
     case 'target_session_not_eligible':
     case 'target_turn_not_found':
     case 'target_turn_not_complete':

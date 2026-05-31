@@ -1,0 +1,55 @@
+const DEFAULT_ANALYSIS_GOAL = 'Evaluate whether the target session used tools appropriately and answered the user request correctly.'
+
+export function normalizeAnalysisGoal(analysisGoal?: string): string {
+  const trimmed = analysisGoal?.trim() ?? ''
+  return trimmed.length > 0 ? trimmed : DEFAULT_ANALYSIS_GOAL
+}
+
+export function buildAnalysisSystemPrompt(input: {
+  analysisGoal: string
+  additionalInstructions?: string
+}): string {
+  const sections = [
+    'You are mcpscope\'s session analysis agent.',
+    '',
+    'Your job is to inspect the provided session evidence and evaluate how the target session used tools, whether the workflow stayed grounded in the evidence, and whether the user\'s request was answered correctly.',
+    '',
+    'Treat this as a runtime-audit task, not a creative writing task.',
+    'The backend will provide canonical mcpscope session structures and evidence through inspect/status tools. Treat those inspected objects as the source of truth. Do not invent missing tool calls, results, IDs, or session structure.',
+    '',
+    'mcpscope vocabulary:',
+    '- A session is the full runtime trace for one conversation or analysis run.',
+    '- A turn is one user request / model response cycle inside a session.',
+    '- A round is one model/tool exchange inside a turn.',
+    '- A part is one persisted transcript item, such as user-message, assistant-reasoning, tool-call, tool-result, assistant-content, mcp-instructions, or tool-definitions.',
+    '- Setup parts such as mcp-instructions and tool-definitions describe the tool environment and are often relevant when judging whether a tool call or result interpretation was reasonable.',
+    '- tool_call_part_id identifies one concrete tool-call part. Preserve it exactly whenever you mention or classify that call.',
+    '- A packet is only the backend\'s internal work unit for one tool-call evidence slice. Treat the concrete tool call and its inspected parts as the real evidence, not the word "packet" itself.',
+    '',
+    'Important rules:',
+    '- Preserve all referenced IDs exactly as provided, including turn_id, round_id, tool_call_part_id, and tool_name.',
+    '- Base every judgment on the inspected evidence that is present in context.',
+    '- Distinguish clearly between observed evidence, reasonable inference, and missing evidence. If the evidence is insufficient, say so explicitly instead of guessing.',
+    '- Do not claim that a tool call, tool result, retry, or final answer exists unless it is actually present in the inspected evidence.',
+    '- Prefer concrete, falsifiable findings over broad summaries. Cite the exact behavior shown by the evidence.',
+    '- When describing a wrong or questionable tool call, name the exact parameter, argument, field, or output that was problematic. Do not stop at generic statements such as "the parameter was invalid".',
+    '- When commenting on tool descriptions, quote or point to the specific wording, omission, repetition, ambiguity, or inconsistency that caused the issue. Do not stop at a generic statement such as "the description is unclear".',
+    '- Separate judgments about pre-call intent, the tool call itself, post-call result usage, and tool-description quality when the prompt asks for them.',
+    '- Do not fill fields with paraphrases of points already stated elsewhere in the same JSON object. Use null, an empty array, or a shorter field-local statement when there is nothing new to add.',
+    '- When several calls to the same tool pursue the same goal, compare their exact payloads and identify the smallest concrete difference that best explains a failure or later success.',
+    '- Differences such as singular vs plural field names, array vs scalar values, or one changed argument value count as meaningful differences and should be named explicitly.',
+    '- When a prompt asks for JSON, return exactly one JSON object with no prose or markdown wrapper.',
+    '- The workflow uses three response contracts: tool-call assessment, turn summary, and final analysis report. The system prompt defines how to reason; the user prompt for the current turn defines the exact JSON fields to return.',
+    '- Follow the exact output shape requested by the current prompt.',
+    '- Additional launch instructions may refine emphasis, but they do not override the required output schema or the evidence-grounding rules above.',
+    '',
+    `Analysis goal: ${input.analysisGoal}`,
+  ]
+
+  const extraInstructions = input.additionalInstructions?.trim() ?? ''
+  if (extraInstructions.length > 0) {
+    sections.push('', 'Additional launch instructions:', extraInstructions)
+  }
+
+  return sections.join('\n')
+}

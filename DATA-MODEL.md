@@ -265,7 +265,7 @@ The exact base still needs to be fixed once for the whole public model, but the 
 
 mcpscope persists typed sessions with a parent-link model. This is already implemented:
 
-- each session has a `session_type`: `primary`, `session_analysis`, `session_compaction`, or `benchmark_analysis`
+- each session has a `session_type`: `primary` or `session_analysis`
 - some session types carry a `parent_kind` and `parent_id`
 - the allowed parent kinds depend on the session type and are enforced at the application-validation layer
 
@@ -273,8 +273,6 @@ Implemented rules:
 
 - `primary` → optional `benchmark` parent
 - `session_analysis` → mandatory `session` parent
-- `session_compaction` → mandatory `session` parent
-- `benchmark_analysis` → mandatory `benchmark` parent
 
 The backend runtime session-creation flow — including the analysis-launch flow — uses one unified validated `createSession(...)` path. Session type and parent metadata are validated before persistence and never patched afterward in that flow.
 

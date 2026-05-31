@@ -80,20 +80,6 @@ erDiagram
     INTEGER updated_at
   }
 
-  analysis_profiles {
-    TEXT id PK
-    TEXT name
-    TEXT record_json
-    INTEGER created_at
-    INTEGER updated_at
-  }
-
-  analysis_defaults {
-    INTEGER id PK
-    TEXT default_analysis_profile_id
-    INTEGER updated_at
-  }
-
   session_containers {
     TEXT id PK
     TEXT container_type_key

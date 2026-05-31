@@ -6,7 +6,7 @@
     selectChat,
   } from '../sessionStore'
   import { currentView } from '../navStore'
-  import { analysisProfiles } from '../connectionStore'
+  import { modelConfigs } from '../connectionStore'
   import { untrack } from 'svelte'
   import AnalysisLaunchModal from './AnalysisLaunchModal.svelte'
   import type { SessionSummary } from '../backendTypes'
@@ -124,7 +124,7 @@
           </button>
 
           <div class="row-actions">
-            {#if $analysisProfiles.length > 0}
+            {#if $modelConfigs.length > 0}
               <button
                 class="action-btn analyze-btn"
                 title="Launch analysis"

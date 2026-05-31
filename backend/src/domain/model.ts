@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const DOMAIN_MODEL_VERSION = 2
 
-export const sessionTypeValues = ['primary', 'session_analysis', 'session_compaction', 'benchmark_analysis'] as const
+export const sessionTypeValues = ['primary', 'session_analysis'] as const
 export const parentKindValues = ['session', 'benchmark'] as const
 
 export const sessionStatusValues = ['draft', 'ready', 'active', 'error', 'archived'] as const

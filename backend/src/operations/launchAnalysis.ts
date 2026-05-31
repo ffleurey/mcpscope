@@ -12,10 +12,9 @@ import { z } from 'zod'
 import { OperationError } from './errors.js'
 import {
   findActiveSession,
-  getAnalysisDefaults,
+  getSessionCreationDefaults,
   getSessionRecord,
   getTurnRecord,
-  listAnalysisProfiles,
   listLmConnections,
   listModelConfigs,
 } from '../persistence/repository.js'
@@ -25,9 +24,10 @@ import {
   SessionIdGenerationError,
   SessionIdInputError,
 } from '../runtime/modelTurns.js'
-import type { McpProfileSnapshot, ModelProfileSnapshot, SessionRecord } from '../domain/model.js'
+import { sessionRecordSchema, type McpProfileSnapshot, type ModelProfileSnapshot, type SessionRecord } from '../domain/model.js'
 import type { OperationContext } from './context.js'
 import { AnalysisSession } from '../analysis/analysisSession.js'
+import { buildAnalysisSystemPrompt, normalizeAnalysisGoal } from '../analysis/systemPrompt.js'
 import { runSessionInitialization } from '../runtime/sessionInit.js'
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
@@ -35,10 +35,22 @@ import { runSessionInitialization } from '../runtime/sessionInit.js'
 export const launchAnalysisInputSchema = z.object({
   /** The turn in the target session at which analysis should stop (inclusive). */
   target_turn_id: z.string().min(1, 'target_turn_id must not be empty'),
-  /** Freeform description of what the analysis should evaluate. */
-  analysis_goal: z.string().min(1, 'analysis_goal must not be empty'),
-  /** Analysis profile to use. If omitted the backend default is used. */
-  analysis_profile_id: z.string().optional(),
+  /** Optional extra guidance for what the analysis should emphasize. */
+  analysis_goal: z.string().optional(),
+  /** Model config to use. If omitted the general default model config is used. */
+  model_config_id: z.string().optional(),
+  /** Optional extra launch-time instructions appended to the built-in analysis prompt. */
+  additional_instructions: z.string().optional(),
+  /** Optional full system prompt override shown and editable in the launch dialog. */
+  system_prompt_override: z.string().optional(),
+  /** Optional sampling temperature override; defaults to 0.5. */
+  temperature: z.number().optional(),
+  /** Optional subset of tool names to include in the analysis. */
+  selected_tool_names: z.array(z.string().min(1)).optional(),
+  /** Limit analysis to tool calls whose tool result is marked as an error. */
+  only_failed_tool_calls: z.boolean().optional(),
+  /** Optional additional evaluation criteria. */
+  evaluation_criteria: z.array(z.string().min(1)).optional(),
 })
 
 export type LaunchAnalysisInput = z.infer<typeof launchAnalysisInputSchema>
@@ -50,6 +62,24 @@ export interface LaunchAnalysisResult {
   session: SessionRecord
 }
 
+export const launchAnalysisOutputSchema = {
+  session: sessionRecordSchema,
+}
+
+export const launchAnalysisOperation = {
+  id: 'launch_analysis' as const,
+  description: 'Launch a session_analysis child session for a target session and completed target turn.',
+  schema: launchAnalysisInputSchema,
+  outputSchema: launchAnalysisOutputSchema,
+  async execute(
+    ctx: OperationContext,
+    targetSessionId: string,
+    rawInput: unknown,
+  ): Promise<LaunchAnalysisResult> {
+    return executeAnalysisLaunch(ctx, targetSessionId, rawInput)
+  },
+}
+
 // ─── Execution ────────────────────────────────────────────────────────────────
 
 export async function executeAnalysisLaunch(
@@ -59,14 +89,21 @@ export async function executeAnalysisLaunch(
 ): Promise<LaunchAnalysisResult> {
   const { db } = ctx
   const input = launchAnalysisInputSchema.parse(rawInput)
+  const analysisGoal = normalizeAnalysisGoal(input.analysis_goal)
+  const additionalInstructions = input.additional_instructions?.trim() ?? ''
+  const systemPromptOverride = input.system_prompt_override?.trim() ?? ''
+  const temperature = input.temperature ?? 0.5
+  const selectedToolNames = [...new Set((input.selected_tool_names ?? []).map((name) => name.trim()).filter(Boolean))]
+  const onlyFailedToolCalls = input.only_failed_tool_calls === true
+  const evaluationCriteria = [...new Set((input.evaluation_criteria ?? []).map((criterion) => criterion.trim()).filter(Boolean))]
 
   type TxResult =
     | { kind: 'target_not_found' }
     | { kind: 'target_not_eligible'; reason: string }
     | { kind: 'target_turn_not_found' }
     | { kind: 'target_turn_not_complete' }
-    | { kind: 'profile_not_found'; profileId: string }
-    | { kind: 'no_default_profile' }
+    | { kind: 'default_model_not_configured' }
+    | { kind: 'default_model_config_not_found'; modelConfigId: string }
     | { kind: 'model_config_not_found'; modelConfigId: string }
     | { kind: 'lm_connection_not_found'; connectionId: string }
     | { kind: 'another_session_active'; active: { id: string; state: string } }
@@ -75,7 +112,7 @@ export async function executeAnalysisLaunch(
     | { kind: 'id_generation_error'; error: SessionIdGenerationError }
     | { kind: 'created'; session: SessionRecord }
 
-  const analysisProfileId = input.analysis_profile_id
+  const requestedModelConfigId = input.model_config_id
 
   const result: TxResult = db.connection.transaction((): TxResult => {
     // Validate target session
@@ -94,28 +131,23 @@ export async function executeAnalysisLaunch(
     if (!targetTurn) return { kind: 'target_turn_not_found' }
     if (targetTurn.status !== 'complete') return { kind: 'target_turn_not_complete' }
 
-    // Resolve analysis profile
-    const profiles = listAnalysisProfiles(db.connection)
-    let resolvedProfileId = analysisProfileId
-
-    if (!resolvedProfileId) {
-      const defaults = getAnalysisDefaults(db.connection)
-      if (!defaults.defaultAnalysisProfileId) {
-        return { kind: 'no_default_profile' }
-      }
-      resolvedProfileId = defaults.defaultAnalysisProfileId
-    }
-
-    const profile = profiles.find(p => p.id === resolvedProfileId)
-    if (!profile) {
-      return { kind: 'profile_not_found', profileId: resolvedProfileId }
-    }
-
     // Resolve model config and LM connection
     const modelConfigs = listModelConfigs(db.connection)
-    const modelConfig = modelConfigs.find(c => c.id === profile.modelConfigId)
+    let resolvedModelConfigId = requestedModelConfigId
+    if (!resolvedModelConfigId) {
+      const defaults = getSessionCreationDefaults(db.connection)
+      if (!defaults.defaultModelConfigId) {
+        return { kind: 'default_model_not_configured' }
+      }
+      resolvedModelConfigId = defaults.defaultModelConfigId
+      if (!modelConfigs.some(c => c.id === resolvedModelConfigId)) {
+        return { kind: 'default_model_config_not_found', modelConfigId: resolvedModelConfigId }
+      }
+    }
+
+    const modelConfig = modelConfigs.find(c => c.id === resolvedModelConfigId)
     if (!modelConfig) {
-      return { kind: 'model_config_not_found', modelConfigId: profile.modelConfigId }
+      return { kind: 'model_config_not_found', modelConfigId: resolvedModelConfigId }
     }
 
     const lmConnections = listLmConnections(db.connection)
@@ -136,14 +168,19 @@ export async function executeAnalysisLaunch(
       apiKey: lmConnection.apiKey ?? null,
       modelKey: modelConfig.modelKey,
       modelDisplayName: modelConfig.modelDisplayName,
-      systemPrompt: profile.systemPrompt,
-      temperature: profile.temperature,
-      reasoning: profile.reasoning ?? null,
+      systemPrompt: systemPromptOverride.length > 0
+        ? systemPromptOverride
+        : buildAnalysisSystemPrompt({
+            analysisGoal,
+            additionalInstructions,
+          }),
+      temperature,
+      reasoning: modelConfig.reasoning ?? null,
       createdAt: modelConfig.createdAt,
       updatedAt: modelConfig.updatedAt,
     }
 
-    const title = `Analysis: ${profile.name}`
+    const title = `Analysis: ${target.title}`
 
     try {
       // Build a synthetic MCP profile snapshot pointing to the restricted analysis
@@ -180,7 +217,10 @@ export async function executeAnalysisLaunch(
         analysisSessionId: session.id,
         targetSessionId,
         targetTurnId: input.target_turn_id,
-        analysisGoal: input.analysis_goal,
+        analysisGoal,
+        selectedToolNames,
+        onlyFailedToolCalls,
+        evaluationCriteria,
       })
       analysisInstance.initializeCursorStep()
 
@@ -212,20 +252,19 @@ export async function executeAnalysisLaunch(
         `Target turn "${input.target_turn_id}" is not yet complete.`,
         'target_turn_not_complete',
       )
-    case 'no_default_profile':
+    case 'default_model_not_configured':
       throw new OperationError(
-        'No analysis profile supplied and no default analysis profile is configured. '
-        + 'Either supply an analysis_profile_id or configure a default analysis profile first.',
-        'no_analysis_profile',
+        'No model config was supplied and no default model config is configured for new sessions.',
+        'default_model_not_configured',
       )
-    case 'profile_not_found':
+    case 'default_model_config_not_found':
       throw new OperationError(
-        `Analysis profile "${result.profileId}" not found.`,
-        'analysis_profile_not_found',
+        `Default model config "${result.modelConfigId}" no longer exists.`,
+        'default_model_config_not_found',
       )
     case 'model_config_not_found':
       throw new OperationError(
-        `Model config "${result.modelConfigId}" referenced by the analysis profile no longer exists.`,
+        `Model config "${result.modelConfigId}" not found.`,
         'analysis_model_config_not_found',
       )
     case 'lm_connection_not_found':

@@ -17,7 +17,6 @@ import {
   SCHEMA_KEY,
   type AnalysisSessionState,
   type EvidencePacketIndex,
-  type CoverageMap,
 } from './schemas.js'
 
 function uuid(): string {
@@ -51,13 +50,7 @@ export function runCoverageValidationStep(
     analysisSessionId,
     SCHEMA_KEY.EVIDENCE_PACKET_INDEX,
   )
-  const coverageArtifact = getLatestArtifactBySchemaKey(
-    database.connection,
-    analysisSessionId,
-    SCHEMA_KEY.COVERAGE_MAP,
-  )
-
-  if (!packetIndexArtifact || !coverageArtifact) {
+  if (!packetIndexArtifact) {
     const diagnosticId = uuid()
     insertJsonArtifact(database.connection, {
       id: diagnosticId,
@@ -65,11 +58,10 @@ export function runCoverageValidationStep(
       stepId,
       content: {
         step_type: 'coverage_validation',
-        error_kind: 'missing_bootstrap_artifacts',
-        message: 'evidence_packet_index or coverage_map artifact missing — bootstrap may not have completed',
+        error_kind: 'missing_packet_index',
+        message: 'evidence_packet_index artifact missing — bootstrap may not have completed',
         detail: {
           has_packet_index: packetIndexArtifact != null,
-          has_coverage_map: coverageArtifact != null,
         },
       },
       metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC },
@@ -79,30 +71,26 @@ export function runCoverageValidationStep(
   }
 
   const packetIndex = packetIndexArtifact.content as EvidencePacketIndex
-  const coverageMap = coverageArtifact.content as CoverageMap
   const assessments = listArtifactsBySessionAndSchemaKey(
     database.connection,
     analysisSessionId,
     SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
   )
-  const assessedPacketIndices = new Set(
+  const assessedToolCallPartIds = new Set(
     assessments.map(a => {
-      const meta = a.metadata as { packet_index?: number }
-      return meta.packet_index
+      const meta = a.metadata as { tool_call_part_id?: string }
+      return meta.tool_call_part_id
     }),
   )
 
   // ── Validate every packet is covered ─────────────────────────────────────
   const unassessed = packetIndex.packets.filter(
-    p => !assessedPacketIndices.has(p.packet_index),
+    p => !assessedToolCallPartIds.has(p.tool_call_part_id),
   )
 
-  const unassessedFromMap = coverageMap.entries.filter(e => !e.assessed)
-
-  const failures = [
-    ...unassessed.map(p => `Packet ${p.packet_index} (${p.tool_name}) has no accepted assessment`),
-    ...unassessedFromMap.filter(e => !unassessed.some(u => u.packet_index === e.packet_index)).map(e => `Coverage map entry ${e.packet_index} is not marked assessed`),
-  ]
+  const failures = unassessed.map(
+    p => `Tool call ${p.tool_call_part_id} (${p.tool_name}) has no accepted assessment`,
+  )
 
   if (failures.length > 0) {
     const diagnosticId = uuid()

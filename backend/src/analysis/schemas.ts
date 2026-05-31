@@ -3,7 +3,6 @@
  *
  * Schema keys (stable identifiers for machine-readable artifact retrieval):
  *   analysis.analysis_target.v1
- *   analysis.coverage_map.v1
  *   analysis.evidence_packet_index.v1
  *   analysis.tool_call_assessment.v1
  *   analysis.final_analysis_report.v1
@@ -18,7 +17,6 @@ import { z } from 'zod'
 
 export const SCHEMA_KEY = {
   ANALYSIS_TARGET: 'analysis.analysis_target.v1',
-  COVERAGE_MAP: 'analysis.coverage_map.v1',
   EVIDENCE_PACKET_INDEX: 'analysis.evidence_packet_index.v1',
   TOOL_CALL_ASSESSMENT: 'analysis.tool_call_assessment.v1',
   TURN_SUMMARY: 'analysis.turn_summary.v1',
@@ -33,7 +31,12 @@ export const SCHEMA_KEY = {
 export const launchAnalysisV2InputSchema = z.object({
   target_turn_id: z.string().min(1),
   analysis_goal: z.string().min(1),
-  analysis_profile_id: z.string().optional(),
+  model_config_id: z.string().optional(),
+  additional_instructions: z.string().optional(),
+  temperature: z.number().optional(),
+  selected_tool_names: z.array(z.string().min(1)).optional(),
+  only_failed_tool_calls: z.boolean().optional(),
+  evaluation_criteria: z.array(z.string().min(1)).optional(),
 })
 export type LaunchAnalysisV2Input = z.infer<typeof launchAnalysisV2InputSchema>
 
@@ -80,6 +83,12 @@ export interface AnalysisSessionState {
   targetTurnId: string
   /** The analysis goal text passed by the caller. */
   analysisGoal: string
+  /** Optional tool-name filter applied during bootstrap. */
+  selectedToolNames: string[]
+  /** When true, only packets with an error tool result are analyzed. */
+  onlyFailedToolCalls: boolean
+  /** Optional extra evaluation criteria supplied by the user. */
+  evaluationCriteria: string[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,8 +96,6 @@ export interface AnalysisSessionState {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const evidencePacketSchema = z.object({
-  /** Stable index (0-based) within the packet list. */
-  packet_index: z.number().int().nonnegative(),
   turn_id: z.string(),
   round_id: z.string(),
   tool_call_part_id: z.string(),
@@ -107,6 +114,9 @@ export const analysisTargetSchema = z.object({
   target_session_id: z.string(),
   target_turn_id: z.string(),
   analysis_goal: z.string(),
+  selected_tool_names: z.array(z.string()),
+  only_failed_tool_calls: z.boolean(),
+  evaluation_criteria: z.array(z.string()),
   /** IDs of turns included in the analysis scope (up to and including target_turn_id). */
   analyzed_turn_ids: z.array(z.string()),
   target_mcp_instructions_part_id: z.string().nullable(),
@@ -115,6 +125,19 @@ export const analysisTargetSchema = z.object({
   final_answer_part_id: z.string().nullable(),
 })
 export type AnalysisTarget = z.infer<typeof analysisTargetSchema>
+
+export function buildAnalysisFocusInstructions(target: AnalysisTarget): string {
+  const lines = [`Analysis goal: ${target.analysis_goal}`]
+
+  if (target.evaluation_criteria.length > 0) {
+    lines.push('', 'Evaluation criteria:')
+    for (const criterion of target.evaluation_criteria) {
+      lines.push(`- ${criterion}`)
+    }
+  }
+
+  return lines.join('\n')
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // analysis.evidence_packet_index.v1
@@ -126,38 +149,20 @@ export const evidencePacketIndexSchema = z.object({
 export type EvidencePacketIndex = z.infer<typeof evidencePacketIndexSchema>
 
 // ─────────────────────────────────────────────────────────────────────────────
-// analysis.coverage_map.v1
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const coverageEntrySchema = z.object({
-  packet_index: z.number().int().nonnegative(),
-  tool_call_part_id: z.string(),
-  /** null until assessment is complete. */
-  assessment_artifact_id: z.string().nullable(),
-  assessed: z.boolean(),
-})
-
-export const coverageMapSchema = z.object({
-  entries: z.array(coverageEntrySchema),
-})
-export type CoverageMap = z.infer<typeof coverageMapSchema>
-export type CoverageEntry = z.infer<typeof coverageEntrySchema>
-
-// ─────────────────────────────────────────────────────────────────────────────
 // analysis.tool_call_assessment.v1
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const toolCallAssessmentSchema = z.object({
-  packet_index: z.number().int().nonnegative(),
   turn_id: z.string(),
   round_id: z.string(),
+  tool_call_part_id: z.string(),
   tool_name: z.string(),
   /**
    * Did the tool call match what the context needed?
    * match | partial_match | mismatch | unclear
    */
   expectation_match: z.enum(['match', 'partial_match', 'mismatch', 'unclear']),
-  expectation_rationale: z.string(),
+  tool_call_assessment: z.string(),
   /**
    * The most direct cause of a mismatch (if applicable).
    * wrong_parameters | tool_misunderstanding | tool_description_clarity |
@@ -173,13 +178,8 @@ export const toolCallAssessmentSchema = z.object({
       'unclear',
     ])
     .nullable(),
-  /**
-   * How well was the tool result used in subsequent reasoning?
-   * good | partial | poor | not_applicable | unclear
-   */
-  result_usage_quality: z.enum(['good', 'partial', 'poor', 'not_applicable', 'unclear']),
-  result_usage_rationale: z.string(),
-  notable_observations: z.string().nullish(),
+  parameter_or_call_issues: z.array(z.string()),
+  post_call_assessment: z.string().nullable(),
 })
 export type ToolCallAssessment = z.infer<typeof toolCallAssessmentSchema>
 
@@ -196,14 +196,13 @@ export const turnSummarySchema = z.object({
    */
   turn_outcome: z.enum(['successful', 'partially_successful', 'failed', 'unclear']),
   turn_outcome_rationale: z.string(),
-  /** One-line finding per assessed tool call (packet_index → brief). */
+  /** One-line finding per assessed tool call. */
   per_tool_findings: z.array(z.object({
-    packet_index: z.number().int().nonnegative(),
+    tool_call_part_id: z.string(),
     tool_name: z.string(),
-    expectation_match: z.enum(['match', 'partial_match', 'mismatch', 'unclear']),
     brief_finding: z.string(),
   })),
-  notable_observations: z.string().nullish(),
+  cross_attempt_reconciliation: z.string().nullable(),
 })
 export type TurnSummary = z.infer<typeof turnSummarySchema>
 
@@ -243,9 +242,11 @@ export const finalAnalysisReportSchema = z.object({
   path_efficiency_rationale: z.string(),
   /** Top-level findings, one sentence each. */
   findings: z.array(z.string()),
+  tool_description_findings: z.array(z.string()),
   /** Concrete suggestions for MCP tool surface improvements. */
   improvement_suggestions: z.array(z.string()),
-  total_packets_assessed: z.number().int().nonnegative(),
+  tool_description_improvement_suggestions: z.array(z.string()),
+  total_tool_calls_assessed: z.number().int().nonnegative(),
 })
 export type FinalAnalysisReport = z.infer<typeof finalAnalysisReportSchema>
 

@@ -3,7 +3,13 @@
   import type { NavView } from '../types'
   import ChatList from './ChatList.svelte'
   import { modelConfigs } from '../connectionStore'
-  import { importTraceFile, isImportingTrace, startDraftSession } from '../sessionStore'
+  import {
+    importTraceFile,
+    isImportingTrace,
+    isPrimaryLaunchDialogOpen,
+    openPrimaryLaunchDialog,
+  } from '../sessionStore'
+  import PrimarySessionLaunchModal from './PrimarySessionLaunchModal.svelte'
 
   let collapsed = $state(false)
   let sidebarWidth = $state(240)
@@ -33,7 +39,7 @@
   }
 
   function handleNewChat() {
-    startDraftSession()
+    openPrimaryLaunchDialog()
     currentView.set('chats')
   }
 
@@ -59,6 +65,9 @@
 <nav class="sidebar" class:collapsed class:resizing={isResizing}
   style="width: {collapsed ? '40px' : sidebarWidth + 'px'}"
 >
+  {#if $isPrimaryLaunchDialogOpen}
+    <PrimarySessionLaunchModal />
+  {/if}
   {#if collapsed}
     <button class="collapse-toggle" onclick={() => collapsed = false} title="Expand sidebar">›</button>
   {:else}
@@ -89,9 +98,6 @@
       </button>
       <button class="nav-item" class:active={$currentView === 'mcp-profiles'} onclick={() => navigate('mcp-profiles')}>
         MCP Servers
-      </button>
-      <button class="nav-item" class:active={$currentView === 'analysis-profiles'} onclick={() => navigate('analysis-profiles')}>
-        Analysis Profiles
       </button>
     </div>
 
