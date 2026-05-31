@@ -102,7 +102,27 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value)
 }
 
-function formatJsonPreview(value: unknown): string {
+function describeValuePreview(value: unknown): string {
+  if (typeof value === 'string') {
+    return `string(${value})`
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  if (value === null) {
+    return 'null'
+  }
+  if (Array.isArray(value)) {
+    const rendered = `array(${value.map(item => describeValuePreview(item)).join(', ')})`
+    return rendered.length <= 200 ? rendered : `${rendered.slice(0, 197)}...`
+  }
+  if (value && typeof value === 'object') {
+    const rendered = `object(${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => `${key}=${describeValuePreview(child)}`)
+      .join(', ')})`
+    return rendered.length <= 200 ? rendered : `${rendered.slice(0, 197)}...`
+  }
   const json = stableJson(value)
   return json.length <= 200 ? json : `${json.slice(0, 197)}...`
 }
@@ -154,20 +174,20 @@ function describeArgumentDifferences(previousArgs: Record<string, unknown>, next
     }
 
     if (!(key in previousArgs)) {
-      differences.push(`${key} added as ${formatJsonPreview(nextValue)}`)
+      differences.push(`${key} added as ${describeValuePreview(nextValue)}`)
       continue
     }
     if (!(key in nextArgs)) {
-      differences.push(`${key} removed (was ${formatJsonPreview(previousValue)})`)
+      differences.push(`${key} removed (was ${describeValuePreview(previousValue)})`)
       continue
     }
-    differences.push(`${key}: ${formatJsonPreview(previousValue)} -> ${formatJsonPreview(nextValue)}`)
+    differences.push(`${key}: ${describeValuePreview(previousValue)} -> ${describeValuePreview(nextValue)}`)
   }
 
   return differences
 }
 
-function buildRepeatedAttemptGuidance(
+export function buildRepeatedAttemptGuidance(
   database: BackendDatabase,
   turnPackets: EvidencePacketIndex['packets'],
 ): string | null {
@@ -195,7 +215,7 @@ function buildRepeatedAttemptGuidance(
     for (const packet of packets) {
       const args = parseToolCallArgs(packet.tool_call_part_id, database)
       const outcome = getToolResultOutcome(packet, database)
-      sections.push(`  - ${packet.tool_call_part_id}: outcome=${outcome}; call=${formatJsonPreview(args)}`)
+      sections.push(`  - ${packet.tool_call_part_id}: outcome=${outcome}; call=${describeValuePreview(args)}`)
 
       if (previousArgs && previousPartId) {
         const differences = describeArgumentDifferences(previousArgs, args)
@@ -446,6 +466,7 @@ If the same tool appears multiple times for the same goal in this turn, compare 
 - Repeated tools in this turn: ${repeatedTools.length > 0 ? repeatedTools.join(', ') : 'none'}.
 - Backend-computed repeated-attempt comparison:${repeatedAttemptGuidance ? `\n${repeatedAttemptGuidance}` : ' none'}
 - Treat the backend-computed comparison above as authoritative. If it shows a concrete payload difference, do not describe the attempts as identical or explain success as instability.
+- In cross_attempt_reconciliation and brief_finding, describe payload values in words. Do not paste raw quoted JSON snippets or JSON arrays inside string fields.
 - If repeated tools are present, cross_attempt_reconciliation must not be null.
 - If there is no meaningful cross-attempt pattern and there are no repeated tools, return null for cross_attempt_reconciliation.
 
@@ -473,6 +494,7 @@ Return exactly one JSON object with this shape (no prose, just JSON):
     analysisSessionId,
     summaryQuestion,
     emitEvent,
+    input.stepId,
   )
 
   // ── Parse and validate ────────────────────────────────────────────────────

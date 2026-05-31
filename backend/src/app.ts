@@ -18,6 +18,7 @@ import { getDomainModelSummary } from './domain/model.js'
 import type { SessionRecord, TurnRecord } from './domain/model.js'
 import { deriveContextEntries, deriveTranscriptEntries } from './domain/selectors.js'
 import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from './domain/trace.js'
+import { listArtifactsBySession } from './analysis/artifactRepository.js'
 import { openBackendDatabase } from './persistence/db.js'
 import {
   deleteLmConnection,
@@ -811,6 +812,7 @@ export async function buildBackendApp(
       rounds,
       parts,
       rawExchanges,
+      artifacts: listArtifactsBySession(database.connection, sessionId),
       transcript: deriveTranscriptEntries(parts),
       context: deriveContextEntries(parts),
     })
@@ -853,6 +855,7 @@ export async function buildBackendApp(
       const turn: TurnRecord = {
         id: formatTurnId(sessionId, nextSeq),
         sessionId,
+        ownerStepId: null,
         sequenceNumber: nextSeq,
         status: 'streaming',
         createdAt,
@@ -981,6 +984,7 @@ export async function buildBackendApp(
       const turn: TurnRecord = {
         id: formatTurnId(sessionId, nextSeq),
         sessionId,
+        ownerStepId: null,
         sequenceNumber: nextSeq,
         status: 'streaming',
         createdAt,

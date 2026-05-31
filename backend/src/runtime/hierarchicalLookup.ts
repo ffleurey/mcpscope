@@ -216,6 +216,7 @@ function buildTurnNode(
     id: turn.id,
     type: 'turn',
     number: turn.sequenceNumber,
+    owner_step_id: turn.ownerStepId,
     ...(turn.status ? { status: turn.status } : {}),
     rounds: roundNodes,
   }
@@ -273,6 +274,7 @@ function buildCompactionStepEvidence(
 
 function buildStepNode(
   step: StepRecord,
+  steps: StepRecord[],
   turns: TurnRecord[],
   rounds: RoundRecord[],
   allParts: PartRecord[],
@@ -303,6 +305,15 @@ function buildStepNode(
     .map(part => buildPartNode(part, [], mode, true))
     .filter((node): node is object => node !== null)
 
+  const ownedTurnIds = turns
+    .filter(candidate => candidate.ownerStepId === step.id)
+    .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
+    .map(candidate => candidate.id)
+  const postambleStepIds = ownedTurnIds.flatMap((turnId) => steps
+    .filter(candidate => candidate.stepTypeKey === 'compaction' && candidate.params.sourceTurnId === turnId)
+    .sort((left, right) => left.ordinal - right.ordinal)
+    .map(candidate => candidate.id))
+
   const compactionEvidence = step.stepTypeKey === 'compaction'
     ? buildCompactionStepEvidence(step, allParts, mode)
     : {}
@@ -319,6 +330,8 @@ function buildStepNode(
     context_tokens_before: typeof step.state.contextTokensAtTurnEnd === 'number' ? step.state.contextTokensAtTurnEnd : null,
     context_tokens_after: typeof step.state.contextTokensAfterCompaction === 'number' ? step.state.contextTokensAfterCompaction : null,
     tokens_removed: typeof step.state.compactionTokensRemoved === 'number' ? step.state.compactionTokensRemoved : null,
+    owned_turn_ids: ownedTurnIds,
+    postamble_step_ids: postambleStepIds,
     ...compactionEvidence,
     parts: stepParts,
   }
@@ -374,7 +387,7 @@ export function resolveHierarchicalId(
         used: deriveContextWindowUsed(turns),
       },
       setup: buildSetupNode(session.id, setupParts, mode, false),
-      steps: steps.map(step => buildStepNode(step, turns, allRounds, allParts, mode, false)),
+      steps: steps.map(step => buildStepNode(step, steps, turns, allRounds, allParts, mode, false)),
       turns: turnNodes,
     }
 
@@ -425,7 +438,8 @@ export function resolveHierarchicalId(
     const turns = listTurnRecordsBySession(connection, step.sessionId)
     const rounds = listRoundRecordsBySession(connection, step.sessionId)
     const parts = listPartRecordsBySession(connection, step.sessionId)
-    const data = buildStepNode(step, turns, rounds, parts, mode, true)
+    const steps = listStepRecordsBySession(connection, step.sessionId)
+    const data = buildStepNode(step, steps, turns, rounds, parts, mode, true)
 
     return { status: 'ok', payload: { id: step.id, type: 'step', mode, data } }
   }

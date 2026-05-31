@@ -119,6 +119,7 @@ erDiagram
   v2_turns {
     TEXT step_id PK
     TEXT session_id FK
+    TEXT owner_step_id FK
     INTEGER sequence_number
     TEXT status
     TEXT outcome
@@ -209,6 +210,7 @@ erDiagram
   session_containers ||--o{ v2_sessions : owns
   v2_sessions ||--o{ v2_steps : executes
   v2_steps ||--|| v2_turns : turn_extension
+  v2_steps o|--o{ v2_turns : owns_turns
   v2_steps ||--o{ v2_rounds : iterates
   v2_sessions ||--o{ v2_parts : scopes
   v2_steps o|--o{ v2_parts : owns
@@ -226,6 +228,7 @@ erDiagram
 
 - `v2_steps.session_id`, `v2_turns.session_id`, `v2_rounds.step_id`, `v2_rounds.session_id`, `v2_parts.session_id`, and `v2_raw_exchanges.session_id` are required foreign keys with `ON DELETE CASCADE`.
 - `v2_turns.step_id` is the primary-key link from the generic step row to the turn-specific extension row.
+- `v2_turns.owner_step_id` is optional and links a turn to its owning non-turn step when workflow grouping is needed.
 - `v2_parts.step_id` and `v2_parts.round_id` are optional because setup parts live at the session level.
 - `v2_parts.parent_part_id` is a self-reference with `ON DELETE SET NULL`.
 - `v2_parts.stripped_by_compaction_at_step_id` points at the step that removed a part from active context and also uses `ON DELETE SET NULL`.
@@ -234,13 +237,12 @@ erDiagram
 ## Singleton Tables
 
 - `session_creation_defaults` is a one-row table enforced by `CHECK (id = 1)`.
-- `analysis_defaults` is also a one-row table enforced by `CHECK (id = 1)`.
 
-Those tables store selected default IDs, but the schema does not currently enforce foreign keys from them to `model_configs`, `mcp_server_profiles`, or `analysis_profiles`.
+That table stores selected default IDs, but the schema does not currently enforce foreign keys from it to `model_configs` or `mcp_server_profiles`.
 
 ## Snapshot and Catalog Tables
 
-- `model_configs`, `mcp_server_profiles`, `lm_connections`, and `analysis_profiles` are editable configuration catalogs.
+- `model_configs`, `mcp_server_profiles`, and `lm_connections` are editable configuration catalogs.
 - `model_profiles` and `mcp_profiles` are snapshot catalogs written alongside session creation for historical inspectability.
 - session runtime rows persist model/MCP snapshots inside `v2_sessions.params_json`; they do not foreign-key to snapshot catalogs.
 
@@ -251,7 +253,7 @@ The canonical runtime path is:
 - `session_containers` for container ownership such as `Benchmark`
 - `v2_sessions` for generic session rows and parent-container references
 - `v2_steps` for generic execution-unit rows
-- `v2_turns` for the LLM-specific step extension
+- `v2_turns` for the LLM-specific step extension, including optional `owner_step_id` workflow grouping
 - `v2_rounds` for turn-owned iterations
 - `v2_parts` for canonical setup/round parts
 - `v2_raw_exchanges` for diagnostics and replay payloads

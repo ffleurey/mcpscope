@@ -125,6 +125,7 @@ The shipped product implements:
 - `SessionContainer` ownership: sessions may belong to a parent session or a `Benchmark` container
 - `Benchmark` as a minimal `SessionContainer` for grouping sessions (full benchmark domain design is future work)
 - generic container/session/step persistence without table-per-subtype growth
+- constrained one-level step-owned-turn grouping for workflow-oriented traces
 - the current runtime tree (setup / turn / round / part) unchanged from user perspective
 - `session_analysis` child sessions used by the analysis workflow
 - deterministic non-LLM workflow steps used by the shipped analysis-session orchestration

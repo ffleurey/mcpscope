@@ -62,6 +62,17 @@ function extractJsonBlock(text: string): string {
   return trimmed
 }
 
+function normalizeFinalReportIdentity(parsedJson: unknown, totalToolCallsAssessed: number): unknown {
+  if (!parsedJson || typeof parsedJson !== 'object' || Array.isArray(parsedJson)) {
+    return parsedJson
+  }
+
+  return {
+    ...parsedJson,
+    total_tool_calls_assessed: totalToolCallsAssessed,
+  }
+}
+
 function retireFinalAggregationPromptContext(
   database: BackendDatabase,
   userPartId: string,
@@ -339,6 +350,7 @@ Return exactly one JSON object with this shape (no prose, just JSON):
     analysisSessionId,
     synthesisQuestion,
     emitEvent,
+    input.stepId,
   )
 
   // ── Parse and validate ────────────────────────────────────────────────────
@@ -367,6 +379,8 @@ Return exactly one JSON object with this shape (no prose, just JSON):
       success: false,
     }
   }
+
+  parsedJson = normalizeFinalReportIdentity(parsedJson, assessments.length)
 
   const parsed = finalAnalysisReportSchema.safeParse(parsedJson)
   if (!parsed.success) {

@@ -42,8 +42,11 @@ At a high level:
 
 The analysis session itself has a normal setup containing:
 
-- a system prompt for the analysis model
+- a backend-built system prompt for the analysis model
 - tool definitions for the restricted analysis MCP surface
+
+Launch resolves a normal model config directly. The workflow no longer depends on a separate
+analysis-profile catalog.
 
 The restricted analysis MCP surface currently exposes only:
 
@@ -81,7 +84,7 @@ not just a setup/view distinction; it is missing bootstrap evidence for the targ
 ## Deterministic evidence path
 
 Model-visible evidence must be loaded through deterministic `mcpscope_inspect` calls that are
-committed into the analysis session as ordinary `tool_call` parts with embedded results.
+committed into the analysis session as ordinary tool interactions.
 
 This is the key rule that keeps the workflow inspectable. The workflow does not flatten
 parent-session evidence into one large synthetic prompt. Instead:
@@ -116,6 +119,10 @@ These artifacts hold the durable analysis outputs and indexes. Coverage is deriv
 evidence-packet index plus accepted assessment artifacts rather than from a separate bookkeeping
 artifact. Normal turns and parts hold model-visible conversation and evidence.
 
+The default trace/view groups owned turns and artifacts under their workflow step. Custom analysis
+steps may own zero or more turns, but containment stops at one level: a turn may belong to one
+non-turn step, and turns do not own further turns.
+
 ## Packet model
 
 The analysis unit is one tool-call packet.
@@ -124,7 +131,7 @@ For each packet, the workflow loads the exact parent-session evidence slice need
 tool interaction. Depending on what exists in the parent session, that slice can include:
 
 - reasoning before the tool call
-- the tool-call part itself, including the embedded tool result when tool results are stored that way
+- the tool-call part itself and the corresponding tool result
 - reasoning after the tool result
 - the downstream final answer when result usage needs to be judged directly
 

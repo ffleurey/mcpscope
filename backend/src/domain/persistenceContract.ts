@@ -149,6 +149,8 @@ export interface TurnPersistenceRecord {
   /** References StepPersistenceRecord.id. */
   readonly stepId: string
   readonly sessionId: string
+  /** Optional owning workflow step for composite-step projections. */
+  readonly ownerStepId: string | null
   readonly sequenceNumber: number
   readonly outcome: string | null
   readonly promptTokens: number | null

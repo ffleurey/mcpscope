@@ -478,13 +478,13 @@ export function insertTurnV2Record(
 ): void {
   connection.prepare(`
     INSERT INTO v2_turns (
-      step_id, session_id, sequence_number, status, outcome,
+      step_id, session_id, owner_step_id, sequence_number, status, outcome,
       prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
       context_tokens_at_turn_end, context_tokens_after_compaction,
       compaction_applied, compaction_tokens_removed,
       created_at, completed_at
     ) VALUES (
-      @stepId, @sessionId, @sequenceNumber, @status, @outcome,
+      @stepId, @sessionId, @ownerStepId, @sequenceNumber, @status, @outcome,
       @promptTokens, @completionTokens, @reasoningTokens, @totalTokens,
       @contextTokensAtTurnEnd, @contextTokensAfterCompaction,
       @compactionApplied, @compactionTokensRemoved,
@@ -493,6 +493,7 @@ export function insertTurnV2Record(
   `).run({
     stepId: record.stepId,
     sessionId: record.sessionId,
+    ownerStepId: record.ownerStepId,
     sequenceNumber: record.sequenceNumber,
     status: 'draft',
     outcome: record.outcome,
@@ -518,6 +519,7 @@ export function getTurnV2Record(
   `).get(stepId) as {
     step_id: string
     session_id: string
+    owner_step_id: string | null
     sequence_number: number
     status: string
     outcome: string | null
@@ -538,6 +540,7 @@ export function getTurnV2Record(
   return {
     stepId: row.step_id,
     sessionId: row.session_id,
+    ownerStepId: row.owner_step_id,
     sequenceNumber: row.sequence_number,
     outcome: row.outcome,
     promptTokens: row.prompt_tokens,
@@ -559,6 +562,7 @@ export function updateTurnV2Record(
   const updates: string[] = []
   const params: Record<string, unknown> = { stepId }
 
+  if (fields.ownerStepId !== undefined) { updates.push('owner_step_id = @ownerStepId'); params.ownerStepId = fields.ownerStepId }
   if (fields.outcome !== undefined) { updates.push('outcome = @outcome'); params.outcome = fields.outcome }
   if (fields.promptTokens !== undefined) { updates.push('prompt_tokens = @promptTokens'); params.promptTokens = fields.promptTokens }
   if (fields.completionTokens !== undefined) { updates.push('completion_tokens = @completionTokens'); params.completionTokens = fields.completionTokens }
@@ -588,6 +592,7 @@ export function listTurnV2RecordsBySession(
   `).all(sessionId) as Array<{
     step_id: string
     session_id: string
+    owner_step_id: string | null
     sequence_number: number
     status: string
     outcome: string | null
@@ -606,6 +611,7 @@ export function listTurnV2RecordsBySession(
   return rows.map(row => ({
     stepId: row.step_id,
     sessionId: row.session_id,
+    ownerStepId: row.owner_step_id,
     sequenceNumber: row.sequence_number,
     outcome: row.outcome,
     promptTokens: row.prompt_tokens,

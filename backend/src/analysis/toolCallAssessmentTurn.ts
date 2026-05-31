@@ -123,6 +123,7 @@ export async function runToolCallAssessmentTurn(
       toolArgs: { id: partId },
     })),
     emitEvent,
+    input.stepId,
   )
   injectPartIds.push(...toolCallPartIds, ...toolResultPartIds)
 
@@ -137,6 +138,7 @@ export async function runToolCallAssessmentTurn(
     analysisSessionId,
     assessmentQuestion,
     emitEvent,
+    input.stepId,
   )
 
   // ── Parse and validate the response ──────────────────────────────────────

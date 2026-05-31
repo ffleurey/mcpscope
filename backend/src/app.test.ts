@@ -364,6 +364,7 @@ describe('backend foundation', () => {
         {
           id: capturedReasoningThreeBatchRounds[0]!.turnId,
           sessionId: capturedReasoningThreeBatchSession.id,
+          ownerStepId: null,
           sequenceNumber: 1,
           status: 'complete',
           createdAt: 1,
@@ -428,6 +429,7 @@ describe('backend foundation', () => {
         {
           id: 'captured-reasoning-turn',
           sessionId: capturedReasoningThreeBatchSession.id,
+          ownerStepId: null,
           sequenceNumber: 1,
           status: 'streaming',
           createdAt: 1,
@@ -551,6 +553,7 @@ describe('backend foundation', () => {
         {
           id: sourceTurnId,
           sessionId: sourceSessionId,
+          ownerStepId: null,
           sequenceNumber: 1,
           status: 'complete',
           createdAt: 1,
@@ -2837,6 +2840,7 @@ describe('CLI session lifecycle endpoints', () => {
       insertTurnRecord(a.backendDb.connection, {
         id: `${sessionId}.1`,
         sessionId,
+        ownerStepId: null,
         sequenceNumber: 1,
         status: 'streaming',
         outcome: null,
@@ -3350,6 +3354,7 @@ describe('analysis launch', () => {
     insertTurnRecord(appInst.backendDb.connection, {
       id: turnId,
       sessionId,
+      ownerStepId: null,
       sequenceNumber: 1,
       status: 'complete',
       outcome: 'model-response',
@@ -3480,6 +3485,7 @@ describe('analysis launch', () => {
     insertTurnRecord(appInst.backendDb.connection, {
       id: turnId,
       sessionId,
+      ownerStepId: null,
       sequenceNumber: 1,
       status: 'complete',
       outcome: 'model-response',
@@ -4042,6 +4048,7 @@ describe('analysis launch', () => {
     insertTurnRecord(appInst.backendDb.connection, {
       id: turnId,
       sessionId: targetId,
+      ownerStepId: null,
       sequenceNumber: 1,
       status: 'streaming',
       outcome: null,

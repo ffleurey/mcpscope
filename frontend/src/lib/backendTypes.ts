@@ -194,6 +194,7 @@ export const stepRecordSchema = z.object({
 export const turnRecordSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
+  ownerStepId: z.string().nullable(),
   sequenceNumber: z.number().int().nonnegative(),
   status: turnStatusSchema,
   createdAt: z.number().int().nonnegative(),
@@ -253,6 +254,22 @@ export const rawExchangeRecordSchema = z.object({
   createdAt: z.number().int().nonnegative(),
 })
 
+export const traceArtifactSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  stepId: z.string().nullable(),
+  content: z.unknown(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.number().int().nonnegative(),
+})
+
+export const workflowStepTraceSchema = z.object({
+  step: stepRecordSchema,
+  ownedTurns: z.array(turnRecordSchema).default([]),
+  postambleSteps: z.array(stepRecordSchema).default([]),
+  artifacts: z.array(traceArtifactSchema).default([]),
+})
+
 export const transcriptEntrySchema = z.object({
   id: z.string(),
   turnId: z.string().nullable(),
@@ -283,6 +300,8 @@ export const sessionTraceBundleSchema = z.object({
   rounds: z.array(roundRecordSchema),
   parts: z.array(partRecordSchema),
   rawExchanges: z.array(rawExchangeRecordSchema),
+  artifacts: z.array(traceArtifactSchema).optional().default([]),
+  workflowSteps: z.array(workflowStepTraceSchema).optional().default([]),
   transcript: z.array(transcriptEntrySchema),
   context: z.array(contextEntrySchema),
 })
@@ -440,6 +459,8 @@ export type TurnRecord = z.infer<typeof turnRecordSchema>
 export type RoundRecord = z.infer<typeof roundRecordSchema>
 export type PartRecord = z.infer<typeof partRecordSchema>
 export type RawExchangeRecord = z.infer<typeof rawExchangeRecordSchema>
+export type TraceArtifactRecord = z.infer<typeof traceArtifactSchema>
+export type WorkflowStepTrace = z.infer<typeof workflowStepTraceSchema>
 export type TranscriptEntry = z.infer<typeof transcriptEntrySchema>
 export type ContextEntry = z.infer<typeof contextEntrySchema>
 export type SessionTraceBundle = z.infer<typeof sessionTraceBundleSchema>

@@ -27,6 +27,7 @@ import {
 import { buildSessionTraceBundle } from '../domain/trace.js'
 import { deriveTranscriptEntries, deriveContextEntries } from '../domain/selectors.js'
 import { AnalysisSession } from '../analysis/analysisSession.js'
+import { listArtifactsBySession } from '../analysis/artifactRepository.js'
 import type { OperationContext } from './context.js'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
 
@@ -138,6 +139,7 @@ export async function executeAnalysisWorkflow(
     rounds: listRoundRecordsBySession(db.connection, analysisSessionId),
     parts: finalParts,
     rawExchanges: listRawExchangeRecordsBySession(db.connection, analysisSessionId),
+    artifacts: listArtifactsBySession(db.connection, analysisSessionId),
     transcript: deriveTranscriptEntries(finalParts),
     context: deriveContextEntries(finalParts),
   })

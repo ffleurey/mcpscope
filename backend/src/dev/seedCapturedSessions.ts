@@ -40,6 +40,7 @@ function buildCuratedReasoningTrace(): SessionTraceBundle {
     turns: [{
       id: turnId,
       sessionId: capturedReasoningThreeBatchSession.id,
+      ownerStepId: null,
       sequenceNumber: 0,
       status: 'complete',
       createdAt,

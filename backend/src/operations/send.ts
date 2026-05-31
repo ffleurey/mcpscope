@@ -76,6 +76,7 @@ export const sendOperation = {
       const turn: TurnRecord = {
         id: formatTurnId(sessionId, nextSeq),
         sessionId,
+        ownerStepId: null,
         sequenceNumber: nextSeq,
         status: 'streaming',
         createdAt,

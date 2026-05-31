@@ -273,6 +273,7 @@ export async function runBootstrapStep(
     analysisSession,
     bootstrapInspectCalls,
     emitEvent,
+    input.stepId,
   )
 
   // ── 7. Mark bootstrap as complete, seed packet counts ───────────────────

@@ -18,6 +18,7 @@ import { getLatestArtifactBySchemaKey, insertJsonArtifact } from './artifactRepo
 import { runContextMutationStep } from './contextMutationStep.js'
 import { runCoverageValidationStep } from './coverageValidationStep.js'
 import { runFinalAggregationTurn } from './finalAggregationTurn.js'
+import { buildRepeatedAttemptGuidance } from './turnSummaryTurn.js'
 import { SCHEMA_KEY, type AnalysisSessionState, type EvidencePacketIndex } from './schemas.js'
 import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 
@@ -63,6 +64,7 @@ function makeTurnRecord(overrides: Partial<TurnRecord> & Pick<TurnRecord, 'id' |
   return {
     id: overrides.id,
     sessionId: overrides.sessionId,
+    ownerStepId: overrides.ownerStepId ?? null,
     sequenceNumber: overrides.sequenceNumber,
     status: overrides.status ?? 'complete',
     createdAt: overrides.createdAt ?? 1,
@@ -724,5 +726,274 @@ describe('analysis workflow helpers', () => {
       primary_issue: 'wrong_parameters',
       total_tool_calls_assessed: 2,
     })
+  })
+
+  it('final aggregation fills total_tool_calls_assessed deterministically when omitted by the model', async () => {
+    db = makeTestDatabase()
+
+    createSessionRecord(db.connection, makeSessionRecord({ id: 'TARG' }))
+    createSessionRecord(db.connection, makeSessionRecord({
+      id: 'ANLY',
+      sessionType: 'session_analysis',
+      parentKind: 'session',
+      parentId: 'TARG',
+      mcpProfileSnapshot: {
+        id: 'analysis-mcp',
+        name: 'analysis-mcp',
+        url: 'http://localhost:3030/mcp/analysis',
+        transport: 'streamable-http',
+        authType: null,
+        authValue: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    }))
+    insertStepRecord(db.connection, makeStepRecord({
+      id: 'step-final',
+      sessionId: 'ANLY',
+      stepTypeKey: 'analysis_final_aggregation' as StepPersistenceRecord['stepTypeKey'],
+      ordinal: 0,
+      status: 'running',
+    }))
+
+    insertJsonArtifact(db.connection, {
+      id: 'target',
+      sessionId: 'ANLY',
+      stepId: null,
+      content: {
+        target_session_id: 'TARG',
+        target_turn_id: 'TURN-2',
+        analysis_goal: 'Evaluate tool usage.',
+        selected_tool_names: [],
+        only_failed_tool_calls: false,
+        evaluation_criteria: [],
+        analyzed_turn_ids: ['TURN-1', 'TURN-2'],
+        target_mcp_instructions_part_id: null,
+        target_tool_definitions_part_id: null,
+        user_request_part_id: null,
+        final_answer_part_id: null,
+      },
+      metadata: { schema_key: SCHEMA_KEY.ANALYSIS_TARGET },
+      createdAt: 1,
+    })
+    insertJsonArtifact(db.connection, {
+      id: 'assessment-1',
+      sessionId: 'ANLY',
+      stepId: null,
+      content: {
+        turn_id: 'TURN-1',
+        round_id: 'TURN-1.1',
+        tool_call_part_id: 'TC-1',
+        tool_name: 'test_tool',
+        expectation_match: 'match',
+        tool_call_assessment: 'The tool call correctly requested the needed values.',
+        most_direct_cause: null,
+        parameter_or_call_issues: [],
+        post_call_assessment: null,
+      },
+      metadata: { schema_key: SCHEMA_KEY.TOOL_CALL_ASSESSMENT, turn_id: 'TURN-1', tool_call_part_id: 'TC-1' },
+      createdAt: 2,
+    })
+    insertJsonArtifact(db.connection, {
+      id: 'assessment-2',
+      sessionId: 'ANLY',
+      stepId: null,
+      content: {
+        turn_id: 'TURN-2',
+        round_id: 'TURN-2.1',
+        tool_call_part_id: 'TC-2',
+        tool_name: 'test_tool',
+        expectation_match: 'match',
+        tool_call_assessment: 'The tool call correctly requested the needed values.',
+        most_direct_cause: null,
+        parameter_or_call_issues: [],
+        post_call_assessment: null,
+      },
+      metadata: { schema_key: SCHEMA_KEY.TOOL_CALL_ASSESSMENT, turn_id: 'TURN-2', tool_call_part_id: 'TC-2' },
+      createdAt: 3,
+    })
+    insertJsonArtifact(db.connection, {
+      id: 'summary-1',
+      sessionId: 'ANLY',
+      stepId: null,
+      content: {
+        turn_id: 'TURN-1',
+        total_tool_calls_assessed: 1,
+        turn_outcome: 'successful',
+        turn_outcome_rationale: 'The first turn succeeded.',
+        per_tool_findings: [{ tool_call_part_id: 'TC-1', tool_name: 'test_tool', brief_finding: 'The first turn was a clean success.' }],
+        cross_attempt_reconciliation: null,
+      },
+      metadata: { schema_key: SCHEMA_KEY.TURN_SUMMARY, turn_id: 'TURN-1' },
+      createdAt: 4,
+    })
+    insertJsonArtifact(db.connection, {
+      id: 'summary-2',
+      sessionId: 'ANLY',
+      stepId: null,
+      content: {
+        turn_id: 'TURN-2',
+        total_tool_calls_assessed: 1,
+        turn_outcome: 'successful',
+        turn_outcome_rationale: 'The second turn succeeded.',
+        per_tool_findings: [{ tool_call_part_id: 'TC-2', tool_name: 'test_tool', brief_finding: 'The second turn was a clean success.' }],
+        cross_attempt_reconciliation: null,
+      },
+      metadata: { schema_key: SCHEMA_KEY.TURN_SUMMARY, turn_id: 'TURN-2' },
+      createdAt: 5,
+    })
+
+    const lmGateway: LmStudioGateway = {
+      async createChatCompletion() {
+        return {
+          id: 'cmpl-final-omitted-total',
+          object: 'chat.completion',
+          created: Date.now(),
+          model: 'test-model',
+          choices: [{
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: JSON.stringify({
+                outcome: 'answered',
+                outcome_rationale: 'The workflow answered the request after consolidating both analyzed turns.',
+                primary_issue: 'none',
+                primary_issue_rationale: null,
+                path_efficiency: 'efficient',
+                path_efficiency_rationale: 'The workflow succeeded without corrective retries.',
+                findings: ['The first turn was a clean success.', 'The second turn was a clean success.'],
+                tool_description_findings: [],
+                improvement_suggestions: [],
+                tool_description_improvement_suggestions: [],
+              }),
+            },
+            finish_reason: 'stop',
+          }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }
+      },
+      async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+        const messages = (body.messages as unknown[]) ?? []
+        const promptTokens = messages.length * 5
+        return {
+          promptTokens,
+          completion: {
+            id: 'probe-test',
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+            usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+          },
+          rawExchange: {
+            requestUrl: 'https://example.com/v1/chat/completions',
+            requestMethod: 'POST',
+            requestHeadersJson: {},
+            requestBody: JSON.stringify(body),
+            responseStatus: 200,
+            responseHeadersJson: {},
+            responseBody: '{}',
+          },
+        }
+      },
+    }
+
+    const result = await runFinalAggregationTurn(db, lmGateway, fakeMcpGateway, {
+      state: makeAnalysisState({
+        analysisSessionId: 'ANLY',
+        targetSessionId: 'TARG',
+        targetTurnId: 'TURN-2',
+        phase: 'final_aggregation',
+      }),
+      stepId: 'step-final',
+    })
+
+    expect(result.success).toBe(true)
+
+    const finalArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', SCHEMA_KEY.FINAL_ANALYSIS_REPORT)
+    expect(finalArtifact?.content).toMatchObject({
+      outcome: 'answered',
+      primary_issue: 'none',
+      total_tool_calls_assessed: 2,
+    })
+  })
+
+  it('repeated-attempt guidance avoids raw quoted JSON snippets', () => {
+    db = makeTestDatabase()
+
+    createSessionRecord(db.connection, makeSessionRecord({ id: 'TARG' }))
+    insertTurnRecord(db.connection, makeTurnRecord({ id: 'TARG.1', sessionId: 'TARG', sequenceNumber: 1 }))
+    insertRoundRecord(db.connection, makeRoundRecord({ id: 'TARG.1.1', turnId: 'TARG.1', roundIndex: 0 }))
+    insertRoundRecord(db.connection, makeRoundRecord({ id: 'TARG.1.2', turnId: 'TARG.1', roundIndex: 1 }))
+
+    insertPartRecord(db.connection, makePartRecord({
+      id: 'TARG.1.1.1-T',
+      sessionId: 'TARG',
+      turnId: 'TARG.1',
+      roundId: 'TARG.1.1',
+      ordinal: 1,
+      partType: 'tool-call',
+      payload: {
+        text: null,
+        json: { arguments: JSON.stringify({ aggregation: ['max'], interval: 'day' }) },
+        mimeType: null,
+        summary: null,
+      },
+    }))
+    insertPartRecord(db.connection, makePartRecord({
+      id: 'TARG.1.1.2-TR',
+      sessionId: 'TARG',
+      turnId: 'TARG.1',
+      roundId: 'TARG.1.1',
+      ordinal: 2,
+      partType: 'tool-result',
+    }))
+    insertPartRecord(db.connection, makePartRecord({
+      id: 'TARG.1.2.1-T',
+      sessionId: 'TARG',
+      turnId: 'TARG.1',
+      roundId: 'TARG.1.2',
+      ordinal: 2,
+      partType: 'tool-call',
+      payload: {
+        text: null,
+        json: { arguments: JSON.stringify({ aggregation: 'max', interval: 'day' }) },
+        mimeType: null,
+        summary: null,
+      },
+    }))
+    insertPartRecord(db.connection, makePartRecord({
+      id: 'TARG.1.2.2-TR',
+      sessionId: 'TARG',
+      turnId: 'TARG.1',
+      roundId: 'TARG.1.2',
+      ordinal: 4,
+      partType: 'tool-result',
+    }))
+
+    const guidance = buildRepeatedAttemptGuidance(db, [
+      {
+        turn_id: 'TARG.1',
+        round_id: 'TARG.1.1',
+        tool_call_part_id: 'TARG.1.1.1-T',
+        tool_name: 'ha_history_get_sensor_stats',
+        reasoning_before_part_id: null,
+        tool_result_part_id: 'TARG.1.1.2-TR',
+        reasoning_after_part_id: null,
+      },
+      {
+        turn_id: 'TARG.1',
+        round_id: 'TARG.1.2',
+        tool_call_part_id: 'TARG.1.2.1-T',
+        tool_name: 'ha_history_get_sensor_stats',
+        reasoning_before_part_id: null,
+        tool_result_part_id: 'TARG.1.2.2-TR',
+        reasoning_after_part_id: null,
+      },
+    ])
+
+    expect(guidance).toContain('aggregation: array(string(max)) -> string(max)')
+    expect(guidance).not.toContain('["max"]')
+    expect(guidance).not.toContain('"max"')
   })
 })
