@@ -2,9 +2,11 @@
 
 This document describes the currently shipped `session_analysis` workflow.
 
-Use it as the project-level source of truth for how session analysis works in mcpscope today.
+Use it as the project-level technical source of truth for how session analysis works in mcpscope today.
 
 For historical planning context, see the completed backlog records in `backlog/completed/`.
+
+For a usage-oriented walkthrough and practical inspection checklist, use `MANUAL.md`.
 
 ## Purpose
 
@@ -109,88 +111,6 @@ The context policy is intentionally narrow.
 
 This keeps the trace inspectable without letting packet-local evidence snowball across the whole
 analysis session.
-
-## Example: V2EH analyzing CXQJ
-
-`V2EH` is a good concrete reference session analyzing source session `CXQJ`.
-
-### Bootstrap
-
-`V2EH.S` is the analysis-session prelude.
-
-The first deterministic evidence-loading turn is `V2EH.1`:
-
-- `V2EH.1.1.1-T` inspects `CXQJ`
-- `V2EH.1.2.1-T` inspects `CXQJ.S`
-
-So the analyzed session's own setup enters the analysis session as inspected evidence, not as part
-of `V2EH.S`.
-
-### Packet assessments for `CXQJ.1`
-
-`V2EH` assesses four packets for `CXQJ.1`.
-
-Packet 1 uses `V2EH.2` and loads:
-
-- `CXQJ.1.1.2-R`
-- `CXQJ.1.1.3-T`
-- `CXQJ.1.2.1-R`
-
-Packet 2 uses `V2EH.4` and loads:
-
-- `CXQJ.1.2.1-R`
-- `CXQJ.1.2.2-T`
-- `CXQJ.1.3.1-R`
-
-Packet 3 uses `V2EH.6` and loads:
-
-- `CXQJ.1.3.1-R`
-- `CXQJ.1.3.2-T`
-- `CXQJ.1.4.1-R`
-
-Packet 4 uses `V2EH.8` and loads:
-
-- `CXQJ.1.4.1-R`
-- `CXQJ.1.4.2-T`
-- `CXQJ.1.5.1-R`
-
-This shows the shipped fix for cross-round post-call reasoning: packets 1 through 4 all include
-the reasoning that lives in the next source round.
-
-### Packet assessment for `CXQJ.2`
-
-`V2EH.11` assesses the one tool-call packet in `CXQJ.2` and loads:
-
-- `CXQJ.2.1.2-R`
-- `CXQJ.2.1.3-T`
-- `CXQJ.2.2.1-A`
-
-That packet supports judging whether the successful stats query was used correctly in the follow-up
-answer.
-
-### Summaries and final report
-
-After the packet assessments:
-
-- `V2EH.10` summarizes turn `CXQJ.1`
-- `V2EH.13` summarizes turn `CXQJ.2`
-- `V2EH.14` produces the final analysis report
-
-In this example, the grounded diagnosis is that the user request was answered, but the path was
-inefficient because `ha_history_get_sensor_stats` behaved inconsistently around `aggregation`
-versus `aggregations` and forced repeated attempts.
-
-## Manual inspection checklist
-
-When validating a live analysis session, check these points first:
-
-1. the analysis session has its own prelude with only `mcpscope_inspect` and `mcpscope_status`
-2. bootstrap loads the target session and target setup through deterministic inspect turns
-3. packet-local inspect turns load exact parent-session IDs rather than a synthetic evidence prompt
-4. post-call reasoning is present when it exists in the next source round
-5. packet-local inspect evidence becomes excluded after the corresponding assessment
-6. assessment prompts are short and referential rather than restating all evidence
-7. turn summaries and the final report are grounded in accepted earlier outputs
 
 ## Validation
 

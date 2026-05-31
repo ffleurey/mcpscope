@@ -19,7 +19,8 @@ The value of the project depends on correctness and inspectability:
 ## Documentation boundaries
 
 - [DATA-MODEL.md](DATA-MODEL.md) — compact canonical runtime tree, public part taxonomy, canonical IDs, and lookup-model rules
-- [SESSION-ANALYSIS.md](SESSION-ANALYSIS.md) — shipped `session_analysis` workflow, evidence-loading rules, and reference example
+- [SESSION-ANALYSIS.md](SESSION-ANALYSIS.md) — shipped `session_analysis` workflow and evidence-loading rules
+- [MANUAL.md](MANUAL.md) — usage-oriented guide, goals, and practical walkthroughs
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) — current SQLite tables, foreign keys, singleton defaults, and ER diagram
 - [CLI.md](CLI.md) — CLI command reference: commands, flags, output format, exit codes
 - `ARCHITECTURE.md` — system design, persistence model, streaming model, replay model, and API overview

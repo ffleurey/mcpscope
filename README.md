@@ -10,22 +10,31 @@ separate substrate.
 
 ## Documentation map
 
-- [README.md](README.md) - repository/developer entrypoint for working on mcpscope itself
-- [TUTORIAL.md](TUTORIAL.md) - packaged user/tester tutorial for running released mcpscope in Docker
-- [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
-- [MCP.md](MCP.md) - MCP interface reference: transport, tool surface, and structured results
+### Technical reference
+
 - [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
-- [SESSION-ANALYSIS.md](SESSION-ANALYSIS.md) - shipped `session_analysis` workflow, evidence protocol, and concrete reference example
-- [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
-- [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) - current SQLite tables, foreign keys, singleton defaults, and Mermaid ER diagram
+- [DATA-MODEL.md](DATA-MODEL.md) - canonical runtime tree, part taxonomy, and canonical IDs
+- [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) - SQLite tables, foreign keys, singleton defaults, and ER diagram
+- [SESSION-ANALYSIS.md](SESSION-ANALYSIS.md) - shipped `session_analysis` workflow and evidence-loading contract
+- [MCP.md](MCP.md) - MCP interface reference: transport, tool surface, and structured results
+- [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
+- [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
+
+### Manual and use cases
+
+- [MANUAL.md](MANUAL.md) - usage-oriented guide, session-analysis walkthrough, and mental model
+- [TUTORIAL.md](TUTORIAL.md) - packaged user/tester tutorial for running released mcpscope in Docker
+- [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) - first concrete reference scenario and evaluation target
+- [FRONTEND-TEST.md](FRONTEND-TEST.md) - optional manual UI checks with agent-browser
+
+### Project workflow
+
+- [README.md](README.md) - repository/developer entrypoint for working on mcpscope itself
+- [RELEASING.md](RELEASING.md) - release workflow and GHCR image publishing
 - [backlog/README.md](backlog/README.md) - backlog workflow, state folders, and promotion rules
 - [backlog/ROADMAP.md](backlog/ROADMAP.md) - current product direction and backlog posture
-- [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
-- [FRONTEND-TEST.md](FRONTEND-TEST.md) - optional manual browser-based UI checks with agent-browser
-- [RELEASING.md](RELEASING.md) - release workflow and GHCR image publishing
-- [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) - reference workflow used to evaluate MCP analysis scenarios
+- [backend-data/README.md](backend-data/README.md) - local runtime data and live-test artifact policy
 - [`research/`](research/) - archived payload studies and superseded design research kept for context
-- [`backend-data/README.md`](backend-data/README.md) - local runtime data and live-test artifact policy
 
 ## Audience
 
@@ -33,6 +42,7 @@ This file is for developers working on mcpscope itself.
 
 If you want to use a released mcpscope build to evaluate an MCP server, start with:
 
+- [MANUAL.md](MANUAL.md) for the usage model and session-analysis walkthrough
 - [TUTORIAL.md](TUTORIAL.md) for the Docker/user workflow
 - [RELEASING.md](RELEASING.md) for GHCR image usage and tags
 
@@ -85,42 +95,13 @@ npm run seed:dev-data      # both of the above
 
 ## Packaged user workflow
 
-The released/product workflow is Docker — no Node.js install and no host CLI install required.
+The released/product workflow is Docker.
 
-For the published GHCR image, authenticate first with a GitHub PAT that has `read:packages`:
+Use these docs instead of the developer setup in this file:
 
-```bash
-echo "$GITHUB_PAT" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-docker pull ghcr.io/ffleurey/mcpscope:latest
-docker run -d \
-  --name mcpscope-app \
-  --restart unless-stopped \
-  --add-host=host.docker.internal:host-gateway \
-  -p 3030:3030 \
-  -v mcpscope-data:/data \
-  ghcr.io/ffleurey/mcpscope:latest
-```
-
-The Web UI and API are both exposed through **`http://localhost:3030`**.
-
-If you prefer to build locally instead:
-
-```bash
-docker build -t mcpscope .
-docker run -d --name mcpscope-app -p 3030:3030 mcpscope
-```
-
-Then open **http://localhost:3030**.
-
-Run the CLI inside the same container:
-
-```bash
-docker exec -i mcpscope-app mcpscope list
-```
-
-`docker compose` remains available as a convenience wrapper around the same image.
-
-For the full user/tester walkthrough, use [TUTORIAL.md](TUTORIAL.md).
+- [MANUAL.md](MANUAL.md) for the usage model and goals
+- [TUTORIAL.md](TUTORIAL.md) for the step-by-step Docker path
+- [RELEASING.md](RELEASING.md) for GHCR image details
 
 ## Build
 
