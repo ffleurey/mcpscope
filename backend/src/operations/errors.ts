@@ -38,6 +38,7 @@ export function operationErrorToHttpStatus(code: string | undefined): number {
     case 'another_session_active':
     case 'turn_in_progress':
     case 'session_not_initialized':
+    case 'session_already_queued':
     case 'duplicate_session_id':
     case 'session_id_generation_failed':
       return 409

@@ -15,6 +15,8 @@ import {
   upsertModelConfigResponseSchema,
   launchAnalysisResponseSchema,
   analysisSystemPromptResponseSchema,
+  executionSnapshotSchema,
+  schedulerEventSchema,
   type LmStudioConnection,
   type McpServerProfile,
   type ModelConfig,
@@ -25,6 +27,9 @@ import {
   type TurnStreamEvent,
   analysisStreamEventSchema,
   type AnalysisStreamEvent,
+  type ExecutionSnapshot,
+  type SchedulerEvent,
+  type ExecutionJob,
 } from '../backendTypes'
 import { AppError } from '../errors'
 
@@ -567,5 +572,72 @@ export async function streamExecuteAnalysis(
   if (trailing?.dataText) {
     const event = analysisStreamEventSchema.parse(JSON.parse(trailing.dataText))
     await onEvent(event)
+  }
+}
+
+// ─── Scheduler API ──────────────────────────────────────────────────────────
+
+export function getSchedulerSnapshot(): Promise<ExecutionSnapshot> {
+  return request('/api/scheduler/snapshot', { schema: executionSnapshotSchema })
+}
+
+export function enqueueSession(sessionId: string, prompt?: string): Promise<{ job: ExecutionJob }> {
+  return request('/api/scheduler/enqueue', {
+    method: 'POST',
+    body: { session_id: sessionId, ...(prompt !== undefined ? { prompt } : {}) },
+  })
+}
+
+export function pauseScheduler(): Promise<{ ok: boolean; controlState: string }> {
+  return request('/api/scheduler/pause', { method: 'POST' })
+}
+
+export function resumeScheduler(): Promise<{ ok: boolean; controlState: string }> {
+  return request('/api/scheduler/resume', { method: 'POST' })
+}
+
+export function removeSchedulerJob(jobId: string): Promise<void> {
+  return request<void>(`/api/scheduler/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' })
+}
+
+export async function streamSchedulerEvents(
+  onEvent: (event: SchedulerEvent) => void | Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(buildUrl('/api/scheduler/stream'), {
+    headers: { Accept: 'text/event-stream' },
+    signal,
+  })
+
+  if (!response.ok || !response.body) {
+    throw new AppError('Failed to connect to scheduler stream', 'internal', response.status)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
+
+      let separatorIndex = buffer.search(/\r?\n\r?\n/)
+      while (separatorIndex >= 0) {
+        const block = buffer.slice(0, separatorIndex)
+        buffer = buffer.slice(separatorIndex + (buffer[separatorIndex] === '\r' ? 4 : 2))
+        const parsed = parseSseBlock(block)
+        if (parsed?.dataText) {
+          const event = schedulerEventSchema.parse(JSON.parse(parsed.dataText))
+          await onEvent(event)
+        }
+        separatorIndex = buffer.search(/\r?\n\r?\n/)
+      }
+
+      if (done) break
+    }
+  } catch (err) {
+    if (signal?.aborted) return
+    throw err
   }
 }

@@ -385,6 +385,68 @@ export const analysisStreamEventSchema = z.discriminatedUnion('type', [
 
 export type AnalysisStreamEvent = z.infer<typeof analysisStreamEventSchema>
 
+// ─── Scheduler types ───────────────────────────────────────────────────────
+
+const executionTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('session'), sessionId: z.string() }),
+  z.object({ kind: z.literal('step'), sessionId: z.string(), stepId: z.string() }),
+])
+
+const executionJobSchema = z.object({
+  jobId: z.string(),
+  target: executionTargetSchema,
+  prompt: z.string().optional(),
+  createdAt: z.number(),
+})
+
+const activeExecutionJobSchema = executionJobSchema.extend({
+  startedAt: z.number(),
+})
+
+const terminalJobSchema = activeExecutionJobSchema.extend({
+  endedAt: z.number(),
+  outcome: z.enum(['completed', 'failed', 'removed']),
+  error: z.string().optional(),
+})
+
+export const executionSnapshotSchema = z.object({
+  controlState: z.enum(['running', 'paused']),
+  activeJob: activeExecutionJobSchema.nullable(),
+  pendingJobs: z.array(executionJobSchema),
+  lastTerminalJob: terminalJobSchema.nullable(),
+})
+
+export const schedulerEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('scheduler-job-enqueued'), job: executionJobSchema }),
+  z.object({ type: z.literal('scheduler-job-started'), job: activeExecutionJobSchema }),
+  z.object({ type: z.literal('scheduler-job-completed'), job: terminalJobSchema }),
+  z.object({ type: z.literal('scheduler-job-failed'), job: terminalJobSchema }),
+  z.object({ type: z.literal('scheduler-job-removed'), jobId: z.string(), target: executionTargetSchema }),
+  z.object({ type: z.literal('scheduler-paused') }),
+  z.object({ type: z.literal('scheduler-resumed') }),
+  z.object({
+    type: z.literal('scheduler-execution-event'),
+    sessionId: z.string(),
+    jobId: z.string(),
+    event: analysisStreamEventSchema,
+  }),
+  // Initial snapshot event sent when SSE connection opens
+  z.object({
+    type: z.literal('scheduler-snapshot'),
+    controlState: z.enum(['running', 'paused']),
+    activeJob: activeExecutionJobSchema.nullable(),
+    pendingJobs: z.array(executionJobSchema),
+    lastTerminalJob: terminalJobSchema.nullable(),
+  }),
+])
+
+export type ExecutionTarget = z.infer<typeof executionTargetSchema>
+export type ExecutionJob = z.infer<typeof executionJobSchema>
+export type ActiveExecutionJob = z.infer<typeof activeExecutionJobSchema>
+export type TerminalJob = z.infer<typeof terminalJobSchema>
+export type ExecutionSnapshot = z.infer<typeof executionSnapshotSchema>
+export type SchedulerEvent = z.infer<typeof schedulerEventSchema>
+
 export const listSessionsResponseSchema = z.object({
   api_version: z.literal(1),
   sessions: z.array(sessionSummarySchema),

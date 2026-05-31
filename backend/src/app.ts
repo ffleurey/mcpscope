@@ -74,16 +74,16 @@ import { registerMcpTransport } from './mcp/index.js'
 import {
   listOperation,
   createOperation,
-  sendOperation,
   statusOperation,
   inspectOperation,
   launchAnalysisOperation,
-  streamAnalysisWorkflow,
   OperationError,
   operationErrorResponse,
   operationErrorToHttpStatus,
   type OperationContext,
 } from './operations/index.js'
+import { ExecutionScheduler } from './runtime/scheduler.js'
+import type { SchedulerEvent } from './runtime/scheduler.js'
 import { executeCreateExplicit } from './operations/createExplicit.js'
 import { executePrimarySessionLaunch } from './operations/launchPrimarySession.js'
 import { buildAnalysisSystemPrompt, normalizeAnalysisGoal } from './analysis/systemPrompt.js'
@@ -178,6 +178,9 @@ export async function buildBackendApp(
   // Analysis sessions use /mcp/analysis which exposes only inspect + status.
   const analysisMcpUrl = `http://${config.host}:${config.port}/mcp/analysis`
 
+  // Backend-owned execution scheduler — created once per app instance.
+  const scheduler = new ExecutionScheduler()
+
   const opCtx: OperationContext = {
     db: database,
     lmStudioGateway: dependencies.lmStudioGateway,
@@ -185,6 +188,7 @@ export async function buildBackendApp(
     maxToolRounds: config.maxToolRounds,
     analysisMcpUrl,
     logger: app.log,
+    scheduler,
   }
   registerMcpTransport(app, opCtx)
 
@@ -331,14 +335,25 @@ export async function buildBackendApp(
     }
   })
 
-  // ─── Start turn ─────────────────────────────────────────────────────────────
+  // ─── Start turn (non-streaming, enqueues via scheduler) ─────────────────────
   app.post('/api/sessions/:sessionId/turns/start', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     const { userContent } = z.object({ userContent: z.string().min(1) }).parse(request.body)
     try {
-      const result = await sendOperation.execute(opCtx, { session_id: sessionId, prompt: userContent })
+      const job = scheduler.enqueueSession(opCtx, sessionId, userContent)
+      // Retrieve the reserved draft turn immediately (mirroring old sendOperation
+      // behavior) so the caller gets a turn ID and can poll for completion.
+      // The worker may have already promoted the turn from 'draft' to 'streaming'
+      // synchronously before this line runs, so accept either status.
+      const reservedTurn = listTurnRecordsBySession(database.connection, sessionId)
+        .find(t => (t.status === 'draft' || t.status === 'streaming') && t.sessionId === sessionId)
       reply.code(202)
-      return result
+      return {
+        api_version: 1 as const,
+        session_id: sessionId,
+        job: { jobId: job.jobId, status: 'queued' },
+        turn: reservedTurn ? { id: reservedTurn.id, status: 'running' } : undefined,
+      }
     } catch (err) {
       return handleOperationError(err, reply)
     }
@@ -447,13 +462,29 @@ export async function buildBackendApp(
   })
 
   // ─── Execute analysis session (SSE streaming) ─────────────────────────────
-  // Starts or resumes the backend-owned analysis workflow for a session_analysis
-  // session. Streams progress events (turn tokens + deterministic step events)
-  // back as server-sent events in the same format as regular turns.
+  // Enqueues the analysis session in the scheduler and streams all progress
+  // events (turn tokens + deterministic step events) back as server-sent events.
+  // Replaces the previous direct-execution path.
   app.post('/api/sessions/:sessionId/execute', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
-    const { single_step } = z.object({ single_step: z.string().optional() }).parse(request.query)
-    const singleStep = single_step === 'true'
+
+    // Validate session before enqueue
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return apiError('not_found', 'Session not found')
+    }
+    if (session.sessionType !== 'session_analysis') {
+      reply.code(400)
+      return apiError('validation', 'Session is not an analysis session.')
+    }
+
+    let job: Awaited<ReturnType<typeof scheduler.enqueueSession>>
+    try {
+      job = scheduler.enqueueSession(opCtx, sessionId)
+    } catch (err) {
+      return handleOperationError(err, reply)
+    }
 
     reply.hijack()
     reply.raw.statusCode = 200
@@ -461,16 +492,49 @@ export async function buildBackendApp(
     reply.raw.setHeader('cache-control', 'no-cache, no-transform')
     reply.raw.setHeader('connection', 'keep-alive')
 
-    const emitEvent = (event: { type: string; [key: string]: unknown }) => {
+    const emitSseEvent = (event: { type: string; [key: string]: unknown }) => {
       reply.raw.write(`event: ${event.type}\n`)
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
     }
 
-    try {
-      await streamAnalysisWorkflow(opCtx, sessionId, emitEvent, { singleStep })
-    } finally {
-      reply.raw.end()
-    }
+    await new Promise<void>(resolve => {
+      const unsubscribe = scheduler.subscribe((schedulerEvent: SchedulerEvent) => {
+        if (schedulerEvent.type === 'scheduler-execution-event' && schedulerEvent.jobId === job.jobId) {
+          emitSseEvent(schedulerEvent.event as { type: string; [key: string]: unknown })
+          if (
+            schedulerEvent.event.type === 'analysis-complete'
+            || schedulerEvent.event.type === 'analysis-failed'
+          ) {
+            unsubscribe()
+            resolve()
+          }
+          return
+        }
+        if (
+          (schedulerEvent.type === 'scheduler-job-failed' || schedulerEvent.type === 'scheduler-job-removed')
+          && ('jobId' in schedulerEvent ? schedulerEvent.jobId === job.jobId : false)
+        ) {
+          if (schedulerEvent.type === 'scheduler-job-failed') {
+            emitSseEvent({ type: 'analysis-failed', message: schedulerEvent.job.error ?? 'Job failed' })
+          }
+          unsubscribe()
+          resolve()
+        }
+      })
+
+      const snapshot = scheduler.getSnapshot()
+      const stillPresent = snapshot.activeJob?.jobId === job.jobId
+        || snapshot.pendingJobs.some(j => j.jobId === job.jobId)
+      if (!stillPresent && snapshot.lastTerminalJob?.jobId === job.jobId) {
+        if (snapshot.lastTerminalJob.outcome === 'failed') {
+          emitSseEvent({ type: 'analysis-failed', message: snapshot.lastTerminalJob.error ?? 'Job failed' })
+        }
+        unsubscribe()
+        resolve()
+      }
+    })
+
+    reply.raw.end()
   })
 
   app.patch('/api/sessions/:sessionId', async (request, reply) => {
@@ -956,112 +1020,149 @@ export async function buildBackendApp(
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     const input = createTurnInputSchema.parse(request.body)
 
-    // Reserve the turn atomically (global lock check + same-session turn_in_progress check +
-    // turn insertion) before reply.hijack() and before any async work. This is critical:
-    // createModelOnlyTurn/createToolEnabledTurn do async work (token preflight) before they
-    // write the turn record to the DB. Without pre-inserting here, the global lock would have
-    // no DB record to find during the async gap, allowing concurrent session creation or other
-    // turn starts to slip through.
-    type ReserveResult =
-      | { kind: 'not_found' }
-      | { kind: 'another_session_active'; active: ActiveSessionInfo }
-      | { kind: 'turn_in_progress' }
-      | { kind: 'reserved'; session: SessionRecord; turn: TurnRecord }
-
-    const reservation: ReserveResult = database.connection.transaction((): ReserveResult => {
-      const session = getSessionRecord(database.connection, sessionId)
-      if (!session) return { kind: 'not_found' }
-
-      const active = findActiveSession(database.connection, sessionId)
-      if (active) return { kind: 'another_session_active', active }
-
-      const hasActiveTurn = listTurnRecordsBySession(database.connection, sessionId)
-        .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
-      if (hasActiveTurn) return { kind: 'turn_in_progress' }
-
-      const createdAt = Date.now()
-      const nextSeq = getNextTurnSequenceNumber(database.connection, sessionId)
-      const turn: TurnRecord = {
-        id: formatTurnId(sessionId, nextSeq),
-        sessionId,
-        ownerStepId: null,
-        sequenceNumber: nextSeq,
-        status: 'streaming',
-        createdAt,
-        completedAt: null,
-        outcome: null,
-        usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
-        contextTokensAtTurnEnd: null,
-        contextTokensAfterCompaction: null,
-        compactionApplied: null,
-        compactionTokensRemoved: null,
-      }
-      insertTurnRecord(database.connection, turn)
-      return { kind: 'reserved', session, turn }
-    })()
-
-    if (reservation.kind === 'not_found') {
-      reply.code(404)
-      return apiError('not_found', 'Session not found')
-    }
-    if (reservation.kind === 'another_session_active') {
-      reply.code(409)
-      return anotherSessionActiveError(reservation.active)
-    }
-    if (reservation.kind === 'turn_in_progress') {
-      reply.code(409)
-      return apiError('validation', 'A turn is already in progress for this session.', { code: 'turn_in_progress' })
+    // Enqueue the session target via the scheduler.
+    // The scheduler handles turn reservation, global-lock checks, and deduplication.
+    let job: Awaited<ReturnType<typeof scheduler.enqueueSession>>
+    try {
+      job = scheduler.enqueueSession(opCtx, sessionId, input.userContent)
+    } catch (err) {
+      return handleOperationError(err, reply)
     }
 
+    // Hijack the response to stream turn events from the scheduler.
     reply.hijack()
     reply.raw.statusCode = 200
     reply.raw.setHeader('content-type', 'text/event-stream; charset=utf-8')
     reply.raw.setHeader('cache-control', 'no-cache, no-transform')
     reply.raw.setHeader('connection', 'keep-alive')
 
-    const emitEvent = (event: { type: string; [key: string]: unknown }) => {
+    const emitSseEvent = (event: { type: string; [key: string]: unknown }) => {
       reply.raw.write(`event: ${event.type}\n`)
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
     }
 
-    const { session, turn } = reservation
-    try {
-      if (session.mcpProfileSnapshot) {
-        await createToolEnabledTurn(
-          database,
-          dependencies.lmStudioGateway,
-          dependencies.mcpGateway,
-          {
-            sessionId,
-            userContent: input.userContent,
-            maxToolRounds: config.maxToolRounds,
-            reservedTurn: turn,
-          },
-          emitEvent,
-        )
-      } else {
-        await createModelOnlyTurn(
-          database,
-          dependencies.lmStudioGateway,
-          {
-            sessionId,
-            userContent: input.userContent,
-            reservedTurn: turn,
-          },
-          emitEvent,
-        )
-      }
-    } catch (error) {
-      app.log.error({ sessionId, turnId: turn.id, err: error instanceof Error ? error.message : String(error) }, 'Streaming turn failed')
-      emitEvent({
-        type: 'turn-failed',
-        errorType: 'internal',
-        turnId: turn.id,
-        message: error instanceof Error ? error.message : 'Unknown streaming failure',
+    await new Promise<void>(resolve => {
+      const unsubscribe = scheduler.subscribe((schedulerEvent: SchedulerEvent) => {
+        // Relay execution events for this job/session as SSE
+        if (schedulerEvent.type === 'scheduler-execution-event' && schedulerEvent.jobId === job.jobId) {
+          emitSseEvent(schedulerEvent.event as { type: string; [key: string]: unknown })
+          // Close stream when turn reaches a terminal event
+          if (schedulerEvent.event.type === 'turn-committed' || schedulerEvent.event.type === 'turn-failed') {
+            unsubscribe()
+            resolve()
+          }
+          return
+        }
+        // Close stream if job failed before reaching a terminal turn event
+        if (schedulerEvent.type === 'scheduler-job-failed' && schedulerEvent.job.jobId === job.jobId) {
+          emitSseEvent({ type: 'turn-failed', turnId: null, message: schedulerEvent.job.error ?? 'Job failed' })
+          unsubscribe()
+          resolve()
+          return
+        }
+        // Close stream if job completed without a terminal turn event (e.g. error absorbed)
+        if (schedulerEvent.type === 'scheduler-job-completed' && schedulerEvent.job.jobId === job.jobId) {
+          unsubscribe()
+          resolve()
+          return
+        }
+        // Close stream if job was removed
+        if (schedulerEvent.type === 'scheduler-job-removed' && schedulerEvent.jobId === job.jobId) {
+          unsubscribe()
+          resolve()
+          return
+        }
       })
-    } finally {
-      reply.raw.end()
+
+      // Guard: if the job is already gone from the scheduler by the time we subscribe,
+      // resolve immediately.
+      const snapshot = scheduler.getSnapshot()
+      const stillPresent = snapshot.activeJob?.jobId === job.jobId
+        || snapshot.pendingJobs.some(j => j.jobId === job.jobId)
+      if (!stillPresent && snapshot.lastTerminalJob?.jobId === job.jobId) {
+        if (snapshot.lastTerminalJob.outcome === 'failed') {
+          emitSseEvent({ type: 'turn-failed', turnId: null, message: snapshot.lastTerminalJob.error ?? 'Job failed' })
+        }
+        unsubscribe()
+        resolve()
+      }
+    })
+
+    reply.raw.end()
+  })
+
+  // ─── Scheduler monitoring and control routes ───────────────────────────────
+
+  // GET /api/scheduler/snapshot — current queue and execution state
+  app.get('/api/scheduler/snapshot', async () => {
+    return scheduler.getSnapshot()
+  })
+
+  // POST /api/scheduler/pause — pause after current step boundary
+  app.post('/api/scheduler/pause', async () => {
+    scheduler.pause()
+    return { ok: true, controlState: 'paused' }
+  })
+
+  // POST /api/scheduler/resume — resume from paused state
+  app.post('/api/scheduler/resume', async () => {
+    scheduler.resume()
+    return { ok: true, controlState: 'running' }
+  })
+
+  // DELETE /api/scheduler/jobs/:jobId — remove a pending job
+  app.delete('/api/scheduler/jobs/:jobId', async (request, reply) => {
+    const { jobId } = z.object({ jobId: z.string() }).parse(request.params)
+    const removed = scheduler.removeJob(jobId)
+    if (!removed) {
+      reply.code(404)
+      return apiError('not_found', 'Job not found or already active/completed')
     }
+    reply.code(204)
+    return null
+  })
+
+  // POST /api/scheduler/enqueue — generic enqueue endpoint
+  app.post('/api/scheduler/enqueue', async (request, reply) => {
+    const body = z.object({
+      session_id: z.string(),
+      prompt: z.string().optional(),
+    }).parse(request.body)
+    try {
+      const job = scheduler.enqueueSession(opCtx, body.session_id, body.prompt)
+      reply.code(202)
+      return { job }
+    } catch (err) {
+      return handleOperationError(err, reply)
+    }
+  })
+
+  // GET /api/scheduler/stream — global SSE stream of all scheduler events
+  app.get('/api/scheduler/stream', async (_request, reply) => {
+    reply.hijack()
+    reply.raw.statusCode = 200
+    reply.raw.setHeader('content-type', 'text/event-stream; charset=utf-8')
+    reply.raw.setHeader('cache-control', 'no-cache, no-transform')
+    reply.raw.setHeader('connection', 'keep-alive')
+
+    // Send initial snapshot as first event
+    const snapshot = scheduler.getSnapshot()
+    reply.raw.write(`event: scheduler-snapshot\n`)
+    reply.raw.write(`data: ${JSON.stringify({ type: 'scheduler-snapshot', ...snapshot })}\n\n`)
+
+    const unsubscribe = scheduler.subscribe((event: SchedulerEvent) => {
+      reply.raw.write(`event: ${event.type}\n`)
+      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
+    })
+
+    // Clean up subscription when client disconnects
+    reply.raw.on('close', () => {
+      unsubscribe()
+    })
+
+    // Keep the connection open; never call reply.raw.end() here —
+    // it will be closed by client disconnect or server shutdown.
+    await new Promise<void>(resolve => reply.raw.on('close', resolve))
   })
 
   app.addHook('onClose', async () => {

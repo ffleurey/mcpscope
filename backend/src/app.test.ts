@@ -1173,6 +1173,11 @@ describe('backend foundation', () => {
       },
     })
     const sessionId = sessionResponse.json().session.id as string
+    // The scheduler requires initStatus = 'ready' before accepting turns
+    const sessionRec = getSessionRecord(app.backendDb.connection, sessionId)!
+    sessionRec.initStatus = 'ready'
+    sessionRec.updatedAt = Date.now()
+    updateSessionRecord(app.backendDb.connection, sessionRec)
 
     const streamResponse = await app.inject({
       method: 'POST',
@@ -1444,6 +1449,11 @@ describe('backend foundation', () => {
       },
     })
     const sessionId = sessionResponse.json().session.id as string
+    // The scheduler requires initStatus = 'ready' before accepting turns
+    const sessionRec2 = getSessionRecord(app.backendDb.connection, sessionId)!
+    sessionRec2.initStatus = 'ready'
+    sessionRec2.updatedAt = Date.now()
+    updateSessionRecord(app.backendDb.connection, sessionRec2)
 
     const streamResponse = await app.inject({
       method: 'POST',
@@ -2118,6 +2128,11 @@ describe('error handling contract', () => {
       },
     })
     const sessionId = sessionRes.json().session.id as string
+    // The scheduler requires initStatus = 'ready' before accepting turns
+    const errSessRec = getSessionRecord(app.backendDb.connection, sessionId)!
+    errSessRec.initStatus = 'ready'
+    errSessRec.updatedAt = Date.now()
+    updateSessionRecord(app.backendDb.connection, errSessRec)
 
     const streamRes = await app.inject({
       method: 'POST',
@@ -3111,6 +3126,11 @@ describe('CLI session lifecycle endpoints', () => {
         payload: { title: 'Target', modelProfileSnapshot: minimalModelProfile },
       })
       const targetId = targetRes.json().session.id as string
+      // Make the target session ready so the global-lock error takes precedence
+      const targetSess = getSessionRecord(app.backendDb.connection, targetId)!
+      targetSess.initStatus = 'ready'
+      targetSess.updatedAt = Date.now()
+      updateSessionRecord(app.backendDb.connection, targetSess)
 
       makeSessionRunning(app, blockerId)
 

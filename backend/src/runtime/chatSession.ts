@@ -15,6 +15,7 @@ import { listTurnRecordsBySession, updateTurnRecord } from '../persistence/repos
 import { createModelOnlyTurn, type LmStudioGateway } from './modelTurns.js'
 import { createToolEnabledTurn, type McpGateway } from './toolTurns.js'
 import type { SessionRecord, TurnRecord } from '../domain/model.js'
+import type { TurnStreamEventSink } from './streamEvents.js'
 import {
   CONTAINER_TYPE,
   SESSION_TYPE,
@@ -51,6 +52,7 @@ export class ChatTurnStep implements Step {
     private readonly lmGateway: LmStudioGateway,
     private readonly mcpGateway: McpGateway | null,
     private readonly maxToolRounds: number,
+    private readonly emitEvent?: TurnStreamEventSink,
   ) {}
 
   get stepId(): string { return this.record.id }
@@ -77,22 +79,31 @@ export class ChatTurnStep implements Step {
             userContent: this.userContent,
             maxToolRounds: this.maxToolRounds,
             reservedTurn: this.record,
-          })
+          }, this.emitEvent)
         : await createModelOnlyTurn(this.db, this.lmGateway, {
             sessionId: context.sessionId,
             userContent: this.userContent,
             reservedTurn: this.record,
-          })
+          }, this.emitEvent)
 
       return {
         status: result.turn.status === 'complete' ? 'complete' : 'error',
         outputArtifacts: [],
       }
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      // Emit turn-failed so streaming subscribers can close the stream.
+      // This mirrors the old route-level catch block behavior.
+      this.emitEvent?.({
+        type: 'turn-failed',
+        errorType: 'internal',
+        turnId: this.record.id,
+        message: errorMessage,
+      })
       return {
         status: 'error',
         outputArtifacts: [],
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage,
       }
     }
   }
@@ -126,6 +137,7 @@ export class ChatSession implements Session {
     private readonly maxToolRounds: number,
     pendingTurn: TurnRecord,
     pendingUserContent: string,
+    private readonly emitEvent?: TurnStreamEventSink,
   ) {
     this._pendingTurn = pendingTurn
     this._pendingUserContent = pendingUserContent
@@ -188,6 +200,7 @@ export class ChatSession implements Session {
       this.lmGateway,
       this.mcpGateway,
       this.maxToolRounds,
+      this.emitEvent,
     )
 
     const context: StepExecutionContext = {

@@ -34,6 +34,7 @@ export type TurnStreamEvent =
       type: 'turn-failed'
       turnId: string | null
       message: string
+      errorType?: string
     }
 
 export type TurnStreamEventSink = (event: TurnStreamEvent) => void
@@ -64,3 +65,6 @@ export type AnalysisStreamEvent =
     }
 
 export type AnalysisStreamEventSink = (event: AnalysisStreamEvent) => void
+
+// Re-export scheduler types for consumers that import from streamEvents
+export type { SchedulerEvent, SchedulerEventListener } from './scheduler.js'
