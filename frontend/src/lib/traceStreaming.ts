@@ -154,6 +154,8 @@ export function createEmptyTrace(session: SessionSummary): SessionTraceBundle {
     rounds: [],
     parts: [],
     rawExchanges: [],
+    artifacts: [],
+    workflowSteps: [],
     transcript: [],
     context: [],
   }

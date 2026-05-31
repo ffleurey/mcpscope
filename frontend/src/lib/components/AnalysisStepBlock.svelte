@@ -10,25 +10,50 @@
   const { step, mode = 'chat' }: Props = $props()
 
   const STEP_TYPE_LABELS: Record<string, string> = {
+    analysis_bootstrap: 'Prepare evidence',
+    analysis_tool_call_assessment: 'Assess tool call',
+    analysis_turn_summary: 'Summarize turn',
+    analysis_final_aggregation: 'Build final report',
     analysis_v2_cursor: 'Analysis cursor',
-    analysis_bootstrap: 'Bootstrap',
-    analysis_context_mutation: 'Context mutation',
-    analysis_tool_call_assessment: 'Tool-call assessment',
-    analysis_coverage_validation: 'Coverage validation',
-    analysis_final_aggregation: 'Final aggregation',
   }
 
-  const label = $derived(STEP_TYPE_LABELS[step.stepTypeKey] ?? step.stepTypeKey.replace(/_/g, ' '))
+  function humanizeStepType(stepTypeKey: string): string {
+    return stepTypeKey
+      .replace(/^analysis_/, '')
+      .replace(/^analysis_v2_/, '')
+      .replace(/_/g, ' ')
+      .trim()
+  }
+
+  const label = $derived(STEP_TYPE_LABELS[step.stepTypeKey] ?? humanizeStepType(step.stepTypeKey))
   const phase = $derived(
     step.stepTypeKey === 'analysis_v2_cursor'
       ? (typeof step.state.phase === 'string' ? step.state.phase : null)
       : null,
   )
-  const assessedPacket = $derived(
+  const toolCallPartId = $derived(
     step.stepTypeKey === 'analysis_tool_call_assessment'
-      ? (typeof step.params.toolCallId === 'string' ? step.params.toolCallId : null)
+      ? (typeof step.params.tool_call_part_id === 'string' ? step.params.tool_call_part_id : null)
       : null,
   )
+  const turnId = $derived(
+    step.stepTypeKey === 'analysis_turn_summary'
+      ? (typeof step.params.turn_id === 'string' ? step.params.turn_id : null)
+      : null,
+  )
+  const detailBadges = $derived.by(() => {
+    const details: string[] = []
+    if (phase !== null) {
+      details.push(`phase: ${phase}`)
+    }
+    if (turnId !== null) {
+      details.push(`turn: ${turnId}`)
+    }
+    if (toolCallPartId !== null) {
+      details.push(`tool call: ${toolCallPartId}`)
+    }
+    return details
+  })
   const showState = $derived(mode === 'inspect')
   const stateJson = $derived(showState ? JSON.stringify(step.state, null, 2) : null)
 </script>
@@ -38,12 +63,9 @@
     <div class="analysis-step-line">
       <span class="analysis-step-label">{label}</span>
       <span class="analysis-step-status" class:status-complete={step.status === 'complete'} class:status-error={step.status === 'error'}>{step.status}</span>
-      {#if phase !== null}
-        <span class="analysis-step-detail">phase: {phase}</span>
-      {/if}
-      {#if assessedPacket !== null}
-        <span class="analysis-step-detail">tool call: {assessedPacket.slice(0, 8)}…</span>
-      {/if}
+      {#each detailBadges as detail (detail)}
+        <span class="analysis-step-detail">{detail}</span>
+      {/each}
     </div>
     <div class="analysis-step-actions">
       <IdBadge id={step.id} />

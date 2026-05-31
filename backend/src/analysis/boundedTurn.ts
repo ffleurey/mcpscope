@@ -40,6 +40,7 @@ export async function runAnalysisTurn(
   analysisSessionId: string,
   userContent: string,
   emitEvent?: TurnStreamEventSink,
+  ownerStepId?: string | null,
 ): Promise<AnalysisTurnResult> {
   const result = await createToolEnabledTurn(
     database,
@@ -49,6 +50,7 @@ export async function runAnalysisTurn(
       sessionId: analysisSessionId,
       userContent,
       maxToolRounds: 5,
+      ownerStepId,
     },
     emitEvent,
   )

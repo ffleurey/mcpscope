@@ -13,22 +13,16 @@ import {
   upsertLmConnectionResponseSchema,
   upsertMcpProfileResponseSchema,
   upsertModelConfigResponseSchema,
-  listAnalysisProfilesResponseSchema,
-  upsertAnalysisProfileResponseSchema,
-  analysisDefaultsResponseSchema,
   launchAnalysisResponseSchema,
+  analysisSystemPromptResponseSchema,
   type LmStudioConnection,
-  type McpProfileSnapshot,
   type McpServerProfile,
   type ModelConfig,
-  type ModelProfileSnapshot,
   type PreludeStreamEvent,
   type SessionCreationDefaults,
   type SessionTraceBundle,
   type HierarchicalLookupResponse,
   type TurnStreamEvent,
-  type AnalysisProfile,
-  type AnalysisDefaults,
   analysisStreamEventSchema,
   type AnalysisStreamEvent,
 } from '../backendTypes'
@@ -110,14 +104,14 @@ export function getSessionTrace(sessionId: string) {
   })
 }
 
-export function createSession(input: {
-  sessionId?: string
+export function createPrimarySession(input: {
+  session_id?: string
   title?: string
-  modelProfileSnapshot: ModelProfileSnapshot
-  mcpProfileSnapshot?: McpProfileSnapshot | null
-  compactionStrategy?: 'none' | 'strip-reasoning'
+  model_config_id?: string
+  mcp_profile_id?: string | null
+  compaction_strategy?: 'none' | 'strip-reasoning'
 }) {
-  return request('/api/sessions', {
+  return request('/api/session-constructors/primary', {
     method: 'POST',
     body: input,
     schema: createSessionResponseSchema,
@@ -473,50 +467,41 @@ export function putSessionCreationDefaults(input: {
   })
 }
 
-export function listAnalysisProfiles() {
-  return request('/api/analysis-profiles', {
-    schema: listAnalysisProfilesResponseSchema,
-  })
-}
-
-export function upsertAnalysisProfile(profile: AnalysisProfile) {
-  return request(`/api/analysis-profiles/${profile.id}`, {
-    method: 'PUT',
-    body: profile,
-    schema: upsertAnalysisProfileResponseSchema,
-  })
-}
-
-export function deleteAnalysisProfile(profileId: string) {
-  return request<void>(`/api/analysis-profiles/${profileId}`, {
-    method: 'DELETE',
-  })
-}
-
-export function getAnalysisDefaults(): Promise<{ analysisDefaults: AnalysisDefaults }> {
-  return request('/api/analysis-defaults', {
-    schema: analysisDefaultsResponseSchema,
-  })
-}
-
-export function putAnalysisDefaults(input: {
-  defaultAnalysisProfileId: string | null
-}): Promise<{ analysisDefaults: AnalysisDefaults }> {
-  return request('/api/analysis-defaults', {
-    method: 'PUT',
-    body: input,
-    schema: analysisDefaultsResponseSchema,
-  })
-}
-
 export function launchAnalysis(
-  targetSessionId: string,
-  input: { target_turn_id: string; analysis_goal: string; analysis_profile_id?: string },
+  input: {
+    target_session_id: string
+    target_turn_id: string
+    analysis_goal?: string
+    model_config_id?: string
+    additional_instructions?: string
+    system_prompt_override?: string
+    temperature?: number
+    selected_tool_names?: string[]
+    only_failed_tool_calls?: boolean
+    evaluation_criteria?: string[]
+  },
 ) {
-  return request(`/api/sessions/${targetSessionId}/analyze`, {
+  return request('/api/session-constructors/session-analysis', {
     method: 'POST',
     body: input,
     schema: launchAnalysisResponseSchema,
+  })
+}
+
+export function getDefaultAnalysisSystemPrompt(input: {
+  analysis_goal?: string
+  additional_instructions?: string
+} = {}) {
+  const params = new URLSearchParams()
+  if (input.analysis_goal) {
+    params.set('analysis_goal', input.analysis_goal)
+  }
+  if (input.additional_instructions) {
+    params.set('additional_instructions', input.additional_instructions)
+  }
+  const query = params.size > 0 ? `?${params.toString()}` : ''
+  return request(`/api/analysis/system-prompt-default${query}`, {
+    schema: analysisSystemPromptResponseSchema,
   })
 }
 

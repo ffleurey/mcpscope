@@ -114,6 +114,7 @@ export function initializeNewSchema(connection: Database.Database): void {
     CREATE TABLE IF NOT EXISTS v2_turns (
       step_id TEXT PRIMARY KEY REFERENCES v2_steps(id) ON DELETE CASCADE,
       session_id TEXT NOT NULL REFERENCES v2_sessions(id) ON DELETE CASCADE,
+      owner_step_id TEXT REFERENCES v2_steps(id) ON DELETE SET NULL,
       sequence_number INTEGER NOT NULL,
       status TEXT NOT NULL CHECK (status IN (${sqlEnum(turnStatusValues)})),
       outcome TEXT,
@@ -247,6 +248,15 @@ export function initializeNewSchema(connection: Database.Database): void {
     connection.exec(`ALTER TABLE artifacts ADD COLUMN metadata_json TEXT`)
   }
 
+  const turnColumns = connection
+    .prepare<[], { name: string }>(`PRAGMA table_info(v2_turns)`)
+    .all()
+    .map(r => r.name)
+  if (!turnColumns.includes('owner_step_id')) {
+    connection.exec(`ALTER TABLE v2_turns ADD COLUMN owner_step_id TEXT REFERENCES v2_steps(id) ON DELETE SET NULL`)
+  }
+  connection.exec(`CREATE INDEX IF NOT EXISTS idx_v2_turns_owner_step_id ON v2_turns(owner_step_id)`)
+
   const upsertMeta = connection.prepare(`
     INSERT INTO schema_meta (key, value)
     VALUES (?, ?)
@@ -273,7 +283,7 @@ export function validateNewSchema(connection: Database.Database): void {
     ],
     v2_steps: ['id', 'session_id', 'step_type_key', 'ordinal', 'status', 'params_json', 'state_json', 'created_at', 'completed_at'],
     v2_turns: [
-      'step_id', 'session_id', 'sequence_number', 'status', 'outcome',
+      'step_id', 'session_id', 'owner_step_id', 'sequence_number', 'status', 'outcome',
       'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'total_tokens',
       'context_tokens_at_turn_end', 'context_tokens_after_compaction',
       'compaction_applied', 'compaction_tokens_removed',

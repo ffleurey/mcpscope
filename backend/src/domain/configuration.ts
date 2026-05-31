@@ -33,24 +33,6 @@ export const mcpServerProfileSchema = z.object({
   updatedAt: z.number().int().nonnegative(),
 })
 
-export const analysisProfileSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  modelConfigId: z.string(),
-  systemPrompt: z.string(),
-  temperature: z.number(),
-  reasoning: z.enum(['on', 'off']).optional(),
-  createdAt: z.number().int().nonnegative(),
-  updatedAt: z.number().int().nonnegative(),
-})
-
-export const analysisDefaultsSchema = z.object({
-  defaultAnalysisProfileId: z.string().nullable(),
-  updatedAt: z.number().int().nonnegative(),
-})
-
 export type LmStudioConnection = z.infer<typeof lmStudioConnectionSchema>
 export type ModelConfig = z.infer<typeof modelConfigSchema>
 export type McpServerProfile = z.infer<typeof mcpServerProfileSchema>
-export type AnalysisProfile = z.infer<typeof analysisProfileSchema>
-export type AnalysisDefaults = z.infer<typeof analysisDefaultsSchema>

@@ -16,12 +16,12 @@ session with:
 
 - its own setup
 - normal turns, rounds, and parts
-- deterministic orchestration steps between turns
+- a deterministic workflow frontier persisted as a cursor step
 - inspectable evidence loaded through restricted MCP tools
 
 The important distinction is that the workflow is deterministic where it needs to be, but that
-determinism still lives inside the analysis session through normal steps, turns, parts, and
-context state.
+determinism still lives inside the analysis session through normal turns, parts, artifacts, and a
+small amount of workflow state.
 
 ## Current workflow
 
@@ -42,29 +42,68 @@ At a high level:
 
 The analysis session itself has a normal setup containing:
 
-- a system prompt for the analysis model
+- a backend-built system prompt for the analysis model
 - tool definitions for the restricted analysis MCP surface
+
+Launch resolves a normal model config directly. The workflow no longer depends on a separate
+analysis-profile catalog.
 
 The restricted analysis MCP surface currently exposes only:
 
 - `mcpscope_inspect`
 - `mcpscope_status`
 
-The analysis-session prelude belongs to the analysis session itself. The analyzed session's MCP
-instructions and tool definitions are introduced later as inspected bootstrap evidence.
+This analysis-session prelude belongs only to the analysis session itself.
+
+It must not be confused with the setup of the target session being analyzed.
+
+The target session may have its own MCP prelude, for example:
+
+- target-session `mcp_instructions`
+- target-session `tool_definitions`
+
+Those target-session setup parts are not copied into the analysis-session setup. They are introduced
+later as inspected bootstrap evidence committed into the first analysis turn.
+
+In other words:
+
+- analysis-session setup = the analysis model's own system prompt and the restricted analysis MCP surface
+- bootstrap evidence in turn 1 = inspected facts about the target session, including the target session object and the target session setup parts that matter for analysis
+
+For a target session that used Home Assistant MCP, the bootstrap evidence in turn 1 should therefore
+include all of the following when present in the target session:
+
+- the target session object
+- the target session `mcp_instructions`
+- the target session `tool_definitions`
+
+If the target session setup contains a `tool_definitions` part such as `CXQJ.S.2-TD`, that part is
+expected to show up as inspected evidence in the first analysis turn. If it is absent there, that is
+not just a setup/view distinction; it is missing bootstrap evidence for the target session.
 
 ## Deterministic evidence path
 
 Model-visible evidence must be loaded through deterministic `mcpscope_inspect` calls that are
-committed into the analysis session as ordinary `tool_call` parts with embedded results.
+committed into the analysis session as ordinary tool interactions.
 
 This is the key rule that keeps the workflow inspectable. The workflow does not flatten
 parent-session evidence into one large synthetic prompt. Instead:
 
-- bootstrap inspect calls load the target session and target setup
+- bootstrap inspect calls load the target session and the relevant target-session setup evidence
 - packet-local inspect calls load exact parent-session parts needed for one assessment
 - those inspect calls remain inspectable in the analysis trace even after they are excluded from
   future model context
+
+Bootstrap setup evidence should be understood concretely, not abstractly. When the target session has
+session-level MCP configuration, bootstrap is expected to inspect and commit the exact target setup
+parts needed to understand later tool use, especially:
+
+- target-session `mcp_instructions`
+- target-session `tool_definitions`
+
+This distinction matters because the analysis session already has its own restricted MCP setup. The
+bootstrap turn exists precisely to add inspected evidence about the target session's different MCP
+environment.
 
 ## Core artifacts
 
@@ -72,13 +111,17 @@ Bootstrap persists deterministic working state as artifacts:
 
 - `analysis.analysis_target.v1`
 - `analysis.evidence_packet_index.v1`
-- `analysis.coverage_map.v1`
 - `analysis.tool_call_assessment.v1`
 - `analysis.turn_summary.v1`
 - `analysis.final_analysis_report.v1`
 
-These artifacts hold durable workflow state while normal turns and parts hold model-visible
-conversation and evidence.
+These artifacts hold the durable analysis outputs and indexes. Coverage is derived from the
+evidence-packet index plus accepted assessment artifacts rather than from a separate bookkeeping
+artifact. Normal turns and parts hold model-visible conversation and evidence.
+
+The default trace/view groups owned turns and artifacts under their workflow step. Custom analysis
+steps may own zero or more turns, but containment stops at one level: a turn may belong to one
+non-turn step, and turns do not own further turns.
 
 ## Packet model
 
@@ -88,7 +131,7 @@ For each packet, the workflow loads the exact parent-session evidence slice need
 tool interaction. Depending on what exists in the parent session, that slice can include:
 
 - reasoning before the tool call
-- the tool-call part itself, including the embedded tool result when tool results are stored that way
+- the tool-call part itself and the corresponding tool result
 - reasoning after the tool result
 - the downstream final answer when result usage needs to be judged directly
 
@@ -107,6 +150,11 @@ The context policy is intentionally narrow.
 - analysis reasoning parts are excluded and then stripped by normal compaction
 - accepted assessment answers, turn summaries, and the final report remain durable visible outputs
 
+The context mutation and coverage-validation phases are workflow bookkeeping. They are still
+backend-owned, but they no longer need their own durable step records in the normal default view.
+The inspect/debug view can still show the cursor frontier and committed turns when deeper tracing is
+needed.
+
 This keeps the trace inspectable without letting packet-local evidence snowball across the whole
 analysis session.
 
@@ -114,7 +162,8 @@ analysis session.
 
 `V2EH` analyzing `CXQJ` is a compact reference example.
 
-- bootstrap loads `CXQJ` and `CXQJ.S` through `V2EH.1.1.1-T` and `V2EH.1.2.1-T`
+- bootstrap loads `CXQJ` and the target-session setup evidence from `CXQJ.S`, including the MCP
+  setup parts needed to understand later tool use
 - packets for `CXQJ.1` load three-part slices such as `reasoning -> tool_call -> next-round reasoning`
 - the `CXQJ.2` packet loads `CXQJ.2.1.2-R`, `CXQJ.2.1.3-T`, and `CXQJ.2.2.1-A` to judge result usage
 

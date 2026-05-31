@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { analysisProfiles, analysisDefaults } from '../connectionStore'
+  import { onMount, untrack } from 'svelte'
+  import { modelConfigs, sessionCreationDefaults } from '../connectionStore'
   import { isLaunchingAnalysis, launchAnalysis, sessionError } from '../sessionStore'
   import { currentView } from '../navStore'
-  import { getSessionTrace } from '../api/backendClient'
+  import { getDefaultAnalysisSystemPrompt, getSessionTrace } from '../api/backendClient'
   import DialogShell from './DialogShell.svelte'
-  import type { TurnRecord } from '../backendTypes'
+  import type { PartRecord, SessionTraceBundle, TurnRecord } from '../backendTypes'
 
   interface Props {
     targetSessionId: string
@@ -15,16 +15,57 @@
 
   let { targetSessionId, targetSessionTitle, onClose }: Props = $props()
 
-  let selectedProfileId = $state('')
-  let analysisGoal = $state('')
+  let selectedModelConfigId = $state('')
   let selectedTurnId = $state('')
   let completedTurns = $state<TurnRecord[]>([])
+  let traceBundle = $state<SessionTraceBundle | null>(null)
+  let selectedToolNames = $state<string[]>([])
+  let onlyFailedToolCalls = $state(false)
+  let systemPromptText = $state('')
+  let loadingSystemPrompt = $state(true)
+  let temperature = $state(0.5)
+  let evaluationCriteriaText = $state('')
   let loadingTurns = $state(true)
-  let hasInitialized = $state(false)
+  let hasInitializedModelSelection = $state(false)
+  let availableToolNames = $derived.by(() => {
+    const trace = traceBundle
+    if (!trace || !selectedTurnId) {
+      return []
+    }
+
+    const selectedTurn = trace.turns.find((turn) => turn.id === selectedTurnId)
+    if (!selectedTurn) {
+      return []
+    }
+
+    const turnIdsInScope = new Set(
+      trace.turns
+        .filter((turn) => turn.status === 'complete' && turn.sequenceNumber <= selectedTurn.sequenceNumber)
+        .map((turn) => turn.id),
+    )
+
+    return [...new Set(
+      trace.parts
+        .filter((part): part is PartRecord => part.partType === 'tool-call' && !!part.turnId && turnIdsInScope.has(part.turnId))
+        .map((part) => String((part.payload.json as { name?: string } | null)?.name ?? 'unknown')),
+    )].sort((left, right) => left.localeCompare(right))
+  })
+
+  onMount(async () => {
+    try {
+      const { systemPrompt } = await getDefaultAnalysisSystemPrompt()
+      systemPromptText = systemPrompt
+    } catch {
+      // ignore — launch can still rely on the backend default when no override is supplied
+    } finally {
+      loadingSystemPrompt = false
+    }
+  })
 
   onMount(async () => {
     try {
       const trace = await getSessionTrace(targetSessionId)
+      traceBundle = trace
       completedTurns = trace.turns.filter(t => t.status === 'complete')
       // Default to the last complete turn
       if (completedTurns.length > 0) {
@@ -38,25 +79,55 @@
   })
 
   $effect(() => {
-    if (!hasInitialized) {
-      const defaultId = $analysisDefaults?.defaultAnalysisProfileId ?? null
-      if (defaultId && $analysisProfiles.some(p => p.id === defaultId)) {
-        selectedProfileId = defaultId
-      } else if ($analysisProfiles.length > 0) {
-        selectedProfileId = $analysisProfiles[0]!.id
-      }
-      hasInitialized = true
+    const defaultId = $sessionCreationDefaults?.defaultModelConfigId ?? null
+    const hasDefault = defaultId != null && $modelConfigs.some((config) => config.id === defaultId)
+    const currentIsValid = $modelConfigs.some((config) => config.id === selectedModelConfigId)
+
+    if (!hasInitializedModelSelection) {
+      selectedModelConfigId = hasDefault ? defaultId : ($modelConfigs[0]?.id ?? '')
+      hasInitializedModelSelection = true
+      return
+    }
+
+    if (!currentIsValid) {
+      selectedModelConfigId = hasDefault ? defaultId : ($modelConfigs[0]?.id ?? '')
     }
   })
 
+  $effect(() => {
+    const currentSelection = untrack(() => selectedToolNames)
+    const filteredSelection = currentSelection.filter((toolName) => availableToolNames.includes(toolName))
+
+    if (filteredSelection.length !== currentSelection.length) {
+      selectedToolNames = filteredSelection
+    }
+  })
+
+  function toggleToolName(toolName: string, enabled: boolean) {
+    if (enabled) {
+      selectedToolNames = [...new Set([...selectedToolNames, toolName])]
+      return
+    }
+    selectedToolNames = selectedToolNames.filter((value) => value !== toolName)
+  }
+
   async function handleLaunch() {
-    if (!analysisGoal.trim() || !selectedProfileId || !selectedTurnId.trim()) return
+    if (!selectedModelConfigId || !selectedTurnId.trim() || !Number.isFinite(temperature)) return
+
+    const evaluationCriteria = evaluationCriteriaText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
 
     await launchAnalysis({
       targetSessionId,
       targetTurnId: selectedTurnId.trim(),
-      analysisGoal: analysisGoal.trim(),
-      analysisProfileId: selectedProfileId,
+      modelConfigId: selectedModelConfigId,
+      systemPromptOverride: systemPromptText.trim() || undefined,
+      temperature,
+      selectedToolNames: selectedToolNames.length > 0 ? selectedToolNames : undefined,
+      onlyFailedToolCalls,
+      evaluationCriteria: evaluationCriteria.length > 0 ? evaluationCriteria : undefined,
     })
 
     if (!$sessionError) {
@@ -77,23 +148,54 @@
     <p class="target-label">Target: <span class="target-title">[{targetSessionId}] {targetSessionTitle}</span></p>
 
     <div class="field">
-      <label class="field-label" for="analysis-profile-select">Analysis profile</label>
-      {#if $analysisProfiles.length === 0}
-        <p class="field-hint">No analysis profiles configured. Create one in <strong>Analysis Profiles</strong> first.</p>
+      <label class="field-label" for="analysis-model-select">Model</label>
+      {#if $modelConfigs.length === 0}
+        <p class="field-hint">No model configs configured. Create one in <strong>Model Configs</strong> first.</p>
       {:else}
         <select
-          id="analysis-profile-select"
+          id="analysis-model-select"
           class="field-select"
-          bind:value={selectedProfileId}
+          bind:value={selectedModelConfigId}
           disabled={$isLaunchingAnalysis}
         >
-          {#each $analysisProfiles as p (p.id)}
-            <option value={p.id}>
-              {p.name}{$analysisDefaults?.defaultAnalysisProfileId === p.id ? ' (default)' : ''}
+          {#each $modelConfigs as config (config.id)}
+            <option value={config.id}>
+              {config.name}{$sessionCreationDefaults?.defaultModelConfigId === config.id ? ' (default)' : ''}
             </option>
           {/each}
         </select>
       {/if}
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="analysis-temperature">Temperature <span class="optional">(optional)</span></label>
+      <p class="field-hint">Defaults to 0.5 for analysis runs. Adjust only when you need broader or narrower sampling.</p>
+      <input
+        id="analysis-temperature"
+        class="field-select"
+        type="number"
+        min="0"
+        max="2"
+        step="0.05"
+        bind:value={temperature}
+        disabled={$isLaunchingAnalysis}
+      />
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="analysis-system-prompt">System prompt</label>
+      <p class="field-hint">This is the backend-owned default analysis prompt. You can edit it for this launch before starting the analysis session.</p>
+      {#if loadingSystemPrompt}
+        <p class="field-hint">Loading default system prompt…</p>
+      {/if}
+      <textarea
+        id="analysis-system-prompt"
+        class="field-textarea"
+        rows={12}
+        bind:value={systemPromptText}
+        disabled={$isLaunchingAnalysis}
+        placeholder="Loading the default analysis system prompt..."
+      ></textarea>
     </div>
 
     <div class="field">
@@ -127,21 +229,45 @@
     </div>
 
     <div class="field">
-      <label class="field-label" for="analysis-goal">Analysis goal</label>
-      <p class="field-hint">
-        Describe what you expected this session to do, which tools should have been used,
-        any failure modes to watch for, or any other evaluation guidance.
-      </p>
-      <!-- svelte-ignore a11y_autofocus -->
+      <div class="field-label">Tool scope <span class="optional">(optional)</span></div>
+      <p class="field-hint">Leave all unchecked to analyze every tool call in scope, or select a subset of tools.</p>
+      {#if availableToolNames.length === 0}
+        <p class="field-hint">No tool calls found in the currently selected turn range.</p>
+      {:else}
+        <div class="checkbox-list">
+          {#each availableToolNames as toolName (toolName)}
+            <label class="checkbox-option">
+              <input
+                type="checkbox"
+                checked={selectedToolNames.includes(toolName)}
+                disabled={$isLaunchingAnalysis}
+                onchange={(event) => toggleToolName(toolName, (event.currentTarget as HTMLInputElement).checked)}
+              />
+              <span>{toolName}</span>
+            </label>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <div class="field checkbox-field">
+      <label class="checkbox-option standalone-checkbox">
+        <input type="checkbox" bind:checked={onlyFailedToolCalls} disabled={$isLaunchingAnalysis} />
+        <span>Only analyze tool calls whose recorded tool result is marked as an error</span>
+      </label>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="evaluation-criteria">Evaluation criteria <span class="optional">(optional)</span></label>
+      <p class="field-hint">Add one criterion per line when you want this analysis run to emphasize specific checks.</p>
       <textarea
-        id="analysis-goal"
-        class="prompt-textarea"
-        placeholder="e.g. The agent should have called get_weather before answering. It should not have hallucinated tool results."
-        rows={5}
-        bind:value={analysisGoal}
+        id="evaluation-criteria"
+        class="field-textarea"
+        rows={4}
+        bind:value={evaluationCriteriaText}
         disabled={$isLaunchingAnalysis}
+        placeholder="Example:\nCheck whether retries were justified\nPrefer direct tool use over guesswork"
         onkeydown={handleKeydown}
-        autofocus
       ></textarea>
     </div>
 
@@ -156,7 +282,7 @@
       <button
         class="btn-primary"
         onclick={handleLaunch}
-        disabled={$isLaunchingAnalysis || !analysisGoal.trim() || !selectedProfileId || !selectedTurnId.trim()}
+        disabled={$isLaunchingAnalysis || !selectedModelConfigId || !selectedTurnId.trim() || !Number.isFinite(temperature)}
       >
         {$isLaunchingAnalysis ? 'Running analysis…' : 'Launch analysis'}
       </button>
@@ -197,6 +323,12 @@
     letter-spacing: 0.04em;
   }
 
+  .optional {
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
   .field-hint {
     font-size: 0.78rem;
     color: var(--text-muted);
@@ -204,8 +336,7 @@
     line-height: 1.4;
   }
 
-  .field-select,
-  .prompt-textarea {
+  .field-select {
     background: var(--bg-input, var(--bg));
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -217,9 +348,47 @@
     box-sizing: border-box;
   }
 
-  .prompt-textarea {
+  .field-textarea {
+    background: var(--bg-input, var(--bg));
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.45rem 0.6rem;
+    width: 100%;
+    box-sizing: border-box;
     resize: vertical;
-    min-height: 100px;
+    min-height: 90px;
+  }
+
+  .checkbox-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-height: 160px;
+    overflow-y: auto;
+    padding: 0.25rem 0;
+  }
+
+  .checkbox-field {
+    gap: 0;
+  }
+
+  .checkbox-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    color: var(--text);
+    font-size: 0.84rem;
+  }
+
+  .checkbox-option input {
+    margin-top: 0.15rem;
+  }
+
+  .standalone-checkbox {
+    padding: 0.1rem 0;
   }
 
   .error-banner {

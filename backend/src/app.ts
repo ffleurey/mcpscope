@@ -13,12 +13,12 @@ import {
   lmStudioConnectionSchema,
   mcpServerProfileSchema,
   modelConfigSchema,
-  analysisProfileSchema,
 } from './domain/configuration.js'
 import { getDomainModelSummary } from './domain/model.js'
 import type { SessionRecord, TurnRecord } from './domain/model.js'
 import { deriveContextEntries, deriveTranscriptEntries } from './domain/selectors.js'
 import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from './domain/trace.js'
+import { listArtifactsBySession } from './analysis/artifactRepository.js'
 import { openBackendDatabase } from './persistence/db.js'
 import {
   deleteLmConnection,
@@ -46,11 +46,6 @@ import {
   upsertModelConfig,
   listChildSessionSummaries,
   listAllSessionSummaries,
-  upsertAnalysisProfile,
-  listAnalysisProfiles,
-  deleteAnalysisProfile,
-  getAnalysisDefaults,
-  upsertAnalysisDefaults,
   type ActiveSessionInfo,
 } from './persistence/repository.js'
 import {
@@ -82,14 +77,16 @@ import {
   sendOperation,
   statusOperation,
   inspectOperation,
+  launchAnalysisOperation,
+  streamAnalysisWorkflow,
   OperationError,
   operationErrorResponse,
   operationErrorToHttpStatus,
   type OperationContext,
 } from './operations/index.js'
 import { executeCreateExplicit } from './operations/createExplicit.js'
-import { executeAnalysisLaunch } from './operations/launchAnalysis.js'
-import { executeAnalysisWorkflow } from './operations/executeAnalysis.js'
+import { executePrimarySessionLaunch } from './operations/launchPrimarySession.js'
+import { buildAnalysisSystemPrompt, normalizeAnalysisGoal } from './analysis/systemPrompt.js'
 
 interface RuntimeDependencies {
   lmStudioGateway: LmStudioGateway
@@ -264,7 +261,67 @@ export async function buildBackendApp(
     }
   })
 
+  app.post('/api/session-constructors/primary', async (request, reply) => {
+    try {
+      const result = await executePrimarySessionLaunch(opCtx, request.body)
+      reply.code(201)
+      return result
+    } catch (err) {
+      return handleOperationError(err, reply)
+    }
+  })
+
+  app.post('/api/session-constructors/session-analysis', async (request, reply) => {
+    const body = z.object({
+      target_session_id: z.string(),
+      target_turn_id: z.string(),
+      analysis_goal: z.string().optional(),
+      model_config_id: z.string().optional(),
+      additional_instructions: z.string().optional(),
+      system_prompt_override: z.string().optional(),
+      temperature: z.number().optional(),
+      selected_tool_names: z.array(z.string()).optional(),
+      only_failed_tool_calls: z.boolean().optional(),
+      evaluation_criteria: z.array(z.string()).optional(),
+    }).parse(request.body)
+    try {
+      const result = await launchAnalysisOperation.execute(opCtx, body.target_session_id, {
+        target_turn_id: body.target_turn_id,
+        analysis_goal: body.analysis_goal,
+        model_config_id: body.model_config_id,
+        additional_instructions: body.additional_instructions,
+        system_prompt_override: body.system_prompt_override,
+        temperature: body.temperature,
+        selected_tool_names: body.selected_tool_names,
+        only_failed_tool_calls: body.only_failed_tool_calls,
+        evaluation_criteria: body.evaluation_criteria,
+      })
+      reply.code(201)
+      return result
+    } catch (err) {
+      return handleOperationError(err, reply)
+    }
+  })
+
   // ─── Session status ─────────────────────────────────────────────────────────
+  app.get('/api/analysis/system-prompt-default', async (request) => {
+    const { analysis_goal, additional_instructions } = z.object({
+      analysis_goal: z.string().optional(),
+      additional_instructions: z.string().optional(),
+    }).parse(request.query)
+
+    return {
+      systemPrompt: additional_instructions === undefined
+        ? buildAnalysisSystemPrompt({
+            analysisGoal: normalizeAnalysisGoal(analysis_goal),
+          })
+        : buildAnalysisSystemPrompt({
+            analysisGoal: normalizeAnalysisGoal(analysis_goal),
+            additionalInstructions: additional_instructions,
+          }),
+    }
+  })
+
   app.get('/api/sessions/:sessionId/status', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     try {
@@ -381,11 +438,9 @@ export async function buildBackendApp(
   app.post('/api/sessions/:sessionId/analyze', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     try {
-      const result = await executeAnalysisLaunch(opCtx, sessionId, request.body)
+      const result = await launchAnalysisOperation.execute(opCtx, sessionId, request.body)
       reply.code(201)
-      return {
-        session: result.session,
-      }
+      return result
     } catch (err) {
       return handleOperationError(err, reply)
     }
@@ -412,14 +467,7 @@ export async function buildBackendApp(
     }
 
     try {
-      await executeAnalysisWorkflow(opCtx, sessionId, emitEvent, { singleStep })
-    } catch (error) {
-      app.log.error({ sessionId, err: error instanceof Error ? error.message : String(error) }, 'Analysis execution failed')
-      emitEvent({
-        type: 'analysis-failed',
-        errorType: 'internal',
-        message: error instanceof Error ? error.message : 'Unknown execution failure',
-      })
+      await streamAnalysisWorkflow(opCtx, sessionId, emitEvent, { singleStep })
     } finally {
       reply.raw.end()
     }
@@ -499,14 +547,6 @@ export async function buildBackendApp(
       reply.code(409)
       return apiError('validation', 'Cannot delete this model config because it is currently set as the default for new sessions. Change or clear the default first.', {
         code: 'default_model_config_in_use',
-      })
-    }
-    const referencedByAnalysisProfile = listAnalysisProfiles(database.connection)
-      .some(p => p.modelConfigId === modelConfigId)
-    if (referencedByAnalysisProfile) {
-      reply.code(409)
-      return apiError('validation', 'Cannot delete this model config because one or more analysis profiles still reference it. Delete those analysis profiles first.', {
-        code: 'model_config_in_use_by_analysis_profile',
       })
     }
     const deleted = deleteModelConfig(database.connection, modelConfigId)
@@ -593,80 +633,6 @@ export async function buildBackendApp(
     }
     upsertSessionCreationDefaults(database.connection, updatedDefaults)
     return { sessionCreationDefaults: updatedDefaults }
-  })
-
-  // ─── Analysis profiles ─────────────────────────────────────────────────────
-
-  app.get('/api/analysis-profiles', async () => {
-    return {
-      analysisProfiles: listAnalysisProfiles(database.connection),
-    }
-  })
-
-  app.put('/api/analysis-profiles/:analysisProfileId', async (request, reply) => {
-    const { analysisProfileId } = z.object({ analysisProfileId: z.string() }).parse(request.params)
-    const record = analysisProfileSchema.parse(request.body)
-    if (record.id !== analysisProfileId) {
-      reply.code(400)
-      return apiError('validation', 'Analysis profile ID mismatch')
-    }
-    const modelConfigs = listModelConfigs(database.connection)
-    if (!modelConfigs.some(c => c.id === record.modelConfigId)) {
-      reply.code(422)
-      return apiError('validation', `Model config "${record.modelConfigId}" not found.`, {
-        code: 'analysis_profile_model_config_not_found',
-      })
-    }
-    upsertAnalysisProfile(database.connection, record)
-    return { analysisProfile: record }
-  })
-
-  app.delete('/api/analysis-profiles/:analysisProfileId', async (request, reply) => {
-    const { analysisProfileId } = z.object({ analysisProfileId: z.string() }).parse(request.params)
-    const defaults = getAnalysisDefaults(database.connection)
-    if (defaults.defaultAnalysisProfileId === analysisProfileId) {
-      reply.code(409)
-      return apiError('validation', 'Cannot delete this analysis profile because it is currently set as the default. Change or clear the default first.', {
-        code: 'default_analysis_profile_in_use',
-      })
-    }
-    const deleted = deleteAnalysisProfile(database.connection, analysisProfileId)
-    if (!deleted) {
-      reply.code(404)
-      return apiError('not_found', 'Analysis profile not found')
-    }
-    reply.code(204)
-    return null
-  })
-
-  app.get('/api/analysis-defaults', async () => {
-    const defaults = getAnalysisDefaults(database.connection)
-    return { analysisDefaults: defaults }
-  })
-
-  const analysisDefaultsInputSchema = z.object({
-    defaultAnalysisProfileId: z.string().nullable(),
-  })
-
-  app.put('/api/analysis-defaults', async (request, reply) => {
-    const { defaultAnalysisProfileId } = analysisDefaultsInputSchema.parse(request.body)
-
-    if (defaultAnalysisProfileId !== null) {
-      const profiles = listAnalysisProfiles(database.connection)
-      if (!profiles.some(p => p.id === defaultAnalysisProfileId)) {
-        reply.code(422)
-        return apiError('validation', `Analysis profile "${defaultAnalysisProfileId}" not found.`, {
-          code: 'default_analysis_profile_not_found',
-        })
-      }
-    }
-
-    const updatedDefaults = {
-      defaultAnalysisProfileId,
-      updatedAt: Date.now(),
-    }
-    upsertAnalysisDefaults(database.connection, updatedDefaults)
-    return { analysisDefaults: updatedDefaults }
   })
 
   app.post('/api/lm-connections/test', async (_request, reply) => {
@@ -846,6 +812,7 @@ export async function buildBackendApp(
       rounds,
       parts,
       rawExchanges,
+      artifacts: listArtifactsBySession(database.connection, sessionId),
       transcript: deriveTranscriptEntries(parts),
       context: deriveContextEntries(parts),
     })
@@ -888,6 +855,7 @@ export async function buildBackendApp(
       const turn: TurnRecord = {
         id: formatTurnId(sessionId, nextSeq),
         sessionId,
+        ownerStepId: null,
         sequenceNumber: nextSeq,
         status: 'streaming',
         createdAt,
@@ -1016,6 +984,7 @@ export async function buildBackendApp(
       const turn: TurnRecord = {
         id: formatTurnId(sessionId, nextSeq),
         sessionId,
+        ownerStepId: null,
         sequenceNumber: nextSeq,
         status: 'streaming',
         createdAt,

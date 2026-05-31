@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const DOMAIN_MODEL_VERSION = 2
 
-export const sessionTypeValues = ['primary', 'session_analysis', 'session_compaction', 'benchmark_analysis'] as const
+export const sessionTypeValues = ['primary', 'session_analysis'] as const
 export const parentKindValues = ['session', 'benchmark'] as const
 
 export const sessionStatusValues = ['draft', 'ready', 'active', 'error', 'archived'] as const
@@ -161,6 +161,7 @@ export const stepRecordSchema = z.object({
 export const turnRecordSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
+  ownerStepId: z.string().nullable(),
   sequenceNumber: z.number().int().nonnegative(),
   status: turnStatusSchema,
   createdAt: z.number().int().nonnegative(),

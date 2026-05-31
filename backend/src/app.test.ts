@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify'
 import { buildBackendApp } from './app.js'
 import type { SessionTraceBundle } from './domain/trace.js'
 import { getSessionRecord, insertTurnRecord, insertRoundRecord, insertPartRecord, updateSessionRecord } from './persistence/repository.js'
+import { listStepRecordsBySession } from './persistence/repositoryV2.js'
 import {
   capturedReasoningThreeBatchParts,
   capturedReasoningThreeBatchRounds,
@@ -101,7 +102,7 @@ describe('backend foundation', () => {
     expect(body.schema.tables).toEqual(
       expect.arrayContaining([
         // Shared config/default tables
-        'session_creation_defaults', 'analysis_profiles', 'analysis_defaults',
+        'session_creation_defaults',
         // Canonical execution-model tables
         'session_containers', 'v2_sessions', 'v2_steps', 'v2_turns',
         'v2_rounds', 'v2_parts', 'v2_raw_exchanges', 'artifacts',
@@ -109,7 +110,7 @@ describe('backend foundation', () => {
     )
     expect(body.schema.meta).toMatchObject({
       domain_model_version: '2',
-      sqlite_schema_version: '7',
+      sqlite_schema_version: '8',
       new_schema_version: '1',
     })
   })
@@ -363,6 +364,7 @@ describe('backend foundation', () => {
         {
           id: capturedReasoningThreeBatchRounds[0]!.turnId,
           sessionId: capturedReasoningThreeBatchSession.id,
+          ownerStepId: null,
           sequenceNumber: 1,
           status: 'complete',
           createdAt: 1,
@@ -427,6 +429,7 @@ describe('backend foundation', () => {
         {
           id: 'captured-reasoning-turn',
           sessionId: capturedReasoningThreeBatchSession.id,
+          ownerStepId: null,
           sequenceNumber: 1,
           status: 'streaming',
           createdAt: 1,
@@ -550,6 +553,7 @@ describe('backend foundation', () => {
         {
           id: sourceTurnId,
           sessionId: sourceSessionId,
+          ownerStepId: null,
           sequenceNumber: 1,
           status: 'complete',
           createdAt: 1,
@@ -2486,6 +2490,39 @@ describe('CLI session lifecycle endpoints', () => {
     expect(typeof body.session.id).toBe('string')
   })
 
+  it('POST /api/session-constructors/primary creates a session from constructor parameters', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, baseGateway)
+
+    const lmConnection = { id: 'lm-1', name: 'LM', baseUrl: 'https://example.com/v1', createdAt: 1, updatedAt: 1 }
+    const modelConfig = { id: 'mc-1', name: 'Qwen Local', connectionId: 'lm-1', modelKey: 'qwen', modelDisplayName: 'Qwen', systemPrompt: 'Be helpful.', temperature: 0.7, createdAt: 1, updatedAt: 1 }
+    const mcpProfile = { id: 'mcp-1', name: 'Home Assistant', url: 'http://localhost:3001/mcp', transport: 'streamable-http' as const, authType: null, authValue: null, createdAt: 1, updatedAt: 1 }
+
+    await app.inject({ method: 'PUT', url: '/api/lm-connections/lm-1', payload: lmConnection })
+    await app.inject({ method: 'PUT', url: '/api/model-configs/mc-1', payload: modelConfig })
+    await app.inject({ method: 'PUT', url: '/api/mcp-profiles/mcp-1', payload: mcpProfile })
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/session-constructors/primary',
+      payload: {
+        session_id: 'AB23',
+        model_config_id: 'mc-1',
+        mcp_profile_id: 'mcp-1',
+        compaction_strategy: 'none',
+      },
+    })
+
+    expect(response.statusCode).toBe(201)
+    const body = response.json()
+    expect(body.session.id).toBe('AB23')
+    expect(body.session.sessionType).toBe('primary')
+    expect(body.session.compactionStrategy).toBe('none')
+    expect(body.session.modelProfileSnapshot.id).toBe('mc-1')
+    expect(body.session.mcpProfileSnapshot?.id).toBe('mcp-1')
+  })
+
   it('auto-titles an unnamed session from the first prompt only', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
@@ -2803,6 +2840,7 @@ describe('CLI session lifecycle endpoints', () => {
       insertTurnRecord(a.backendDb.connection, {
         id: `${sessionId}.1`,
         sessionId,
+        ownerStepId: null,
         sequenceNumber: 1,
         status: 'streaming',
         outcome: null,
@@ -3226,179 +3264,6 @@ describe('CLI session lifecycle endpoints', () => {
   })
 })
 
-describe('analysis profiles', () => {
-  let app: FastifyInstance | undefined
-  let dataDir: string | undefined
-
-  afterEach(async () => {
-    await app?.close()
-    app = undefined
-    if (dataDir) {
-      fs.rmSync(dataDir, { recursive: true, force: true })
-      dataDir = undefined
-    }
-  })
-
-  const modelConfig = {
-    id: 'mc-1',
-    name: 'Test Model',
-    connectionId: 'lm-1',
-    modelKey: 'qwen-1',
-    modelDisplayName: 'Qwen 1',
-    systemPrompt: 'You are helpful.',
-    temperature: 0.7,
-    reasoning: 'on' as const,
-    createdAt: 1,
-    updatedAt: 2,
-  }
-
-  const analysisProfile = {
-    id: 'ap-1',
-    name: 'Analysis Profile 1',
-    modelConfigId: 'mc-1',
-    systemPrompt: 'Analyse the session.',
-    temperature: 0.5,
-    reasoning: 'on' as const,
-    createdAt: 10,
-    updatedAt: 11,
-  }
-
-  async function setupApp() {
-    const config = makeTestConfig()
-    dataDir = config.dataDir
-    app = await buildBackendApp(config)
-    await app.inject({ method: 'PUT', url: '/api/model-configs/mc-1', payload: modelConfig })
-    return app
-  }
-
-  it('GET /api/analysis-profiles returns empty list initially', async () => {
-    app = await (async () => { const c = makeTestConfig(); dataDir = c.dataDir; return buildBackendApp(c) })()
-    const res = await app.inject({ method: 'GET', url: '/api/analysis-profiles' })
-    expect(res.statusCode).toBe(200)
-    expect(res.json()).toEqual({ analysisProfiles: [] })
-  })
-
-  it('GET /api/analysis-defaults returns null default initially', async () => {
-    app = await (async () => { const c = makeTestConfig(); dataDir = c.dataDir; return buildBackendApp(c) })()
-    const res = await app.inject({ method: 'GET', url: '/api/analysis-defaults' })
-    expect(res.statusCode).toBe(200)
-    expect(res.json().analysisDefaults.defaultAnalysisProfileId).toBeNull()
-  })
-
-  it('creates, lists, and deletes an analysis profile', async () => {
-    await setupApp()
-
-    const putRes = await app!.inject({
-      method: 'PUT',
-      url: '/api/analysis-profiles/ap-1',
-      payload: analysisProfile,
-    })
-    expect(putRes.statusCode).toBe(200)
-    expect(putRes.json().analysisProfile).toEqual(analysisProfile)
-
-    const listRes = await app!.inject({ method: 'GET', url: '/api/analysis-profiles' })
-    expect(listRes.statusCode).toBe(200)
-    expect(listRes.json().analysisProfiles).toEqual([analysisProfile])
-
-    const deleteRes = await app!.inject({ method: 'DELETE', url: '/api/analysis-profiles/ap-1' })
-    expect(deleteRes.statusCode).toBe(204)
-
-    const listAfter = await app!.inject({ method: 'GET', url: '/api/analysis-profiles' })
-    expect(listAfter.json().analysisProfiles).toEqual([])
-  })
-
-  it('rejects PUT when path id and body id mismatch', async () => {
-    await setupApp()
-    const res = await app!.inject({
-      method: 'PUT',
-      url: '/api/analysis-profiles/ap-wrong',
-      payload: analysisProfile,
-    })
-    expect(res.statusCode).toBe(400)
-    expect(res.json().error.type).toBe('validation')
-  })
-
-  it('rejects PUT when modelConfigId does not exist', async () => {
-    app = await (async () => { const c = makeTestConfig(); dataDir = c.dataDir; return buildBackendApp(c) })()
-    const res = await app.inject({
-      method: 'PUT',
-      url: '/api/analysis-profiles/ap-1',
-      payload: { ...analysisProfile, modelConfigId: 'nonexistent' },
-    })
-    expect(res.statusCode).toBe(422)
-    expect(res.json().error.code).toBe('analysis_profile_model_config_not_found')
-  })
-
-  it('sets and clears analysis default', async () => {
-    await setupApp()
-    await app!.inject({ method: 'PUT', url: '/api/analysis-profiles/ap-1', payload: analysisProfile })
-
-    const setRes = await app!.inject({
-      method: 'PUT',
-      url: '/api/analysis-defaults',
-      payload: { defaultAnalysisProfileId: 'ap-1' },
-    })
-    expect(setRes.statusCode).toBe(200)
-    expect(setRes.json().analysisDefaults.defaultAnalysisProfileId).toBe('ap-1')
-
-    const getRes = await app!.inject({ method: 'GET', url: '/api/analysis-defaults' })
-    expect(getRes.json().analysisDefaults.defaultAnalysisProfileId).toBe('ap-1')
-
-    const clearRes = await app!.inject({
-      method: 'PUT',
-      url: '/api/analysis-defaults',
-      payload: { defaultAnalysisProfileId: null },
-    })
-    expect(clearRes.statusCode).toBe(200)
-    expect(clearRes.json().analysisDefaults.defaultAnalysisProfileId).toBeNull()
-  })
-
-  it('rejects setting default to a nonexistent analysis profile', async () => {
-    app = await (async () => { const c = makeTestConfig(); dataDir = c.dataDir; return buildBackendApp(c) })()
-    const res = await app.inject({
-      method: 'PUT',
-      url: '/api/analysis-defaults',
-      payload: { defaultAnalysisProfileId: 'nonexistent' },
-    })
-    expect(res.statusCode).toBe(422)
-    expect(res.json().error.code).toBe('default_analysis_profile_not_found')
-  })
-
-  it('rejects deleting the current default analysis profile', async () => {
-    await setupApp()
-    await app!.inject({ method: 'PUT', url: '/api/analysis-profiles/ap-1', payload: analysisProfile })
-    await app!.inject({ method: 'PUT', url: '/api/analysis-defaults', payload: { defaultAnalysisProfileId: 'ap-1' } })
-
-    const deleteRes = await app!.inject({ method: 'DELETE', url: '/api/analysis-profiles/ap-1' })
-    expect(deleteRes.statusCode).toBe(409)
-    expect(deleteRes.json().error.code).toBe('default_analysis_profile_in_use')
-  })
-
-  it('returns 404 when deleting a nonexistent analysis profile', async () => {
-    app = await (async () => { const c = makeTestConfig(); dataDir = c.dataDir; return buildBackendApp(c) })()
-    const res = await app.inject({ method: 'DELETE', url: '/api/analysis-profiles/nonexistent' })
-    expect(res.statusCode).toBe(404)
-  })
-
-  it('rejects deleting a model config that is referenced by an analysis profile', async () => {
-    await setupApp()
-    await app!.inject({ method: 'PUT', url: '/api/analysis-profiles/ap-1', payload: analysisProfile })
-
-    const deleteRes = await app!.inject({ method: 'DELETE', url: '/api/model-configs/mc-1' })
-    expect(deleteRes.statusCode).toBe(409)
-    expect(deleteRes.json().error.code).toBe('model_config_in_use_by_analysis_profile')
-  })
-
-  it('allows deleting a model config once its analysis profile references are removed', async () => {
-    await setupApp()
-    await app!.inject({ method: 'PUT', url: '/api/analysis-profiles/ap-1', payload: analysisProfile })
-    await app!.inject({ method: 'DELETE', url: '/api/analysis-profiles/ap-1' })
-
-    const deleteRes = await app!.inject({ method: 'DELETE', url: '/api/model-configs/mc-1' })
-    expect(deleteRes.statusCode).toBe(204)
-  })
-})
-
 // ─── Analysis launch ───────────────────────────────────────────────────────────
 
 describe('analysis launch', () => {
@@ -3451,7 +3316,7 @@ describe('analysis launch', () => {
     return sessionId
   }
 
-  async function createAnalysisProfile(appInst: FastifyInstance): Promise<string> {
+  async function createAnalysisModelConfig(appInst: FastifyInstance): Promise<string> {
     await appInst.inject({
       method: 'PUT',
       url: '/api/lm-connections/lm-1',
@@ -3479,21 +3344,7 @@ describe('analysis launch', () => {
         updatedAt: 1,
       },
     })
-    await appInst.inject({
-      method: 'PUT',
-      url: '/api/analysis-profiles/ap-1',
-      payload: {
-        id: 'ap-1',
-        name: 'Standard Analysis',
-        modelConfigId: 'mc-1',
-        systemPrompt: 'You are an evaluation agent.',
-        temperature: 0,
-        reasoning: 'on',
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    })
-    return 'ap-1'
+    return 'mc-1'
   }
 
   // Helper to insert a complete turn into the target session so the v2 endpoint has a valid target_turn_id.
@@ -3503,6 +3354,7 @@ describe('analysis launch', () => {
     insertTurnRecord(appInst.backendDb.connection, {
       id: turnId,
       sessionId,
+      ownerStepId: null,
       sequenceNumber: 1,
       status: 'complete',
       outcome: 'model-response',
@@ -3541,8 +3393,10 @@ describe('analysis launch', () => {
                   path_efficiency: 'efficient',
                   path_efficiency_rationale: 'No unnecessary tool calls.',
                   findings: ['Session was efficient.'],
+                  tool_description_findings: [],
                   improvement_suggestions: [],
-                  total_packets_assessed: 0,
+                  tool_description_improvement_suggestions: [],
+                  total_tool_calls_assessed: 0,
                 }),
               },
               finish_reason: 'stop',
@@ -3631,6 +3485,7 @@ describe('analysis launch', () => {
     insertTurnRecord(appInst.backendDb.connection, {
       id: turnId,
       sessionId,
+      ownerStepId: null,
       sequenceNumber: 1,
       status: 'complete',
       outcome: 'model-response',
@@ -3800,7 +3655,7 @@ describe('analysis launch', () => {
     expect(res.json().error.code).toBe('not_found')
   })
 
-  it('returns 422 when no analysis profile is configured and none is supplied', async () => {
+  it('returns 422 when no model config is configured and none is supplied', async () => {
     const { app: appInst } = await setupBackendApp()
     const targetId = await createReadySession(appInst)
     const turnId = createCompleteTurn(appInst, targetId)
@@ -3812,12 +3667,12 @@ describe('analysis launch', () => {
     })
 
     expect(res.statusCode).toBe(422)
-    expect(res.json().error.code).toBe('no_analysis_profile')
+    expect(res.json().error.code).toBe('default_model_not_configured')
   })
 
   it('returns 422 when target session is not yet initialized', async () => {
     const { app: appInst } = await setupBackendApp()
-    await createAnalysisProfile(appInst)
+    await createAnalysisModelConfig(appInst)
 
     const createRes = await appInst.inject({
       method: 'POST',
@@ -3830,7 +3685,7 @@ describe('analysis launch', () => {
     const res = await appInst.inject({
       method: 'POST',
       url: `/api/sessions/${notReadySessionId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', target_turn_id: `${notReadySessionId}-T1`, analysis_goal: 'Evaluate.' },
+      payload: { model_config_id: 'mc-1', target_turn_id: `${notReadySessionId}-T1`, analysis_goal: 'Evaluate.' },
     })
 
     expect(res.statusCode).toBe(422)
@@ -3845,13 +3700,18 @@ describe('analysis launch', () => {
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
-    await createAnalysisProfile(app)
+    await createAnalysisModelConfig(app)
     const turnId = createCompleteTurn(app, targetId)
 
     const res = await app.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: 'Evaluate this session carefully.' },
+      payload: {
+        model_config_id: 'mc-1',
+        target_turn_id: turnId,
+        analysis_goal: 'Evaluate this session carefully.',
+        additional_instructions: 'You are an evaluation agent.',
+      },
     })
 
     expect(res.statusCode).toBe(201)
@@ -3865,8 +3725,7 @@ describe('analysis launch', () => {
     // v2: no analysis_prompt in response
     expect(body.analysis_prompt).toBeUndefined()
 
-    // Title derived from profile name
-    expect(body.session.title).toBe('Analysis: Standard Analysis')
+    expect(body.session.title).toBe('Analysis: Target Session')
 
     // Analysis sessions now have a built-in MCP binding (analysis MCP endpoint)
     expect(body.session.mcpProfileSnapshot).not.toBeNull()
@@ -3877,9 +3736,17 @@ describe('analysis launch', () => {
     expect(stored).not.toBeNull()
     expect(stored?.sessionType).toBe('session_analysis')
     expect(stored?.parentId).toBe(targetId)
+    expect(stored?.modelProfileSnapshot.systemPrompt).toContain('You are mcpscope\'s session analysis agent.')
+    expect(stored?.modelProfileSnapshot.systemPrompt).toContain('Evaluate this session carefully.')
+    expect(stored?.modelProfileSnapshot.systemPrompt).toContain('You are an evaluation agent.')
+    expect(stored?.modelProfileSnapshot.temperature).toBe(0.5)
+
+    const steps = listStepRecordsBySession(app.backendDb.connection, body.session.id)
+    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
+    expect(cursorStep?.params.analysisGoal).toBe('Evaluate this session carefully.')
   })
 
-  it('uses the default analysis profile when none is explicitly supplied', async () => {
+  it('POST /api/session-constructors/session-analysis launches an analysis child session', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
@@ -3887,14 +3754,81 @@ describe('analysis launch', () => {
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
-    await createAnalysisProfile(app)
+    await createAnalysisModelConfig(app)
     const turnId = createCompleteTurn(app, targetId)
 
-    // Set as default
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/session-constructors/session-analysis',
+      payload: {
+        target_session_id: targetId,
+        target_turn_id: turnId,
+        model_config_id: 'mc-1',
+      },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(res.json().session.sessionType).toBe('session_analysis')
+    expect(res.json().session.parentId).toBe(targetId)
+  })
+
+  it('GET /api/analysis/system-prompt-default returns the backend-owned default prompt', async () => {
+    const { app: appInst } = await setupBackendApp()
+
+    const res = await appInst.inject({
+      method: 'GET',
+      url: '/api/analysis/system-prompt-default',
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json().systemPrompt).toContain('You are mcpscope\'s session analysis agent.')
+    expect(res.json().systemPrompt).toContain('Treat this as a runtime-audit task, not a creative writing task.')
+    expect(res.json().systemPrompt).toContain('A turn is one user request / model response cycle inside a session.')
+    expect(res.json().systemPrompt).toContain('When commenting on tool descriptions, quote or point to the specific wording')
+  })
+
+  it('uses a launch-time system prompt override verbatim when supplied', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurn(app, targetId)
+
+    const overridePrompt = 'Custom analysis prompt override for this launch only.'
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: {
+        model_config_id: 'mc-1',
+        target_turn_id: turnId,
+        system_prompt_override: overridePrompt,
+      },
+    })
+
+    expect(res.statusCode).toBe(201)
+    const stored = getSessionRecord(app.backendDb.connection, res.json().session.id as string)
+    expect(stored?.modelProfileSnapshot.systemPrompt).toBe(overridePrompt)
+  })
+
+  it('uses the default model config when none is explicitly supplied', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurn(app, targetId)
+
     await app.inject({
       method: 'PUT',
-      url: '/api/analysis-defaults',
-      payload: { defaultAnalysisProfileId: 'ap-1' },
+      url: '/api/session-creation-defaults',
+      payload: { defaultModelConfigId: 'mc-1', defaultMcpProfileId: null },
     })
 
     // Launch without specifying the profile
@@ -3905,10 +3839,11 @@ describe('analysis launch', () => {
     })
 
     expect(res.statusCode).toBe(201)
-    expect(res.json().session.title).toBe('Analysis: Standard Analysis')
+    const stored = getSessionRecord(app.backendDb.connection, res.json().session.id as string)
+    expect(stored?.modelProfileSnapshot.id).toBe('mc-1')
   })
 
-  it('prefers an explicitly supplied profile over the default', async () => {
+  it('prefers an explicitly supplied model config over the default', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
@@ -3916,42 +3851,42 @@ describe('analysis launch', () => {
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
-    await createAnalysisProfile(app)
+    await createAnalysisModelConfig(app)
     const turnId = createCompleteTurn(app, targetId)
 
-    // Create a second profile
     await app.inject({
       method: 'PUT',
-      url: '/api/analysis-profiles/ap-2',
+      url: '/api/model-configs/mc-2',
       payload: {
-        id: 'ap-2',
-        name: 'Deep Analysis',
-        modelConfigId: 'mc-1',
-        systemPrompt: 'Deep eval.',
-        temperature: 0,
+        id: 'mc-2',
+        name: 'Secondary Analysis Model',
+        connectionId: 'lm-1',
+        modelKey: 'qwen-2',
+        modelDisplayName: 'Qwen 2',
+        systemPrompt: 'Ignored for analysis.',
+        temperature: 0.9,
         createdAt: 2,
         updatedAt: 2,
       },
     })
-    // Set ap-1 as default
     await app.inject({
       method: 'PUT',
-      url: '/api/analysis-defaults',
-      payload: { defaultAnalysisProfileId: 'ap-1' },
+      url: '/api/session-creation-defaults',
+      payload: { defaultModelConfigId: 'mc-1', defaultMcpProfileId: null },
     })
 
-    // Explicitly request ap-2
     const res = await app.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-2', target_turn_id: turnId, analysis_goal: 'Deep check.' },
+      payload: { model_config_id: 'mc-2', target_turn_id: turnId, analysis_goal: 'Deep check.' },
     })
 
     expect(res.statusCode).toBe(201)
-    expect(res.json().session.title).toBe('Analysis: Deep Analysis')
+    const stored = getSessionRecord(app.backendDb.connection, res.json().session.id as string)
+    expect(stored?.modelProfileSnapshot.id).toBe('mc-2')
   })
 
-  it('returns 422 when the supplied analysis profile id does not exist', async () => {
+  it('returns 422 when the supplied model config id does not exist', async () => {
     const { app: appInst } = await setupBackendApp()
     const targetId = await createReadySession(appInst)
     const turnId = createCompleteTurn(appInst, targetId)
@@ -3959,26 +3894,44 @@ describe('analysis launch', () => {
     const res = await appInst.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'nonexistent', target_turn_id: turnId, analysis_goal: 'Eval.' },
+      payload: { model_config_id: 'nonexistent', target_turn_id: turnId, analysis_goal: 'Eval.' },
     })
 
     expect(res.statusCode).toBe(422)
-    expect(res.json().error.code).toBe('analysis_profile_not_found')
+    expect(res.json().error.code).toBe('analysis_model_config_not_found')
   })
 
-  it('rejects an empty analysis_goal', async () => {
-    const { app: appInst } = await setupBackendApp()
+  it('uses a built-in default analysis goal when none is supplied', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const appInst = app
     const targetId = await createReadySession(appInst)
-    await createAnalysisProfile(appInst)
+    await createAnalysisModelConfig(appInst)
     const turnId = createCompleteTurn(appInst, targetId)
 
     const res = await appInst.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: '' },
+      payload: { model_config_id: 'mc-1', target_turn_id: turnId },
     })
 
-    expect(res.statusCode).toBe(400)
+    expect(res.statusCode).toBe(201)
+
+    const sessionId = res.json().session.id as string
+    const stored = getSessionRecord(appInst.backendDb.connection, sessionId)
+    expect(stored?.modelProfileSnapshot.systemPrompt).toContain(
+      'Evaluate whether the target session used tools appropriately and answered the user request correctly.',
+    )
+
+    const steps = listStepRecordsBySession(appInst.backendDb.connection, sessionId)
+    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
+    expect(cursorStep?.params.analysisGoal).toBe(
+      'Evaluate whether the target session used tools appropriately and answered the user request correctly.',
+    )
   })
 
   it('analysis child session appears in GET /api/sessions?include_children=true but not in the primary list', async () => {
@@ -3989,13 +3942,13 @@ describe('analysis launch', () => {
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
-    await createAnalysisProfile(app)
+    await createAnalysisModelConfig(app)
     const turnId = createCompleteTurn(app, targetId)
 
     const launchRes = await app.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: 'Check it.' },
+      payload: { model_config_id: 'mc-1', target_turn_id: turnId, analysis_goal: 'Check it.' },
     })
     expect(launchRes.statusCode).toBe(201)
     const childId = launchRes.json().session.id as string
@@ -4072,12 +4025,12 @@ describe('analysis launch', () => {
   it('returns 422 when target_turn_id does not exist', async () => {
     const { app: appInst } = await setupBackendApp()
     const targetId = await createReadySession(appInst)
-    await createAnalysisProfile(appInst)
+    await createAnalysisModelConfig(appInst)
 
     const res = await appInst.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', target_turn_id: 'NOTEXIST-T1', analysis_goal: 'Eval.' },
+      payload: { model_config_id: 'mc-1', target_turn_id: 'NOTEXIST-T1', analysis_goal: 'Eval.' },
     })
 
     expect(res.statusCode).toBe(422)
@@ -4087,7 +4040,7 @@ describe('analysis launch', () => {
   it('returns 422 when target_turn is not complete', async () => {
     const { app: appInst } = await setupBackendApp()
     const targetId = await createReadySession(appInst)
-    await createAnalysisProfile(appInst)
+    await createAnalysisModelConfig(appInst)
 
     // Insert a turn in 'streaming' status (not complete)
     const ts = Date.now()
@@ -4095,6 +4048,7 @@ describe('analysis launch', () => {
     insertTurnRecord(appInst.backendDb.connection, {
       id: turnId,
       sessionId: targetId,
+      ownerStepId: null,
       sequenceNumber: 1,
       status: 'streaming',
       outcome: null,
@@ -4110,7 +4064,7 @@ describe('analysis launch', () => {
     const res = await appInst.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: 'Eval.' },
+      payload: { model_config_id: 'mc-1', target_turn_id: turnId, analysis_goal: 'Eval.' },
     })
 
     expect(res.statusCode).toBe(422)
@@ -4125,14 +4079,14 @@ describe('analysis launch', () => {
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
-    await createAnalysisProfile(app)
+    await createAnalysisModelConfig(app)
     const turnId = createCompleteTurn(app, targetId)
 
     // Step 1: launch (creates analysis session, pre-initializes cursor step)
     const res = await app.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: 'Did the session do the right thing?' },
+      payload: { model_config_id: 'mc-1', target_turn_id: turnId, analysis_goal: 'Did the session do the right thing?' },
     })
 
     expect(res.statusCode).toBe(201)
@@ -4153,15 +4107,14 @@ describe('analysis launch', () => {
       .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
       .all(childId) as Array<{ id: string; metadata_json: string }>
 
-    // At minimum: analysis_target, evidence_packet_index, coverage_map
-    expect(artifacts.length).toBeGreaterThanOrEqual(3)
+    // At minimum: analysis_target and evidence_packet_index
+    expect(artifacts.length).toBeGreaterThanOrEqual(2)
     const schemaKeys = artifacts.map(a => {
       const meta = JSON.parse(a.metadata_json) as { schema_key: string }
       return meta.schema_key
     })
     expect(schemaKeys).toContain('analysis.analysis_target.v1')
     expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
-    expect(schemaKeys).toContain('analysis.coverage_map.v1')
     // No tool-call packets means no tool_call_assessment artifacts
     expect(schemaKeys.filter(k => k === 'analysis.tool_call_assessment.v1')).toHaveLength(0)
     // Final report should be present since coverage_validation passes trivially (0 packets)
@@ -4184,25 +4137,15 @@ describe('analysis launch', () => {
           let content: string
           if (idx === 0) {
             content = JSON.stringify({
-              packet_index: 0,
               turn_id: turnRef.id,
               round_id: `${turnRef.id}-R1`,
+              tool_call_part_id: `${turnRef.id}-P3`,
               tool_name: 'test_tool',
               expectation_match: 'match',
-              expectation_rationale: 'Tool was called correctly.',
+              tool_call_assessment: 'The selected tool matched the stated intent, and the city argument was set to Paris as expected.',
               most_direct_cause: null,
-              result_usage_quality: 'good',
-              result_usage_rationale: 'Result was used well.',
-              notable_observations: null,
-            })
-          } else if (idx === 1) {
-            content = JSON.stringify({
-              turn_id: turnRef.id,
-              total_tool_calls_assessed: 1,
-              turn_outcome: 'successful',
-              turn_outcome_rationale: 'The single tool call matched expectations.',
-              per_tool_findings: [{ packet_index: 0, tool_name: 'test_tool', expectation_match: 'match', brief_finding: 'OK.' }],
-              notable_observations: null,
+              parameter_or_call_issues: [],
+              post_call_assessment: null,
             })
           } else {
             content = JSON.stringify({
@@ -4213,8 +4156,10 @@ describe('analysis launch', () => {
               path_efficiency: 'efficient',
               path_efficiency_rationale: 'No unnecessary tool calls.',
               findings: ['Session was efficient.'],
+              tool_description_findings: [],
               improvement_suggestions: [],
-              total_packets_assessed: 1,
+              tool_description_improvement_suggestions: [],
+              total_tool_calls_assessed: 1,
             })
           }
           return {
@@ -4251,7 +4196,7 @@ describe('analysis launch', () => {
       mcpGateway: makeAnalysisMcpGateway(inspectIds),
     })
     const targetId = await createReadySession(app)
-    await createAnalysisProfile(app)
+    await createAnalysisModelConfig(app)
     const turnId = createCompleteTurnWithToolCall(app, targetId)
     turnRef.id = turnId  // wire the ref so the gateway can use it
 
@@ -4259,7 +4204,7 @@ describe('analysis launch', () => {
     const launchRes = await app.inject({
       method: 'POST',
       url: `/api/sessions/${targetId}/analyze`,
-      payload: { analysis_profile_id: 'ap-1', target_turn_id: turnId, analysis_goal: 'Evaluate this tool call.' },
+      payload: { model_config_id: 'mc-1', target_turn_id: turnId, analysis_goal: 'Evaluate this tool call.' },
     })
     expect(launchRes.statusCode).toBe(201)
     const childId = launchRes.json().session.id as string
@@ -4270,6 +4215,7 @@ describe('analysis launch', () => {
       url: `/api/sessions/${childId}/execute`,
     })
     expect(execRes.statusCode).toBe(200)
+    expect(callCount).toBe(1)
 
     // Check artifacts produced
     const artifacts = app.backendDb.connection
@@ -4283,7 +4229,6 @@ describe('analysis launch', () => {
     // Core structural artifacts
     expect(schemaKeys).toContain('analysis.analysis_target.v1')
     expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
-    expect(schemaKeys).toContain('analysis.coverage_map.v1')
 
     // Per-packet assessment
     expect(schemaKeys.filter(k => k === 'analysis.tool_call_assessment.v1')).toHaveLength(1)
@@ -4303,7 +4248,6 @@ describe('analysis launch', () => {
 
     expect(inspectIds).toEqual([
       targetId,
-      `${targetId}.S`,
       `${turnId}-P2`,
       `${turnId}-P3`,
       `${turnId}-P5`,
@@ -4314,7 +4258,6 @@ describe('analysis launch', () => {
       .all(childId) as Array<{ turn_number: number; round_index: number }>
     expect(deterministicRounds).toEqual([
       { turn_number: 1, round_index: 0 },
-      { turn_number: 1, round_index: 1 },
       { turn_number: 2, round_index: 0 },
       { turn_number: 2, round_index: 1 },
       { turn_number: 2, round_index: 2 },
@@ -4345,5 +4288,198 @@ describe('analysis launch', () => {
       .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND payload_summary LIKE 'Evidence for packet%'`)
       .all(childId) as Array<{ id: string }>
     expect(injectParts).toHaveLength(0)
+  })
+
+  it('analysis execute rejects an assessment response whose identity does not match the expected packet', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const turnRef = { id: '' }
+
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          return {
+            id: 'cmpl-bad-assessment',
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: JSON.stringify({
+                  turn_id: turnRef.id,
+                  round_id: `${turnRef.id}-R1`,
+                  tool_call_part_id: `${turnRef.id}-WRONG`,
+                  tool_name: 'test_tool',
+                  expectation_match: 'mismatch',
+                  tool_call_assessment: 'The selected tool was plausible, but the invoked call did not match the expected packet identity.',
+                  most_direct_cause: 'unclear',
+                  parameter_or_call_issues: ['The assessment does not support a clean-success shortcut for this turn.'],
+                  post_call_assessment: null,
+                }),
+              },
+              finish_reason: 'stop',
+            }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: { model_config_id: 'mc-1', target_turn_id: turnId, analysis_goal: 'Evaluate this tool call.' },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(execRes.statusCode).toBe(200)
+
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT metadata_json, content_json FROM artifacts WHERE session_id = ? ORDER BY created_at ASC`)
+      .all(childId) as Array<{ metadata_json: string; content_json: string }>
+
+    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).not.toContain('analysis.tool_call_assessment.v1')
+    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).not.toContain('analysis.final_analysis_report.v1')
+
+    const diagnostic = artifacts
+      .map(a => ({ meta: JSON.parse(a.metadata_json), content: JSON.parse(a.content_json) }))
+      .find(a => a.meta.schema_key === 'analysis.diagnostic.v1')
+
+    expect(diagnostic?.content.error_kind).toBe('identity_mismatch')
+    expect(diagnostic?.content.step_type).toBe('tool_call_assessment')
+  })
+
+  it('analysis execute rejects a turn summary whose tool identities do not match the assessed turn', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const turnRef = { id: '' }
+    let callCount = 0
+
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          const content = idx === 0
+            ? JSON.stringify({
+                turn_id: turnRef.id,
+                round_id: `${turnRef.id}-R1`,
+                tool_call_part_id: `${turnRef.id}-P3`,
+                tool_name: 'test_tool',
+                expectation_match: 'mismatch',
+                tool_call_assessment: 'The selected tool was plausible, but the invoked call did not match the expected packet identity.',
+                most_direct_cause: 'unclear',
+                parameter_or_call_issues: ['The assessment does not qualify for the deterministic single-success summary shortcut.'],
+                post_call_assessment: null,
+              })
+            : JSON.stringify({
+                turn_id: turnRef.id,
+                total_tool_calls_assessed: 1,
+                turn_outcome: 'successful',
+                turn_outcome_rationale: 'The single tool call matched expectations.',
+                per_tool_findings: [{ tool_call_part_id: `${turnRef.id}-WRONG`, tool_name: 'test_tool', brief_finding: 'OK.' }],
+                cross_attempt_reconciliation: null,
+              })
+
+          return {
+            id: `cmpl-summary-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: { model_config_id: 'mc-1', target_turn_id: turnId, analysis_goal: 'Evaluate this tool call.' },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(execRes.statusCode).toBe(200)
+
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT metadata_json, content_json FROM artifacts WHERE session_id = ? ORDER BY created_at ASC`)
+      .all(childId) as Array<{ metadata_json: string; content_json: string }>
+
+    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).toContain('analysis.tool_call_assessment.v1')
+    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).not.toContain('analysis.turn_summary.v1')
+    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).not.toContain('analysis.final_analysis_report.v1')
+
+    const diagnostic = artifacts
+      .map(a => ({ meta: JSON.parse(a.metadata_json), content: JSON.parse(a.content_json) }))
+      .find(a => a.meta.schema_key === 'analysis.diagnostic.v1')
+
+    expect(diagnostic?.content.error_kind).toBe('identity_mismatch')
+    expect(diagnostic?.content.step_type).toBe('turn_summary')
   })
 })

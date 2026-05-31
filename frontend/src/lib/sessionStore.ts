@@ -1,6 +1,6 @@
 import { derived, get, writable } from 'svelte/store'
 import {
-  createSession,
+  createPrimarySession,
   deleteSession as deleteBackendSession,
   getSessionTrace,
   importTrace as importBackendTrace,
@@ -11,6 +11,7 @@ import {
   streamPreludeInit,
   streamTurn as streamBackendTurn,
 } from './api/backendClient'
+import { lmConnections, mcpProfiles, modelConfigs, sessionCreationDefaults } from './connectionStore'
 import type {
   AnalysisStreamEvent,
   PreludeStreamEvent,
@@ -35,9 +36,7 @@ import {
   type TurnStreamingState,
 } from './traceStreaming'
 import type {
-  LmStudioConnection,
   McpServerProfile,
-  ModelConfig,
 } from './types'
 
 export const sessionError = writable<AppError | null>(null)
@@ -53,6 +52,7 @@ export const isLaunchingAnalysis = writable(false)
 export const isExecutingAnalysis = writable(false)
 export const isSteppingAnalysis = writable(false)
 export const activeTurnStream = writable<TurnStreamingState | null>(null)
+export const isPrimaryLaunchDialogOpen = writable(false)
 
 export const activeSession = derived(
   [chatSessions, activeChatId],
@@ -71,22 +71,6 @@ function setSessionError(error: AppError, surface: 'dialog' | 'new-session' = 'd
 
 function sortByUpdatedAtDesc<T extends { updated_at: number }>(records: T[]): T[] {
   return [...records].sort((left, right) => right.updated_at - left.updated_at)
-}
-
-function buildModelProfileSnapshot(modelConfig: ModelConfig, connection: LmStudioConnection) {
-  return {
-    id: modelConfig.id,
-    name: modelConfig.name,
-    connectionBaseUrl: connection.baseUrl,
-    apiKey: connection.apiKey ?? null,
-    modelKey: modelConfig.modelKey,
-    modelDisplayName: modelConfig.modelDisplayName,
-    systemPrompt: modelConfig.systemPrompt,
-    temperature: modelConfig.temperature,
-    reasoning: modelConfig.reasoning ?? null,
-    createdAt: modelConfig.createdAt,
-    updatedAt: modelConfig.updatedAt,
-  }
 }
 
 function buildMcpProfileSnapshot(mcpProfile: McpServerProfile) {
@@ -172,6 +156,15 @@ export function startDraftSession(): void {
   activeTurnStream.set(null)
 }
 
+export function openPrimaryLaunchDialog(): void {
+  clearSessionError()
+  isPrimaryLaunchDialogOpen.set(true)
+}
+
+export function closePrimaryLaunchDialog(): void {
+  isPrimaryLaunchDialogOpen.set(false)
+}
+
 export async function selectChat(sessionId: string): Promise<void> {
   clearSessionError()
   activeChatId.set(sessionId)
@@ -204,31 +197,55 @@ export async function deleteChat(sessionId: string): Promise<void> {
 
 export async function startSession(input: {
   sessionId?: string
-  modelConfig: ModelConfig
-  connection: LmStudioConnection
-  mcpProfile: McpServerProfile | null
+  modelConfigId?: string
+  mcpProfileId?: string | null
   compactionStrategy: 'none' | 'strip-reasoning'
 }): Promise<void> {
   clearSessionError()
   isStartingSession.set(true)
   try {
-    const mcpSnapshot = input.mcpProfile ? buildMcpProfileSnapshot(input.mcpProfile) : null
+    const defaults = get(sessionCreationDefaults)
+    const resolvedModelConfigId = input.modelConfigId ?? defaults?.defaultModelConfigId ?? undefined
+    const selectedModelConfig = resolvedModelConfigId
+      ? get(modelConfigs).find((config) => config.id === resolvedModelConfigId)
+      : undefined
+
+    if (!selectedModelConfig) {
+      throw new AppError('No model config is available for the primary session constructor.', 'validation', 0)
+    }
+
+    const selectedConnection = get(lmConnections).find((connection) => connection.id === selectedModelConfig.connectionId)
+    if (!selectedConnection) {
+      throw new AppError(
+        `LM connection "${selectedModelConfig.connectionId}" referenced by the selected model config no longer exists.`,
+        'validation',
+        0,
+      )
+    }
+
+    const resolvedMcpProfileId = input.mcpProfileId === undefined
+      ? defaults?.defaultMcpProfileId ?? undefined
+      : input.mcpProfileId
+    const selectedMcpProfile = resolvedMcpProfileId
+      ? get(mcpProfiles).find((profile) => profile.id === resolvedMcpProfileId) ?? null
+      : null
+    const mcpSnapshot = selectedMcpProfile ? buildMcpProfileSnapshot(selectedMcpProfile) : null
 
     // Pre-flight: check connectivity before creating the session record
     await preflightSession({
-      lmConnectionSnapshot: { baseUrl: input.connection.baseUrl, apiKey: input.connection.apiKey ?? null },
+      lmConnectionSnapshot: { baseUrl: selectedConnection.baseUrl, apiKey: selectedConnection.apiKey ?? null },
       mcpProfileSnapshot: mcpSnapshot ? { url: mcpSnapshot.url } : null,
       selectedModel: {
-        modelKey: input.modelConfig.modelKey,
-        modelDisplayName: input.modelConfig.modelDisplayName,
+        modelKey: selectedModelConfig.modelKey,
+        modelDisplayName: selectedModelConfig.modelDisplayName,
       },
     })
 
-    const { session } = await createSession({
-      sessionId: input.sessionId,
-      modelProfileSnapshot: buildModelProfileSnapshot(input.modelConfig, input.connection),
-      mcpProfileSnapshot: mcpSnapshot,
-      compactionStrategy: input.compactionStrategy,
+    const { session } = await createPrimarySession({
+      session_id: input.sessionId,
+      model_config_id: selectedModelConfig.id,
+      mcp_profile_id: resolvedMcpProfileId ?? null,
+      compaction_strategy: input.compactionStrategy,
     })
     // Show the chat view immediately (composer locked until initStatus = 'ready')
     activeChatId.set(session.id)
@@ -240,6 +257,7 @@ export async function startSession(input: {
     await streamPreludeInit(session.id, (event) => applyPreludeStreamEvent(event))
 
     await refreshSessions()
+    isPrimaryLaunchDialogOpen.set(false)
   } catch (error) {
     setSessionError(toAppError(error), 'new-session')
   } finally {
@@ -409,29 +427,36 @@ function applyTurnStreamEvent(
 /**
  * Launch an analysis session for the given target session.
  *
- * Creates a session_analysis child session on the backend, navigates to it,
- * runs prelude initialization, then auto-sends the analysis prompt as the
- * first turn — all using the existing streaming infrastructure.
+ * Creates a backend-owned session_analysis child session, updates the session
+ * list, and navigates to it. Analysis execution is a separate streamed action.
  */
 export async function launchAnalysis(input: {
   targetSessionId: string
   targetTurnId: string
-  analysisGoal: string
-  analysisProfileId?: string
+  analysisGoal?: string
+  modelConfigId?: string
+  additionalInstructions?: string
+  systemPromptOverride?: string
+  temperature?: number
+  selectedToolNames?: string[]
+  onlyFailedToolCalls?: boolean
+  evaluationCriteria?: string[]
 }): Promise<void> {
   clearSessionError()
   isLaunchingAnalysis.set(true)
   try {
-    // The backend now owns the full analysis workflow: it creates the child session,
-    // runs every step, and returns the completed session.
-    const { session } = await launchBackendAnalysis(
-      input.targetSessionId,
-      {
-        target_turn_id: input.targetTurnId,
-        analysis_goal: input.analysisGoal,
-        analysis_profile_id: input.analysisProfileId,
-      },
-    )
+    const { session } = await launchBackendAnalysis({
+      target_session_id: input.targetSessionId,
+      target_turn_id: input.targetTurnId,
+      analysis_goal: input.analysisGoal,
+      model_config_id: input.modelConfigId,
+      additional_instructions: input.additionalInstructions,
+      system_prompt_override: input.systemPromptOverride,
+      temperature: input.temperature,
+      selected_tool_names: input.selectedToolNames,
+      only_failed_tool_calls: input.onlyFailedToolCalls,
+      evaluation_criteria: input.evaluationCriteria,
+    })
 
     // Add the completed session to the session list and navigate to it
     const summary = toSessionSummary(session)
@@ -441,7 +466,8 @@ export async function launchAnalysis(input: {
     })
     activeChatId.set(session.id)
 
-    // Refresh to load the full session trace
+    // Refresh to load the created analysis session immediately in the chat view.
+    await refreshActiveTrace()
     await refreshSessions()
   } catch (error) {
     setSessionError(toAppError(error))
@@ -452,8 +478,7 @@ export async function launchAnalysis(input: {
 
 /**
  * Execute (or resume) the analysis workflow for the active analysis session.
- * Streams progress events back: LLM turn tokens (same as regular sessions)
- * and deterministic analysis step events.
+ * Streams normal turn events plus analysis workflow events from the backend.
  */
 export async function executeAnalysis(): Promise<void> {
   const sessionId = get(activeChatId)

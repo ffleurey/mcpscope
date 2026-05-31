@@ -51,6 +51,9 @@ export interface AnalysisSessionInput {
   targetSessionId: string
   targetTurnId: string
   analysisGoal: string
+  selectedToolNames: string[]
+  onlyFailedToolCalls: boolean
+  evaluationCriteria: string[]
 }
 
 export class AnalysisSession {
@@ -87,6 +90,9 @@ export class AnalysisSession {
       targetSessionId: input.targetSessionId,
       targetTurnId: input.targetTurnId,
       analysisGoal: input.analysisGoal,
+      selectedToolNames: input.selectedToolNames,
+      onlyFailedToolCalls: input.onlyFailedToolCalls,
+      evaluationCriteria: input.evaluationCriteria,
     }
   }
 
@@ -104,6 +110,9 @@ export class AnalysisSession {
         targetSessionId: this.state.targetSessionId,
         targetTurnId: this.state.targetTurnId,
         analysisGoal: this.state.analysisGoal,
+        selectedToolNames: this.state.selectedToolNames,
+        onlyFailedToolCalls: this.state.onlyFailedToolCalls,
+        evaluationCriteria: this.state.evaluationCriteria,
       },
       state: this.state as unknown as Record<string, unknown>,
       createdAt: now(),
@@ -127,6 +136,9 @@ export class AnalysisSession {
         targetSessionId: this.state.targetSessionId,
         targetTurnId: this.state.targetTurnId,
         analysisGoal: this.state.analysisGoal,
+        selectedToolNames: this.state.selectedToolNames,
+        onlyFailedToolCalls: this.state.onlyFailedToolCalls,
+        evaluationCriteria: this.state.evaluationCriteria,
       },
       state: this.state as unknown as Record<string, unknown>,
       createdAt: now(),
@@ -175,6 +187,9 @@ export class AnalysisSession {
       targetSessionId: '',
       targetTurnId: '',
       analysisGoal: '',
+      selectedToolNames: [],
+      onlyFailedToolCalls: false,
+      evaluationCriteria: [],
     })
     instance.cursorStepId = cursorStep.id
     instance.state = cursorStep.state as unknown as AnalysisSessionState
@@ -306,40 +321,10 @@ export class AnalysisSession {
     const { state } = this
 
     if (state.awaitingContextMutation) {
-      // Context mutation step
-      const assessmentArtifacts = getLatestArtifactBySchemaKey(
-        this.database.connection,
-        state.analysisSessionId,
-        SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
-      )
-      const assessmentArtifactId = assessmentArtifacts?.id ?? ''
-
-      const ordinal = getNextStepOrdinal(this.database.connection, state.analysisSessionId)
-      const stepId = formatStepId(state.analysisSessionId, ordinal)
-      const startedAt = now()
-      const mutStep: StepPersistenceRecord = {
-        id: stepId,
-        sessionId: state.analysisSessionId,
-        stepTypeKey: mkStepTypeKey('analysis_context_mutation'),
-        ordinal,
-        status: 'running',
-        params: { assessment_artifact_id: assessmentArtifactId },
-        state: {},
-        createdAt: startedAt,
-        completedAt: null,
-      }
-      insertStepRecord(this.database.connection, mutStep)
-      emitEvent?.({ type: 'analysis-step-started', step: { ...mutStep } })
-
       const mutationResult = runContextMutationStep(this.database, {
         state,
-        assessmentArtifactId,
       })
       this.state = mutationResult.updatedState
-
-      const completedMutStep: StepPersistenceRecord = { ...mutStep, status: 'complete', completedAt: now() }
-      updateStepRecord(this.database.connection, completedMutStep)
-      emitEvent?.({ type: 'analysis-step-completed', step: completedMutStep })
       this.persistState()
       return
     }
@@ -386,7 +371,7 @@ export class AnalysisSession {
       stepTypeKey: mkStepTypeKey('analysis_tool_call_assessment'),
       ordinal,
       status: 'running',
-      params: { packet_index: packet.packet_index },
+      params: { tool_call_part_id: packet.tool_call_part_id },
       state: {},
       createdAt: startedAt,
       completedAt: null,
@@ -422,38 +407,12 @@ export class AnalysisSession {
   }
 
   private runCoverageValidation(emitEvent?: AnalysisStreamEventSink): void {
-    const ordinal = getNextStepOrdinal(this.database.connection, this.state.analysisSessionId)
-    const stepId = formatStepId(this.state.analysisSessionId, ordinal)
-    const startedAt = now()
-    const stepRecord: StepPersistenceRecord = {
-      id: stepId,
-      sessionId: this.state.analysisSessionId,
-      stepTypeKey: mkStepTypeKey('analysis_coverage_validation'),
-      ordinal,
-      status: 'running',
-      params: {},
-      state: {},
-      createdAt: startedAt,
-      completedAt: null,
-    }
-    insertStepRecord(this.database.connection, stepRecord)
-    emitEvent?.({ type: 'analysis-step-started', step: { ...stepRecord } })
-
     const result = runCoverageValidationStep(this.database, {
       state: this.state,
-      stepId,
+      stepId: this.cursorStepId,
     })
 
     this.state = result.updatedState
-
-    const completedStep: StepPersistenceRecord = {
-      ...stepRecord,
-      status: result.passed ? 'complete' : 'error',
-      state: { passed: result.passed },
-      completedAt: now(),
-    }
-    updateStepRecord(this.database.connection, completedStep)
-    emitEvent?.({ type: 'analysis-step-completed', step: completedStep })
     emitEvent?.({ type: 'analysis-phase-changed', phase: this.state.phase })
 
     this.persistState()

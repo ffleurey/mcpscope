@@ -919,6 +919,7 @@ export async function runDeterministicMcpToolCall(
   reservedTurnId?: string,
   roundIndexOverride?: number,
   commitTurn = true,
+  ownerStepId?: string | null,
 ): Promise<{
   turnId: string
   roundId: string
@@ -970,6 +971,7 @@ export async function runDeterministicMcpToolCall(
         ...(listTurnRecordsBySession(database.connection, session.id).find(t => t.id === turnId) ?? {
           id: turnId,
           sessionId: session.id,
+          ownerStepId: ownerStepId ?? null,
           sequenceNumber: turnSequenceNumber,
           status: 'streaming',
           outcome: null,
@@ -985,6 +987,7 @@ export async function runDeterministicMcpToolCall(
     : {
         id: turnId,
         sessionId: session.id,
+      ownerStepId: ownerStepId ?? null,
         sequenceNumber: turnSequenceNumber,
         status: 'streaming',
         outcome: null,
@@ -1116,6 +1119,7 @@ export async function runDeterministicMcpToolCallsInSingleTurn(
   session: SessionRecord,
   calls: Array<{ toolName: string; toolArgs: Record<string, unknown> }>,
   emitEvent?: TurnStreamEventSink,
+  ownerStepId?: string | null,
 ): Promise<{ turnId: string; toolCallPartIds: string[]; toolResultPartIds: string[] }> {
   const toolCallPartIds: string[] = []
   const toolResultPartIds: string[] = []
@@ -1134,6 +1138,7 @@ export async function runDeterministicMcpToolCallsInSingleTurn(
       reservedTurnId ?? undefined,
       index,
       index === calls.length - 1,
+      ownerStepId,
     )
     reservedTurnId = result.turnId
     toolCallPartIds.push(result.toolCallPartId)
@@ -1155,7 +1160,7 @@ export async function createToolEnabledTurn(
   database: BackendDatabase,
   lmStudioGateway: LmStudioGateway,
   mcpGateway: McpGateway,
-  input: { sessionId: string; userContent: string; maxToolRounds: number; reservedTurn?: TurnRecord | undefined },
+  input: { sessionId: string; userContent: string; maxToolRounds: number; ownerStepId?: string | null | undefined; reservedTurn?: TurnRecord | undefined },
   emitEvent?: TurnStreamEventSink,
 ): Promise<RuntimeTurnResult> {
   if (input.maxToolRounds < 1) {
@@ -1191,6 +1196,7 @@ export async function createToolEnabledTurn(
     : {
         id: turnId,
         sessionId: session.id,
+      ownerStepId: input.ownerStepId ?? null,
         sequenceNumber: turnSequenceNumber,
         status: 'streaming',
         createdAt: startedAt,

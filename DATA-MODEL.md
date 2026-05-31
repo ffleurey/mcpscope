@@ -16,7 +16,7 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 - `SessionContainer` — the domain-level ownership abstraction for sessions
 - `Session` — the execution container (also a `SessionContainer`); runs its loop via `execute()` / `advance()` / `canContinue()`
 - `Step` — the abstract execution unit; concrete units of work include `Turn` for LLM interaction plus shipped deterministic analysis workflow steps
-- `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records
+- `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records, and may optionally belong to one non-turn step for workflow grouping
 - the runtime tree described below for persisted sessions (unchanged from user perspective)
 - one session contains one setup and zero or more turns
 - hierarchical IDs for session/setup/turn/round/part runtime nodes
@@ -44,6 +44,12 @@ The key distinction is:
 - `Step` is the execution unit inside that session
 - `Turn` is the LLM-interaction step subtype
 - deterministic steps can steer the session without moving the workflow outside the session model
+
+Current ownership rule:
+
+- non-turn steps may own zero or more turns
+- a turn may belong to at most one non-turn step
+- containment is intentionally limited to one level
 
 ## Canonical tree
 
@@ -107,6 +113,7 @@ Current implementations may also expose metadata around the session tree such as
 |---|---|---|
 | `id` | `string` | Canonical turn ID |
 | `number` | `integer` | Stable turn sequence number within the session |
+| `owner_step_id?` | `string` | Owning non-turn step when the turn is grouped under a workflow step |
 | `status?` | `string` | Turn lifecycle status when exposed |
 | `rounds` | `Round[]` | Ordered rounds in the turn |
 
@@ -265,7 +272,7 @@ The exact base still needs to be fixed once for the whole public model, but the 
 
 mcpscope persists typed sessions with a parent-link model. This is already implemented:
 
-- each session has a `session_type`: `primary`, `session_analysis`, `session_compaction`, or `benchmark_analysis`
+- each session has a `session_type`: `primary` or `session_analysis`
 - some session types carry a `parent_kind` and `parent_id`
 - the allowed parent kinds depend on the session type and are enforced at the application-validation layer
 
@@ -273,8 +280,6 @@ Implemented rules:
 
 - `primary` → optional `benchmark` parent
 - `session_analysis` → mandatory `session` parent
-- `session_compaction` → mandatory `session` parent
-- `benchmark_analysis` → mandatory `benchmark` parent
 
 The backend runtime session-creation flow — including the analysis-launch flow — uses one unified validated `createSession(...)` path. Session type and parent metadata are validated before persistence and never patched afterward in that flow.
 

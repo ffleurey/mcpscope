@@ -27,8 +27,29 @@ import {
 import { buildSessionTraceBundle } from '../domain/trace.js'
 import { deriveTranscriptEntries, deriveContextEntries } from '../domain/selectors.js'
 import { AnalysisSession } from '../analysis/analysisSession.js'
+import { listArtifactsBySession } from '../analysis/artifactRepository.js'
 import type { OperationContext } from './context.js'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
+
+export async function streamAnalysisWorkflow(
+  ctx: OperationContext,
+  analysisSessionId: string,
+  emitEvent: AnalysisStreamEventSink,
+  options: { singleStep?: boolean } = {},
+): Promise<void> {
+  try {
+    await executeAnalysisWorkflow(ctx, analysisSessionId, emitEvent, options)
+  } catch (error) {
+    ctx.logger?.error(
+      { sessionId: analysisSessionId, err: error instanceof Error ? error.message : String(error) },
+      'Analysis execution failed',
+    )
+    emitEvent({
+      type: 'analysis-failed',
+      message: error instanceof Error ? error.message : 'Unknown execution failure',
+    })
+  }
+}
 
 export async function executeAnalysisWorkflow(
   ctx: OperationContext,
@@ -118,6 +139,7 @@ export async function executeAnalysisWorkflow(
     rounds: listRoundRecordsBySession(db.connection, analysisSessionId),
     parts: finalParts,
     rawExchanges: listRawExchangeRecordsBySession(db.connection, analysisSessionId),
+    artifacts: listArtifactsBySession(db.connection, analysisSessionId),
     transcript: deriveTranscriptEntries(finalParts),
     context: deriveContextEntries(finalParts),
   })

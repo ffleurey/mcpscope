@@ -8,8 +8,6 @@ import type { ParentKind, SessionType } from './model.js'
  * Rules:
  *   primary           → parent optional; if present, kind must be 'benchmark'
  *   session_analysis  → parent required; kind must be 'session'
- *   session_compaction→ parent required; kind must be 'session'
- *   benchmark_analysis→ parent required; kind must be 'benchmark'
  *
  * Additionally: parent_kind and parent_id must be both null or both present.
  */
@@ -34,16 +32,6 @@ export function validateSessionParent(
     case 'session_analysis':
       if (!hasParent) return 'session_analysis sessions require a parent'
       if (parentKind !== 'session') return "session_analysis sessions require a 'session' parent"
-      return null
-
-    case 'session_compaction':
-      if (!hasParent) return 'session_compaction sessions require a parent'
-      if (parentKind !== 'session') return "session_compaction sessions require a 'session' parent"
-      return null
-
-    case 'benchmark_analysis':
-      if (!hasParent) return 'benchmark_analysis sessions require a parent'
-      if (parentKind !== 'benchmark') return "benchmark_analysis sessions require a 'benchmark' parent"
       return null
   }
 }

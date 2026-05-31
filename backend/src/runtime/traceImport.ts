@@ -52,12 +52,17 @@ function normalizeImportedSession(session: SessionRecord): SessionRecord {
 }
 
 function normalizeImportedTurn(turn: TurnRecord, normalizedAt: number): TurnRecord {
+  const normalizedBase: TurnRecord = {
+    ...turn,
+    ownerStepId: turn.ownerStepId ?? null,
+  }
+
   if (turn.status !== 'draft' && turn.status !== 'streaming' && turn.status !== 'awaiting-tools') {
-    return turn
+    return normalizedBase
   }
 
   return {
-    ...turn,
+    ...normalizedBase,
     status: 'aborted',
     completedAt: turn.completedAt ?? normalizedAt,
     outcome: turn.outcome ?? 'aborted',

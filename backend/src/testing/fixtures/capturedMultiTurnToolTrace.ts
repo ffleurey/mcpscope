@@ -45,6 +45,7 @@ export const capturedMultiTurnToolTrace: SessionTraceBundle = {
     {
       id: 'turn-a',
       sessionId: 'CAPT',
+      ownerStepId: null,
       sequenceNumber: 1,
       status: 'complete',
       createdAt: 2,
@@ -59,6 +60,7 @@ export const capturedMultiTurnToolTrace: SessionTraceBundle = {
     {
       id: 'turn-b',
       sessionId: 'CAPT',
+      ownerStepId: null,
       sequenceNumber: 2,
       status: 'complete',
       createdAt: 11,

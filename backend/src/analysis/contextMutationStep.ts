@@ -8,7 +8,7 @@
  *     assistant-content JSON result in context for the final aggregation).
  *  3. Mark the assessment turn's user-message as 'historical-only' to prevent
  *     consecutive-assistant-message API errors on subsequent calls.
- *  4. Update the coverage_map artifact to record that the packet was assessed.
+ *  4. Determine the next phase from packet index state.
  */
 
 import type { BackendDatabase } from '../persistence/db.js'
@@ -19,18 +19,15 @@ import {
 } from '../persistence/repository.js'
 import {
   getLatestArtifactBySchemaKey,
-  updateJsonArtifact,
 } from './artifactRepository.js'
 import {
   SCHEMA_KEY,
   type AnalysisSessionState,
-  type CoverageMap,
   type EvidencePacketIndex,
 } from './schemas.js'
 
 export interface ContextMutationInput {
   state: AnalysisSessionState
-  assessmentArtifactId: string
 }
 
 export interface ContextMutationResult {
@@ -41,7 +38,7 @@ export function runContextMutationStep(
   database: BackendDatabase,
   input: ContextMutationInput,
 ): ContextMutationResult {
-  const { state, assessmentArtifactId } = input
+  const { state } = input
   const {
     analysisSessionId,
     pendingMutationTurnId,
@@ -103,34 +100,7 @@ export function runContextMutationStep(
     }
   }
 
-  // ── 4. Update coverage map ────────────────────────────────────────────────
-  const completedPacketIndex = nextPacketIndex - 1 // we just finished this packet
-  const coverageArtifact = getLatestArtifactBySchemaKey(
-    database.connection,
-    analysisSessionId,
-    SCHEMA_KEY.COVERAGE_MAP,
-  )
-  if (coverageArtifact) {
-    const coverageMap = coverageArtifact.content as CoverageMap
-    const updatedEntries = coverageMap.entries.map(entry => {
-      if (entry.packet_index === completedPacketIndex) {
-        return {
-          ...entry,
-          assessed: true,
-          assessment_artifact_id: assessmentArtifactId,
-        }
-      }
-      return entry
-    })
-    updateJsonArtifact(
-      database.connection,
-      coverageArtifact.id,
-      { entries: updatedEntries },
-      coverageArtifact.metadata,
-    )
-  }
-
-  // ── 5. Determine next phase based on turn boundaries ─────────────────────
+  // ── 4. Determine next phase based on turn boundaries ─────────────────────
   // Load packet index to check what turn the next packet belongs to.
   const nextIdx = nextPacketIndex
   const packetIndexArtifact = getLatestArtifactBySchemaKey(

@@ -142,9 +142,9 @@ export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
     return null
   }
 
-  const compactionStepMatch = /^(?:C)(\d+)$/.exec(segments[1] ?? '')
-  if (compactionStepMatch) {
-    const stepNumber = parseNumber(compactionStepMatch[1] ?? '')
+  const stepMatch = /^(?:C|wf)(\d+)$/.exec(segments[1] ?? '')
+  if (stepMatch) {
+    const stepNumber = parseNumber(stepMatch[1] ?? '')
     if (stepNumber == null || stepNumber < 1) return null
     if (segments.length === 2) {
       return { raw: trimmed, type: 'step', sessionId, stepNumber, turnNumber: null, roundNumber: null, partNumber: null, isSetupPart: false }

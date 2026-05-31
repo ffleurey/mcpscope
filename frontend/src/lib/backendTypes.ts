@@ -35,7 +35,7 @@ export const mcpServerProfileSchema = z.object({
 
 export const sessionStatusSchema = z.enum(['draft', 'ready', 'active', 'error', 'archived'])
 export const sessionInitStatusSchema = z.enum(['pending', 'initializing', 'ready', 'error'])
-export const sessionTypeSchema = z.enum(['primary', 'session_analysis', 'session_compaction', 'benchmark_analysis'])
+export const sessionTypeSchema = z.enum(['primary', 'session_analysis'])
 export const parentKindSchema = z.enum(['session', 'benchmark'])
 export const turnStatusSchema = z.enum(['draft', 'streaming', 'awaiting-tools', 'complete', 'error', 'aborted'])
 export const roundStatusSchema = z.enum(['pending', 'streaming', 'complete', 'error', 'aborted'])
@@ -194,6 +194,7 @@ export const stepRecordSchema = z.object({
 export const turnRecordSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
+  ownerStepId: z.string().nullable(),
   sequenceNumber: z.number().int().nonnegative(),
   status: turnStatusSchema,
   createdAt: z.number().int().nonnegative(),
@@ -253,6 +254,22 @@ export const rawExchangeRecordSchema = z.object({
   createdAt: z.number().int().nonnegative(),
 })
 
+export const traceArtifactSchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  stepId: z.string().nullable(),
+  content: z.unknown(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.number().int().nonnegative(),
+})
+
+export const workflowStepTraceSchema = z.object({
+  step: stepRecordSchema,
+  ownedTurns: z.array(turnRecordSchema).default([]),
+  postambleSteps: z.array(stepRecordSchema).default([]),
+  artifacts: z.array(traceArtifactSchema).default([]),
+})
+
 export const transcriptEntrySchema = z.object({
   id: z.string(),
   turnId: z.string().nullable(),
@@ -283,6 +300,8 @@ export const sessionTraceBundleSchema = z.object({
   rounds: z.array(roundRecordSchema),
   parts: z.array(partRecordSchema),
   rawExchanges: z.array(rawExchangeRecordSchema),
+  artifacts: z.array(traceArtifactSchema).optional().default([]),
+  workflowSteps: z.array(workflowStepTraceSchema).optional().default([]),
   transcript: z.array(transcriptEntrySchema),
   context: z.array(contextEntrySchema),
 })
@@ -416,36 +435,12 @@ export const sessionCreationDefaultsResponseSchema = z.object({
   sessionCreationDefaults: sessionCreationDefaultsSchema,
 })
 
-export const analysisProfileSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  modelConfigId: z.string(),
-  systemPrompt: z.string(),
-  temperature: z.number(),
-  reasoning: z.enum(['on', 'off']).optional(),
-  createdAt: z.number().int().nonnegative(),
-  updatedAt: z.number().int().nonnegative(),
-})
-
-export const analysisDefaultsSchema = z.object({
-  defaultAnalysisProfileId: z.string().nullable(),
-  updatedAt: z.number().int().nonnegative(),
-})
-
-export const listAnalysisProfilesResponseSchema = z.object({
-  analysisProfiles: z.array(analysisProfileSchema),
-})
-
-export const upsertAnalysisProfileResponseSchema = z.object({
-  analysisProfile: analysisProfileSchema,
-})
-
-export const analysisDefaultsResponseSchema = z.object({
-  analysisDefaults: analysisDefaultsSchema,
-})
-
 export const launchAnalysisResponseSchema = z.object({
   session: sessionRecordSchema,
+})
+
+export const analysisSystemPromptResponseSchema = z.object({
+  systemPrompt: z.string(),
 })
 
 export type SessionCreationDefaults = z.infer<typeof sessionCreationDefaultsSchema>
@@ -453,8 +448,6 @@ export type SessionCreationDefaults = z.infer<typeof sessionCreationDefaultsSche
 export type LmStudioConnection = z.infer<typeof lmStudioConnectionSchema>
 export type ModelConfig = z.infer<typeof modelConfigSchema>
 export type McpServerProfile = z.infer<typeof mcpServerProfileSchema>
-export type AnalysisProfile = z.infer<typeof analysisProfileSchema>
-export type AnalysisDefaults = z.infer<typeof analysisDefaultsSchema>
 export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>
 export type SessionType = z.infer<typeof sessionTypeSchema>
@@ -466,6 +459,8 @@ export type TurnRecord = z.infer<typeof turnRecordSchema>
 export type RoundRecord = z.infer<typeof roundRecordSchema>
 export type PartRecord = z.infer<typeof partRecordSchema>
 export type RawExchangeRecord = z.infer<typeof rawExchangeRecordSchema>
+export type TraceArtifactRecord = z.infer<typeof traceArtifactSchema>
+export type WorkflowStepTrace = z.infer<typeof workflowStepTraceSchema>
 export type TranscriptEntry = z.infer<typeof transcriptEntrySchema>
 export type ContextEntry = z.infer<typeof contextEntrySchema>
 export type SessionTraceBundle = z.infer<typeof sessionTraceBundleSchema>

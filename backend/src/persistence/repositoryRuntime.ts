@@ -474,13 +474,13 @@ export function insertTurnRecord(connection: Database.Database, turn: TurnRecord
 
   connection.prepare(`
     INSERT INTO v2_turns (
-      step_id, session_id, sequence_number, status, outcome,
+      step_id, session_id, owner_step_id, sequence_number, status, outcome,
       prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
       context_tokens_at_turn_end, context_tokens_after_compaction,
       compaction_applied, compaction_tokens_removed,
       created_at, completed_at
     ) VALUES (
-      @stepId, @sessionId, @sequenceNumber, @status, @outcome,
+      @stepId, @sessionId, @ownerStepId, @sequenceNumber, @status, @outcome,
       @promptTokens, @completionTokens, @reasoningTokens, @totalTokens,
       @contextTokensAtTurnEnd, @contextTokensAfterCompaction,
       @compactionApplied, @compactionTokensRemoved,
@@ -489,6 +489,7 @@ export function insertTurnRecord(connection: Database.Database, turn: TurnRecord
   `).run({
     stepId: turn.id,
     sessionId: turn.sessionId,
+    ownerStepId: turn.ownerStepId,
     sequenceNumber: turn.sequenceNumber,
     status: turn.status,
     outcome: turn.outcome,
@@ -519,7 +520,8 @@ export function updateTurnRecord(connection: Database.Database, turn: TurnRecord
 
   connection.prepare(`
     UPDATE v2_turns
-    SET status = @status,
+    SET owner_step_id = @ownerStepId,
+      status = @status,
         outcome = @outcome,
         prompt_tokens = @promptTokens,
         completion_tokens = @completionTokens,
@@ -533,6 +535,7 @@ export function updateTurnRecord(connection: Database.Database, turn: TurnRecord
     WHERE step_id = @stepId
   `).run({
     stepId: turn.id,
+    ownerStepId: turn.ownerStepId,
     status: turn.status,
     outcome: turn.outcome,
     promptTokens: turn.usage.promptTokens,
@@ -552,6 +555,7 @@ export function getTurnRecord(connection: Database.Database, turnId: string): Tu
     SELECT
       v2_steps.id,
       v2_steps.session_id,
+      v2_turns.owner_step_id,
       v2_turns.sequence_number,
       v2_turns.status,
       v2_turns.outcome,
@@ -572,6 +576,7 @@ export function getTurnRecord(connection: Database.Database, turnId: string): Tu
     | {
         id: string
         session_id: string
+        owner_step_id: string | null
         sequence_number: number
         status: TurnRecord['status']
         outcome: string | null
@@ -593,6 +598,7 @@ export function getTurnRecord(connection: Database.Database, turnId: string): Tu
   return {
     id: row.id,
     sessionId: row.session_id,
+    ownerStepId: row.owner_step_id,
     sequenceNumber: row.sequence_number,
     status: row.status,
     outcome: row.outcome,
@@ -619,6 +625,7 @@ export function listTurnRecordsBySession(
     SELECT
       v2_steps.id,
       v2_steps.session_id,
+      v2_turns.owner_step_id,
       v2_turns.sequence_number,
       v2_turns.status,
       v2_turns.outcome,
@@ -639,6 +646,7 @@ export function listTurnRecordsBySession(
   `).all(sessionId) as Array<{
     id: string
     session_id: string
+    owner_step_id: string | null
     sequence_number: number
     status: TurnRecord['status']
     outcome: string | null
@@ -657,6 +665,7 @@ export function listTurnRecordsBySession(
   return rows.map(row => ({
     id: row.id,
     sessionId: row.session_id,
+    ownerStepId: row.owner_step_id,
     sequenceNumber: row.sequence_number,
     status: row.status,
     outcome: row.outcome,

@@ -1,5 +1,5 @@
 import { get, writable } from 'svelte/store'
-import type { LmStudioConnection, ModelConfig, McpServerProfile, SessionCreationDefaults, AnalysisProfile, AnalysisDefaults } from './types'
+import type { LmStudioConnection, ModelConfig, McpServerProfile, SessionCreationDefaults } from './types'
 import {
   deleteLmConnection,
   deleteMcpProfile,
@@ -13,11 +13,6 @@ import {
   upsertLmConnection,
   upsertMcpProfile as upsertBackendMcpProfile,
   upsertModelConfig as upsertBackendModelConfig,
-  listAnalysisProfiles,
-  upsertAnalysisProfile as upsertBackendAnalysisProfile,
-  deleteAnalysisProfile as deleteBackendAnalysisProfile,
-  getAnalysisDefaults,
-  putAnalysisDefaults,
 } from './api/backendClient'
 
 export const backendError = writable<string | null>(null)
@@ -145,39 +140,4 @@ export async function initConnectionStore(): Promise<void> {
     sessionCreationDefaults.set(null)
   }
 
-  // Fetch analysis data separately so a failure here doesn't break the main store init
-  try {
-    const [profilesResponse, defaultsResponse] = await Promise.all([
-      listAnalysisProfiles(),
-      getAnalysisDefaults(),
-    ])
-    analysisProfiles.set(sortByUpdatedAtDesc(profilesResponse.analysisProfiles))
-    analysisDefaults.set(defaultsResponse.analysisDefaults)
-  } catch {
-    // Analysis endpoints may not be available on older backends
-    analysisProfiles.set([])
-    analysisDefaults.set(null)
-  }
-}
-
-// Analysis Profiles
-export const analysisProfiles = writable<AnalysisProfile[]>([])
-export const analysisDefaults = writable<AnalysisDefaults | null>(null)
-
-export async function upsertAnalysisProfile(p: AnalysisProfile): Promise<void> {
-  const { analysisProfile } = await upsertBackendAnalysisProfile(p)
-  analysisProfiles.update(list => {
-    const next = list.filter(x => x.id !== analysisProfile.id)
-    return sortByUpdatedAtDesc([analysisProfile, ...next])
-  })
-}
-
-export async function removeAnalysisProfile(id: string): Promise<void> {
-  await deleteBackendAnalysisProfile(id)
-  analysisProfiles.update(list => list.filter(x => x.id !== id))
-}
-
-export async function setDefaultAnalysisProfile(defaultAnalysisProfileId: string | null): Promise<void> {
-  const { analysisDefaults: updated } = await putAnalysisDefaults({ defaultAnalysisProfileId })
-  analysisDefaults.set(updated)
 }

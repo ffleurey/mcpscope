@@ -7,6 +7,7 @@
   import MarkdownPreviewDialog from './MarkdownPreviewDialog.svelte'
   import StreamingRoundDeltaBlock from './StreamingRoundDeltaBlock.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
+  import { highlightStructuredText } from '../textHighlight'
 
   interface Props {
     parts: PartRecord[]
@@ -184,7 +185,9 @@
       {@const assistantText = normalizeCompactMessageText(item.part.payload.text)}
       <section class="assistant-block">
         {#if assistantText}
-          <div class="assistant-text">{assistantText}</div>
+          {@const rendered = highlightStructuredText(assistantText)}
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          <pre class="assistant-text" class:is-json={rendered.format === 'json'}>{@html rendered.html}</pre>
         {/if}
         <div class="message-meta">
           {#if inspectMode}
@@ -194,10 +197,13 @@
             <span class="token-pill">{item.part.tokens.count.toLocaleString()} tokens</span>
           {/if}
         </div>
-        {#if assistantText && looksLikeMarkdown(assistantText)}
+        {#if assistantText}
+          {@const rendered = highlightStructuredText(assistantText)}
+          {#if rendered.format === 'markdown' && looksLikeMarkdown(assistantText)}
           <button class="preview-btn" onclick={() => openMarkdownPreview(assistantText)} aria-label="Render preview" title="Render preview">
             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
+          {/if}
         {/if}
       </section>
     {:else if item.kind === 'reasoning'}
@@ -282,8 +288,10 @@
   {/each}
 
   {#if visibleStreamingContent}
+    {@const renderedStreamingContent = highlightStructuredText(visibleStreamingContent)}
     <section class="assistant-block">
-      <div class="assistant-text">{visibleStreamingContent}</div>
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+      <pre class="assistant-text" class:is-json={renderedStreamingContent.format === 'json'}>{@html renderedStreamingContent.html}</pre>
       <div class="message-meta">
         <span class="status-pill">streaming</span>
       </div>
@@ -334,12 +342,17 @@
   }
 
   .assistant-text {
+    margin: 0;
     min-width: 0;
     white-space: pre-wrap;
     word-break: break-word;
     line-height: var(--compact-line-height, 1.4);
     color: var(--text);
     font-size: 0.9rem;
+  }
+
+  .assistant-text.is-json {
+    font-family: var(--font-mono, monospace);
   }
 
   .assistant-block {

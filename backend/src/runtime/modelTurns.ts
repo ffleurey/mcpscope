@@ -103,6 +103,7 @@ export interface CreateSessionInput {
 export interface CreateTurnInput {
   sessionId: string
   userContent: string
+  ownerStepId?: string | null | undefined
   reservedTurn?: TurnRecord | undefined
 }
 
@@ -229,6 +230,7 @@ export async function createModelOnlyTurn(
     : {
         id: turnId,
         sessionId: session.id,
+      ownerStepId: input.ownerStepId ?? null,
         sequenceNumber: turnSequenceNumber,
         status: 'streaming',
         createdAt: startedAt,
