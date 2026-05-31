@@ -1,8 +1,9 @@
 # Session analysis hybrid workflow v1
 
-This candidate has now been subsumed by the active standalone specification:
+This candidate has now been subsumed by the shipped session-analysis workflow documented in:
 
-- `backlog/specification/session-analysis-agent-v2.md`
+- `SESSION-ANALYSIS.md`
+- `backlog/completed/analysis-session-as-proper-session.md`
 
 This candidate defines the first concrete iteration of a better analysis workflow built on the new execution model.
 

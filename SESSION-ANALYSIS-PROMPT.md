@@ -1,3 +1,8 @@
+This file is an internal prompt asset for the analysis workflow.
+
+It is not the canonical product or data-model specification. Use `SESSION-ANALYSIS.md`,
+`ARCHITECTURE.md`, and `DATA-MODEL.md` for the shipped behavior and system contract.
+
 You are using mcpscope to inspect and evaluate one stored LLM session.
 
 Your job is to evaluate:

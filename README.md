@@ -2,6 +2,12 @@
 
 Local-first **runtime analysis and debugging tool** for MCP server development and multi-turn LLM workflows. Built to inspect how models reason, choose tools, and consume context, with trace export, deterministic replay, and auditable token attribution.
 
+mcpscope is centered on persisted LLM sessions.
+
+Different session types may steer those sessions with deterministic steps and context policy, but
+that determinism still lives inside the same session model. It is an implementation choice, not a
+separate substrate.
+
 ## Documentation map
 
 - [README.md](README.md) - repository/developer entrypoint for working on mcpscope itself
@@ -9,6 +15,7 @@ Local-first **runtime analysis and debugging tool** for MCP server development a
 - [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
 - [MCP.md](MCP.md) - MCP interface reference: transport, tool surface, and structured results
 - [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
+- [SESSION-ANALYSIS.md](SESSION-ANALYSIS.md) - shipped `session_analysis` workflow, evidence protocol, and concrete reference example
 - [DATA-MODEL.md](DATA-MODEL.md) - compact canonical runtime tree, public part taxonomy, and canonical IDs
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) - current SQLite tables, foreign keys, singleton defaults, and Mermaid ER diagram
 - [backlog/README.md](backlog/README.md) - backlog workflow, state folders, and promotion rules
@@ -44,7 +51,7 @@ Those surfaces share the same backend-owned session model and canonical hierarch
 
 - runtime state persists on `session_containers` plus the `v2_*` tables; normal startup does not create the obsolete `sessions` / `turns` / `rounds` / `parts` / `raw_exchanges` runtime tables
 - session parent rules remain intentionally narrow: parents are limited to `session` and `benchmark`, depending on `session_type`
-- deterministic non-LLM step types and broader workflow automation are still future work
+- analysis-session deterministic workflow steps are shipped inside the normal session model; broader generalization and cleanup remain future work
 - benchmark support is currently limited to the minimal container model, not a fuller benchmark product surface
 
 ## Developer setup

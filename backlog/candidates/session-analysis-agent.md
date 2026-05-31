@@ -2,9 +2,10 @@
 
 This is the **epic/background spec** for a first-class analysis agent that evaluates one finished session against explicit expectations and returns a compact, trace-grounded report.
 
-The active standalone specification for the next concrete version now lives in:
+The shipped workflow is now documented in:
 
-- `backlog/specification/session-analysis-agent-v2.md`
+- `SESSION-ANALYSIS.md`
+- `backlog/completed/analysis-session-as-proper-session.md`
 
 The implementation should be delivered in smaller increments rather than as one broad feature branch.
 

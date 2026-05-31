@@ -19,6 +19,7 @@ The value of the project depends on correctness and inspectability:
 ## Documentation boundaries
 
 - [DATA-MODEL.md](DATA-MODEL.md) — compact canonical runtime tree, public part taxonomy, canonical IDs, and lookup-model rules
+- [SESSION-ANALYSIS.md](SESSION-ANALYSIS.md) — shipped `session_analysis` workflow, evidence-loading rules, and reference example
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) — current SQLite tables, foreign keys, singleton defaults, and ER diagram
 - [CLI.md](CLI.md) — CLI command reference: commands, flags, output format, exit codes
 - `ARCHITECTURE.md` — system design, persistence model, streaming model, replay model, and API overview
@@ -33,6 +34,7 @@ The value of the project depends on correctness and inspectability:
 
 - the backend owns the canonical runtime state
 - SQLite is the canonical persistent store
+- every mcpscope session remains an LLM session, even when deterministic steps steer it
 - transcript and context are two views over the same runtime, not separate systems
 - exported traces must stay replayable without reconstruction
 - the frontend is a thin client over backend state
@@ -107,8 +109,15 @@ Normal startup initializes that runtime schema plus the shared config/default ta
 Today, mcpscope persists and exposes sessions as execution containers running on top of the canonical execution model:
 
 - `Session.execute()` runs the execution loop by calling `advance()` while `canContinue()` is true
-- `Session.advance()` executes the next `Step` (a `ChatTurnStep` for interactive chat sessions)
+- `Session.advance()` executes the next `Step`
 - `Step.execute(context)` runs the unit of work, delegating to `createModelOnlyTurn` / `createToolEnabledTurn`
+
+The important distinction is architectural rather than cosmetic:
+
+- determinism does not require moving workflow state outside the session model
+- a session can remain the visible, canonical LLM session while deterministic steps steer what the
+	next bounded turn sees and does
+- the analysis workflow is the shipped proof of that model
 
 The shipped product implements:
 
@@ -118,13 +127,13 @@ The shipped product implements:
 - generic container/session/step persistence without table-per-subtype growth
 - the current runtime tree (setup / turn / round / part) unchanged from user perspective
 - `session_analysis` child sessions used by the analysis workflow
+- deterministic non-LLM workflow steps used by the shipped analysis-session orchestration
 - compaction and context bookkeeping
 
 What is **not** implemented yet:
 
-- deterministic non-LLM step types beyond `Turn`
 - full benchmark product work beyond minimal container support
-- broader workflow automation
+- broader workflow automation and cleanup beyond the shipped analysis-session workflow
 
 The important rule is:
 

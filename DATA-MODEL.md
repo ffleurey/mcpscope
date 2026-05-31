@@ -4,6 +4,9 @@ This document defines the compact canonical runtime tree used by mcpscope.
 
 It is intentionally small. It is the **canonical mcpscope model** used by persistence, API, UI inspect workflows, and future CLI work.
 
+mcpscope is centered on LLM sessions. Different session types may steer those sessions with
+deterministic steps, but they still use the same session tree and persistence model.
+
 For the backing SQLite storage layout, foreign keys, and singleton defaults tables, see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
 
 ## Current implementation vs future work
@@ -12,7 +15,7 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 
 - `SessionContainer` — the domain-level ownership abstraction for sessions
 - `Session` — the execution container (also a `SessionContainer`); runs its loop via `execute()` / `advance()` / `canContinue()`
-- `Step` — the abstract execution unit; concrete unit of work is `Turn` for LLM interaction
+- `Step` — the abstract execution unit; concrete units of work include `Turn` for LLM interaction plus shipped deterministic analysis workflow steps
 - `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records
 - the runtime tree described below for persisted sessions (unchanged from user perspective)
 - one session contains one setup and zero or more turns
@@ -24,9 +27,8 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 
 **Not implemented yet:**
 
-- deterministic non-LLM step types beyond `Turn`
 - full benchmark-domain product work beyond minimal container support
-- broader workflow automation for session sequencing
+- broader workflow automation for session sequencing beyond the shipped analysis-session workflow
 
 **Current deliberate limits:**
 
@@ -35,6 +37,13 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 - the current classification rules still follow the existing session-focused parent model rather than a broader container graph
 
 The canonical vocabulary is now `SessionContainer`, `Session`, `Step`, and `Turn`.
+
+The key distinction is:
+
+- `Session` is still the canonical LLM session container
+- `Step` is the execution unit inside that session
+- `Turn` is the LLM-interaction step subtype
+- deterministic steps can steer the session without moving the workflow outside the session model
 
 ## Canonical tree
 
@@ -276,10 +285,6 @@ Important boundary:
 
 What remains future work:
 
-- deterministic non-LLM step modeling inside a session
 - richer parent object support (e.g. turn-level parents)
-- broader workflow/runtime generalization beyond chat-style sessions
-
-See:
-
-- `backlog/candidates/session-analysis-agent.md`
+- broader workflow/runtime generalization beyond the shipped analysis-session workflow
+- benchmark-oriented workflow extension beyond the current minimal model
