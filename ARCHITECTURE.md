@@ -20,7 +20,6 @@ The value of the project depends on correctness and inspectability:
 
 - [DATA-MODEL.md](DATA-MODEL.md) — compact canonical runtime tree, public part taxonomy, canonical IDs, and lookup-model rules
 - [SESSION-ANALYSIS.md](SESSION-ANALYSIS.md) — shipped `session_analysis` workflow and evidence-loading rules
-- [MANUAL.md](MANUAL.md) — usage-oriented guide, goals, and practical walkthroughs
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) — current SQLite tables, foreign keys, singleton defaults, and ER diagram
 - [CLI.md](CLI.md) — CLI command reference: commands, flags, output format, exit codes
 - `ARCHITECTURE.md` — system design, persistence model, streaming model, replay model, and API overview
@@ -369,115 +368,8 @@ classDiagram
 	McpGateway --> MCPTransport
 ```
 
-### Lifecycle by structure
-
-#### `SessionRecord`
-
-Lifecycle:
-
-- created by `createSession(...)`
-- persists session-level configuration snapshots and compaction strategy
-- updated as turns complete and session metadata changes
-- remains the root of the canonical runtime tree
-
-Dependency role:
-
-- owns model-profile snapshot used to build LM Studio request bodies
-- optionally owns MCP-profile snapshot used to initialize tool-enabled turns
-
-#### `TurnRecord`
-
-Lifecycle:
-
-- created at the start of a user request
-- moves through `streaming` to `complete` or `error`
-- stores aggregate usage and post-turn compaction accounting
-
-Dependency role:
-
-- parent for one or more `RoundRecord`s
-- anchor for turn-level outcomes and post-turn compaction metadata
-
-#### `RoundRecord`
-
-Lifecycle:
-
-- created once per model iteration within a turn
-- for model-only turns there is normally one round
-- for tool-enabled turns there may be multiple rounds in a tool-call loop
-- stores diagnostic copies of `requestPayloadJson` and `responseTraceJson`
-
-Dependency role:
-
-- binds one LM Studio request/response cycle to canonical persisted state
-- links canonical parts to the provider round that produced them
-
-#### `PartRecord`
-
-Lifecycle:
-
-- setup parts are created at session creation or MCP initialization time
-- user parts are created at turn start
-- assistant reasoning/content/tool-call/tool-result parts are created from provider outputs and tool activity
-- compaction later mutates `context.state` on canonical parts instead of deleting transcript history
-
-Dependency role:
-
-- this is the most important structure for context reconstruction
-- future model-visible context is derived from part `context.state`, not from provider-held session memory
-- transcript and context views are both projections over the same parts table
-
-#### `RawExchangeRecord`
-
-Lifecycle:
-
-- created whenever LM Studio or MCP traffic is captured
-- persisted for replay, debugging, and auditability
-- never becomes the authoritative semantic runtime model
-
-Dependency role:
-
-- diagnostic mirror of transport activity
-- useful for replay and inspection, but subordinate to the canonical runtime tree
-
-#### `ApiMessage[]` / `ModelMessage[]`
-
-Lifecycle:
-
-- rebuilt from persisted parts immediately before model calls
-- never treated as the persistent source of truth
-- discarded after request construction
-
-Dependency role:
-
-- bridge between canonical parts and provider chat-completion transport
-
-#### LM Studio transport structures
-
-Lifecycle:
-
-- created for a single request/response exchange
-- parsed into segments/deltas/chunks during streaming
-- normalized into canonical parts
-- persisted only as raw/diagnostic mirrors where needed
-
-Dependency role:
-
-- transport only
-- no LM Studio-native session handle is used as authoritative runtime state today
-
-#### MCP session handle
-
-Lifecycle:
-
-- created by `initializeSession(...)` at the start of a tool-enabled turn
-- reused for MCP tool calls within that turn
-- not part of the canonical persisted session model
-
-Dependency role:
-
-- external server-owned session handle for MCP interaction
-- currently the main example of true external session state in runtime execution
+These diagrams are the architectural overview only. For the canonical runtime tree and field-level
+contracts, use `DATA-MODEL.md`. For storage details, use `DATABASE-SCHEMA.md`.
 
 ## What is actually used during a session
 
@@ -532,33 +424,9 @@ analysis sessions. The remaining gap is broader cleanup and generalization:
 
 ### Current session classification limits
 
-Session metadata around the runtime tree is already implemented:
+Session type and parent link are metadata around the runtime tree, not a replacement for it.
 
-- `session_type`
-- `parent_ref`
-
-The important architectural rule is:
-
-> the setup/turn/round/part runtime tree stays the same; session type and parent link are metadata around the session, not a replacement for the runtime model
-
-Implemented parent rules today:
-
-- `primary` sessions may optionally belong to a `benchmark`
-- `session_analysis` and `session_compaction` sessions must belong to a parent `session`
-- `benchmark_analysis` sessions must belong to a `benchmark`
-
-What remains intentionally limited in the current release:
-
-- parent kinds are still limited to `session` and `benchmark`
-- there is no turn-level or broader container-parent model yet
-- benchmark support is still limited to the minimal container shape
-
-Tracked tasks:
-
-- `backlog/candidates/session-analysis-agent.md`
-- `backlog/candidates/session-compaction-agent.md`
-- `backlog/candidates/session-batch-runs.md`
-- `backlog/candidates/benchmark-automation.md`
+For the implemented session-classification and parent rules, use `DATA-MODEL.md`.
 
 ## Transcript vs context
 

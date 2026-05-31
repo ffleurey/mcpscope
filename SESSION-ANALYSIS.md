@@ -6,8 +6,6 @@ Use it as the project-level technical source of truth for how session analysis w
 
 For historical planning context, see the completed backlog records in `backlog/completed/`.
 
-For a usage-oriented walkthrough and practical inspection checklist, use `MANUAL.md`.
-
 ## Purpose
 
 Session analysis lets mcpscope inspect one finished parent session through a child
@@ -111,6 +109,17 @@ The context policy is intentionally narrow.
 
 This keeps the trace inspectable without letting packet-local evidence snowball across the whole
 analysis session.
+
+## Reference example
+
+`V2EH` analyzing `CXQJ` is a compact reference example.
+
+- bootstrap loads `CXQJ` and `CXQJ.S` through `V2EH.1.1.1-T` and `V2EH.1.2.1-T`
+- packets for `CXQJ.1` load three-part slices such as `reasoning -> tool_call -> next-round reasoning`
+- the `CXQJ.2` packet loads `CXQJ.2.1.2-R`, `CXQJ.2.1.3-T`, and `CXQJ.2.2.1-A` to judge result usage
+
+This example shows the shipped fix for cross-round post-call reasoning and the intended packet
+granularity for the analysis workflow.
 
 ## Validation
 

@@ -20,9 +20,8 @@ separate substrate.
 - [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
 
-### Manual and use cases
+### Usage and use cases
 
-- [MANUAL.md](MANUAL.md) - usage-oriented guide, session-analysis walkthrough, and mental model
 - [TUTORIAL.md](TUTORIAL.md) - packaged user/tester tutorial for running released mcpscope in Docker
 - [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) - first concrete reference scenario and evaluation target
 - [FRONTEND-TEST.md](FRONTEND-TEST.md) - optional manual UI checks with agent-browser
@@ -42,8 +41,8 @@ This file is for developers working on mcpscope itself.
 
 If you want to use a released mcpscope build to evaluate an MCP server, start with:
 
-- [MANUAL.md](MANUAL.md) for the usage model and session-analysis walkthrough
 - [TUTORIAL.md](TUTORIAL.md) for the Docker/user workflow
+- [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) for the first concrete evaluation target
 - [RELEASING.md](RELEASING.md) for GHCR image usage and tags
 
 ## Product surfaces
@@ -99,8 +98,8 @@ The released/product workflow is Docker.
 
 Use these docs instead of the developer setup in this file:
 
-- [MANUAL.md](MANUAL.md) for the usage model and goals
 - [TUTORIAL.md](TUTORIAL.md) for the step-by-step Docker path
+- [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) for the first concrete use case
 - [RELEASING.md](RELEASING.md) for GHCR image details
 
 ## Build
