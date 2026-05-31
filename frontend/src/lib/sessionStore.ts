@@ -156,6 +156,52 @@ export function startDraftSession(): void {
   activeTurnStream.set(null)
 }
 
+/**
+ * Called by executionStore when the scheduler starts a job for a session.
+ * If that session is currently open and not already streaming, prime
+ * activeTurnStream so live scheduler-execution-events will render.
+ */
+export function initExternalTurnStream(sessionId: string, prompt: string): void {
+  if (get(activeChatId) !== sessionId) return
+  if (get(activeTurnStream) !== null) return
+  activeTurnStream.set(createTurnStreamingState(sessionId, prompt))
+}
+
+/**
+ * Called by executionStore when a scheduler-execution-event arrives for a
+ * session that is currently open. Routes the event to activeTurnStream /
+ * activeTrace exactly as the frontend-initiated streaming path does.
+ */
+export function applyExternalStreamEvent(
+  sessionId: string,
+  prompt: string,
+  event: TurnStreamEvent | AnalysisStreamEvent,
+): void {
+  if (get(activeChatId) !== sessionId) return
+  const session = get(chatSessions).find(s => s.id === sessionId) ?? null
+  const isTurnEvent = (
+    event.type === 'turn-started'
+    || event.type === 'round-started'
+    || event.type === 'part-delta'
+    || event.type === 'part-committed'
+    || event.type === 'round-committed'
+    || event.type === 'turn-committed'
+    || event.type === 'turn-failed'
+  )
+  if (isTurnEvent && session) {
+    applyTurnStreamEvent(session, prompt, event as TurnStreamEvent)
+  } else if (!isTurnEvent) {
+    applyAnalysisStreamEvent(session, event as AnalysisStreamEvent)
+  }
+}
+
+/**
+ * Exported for executionStore — refreshes the active trace after a job completes.
+ */
+export async function refreshActiveTurnTrace(): Promise<void> {
+  await refreshActiveTrace()
+}
+
 export function openPrimaryLaunchDialog(): void {
   clearSessionError()
   isPrimaryLaunchDialogOpen.set(true)
@@ -171,6 +217,17 @@ export async function selectChat(sessionId: string): Promise<void> {
 
   try {
     await refreshActiveTrace()
+    // If a scheduler job is already running for this session (e.g. opened from
+    // the sidebar while a MCP/CLI turn is in progress), prime activeTurnStream
+    // so incoming scheduler-execution-event updates render live.
+    const { schedulerSnapshot: snap } = await import('./executionStore')
+    const activeJob = get(snap).activeJob
+    if (
+      activeJob?.target.sessionId === sessionId
+      && get(activeTurnStream) === null
+    ) {
+      activeTurnStream.set(createTurnStreamingState(sessionId, activeJob.prompt ?? ''))
+    }
   } catch (error) {
     setSessionError(toAppError(error))
     throw error
@@ -369,7 +426,7 @@ export async function importTraceFile(file: File): Promise<void> {
   }
 }
 
-function applyTurnStreamEvent(
+export function applyTurnStreamEvent(
   session: SessionSummary,
   userContent: string,
   event: TurnStreamEvent,
@@ -542,7 +599,7 @@ export async function executeAnalysisStep(): Promise<void> {
   }
 }
 
-function applyAnalysisStreamEvent(
+export function applyAnalysisStreamEvent(
   session: SessionSummary | null,
   event: AnalysisStreamEvent,
 ): void {

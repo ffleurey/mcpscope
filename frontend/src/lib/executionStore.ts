@@ -101,12 +101,12 @@ function applySchedulerEvent(event: SchedulerEvent): void {
       activeJob: event.job,
       pendingJobs: snap.pendingJobs.filter(j => j.jobId !== event.job.jobId),
     }))
-    // If the session that just started is not in the local list, refresh so
-    // externally-created sessions (MCP, CLI) appear immediately.
     const sessionId = event.job.target.sessionId
-    import('./sessionStore').then(({ chatSessions, refreshSessions }) => {
+    const prompt = event.job.prompt ?? ''
+    import('./sessionStore').then(({ chatSessions, refreshSessions, initExternalTurnStream }) => {
       const known = get(chatSessions).some(s => s.id === sessionId)
       if (!known) refreshSessions().catch(() => {})
+      initExternalTurnStream(sessionId, prompt)
     })
     return
   }
@@ -117,9 +117,12 @@ function applySchedulerEvent(event: SchedulerEvent): void {
       activeJob: snap.activeJob?.jobId === event.job.jobId ? null : snap.activeJob,
       lastTerminalJob: event.job,
     }))
-    // Refresh the session list so turn counts / updated timestamps stay current.
-    import('./sessionStore').then(({ refreshSessions }) => {
+    const sessionId = event.job.target.sessionId
+    import('./sessionStore').then(({ refreshSessions, activeChatId, refreshActiveTurnTrace }) => {
       refreshSessions().catch(() => {})
+      if (get(activeChatId) === sessionId) {
+        refreshActiveTurnTrace().catch(() => {})
+      }
     })
     return
   }
@@ -149,6 +152,11 @@ function applySchedulerEvent(event: SchedulerEvent): void {
       const existing = updated.get(sessionId) ?? []
       updated.set(sessionId, [...existing, execEvent])
       return updated
+    })
+    // Drive activeTurnStream / activeTrace for the currently open session.
+    const prompt = get(schedulerSnapshot).activeJob?.prompt ?? ''
+    import('./sessionStore').then(({ applyExternalStreamEvent }) => {
+      applyExternalStreamEvent(sessionId, prompt, execEvent)
     })
     return
   }
