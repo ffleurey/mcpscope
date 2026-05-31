@@ -101,6 +101,13 @@ function applySchedulerEvent(event: SchedulerEvent): void {
       activeJob: event.job,
       pendingJobs: snap.pendingJobs.filter(j => j.jobId !== event.job.jobId),
     }))
+    // If the session that just started is not in the local list, refresh so
+    // externally-created sessions (MCP, CLI) appear immediately.
+    const sessionId = event.job.target.sessionId
+    import('./sessionStore').then(({ chatSessions, refreshSessions }) => {
+      const known = get(chatSessions).some(s => s.id === sessionId)
+      if (!known) refreshSessions().catch(() => {})
+    })
     return
   }
 
@@ -110,6 +117,10 @@ function applySchedulerEvent(event: SchedulerEvent): void {
       activeJob: snap.activeJob?.jobId === event.job.jobId ? null : snap.activeJob,
       lastTerminalJob: event.job,
     }))
+    // Refresh the session list so turn counts / updated timestamps stay current.
+    import('./sessionStore').then(({ refreshSessions }) => {
+      refreshSessions().catch(() => {})
+    })
     return
   }
 

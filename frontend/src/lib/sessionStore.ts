@@ -86,7 +86,7 @@ function buildMcpProfileSnapshot(mcpProfile: McpServerProfile) {
   }
 }
 
-async function refreshSessions(): Promise<SessionSummary[]> {
+export async function refreshSessions(): Promise<SessionSummary[]> {
   const response = await listSessions({ includeChildren: true })
   const sessions = response.sessions
   chatSessions.set(sessions)
