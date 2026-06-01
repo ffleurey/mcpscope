@@ -12,7 +12,7 @@ import { listArtifactsBySession } from '../analysis/artifactRepository.js'
 import { buildSessionTraceBundle } from '../domain/trace.js'
 import { deriveContextEntries, deriveTranscriptEntries } from '../domain/selectors.js'
 import { ChatSession } from './chatSession.js'
-import { AnalysisSession } from '../analysis/analysisSession.js'
+import { rehydrateAnalysisWorkflow } from '../analysis/analysisWorkflowFactory.js'
 import { runSessionInitialization } from './sessionInit.js'
 import type { TurnRecord } from '../domain/model.js'
 import type {
@@ -116,7 +116,7 @@ async function executeAnalysisJob(
   updateSessionRecord(opCtx.db.connection, session)
 
   try {
-    const instance = AnalysisSession.rehydrateFromDb(opCtx.db, opCtx.lmStudioGateway, opCtx.mcpGateway, job.target.sessionId)
+    const instance = rehydrateAnalysisWorkflow(opCtx.db, opCtx.lmStudioGateway, opCtx.mcpGateway, job.target.sessionId)
     if (!instance) {
       throw new Error('Failed to rehydrate analysis session from cursor step')
     }
@@ -157,7 +157,7 @@ async function executeAnalysisOneStepJob(
   updateSessionRecord(opCtx.db.connection, session)
 
   try {
-    const instance = AnalysisSession.rehydrateFromDb(opCtx.db, opCtx.lmStudioGateway, opCtx.mcpGateway, job.target.sessionId)
+    const instance = rehydrateAnalysisWorkflow(opCtx.db, opCtx.lmStudioGateway, opCtx.mcpGateway, job.target.sessionId)
     if (!instance) {
       throw new Error('Failed to rehydrate analysis session from cursor step')
     }

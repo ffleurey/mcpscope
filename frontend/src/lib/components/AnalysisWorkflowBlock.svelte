@@ -36,6 +36,7 @@
   const STEP_TYPE_LABELS: Record<string, string> = {
     analysis_bootstrap: 'Prepare evidence',
     analysis_tool_call_assessment: 'Assess tool call',
+    analysis_tool_group_assessment: 'Assess tool group',
     analysis_turn_summary: 'Summarize turn',
     analysis_final_aggregation: 'Build final report',
   }
@@ -53,6 +54,11 @@
       ? (typeof step.params.tool_call_part_id === 'string' ? step.params.tool_call_part_id : null)
       : null,
   )
+  const workUnitId = $derived(
+    step.stepTypeKey === 'analysis_tool_group_assessment'
+      ? (typeof step.params.work_unit_id === 'string' ? step.params.work_unit_id : null)
+      : null,
+  )
   const turnId = $derived(
     step.stepTypeKey === 'analysis_turn_summary'
       ? (typeof step.params.turn_id === 'string' ? step.params.turn_id : null)
@@ -62,6 +68,7 @@
     const details: string[] = []
     if (turnId !== null) details.push(`turn: ${turnId}`)
     if (toolCallPartId !== null) details.push(`tool call: ${toolCallPartId}`)
+    if (workUnitId !== null) details.push(`work unit: ${workUnitId}`)
     if (workflowStep.ownedTurns.length > 0) details.push(`${workflowStep.ownedTurns.length} turn${workflowStep.ownedTurns.length === 1 ? '' : 's'}`)
     if (workflowStep.artifacts.length > 0) details.push(`${workflowStep.artifacts.length} artifact${workflowStep.artifacts.length === 1 ? '' : 's'}`)
     return details
@@ -78,6 +85,9 @@
     }
     if (step.stepTypeKey === 'analysis_tool_call_assessment') {
       return index === 0 ? 'Evidence turn' : 'Assessment turn'
+    }
+    if (step.stepTypeKey === 'analysis_tool_group_assessment') {
+      return index === 0 ? 'Grouped evidence turn' : 'Grouped assessment turn'
     }
     if (step.stepTypeKey === 'analysis_turn_summary') {
       return 'Summary turn'

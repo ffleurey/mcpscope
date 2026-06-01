@@ -1,11 +1,3 @@
-/**
- * AnalysisSession
- *
- * Orchestrates the backend-owned analysis v2 workflow.
- * State is stored persistently in v2_steps using a cursor step record so the
- * session can be inspected after completion or failure.
- */
-
 import type { BackendDatabase } from '../persistence/db.js'
 import type { LmStudioGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
@@ -14,18 +6,15 @@ import type { AnalysisSessionState } from './schemas.js'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
 import { AnalysisWorkflowRuntime } from './analysisWorkflowRuntime.js'
 import {
-  advanceFullSessionAnalysisStep,
-  createFullSessionAnalysisState,
-  getFullSessionAnalysisCursorParams,
-  isFullSessionAnalysisTerminal,
-  type FullSessionAnalysisWorkflowInput,
-} from './fullSessionAnalysisWorkflow.js'
+  advanceFastToolAnalysisStep,
+  createFastToolAnalysisState,
+  getFastToolAnalysisCursorParams,
+  isFastToolAnalysisTerminal,
+  type FastToolAnalysisWorkflowInput,
+} from './fastToolAnalysisWorkflow.js'
+import { ANALYSIS_CURSOR_STEP_TYPE } from './analysisSession.js'
 
-export const ANALYSIS_CURSOR_STEP_TYPE = 'analysis_v2_cursor'
-
-export type AnalysisSessionInput = FullSessionAnalysisWorkflowInput
-
-export class AnalysisSession {
+export class FastToolAnalysisSession {
   private readonly database: BackendDatabase
   private readonly lmGateway: LmStudioGateway
   private readonly mcpGateway: McpGateway
@@ -37,13 +26,13 @@ export class AnalysisSession {
     database: BackendDatabase,
     lmGateway: LmStudioGateway,
     mcpGateway: McpGateway,
-    input: AnalysisSessionInput,
+    input: FastToolAnalysisWorkflowInput,
   ) {
     this.database = database
     this.lmGateway = lmGateway
     this.mcpGateway = mcpGateway
     this.cursorStepId = ''
-    this.state = createFullSessionAnalysisState(input)
+    this.state = createFastToolAnalysisState(input)
 
     this.runtime = new AnalysisWorkflowRuntime(this.database, {
       cursorStepType: ANALYSIS_CURSOR_STEP_TYPE,
@@ -51,13 +40,13 @@ export class AnalysisSession {
       setState: (state) => { this.state = state },
       getCursorStepId: () => this.cursorStepId,
       setCursorStepId: (cursorStepId) => { this.cursorStepId = cursorStepId },
-      getCursorParams: getFullSessionAnalysisCursorParams,
+      getCursorParams: getFastToolAnalysisCursorParams,
       getCursorStatus: (state) => state.phase === 'complete'
         ? 'complete'
         : state.phase === 'error'
           ? 'error'
           : 'running',
-      isTerminal: isFullSessionAnalysisTerminal,
+      isTerminal: isFastToolAnalysisTerminal,
       advance: (emitEvent) => this.advance(emitEvent),
     })
   }
@@ -71,12 +60,12 @@ export class AnalysisSession {
     lmGateway: LmStudioGateway,
     mcpGateway: McpGateway,
     analysisSessionId: string,
-  ): AnalysisSession | null {
+  ): FastToolAnalysisSession | null {
     const steps = listStepRecordsBySession(database.connection, analysisSessionId)
     const cursorStep = steps.find(step => step.stepTypeKey === ANALYSIS_CURSOR_STEP_TYPE)
     if (!cursorStep) return null
 
-    const instance = new AnalysisSession(database, lmGateway, mcpGateway, {
+    const instance = new FastToolAnalysisSession(database, lmGateway, mcpGateway, {
       analysisSessionId,
       targetSessionId: '',
       targetTurnId: '',
@@ -87,10 +76,6 @@ export class AnalysisSession {
     })
     instance.runtime.restore(cursorStep.id, cursorStep.state as unknown as AnalysisSessionState)
     return instance
-  }
-
-  async execute(emitEvent?: AnalysisStreamEventSink): Promise<void> {
-    await this.runtime.execute(emitEvent)
   }
 
   async resume(emitEvent?: AnalysisStreamEventSink): Promise<void> {
@@ -106,7 +91,7 @@ export class AnalysisSession {
   }
 
   private async advance(emitEvent?: AnalysisStreamEventSink): Promise<void> {
-    this.state = await advanceFullSessionAnalysisStep({
+    this.state = await advanceFastToolAnalysisStep({
       database: this.database,
       lmGateway: this.lmGateway,
       mcpGateway: this.mcpGateway,

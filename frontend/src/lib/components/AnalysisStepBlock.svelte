@@ -12,6 +12,7 @@
   const STEP_TYPE_LABELS: Record<string, string> = {
     analysis_bootstrap: 'Prepare evidence',
     analysis_tool_call_assessment: 'Assess tool call',
+    analysis_tool_group_assessment: 'Assess tool group',
     analysis_turn_summary: 'Summarize turn',
     analysis_final_aggregation: 'Build final report',
     analysis_v2_cursor: 'Analysis cursor',
@@ -41,6 +42,11 @@
       ? (typeof step.params.turn_id === 'string' ? step.params.turn_id : null)
       : null,
   )
+  const workUnitId = $derived(
+    step.stepTypeKey === 'analysis_tool_group_assessment'
+      ? (typeof step.params.work_unit_id === 'string' ? step.params.work_unit_id : null)
+      : null,
+  )
   const detailBadges = $derived.by(() => {
     const details: string[] = []
     if (phase !== null) {
@@ -51,6 +57,9 @@
     }
     if (toolCallPartId !== null) {
       details.push(`tool call: ${toolCallPartId}`)
+    }
+    if (workUnitId !== null) {
+      details.push(`work unit: ${workUnitId}`)
     }
     return details
   })

@@ -32,6 +32,7 @@ import {
   type TurnSummary,
 } from './schemas.js'
 import type { ZodError } from 'zod'
+import { renderPromptResource } from './promptResources.js'
 
 function uuid(): string {
   return crypto.randomUUID()
@@ -316,31 +317,11 @@ export async function runFinalAggregationTurn(
   // ── Build synthesis question ──────────────────────────────────────────────
   // The accumulated context already contains: system-prompt, mcp-instructions,
   // accepted assessment results, and turn summaries. Ask the LLM to consolidate.
-  const synthesisQuestion = `You have assessed ${assessments.length} tool call(s) above and produced ${turnSummaries.length} turn summary artifact(s). Consolidate them into a final analysis report.
-
-${buildAnalysisFocusInstructions(analysisTarget)}
-
-The final report should consolidate already-supported conclusions rather than reopen the diagnosis from scratch.
-- Prefer the concrete retry explanations already established in turn summaries over inventing a broader theory.
-- If later calls to the same tool succeeded, do not claim the feature was unsupported unless the successful call still supports that conclusion.
-- Keep findings specific. When possible, mention the exact tool call, parameter, output field, or quoted description wording behind each important conclusion.
-- Use tool_description_findings and tool_description_improvement_suggestions only when there is concrete, non-duplicative documentation value. Otherwise return empty arrays.
-- Do not repeat the same point across findings and improvement suggestions.
-
-Return exactly one JSON object with this shape (no prose, just JSON):
-{
-  "outcome": "answered" | "partially_answered" | "unsupported" | "unanswered",
-  "outcome_rationale": "<2-3 sentences>",
-  "primary_issue": "wrong_parameters" | "tool_misunderstanding" | "tool_description_clarity" | "tool_surface_mismatch" | "tool_limitation" | "unclear" | "none" | null,
-  "primary_issue_rationale": "<2-3 sentences or null>",
-  "path_efficiency": "efficient" | "mixed" | "inefficient",
-  "path_efficiency_rationale": "<2-3 sentences>",
-  "findings": ["<finding 1>", "<finding 2>", ...],
-  "tool_description_findings": ["<specific finding about tool-description clarity, omissions, repetition, or inconsistency>", "..."],
-  "improvement_suggestions": ["<suggestion 1>", "<suggestion 2>", ...],
-  "tool_description_improvement_suggestions": ["<specific documentation or description improvement>", "..."],
-  "total_tool_calls_assessed": ${assessments.length}
-}`
+  const synthesisQuestion = renderPromptResource('full.final-aggregation.txt', {
+    analysis_focus_instructions: buildAnalysisFocusInstructions(analysisTarget),
+    assessment_count: assessments.length,
+    turn_summary_count: turnSummaries.length,
+  })
 
   // ── Run context-aware LLM turn ────────────────────────────────────────────
   const turnResult = await runAnalysisTurn(

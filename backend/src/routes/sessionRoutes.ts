@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ANALYSIS_WORKFLOW_KIND } from '../analysis/workflowKinds.js'
 import { apiError } from '../errors.js'
 import {
   deleteSessionRecord,
@@ -76,17 +77,26 @@ export function registerSessionRoutes(deps: RouteDeps): void {
   })
 
   app.get('/api/analysis/system-prompt-default', async (request) => {
-    const { analysis_goal, additional_instructions } = z.object({
+    const { analysis_goal, additional_instructions, workflow_kind } = z.object({
       analysis_goal: z.string().optional(),
       additional_instructions: z.string().optional(),
+      workflow_kind: z.enum([
+        ANALYSIS_WORKFLOW_KIND.FULL_SESSION,
+        ANALYSIS_WORKFLOW_KIND.FAST_SESSION,
+        ANALYSIS_WORKFLOW_KIND.FAST_TOOL,
+      ]).optional(),
     }).parse(request.query)
 
     return {
       systemPrompt: additional_instructions === undefined
-        ? buildAnalysisSystemPrompt({ analysisGoal: normalizeAnalysisGoal(analysis_goal) })
+        ? buildAnalysisSystemPrompt({
+            analysisGoal: normalizeAnalysisGoal(analysis_goal),
+            ...(workflow_kind ? { workflowKind: workflow_kind } : {}),
+          })
         : buildAnalysisSystemPrompt({
             analysisGoal: normalizeAnalysisGoal(analysis_goal),
             additionalInstructions: additional_instructions,
+            ...(workflow_kind ? { workflowKind: workflow_kind } : {}),
           }),
     }
   })

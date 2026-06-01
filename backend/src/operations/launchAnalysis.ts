@@ -25,8 +25,11 @@ import {
 import { sessionRecordSchema, type McpProfileSnapshot, type ModelProfileSnapshot, type SessionRecord } from '../domain/model.js'
 import type { OperationContext } from './context.js'
 import { AnalysisSession } from '../analysis/analysisSession.js'
+import { FastToolAnalysisSession } from '../analysis/fastToolAnalysisSession.js'
 import { buildAnalysisSystemPrompt, normalizeAnalysisGoal } from '../analysis/systemPrompt.js'
 import { runSessionInitialization } from '../runtime/sessionInit.js'
+import { ANALYSIS_WORKFLOW_KIND } from '../analysis/workflowKinds.js'
+import { FastSessionAnalysisSession } from '../analysis/fastSessionAnalysisSession.js'
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
 
@@ -49,6 +52,12 @@ export const launchAnalysisInputSchema = z.object({
   only_failed_tool_calls: z.boolean().optional(),
   /** Optional additional evaluation criteria. */
   evaluation_criteria: z.array(z.string().min(1)).optional(),
+  /** The analysis workflow to run. */
+  workflow_kind: z.enum([
+    ANALYSIS_WORKFLOW_KIND.FULL_SESSION,
+    ANALYSIS_WORKFLOW_KIND.FAST_SESSION,
+    ANALYSIS_WORKFLOW_KIND.FAST_TOOL,
+  ]).optional(),
 })
 
 export type LaunchAnalysisInput = z.infer<typeof launchAnalysisInputSchema>
@@ -95,6 +104,7 @@ export async function executeAnalysisLaunch(
   const selectedToolNames = [...new Set((input.selected_tool_names ?? []).map((name) => name.trim()).filter(Boolean))]
   const onlyFailedToolCalls = input.only_failed_tool_calls === true
   const evaluationCriteria = [...new Set((input.evaluation_criteria ?? []).map((criterion) => criterion.trim()).filter(Boolean))]
+  const workflowKind = input.workflow_kind ?? ANALYSIS_WORKFLOW_KIND.FULL_SESSION
 
   type TxResult =
     | { kind: 'target_not_found' }
@@ -172,6 +182,7 @@ export async function executeAnalysisLaunch(
         : buildAnalysisSystemPrompt({
             analysisGoal,
             additionalInstructions,
+            workflowKind,
           }),
       temperature,
       reasoning: modelConfig.reasoning ?? null,
@@ -212,7 +223,7 @@ export async function executeAnalysisLaunch(
 
       // Pre-create the cursor step so the execute endpoint can always use rehydrateFromDb.
       // This persists targetTurnId and analysisGoal into the cursor step params.
-      const analysisInstance = new AnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, {
+      const analysisInput = {
         analysisSessionId: session.id,
         targetSessionId,
         targetTurnId: input.target_turn_id,
@@ -220,7 +231,12 @@ export async function executeAnalysisLaunch(
         selectedToolNames,
         onlyFailedToolCalls,
         evaluationCriteria,
-      })
+      }
+      const analysisInstance = workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_SESSION
+        ? new FastSessionAnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, analysisInput)
+        : workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_TOOL
+          ? new FastToolAnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, analysisInput)
+        : new AnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, analysisInput)
       analysisInstance.initializeCursorStep()
 
       // Leave initStatus as 'pending' — runSessionInitialization (called below, outside

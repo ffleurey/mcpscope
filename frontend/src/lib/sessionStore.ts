@@ -538,6 +538,7 @@ export function applyTurnStreamEvent(
 export async function launchAnalysis(input: {
   targetSessionId: string
   targetTurnId: string
+  workflowKind?: 'full_session_analysis' | 'fast_session_analysis' | 'fast_tool_analysis'
   analysisGoal?: string
   modelConfigId?: string
   additionalInstructions?: string
@@ -553,6 +554,7 @@ export async function launchAnalysis(input: {
     const { session } = await launchBackendAnalysis({
       target_session_id: input.targetSessionId,
       target_turn_id: input.targetTurnId,
+      workflow_kind: input.workflowKind,
       analysis_goal: input.analysisGoal,
       model_config_id: input.modelConfigId,
       additional_instructions: input.additionalInstructions,

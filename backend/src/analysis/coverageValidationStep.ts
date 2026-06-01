@@ -30,6 +30,7 @@ function now(): number {
 export interface CoverageValidationInput {
   state: AnalysisSessionState
   stepId: string
+  assessmentSchemaKey?: string
 }
 
 export interface CoverageValidationResult {
@@ -43,6 +44,7 @@ export function runCoverageValidationStep(
 ): CoverageValidationResult {
   const { state, stepId } = input
   const { analysisSessionId } = state
+  const assessmentSchemaKey = input.assessmentSchemaKey ?? SCHEMA_KEY.TOOL_CALL_ASSESSMENT
 
   // ── Load artifacts ────────────────────────────────────────────────────────
   const packetIndexArtifact = getLatestArtifactBySchemaKey(
@@ -74,7 +76,7 @@ export function runCoverageValidationStep(
   const assessments = listArtifactsBySessionAndSchemaKey(
     database.connection,
     analysisSessionId,
-    SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
+    assessmentSchemaKey,
   )
   const assessedToolCallPartIds = new Set(
     assessments.map(a => {

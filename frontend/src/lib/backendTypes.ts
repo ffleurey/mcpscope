@@ -499,6 +499,12 @@ export const sessionCreationDefaultsSchema = z.object({
   updatedAt: z.number().int().nonnegative(),
 })
 
+export const analysisWorkflowKindSchema = z.enum([
+  'full_session_analysis',
+  'fast_session_analysis',
+  'fast_tool_analysis',
+])
+
 export const sessionCreationDefaultsResponseSchema = z.object({
   sessionCreationDefaults: sessionCreationDefaultsSchema,
 })
@@ -512,6 +518,7 @@ export const analysisSystemPromptResponseSchema = z.object({
 })
 
 export type SessionCreationDefaults = z.infer<typeof sessionCreationDefaultsSchema>
+export type AnalysisWorkflowKind = z.infer<typeof analysisWorkflowKindSchema>
 
 export type LmStudioConnection = z.infer<typeof lmStudioConnectionSchema>
 export type ModelConfig = z.infer<typeof modelConfigSchema>

@@ -5,7 +5,7 @@
   import { currentView } from '../navStore'
   import { getDefaultAnalysisSystemPrompt, getSessionTrace } from '../api/backendClient'
   import DialogShell from './DialogShell.svelte'
-  import type { PartRecord, SessionTraceBundle, TurnRecord } from '../backendTypes'
+  import type { AnalysisWorkflowKind, PartRecord, SessionTraceBundle, TurnRecord } from '../backendTypes'
 
   interface Props {
     targetSessionId: string
@@ -16,6 +16,7 @@
   let { targetSessionId, targetSessionTitle, onClose }: Props = $props()
 
   let selectedModelConfigId = $state('')
+  let selectedWorkflowKind = $state<AnalysisWorkflowKind>('full_session_analysis')
   let selectedTurnId = $state('')
   let completedTurns = $state<TurnRecord[]>([])
   let traceBundle = $state<SessionTraceBundle | null>(null)
@@ -23,6 +24,7 @@
   let onlyFailedToolCalls = $state(false)
   let systemPromptText = $state('')
   let loadingSystemPrompt = $state(true)
+  let systemPromptLoadId = 0
   let temperature = $state(0.5)
   let evaluationCriteriaText = $state('')
   let loadingTurns = $state(true)
@@ -53,17 +55,6 @@
 
   onMount(async () => {
     try {
-      const { systemPrompt } = await getDefaultAnalysisSystemPrompt()
-      systemPromptText = systemPrompt
-    } catch {
-      // ignore — launch can still rely on the backend default when no override is supplied
-    } finally {
-      loadingSystemPrompt = false
-    }
-  })
-
-  onMount(async () => {
-    try {
       const trace = await getSessionTrace(targetSessionId)
       traceBundle = trace
       completedTurns = trace.turns.filter(t => t.status === 'complete')
@@ -76,6 +67,25 @@
     } finally {
       loadingTurns = false
     }
+  })
+
+  $effect(() => {
+    const workflowKind = selectedWorkflowKind
+    const loadId = ++systemPromptLoadId
+    loadingSystemPrompt = true
+
+    void getDefaultAnalysisSystemPrompt({ workflow_kind: workflowKind })
+      .then(({ systemPrompt }) => {
+        if (loadId !== systemPromptLoadId) return
+        systemPromptText = systemPrompt
+      })
+      .catch(() => {
+        // ignore — launch can still rely on the backend default when no override is supplied
+      })
+      .finally(() => {
+        if (loadId !== systemPromptLoadId) return
+        loadingSystemPrompt = false
+      })
   })
 
   $effect(() => {
@@ -122,6 +132,7 @@
     await launchAnalysis({
       targetSessionId,
       targetTurnId: selectedTurnId.trim(),
+      workflowKind: selectedWorkflowKind,
       modelConfigId: selectedModelConfigId,
       systemPromptOverride: systemPromptText.trim() || undefined,
       temperature,
@@ -146,6 +157,20 @@
 <DialogShell title="Analyze session" {onClose} dialogClass="analysis-launch-dialog">
   <div class="form">
     <p class="target-label">Target: <span class="target-title">[{targetSessionId}] {targetSessionTitle}</span></p>
+
+    <div class="field">
+      <label class="field-label" for="analysis-workflow-kind">Analysis type</label>
+      <select
+        id="analysis-workflow-kind"
+        class="field-select"
+        bind:value={selectedWorkflowKind}
+        disabled={$isLaunchingAnalysis}
+      >
+        <option value="full_session_analysis">Full session analysis</option>
+        <option value="fast_session_analysis">Fast session analysis</option>
+        <option value="fast_tool_analysis">Fast tool analysis</option>
+      </select>
+    </div>
 
     <div class="field">
       <label class="field-label" for="analysis-model-select">Model</label>

@@ -4310,6 +4310,261 @@ describe('analysis launch', () => {
     expect(injectParts).toHaveLength(0)
   })
 
+  it('v2 fast session flow with tool calls: produces fast assessment, fast turn summary, and fast final report artifacts', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const inspectIds: string[] = []
+    const turnRef = { id: '' }
+    let callCount = 0
+
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          const content = idx === 0
+            ? JSON.stringify({
+                turn_id: turnRef.id,
+                round_id: `${turnRef.id}-R1`,
+                tool_call_part_id: `${turnRef.id}-P3`,
+                tool_name: 'test_tool',
+                result_status: 'successful',
+                efficiency: 'efficient',
+                primary_issue: 'none',
+                short_rationale: 'The tool call succeeded with the right request shape.',
+                post_call_outcome: 'correctly_used',
+                follow_up_priority: 'none',
+              })
+            : idx === 1
+              ? JSON.stringify({
+                  turn_id: turnRef.id,
+                  total_tool_calls_assessed: 1,
+                  turn_outcome: 'answered',
+                  turn_outcome_rationale: 'The turn answered the request directly.',
+                  per_tool_findings: [{
+                    tool_call_part_id: `${turnRef.id}-P3`,
+                    tool_name: 'test_tool',
+                    result_status: 'successful',
+                    brief_finding: 'The tool was used correctly and efficiently.',
+                  }],
+                  cross_attempt_reconciliation: null,
+                  follow_up_candidates: [],
+                })
+              : JSON.stringify({
+                  overall_outcome: 'answered',
+                  overall_rationale: 'The session answered the request with one successful tool call.',
+                  path_efficiency: 'efficient',
+                  tool_summaries: [{
+                    tool_name: 'test_tool',
+                    total_tool_calls: 1,
+                    successful_tool_calls: 1,
+                    request_error_tool_calls: 0,
+                    response_error_tool_calls: 0,
+                    empty_tool_calls: 0,
+                    inefficient_tool_calls: 0,
+                    summary: 'The tool performed well in the assessed scope.',
+                  }],
+                  notable_failures: [],
+                  follow_up_candidates: [],
+                  total_tool_calls_assessed: 1,
+                })
+
+          return {
+            id: `cmpl-fast-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-fast-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(inspectIds),
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: {
+        model_config_id: 'mc-1',
+        target_turn_id: turnId,
+        analysis_goal: 'Quickly grade this tool call.',
+        workflow_kind: 'fast_session_analysis',
+      },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(execRes.statusCode).toBe(200)
+    expect(callCount).toBe(3)
+
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+
+    expect(schemaKeys).toContain('analysis.analysis_target.v1')
+    expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
+    expect(schemaKeys).toContain('analysis.fast_session_tool_call_assessment.v1')
+    expect(schemaKeys).toContain('analysis.fast_session_turn_summary.v1')
+    expect(schemaKeys).toContain('analysis.fast_session_final_analysis_report.v1')
+    expect(inspectIds).toEqual([
+      targetId,
+      `${turnId}-P2`,
+      `${turnId}-P3`,
+      `${turnId}-P5`,
+    ])
+  })
+
+  it('v2 fast tool flow with tool calls: produces grouped tool assessment and fast tool final report artifacts', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const inspectIds: string[] = []
+    const turnRef = { id: '' }
+    let callCount = 0
+
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          const content = idx === 0
+            ? JSON.stringify({
+                work_unit_id: 'tool-group-1',
+                tool_name: 'test_tool',
+                tool_call_part_ids: [`${turnRef.id}-P3`],
+                turn_ids: [turnRef.id],
+                total_tool_calls: 1,
+                usefulness: 'high',
+                efficiency: 'efficient',
+                common_failure_mode: 'none',
+                summary: 'The tool was used effectively for the target task.',
+                follow_up_priority: 'none',
+                notable_part_ids: [`${turnRef.id}-P3`],
+              })
+            : JSON.stringify({
+                overall_tool_use_outcome: 'strong',
+                overall_rationale: 'Tool use was strong and directly supported the answer.',
+                tool_summaries: [{
+                  work_unit_id: 'tool-group-1',
+                  tool_name: 'test_tool',
+                  usefulness: 'high',
+                  efficiency: 'efficient',
+                  common_failure_mode: 'none',
+                  summary: 'The tool performed well in the assessed scope.',
+                  follow_up_priority: 'none',
+                }],
+                repeated_failure_patterns: [],
+                follow_up_candidates: [],
+                total_tool_groups_assessed: 1,
+                total_tool_calls_assessed: 1,
+              })
+
+          return {
+            id: `cmpl-fast-tool-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-fast-tool-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(inspectIds),
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: {
+        model_config_id: 'mc-1',
+        target_turn_id: turnId,
+        analysis_goal: 'Assess tool performance by tool name.',
+        workflow_kind: 'fast_tool_analysis',
+      },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(execRes.statusCode).toBe(200)
+    expect(callCount).toBe(2)
+
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+
+    expect(schemaKeys).toContain('analysis.analysis_target.v1')
+    expect(schemaKeys).toContain('analysis.fast_tool_work_index.v1')
+    expect(schemaKeys).toContain('analysis.fast_tool_group_assessment.v1')
+    expect(schemaKeys).toContain('analysis.fast_tool_final_report.v1')
+    expect(inspectIds).toEqual([
+      targetId,
+      `${turnId}-P2`,
+      `${turnId}-P3`,
+      `${turnId}-P4`,
+      `${turnId}-P5`,
+    ])
+  })
+
   it('analysis execute rejects an assessment response whose identity does not match the expected packet', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
