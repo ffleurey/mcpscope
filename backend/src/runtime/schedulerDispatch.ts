@@ -171,7 +171,12 @@ async function executeAnalysisOneStepJob(
     }
   }
 
-  emitExecutionEvent({ type: 'analysis-complete', trace: buildAnalysisTrace(opCtx, job.target.sessionId) })
+  const trace = buildAnalysisTrace(opCtx, job.target.sessionId)
+  const cursorStep = trace.steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
+  const phase = typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : null
+  if (phase === 'complete' || phase === 'error') {
+    emitExecutionEvent({ type: 'analysis-complete', trace })
+  }
 }
 
 function buildAnalysisTrace(opCtx: SchedulerContext, sessionId: string) {

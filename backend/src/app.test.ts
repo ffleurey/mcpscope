@@ -4445,6 +4445,111 @@ describe('analysis launch', () => {
     ])
   })
 
+  it('v2 fast session single-step execution does not emit analysis-complete before the workflow finishes', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const turnRef = { id: '' }
+    let callCount = 0
+
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          const content = idx === 0
+            ? JSON.stringify({
+                turn_id: turnRef.id,
+                round_id: `${turnRef.id}-R1`,
+                tool_call_part_id: `${turnRef.id}-P3`,
+                tool_name: 'test_tool',
+                result_status: 'successful',
+                efficiency: 'efficient',
+                primary_issue: 'none',
+                short_rationale: 'The tool call succeeded with the right request shape.',
+                post_call_outcome: 'correctly_used',
+                follow_up_priority: 'none',
+              })
+            : JSON.stringify({
+                overall_outcome: 'answered',
+                overall_rationale: 'unused in single-step validation',
+                path_efficiency: 'efficient',
+                tool_summaries: [],
+                notable_failures: [],
+                follow_up_candidates: [],
+                total_tool_calls_assessed: 1,
+              })
+
+          return {
+            id: `cmpl-fast-single-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-fast-single-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: {
+        model_config_id: 'mc-1',
+        target_turn_id: turnId,
+        analysis_goal: 'Quickly grade this tool call.',
+        workflow_kind: 'fast_session_analysis',
+      },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute?single_step=true`,
+    })
+    expect(execRes.statusCode).toBe(200)
+    expect(execRes.body).not.toContain('analysis-complete')
+
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+    expect(schemaKeys).toContain('analysis.analysis_target.v1')
+    expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
+    expect(schemaKeys).not.toContain('analysis.fast_session_final_analysis_report.v1')
+
+    const steps = listStepRecordsBySession(app.backendDb.connection, childId)
+    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
+    expect((cursorStep?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+  })
+
   it('v2 fast tool flow with tool calls: produces grouped tool assessment and fast tool final report artifacts', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
@@ -4563,6 +4668,120 @@ describe('analysis launch', () => {
       `${turnId}-P4`,
       `${turnId}-P5`,
     ])
+  })
+
+  it('v2 fast tool single-step execution advances one grouped assessment without completing the workflow', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const turnRef = { id: '' }
+    let callCount = 0
+
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          const content = idx === 0
+            ? JSON.stringify({
+                work_unit_id: 'tool-group-1',
+                tool_name: 'test_tool',
+                tool_call_part_ids: [`${turnRef.id}-P3`],
+                turn_ids: [turnRef.id],
+                total_tool_calls: 1,
+                usefulness: 'high',
+                efficiency: 'efficient',
+                common_failure_mode: 'none',
+                summary: 'The tool was used effectively for the target task.',
+                follow_up_priority: 'none',
+                notable_part_ids: [`${turnRef.id}-P3`],
+              })
+            : JSON.stringify({
+                overall_tool_use_outcome: 'strong',
+                overall_rationale: 'unused in single-step validation',
+                tool_summaries: [],
+                repeated_failure_patterns: [],
+                follow_up_candidates: [],
+                total_tool_groups_assessed: 1,
+                total_tool_calls_assessed: 1,
+              })
+
+          return {
+            id: `cmpl-fast-tool-single-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-fast-tool-single-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: {
+        model_config_id: 'mc-1',
+        target_turn_id: turnId,
+        analysis_goal: 'Assess tool performance by tool name.',
+        workflow_kind: 'fast_tool_analysis',
+      },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const firstExecRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute?single_step=true`,
+    })
+    expect(firstExecRes.statusCode).toBe(200)
+    expect(firstExecRes.body).not.toContain('analysis-complete')
+
+    const secondExecRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute?single_step=true`,
+    })
+    expect(secondExecRes.statusCode).toBe(200)
+    expect(secondExecRes.body).not.toContain('analysis-complete')
+
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+    expect(schemaKeys).toContain('analysis.analysis_target.v1')
+    expect(schemaKeys).toContain('analysis.fast_tool_work_index.v1')
+    expect(schemaKeys).toContain('analysis.fast_tool_group_assessment.v1')
+    expect(schemaKeys).not.toContain('analysis.fast_tool_final_report.v1')
+
+    const steps = listStepRecordsBySession(app.backendDb.connection, childId)
+    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
+    expect((cursorStep?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
   })
 
   it('analysis execute rejects an assessment response whose identity does not match the expected packet', async () => {
