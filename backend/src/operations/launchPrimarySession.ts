@@ -149,7 +149,18 @@ export async function executePrimarySessionLaunch(
       throw new OperationError(result.error.message, 'duplicate_session_id')
     case 'id_generation_error':
       throw new OperationError(result.error.message, 'session_id_generation_failed')
-    case 'created':
+    case 'created': {
+      // Auto-enqueue initialization via the scheduler so the frontend can watch
+      // the scheduler stream for prelude events instead of calling /initialize separately.
+      if (ctx.scheduler) {
+        try {
+          ctx.scheduler.enqueueInit(ctx, result.session.id)
+        } catch {
+          // Admission failure (e.g. another session active) is non-fatal here;
+          // the frontend can fall back to calling /initialize explicitly.
+        }
+      }
       return { session: result.session }
+    }
   }
 }

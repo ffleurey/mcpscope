@@ -1,16 +1,8 @@
 import { z } from 'zod'
 import { OperationError } from './errors.js'
 import {
-  findActiveSession,
-  getNextTurnSequenceNumber,
-  getSessionRecord,
-  insertTurnRecord,
   listTurnRecordsBySession,
-  updateTurnRecord,
 } from '../persistence/repository.js'
-import { ChatSession } from '../runtime/chatSession.js'
-import { formatTurnId } from '../domain/hierarchicalIds.js'
-import type { TurnRecord } from '../domain/model.js'
 import type { OperationContext } from './context.js'
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
@@ -50,126 +42,25 @@ export const sendOperation = {
     const sessionId = input.session_id
     const userContent = input.prompt
 
-    // ── Scheduler path (preferred): delegate admission + enqueue to the scheduler
-    if (ctx.scheduler) {
-      const job = ctx.scheduler.enqueueSession(ctx, sessionId, userContent)
-      // The worker may have promoted the draft turn to 'streaming' synchronously
-      // before this line runs, so accept either status.
-      const reservedTurn = listTurnRecordsBySession(ctx.db.connection, sessionId)
-        .find(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
-      return {
-        api_version: 1,
-        session_id: sessionId,
-        turn: {
-          id: reservedTurn?.id ?? job.jobId,
-          status: 'running',
-        },
-      }
-    }
-
-    // ── Legacy path (no scheduler, e.g. unit-test contexts without scheduler) ──
-    const { db, lmStudioGateway, mcpGateway, maxToolRounds, logger } = ctx
-
-    type ReservationResult =
-      | { kind: 'not_found' }
-      | { kind: 'not_initialized' }
-      | { kind: 'another_session_active'; active: { id: string; state: string } }
-      | { kind: 'turn_in_progress' }
-      | { kind: 'reserved'; session: ReturnType<typeof getSessionRecord>; turn: TurnRecord }
-
-    const reservation: ReservationResult = db.connection.transaction((): ReservationResult => {
-      const session = getSessionRecord(db.connection, sessionId)
-      if (!session) return { kind: 'not_found' }
-
-      if (session.initStatus !== 'ready') return { kind: 'not_initialized' }
-
-      const active = findActiveSession(db.connection, sessionId)
-      if (active) return { kind: 'another_session_active', active }
-
-      const hasActiveTurn = listTurnRecordsBySession(db.connection, sessionId)
-        .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
-      if (hasActiveTurn) return { kind: 'turn_in_progress' }
-
-      const createdAt = Date.now()
-      const nextSeq = getNextTurnSequenceNumber(db.connection, sessionId)
-      const turn: TurnRecord = {
-        id: formatTurnId(sessionId, nextSeq),
-        sessionId,
-        ownerStepId: null,
-        sequenceNumber: nextSeq,
-        status: 'streaming',
-        createdAt,
-        completedAt: null,
-        outcome: null,
-        usage: {
-          promptTokens: null,
-          completionTokens: null,
-          reasoningTokens: null,
-          totalTokens: null,
-        },
-        contextTokensAtTurnEnd: null,
-        contextTokensAfterCompaction: null,
-        compactionApplied: null,
-        compactionTokensRemoved: null,
-      }
-
-      insertTurnRecord(db.connection, turn)
-      return { kind: 'reserved', session, turn }
-    })()
-
-    if (reservation.kind === 'not_found') {
-      throw new OperationError('Session not found', 'session_not_found')
-    }
-    if (reservation.kind === 'not_initialized') {
+    if (!ctx.scheduler) {
       throw new OperationError(
-        'Session is still initializing or has not reached a ready state. Nothing was queued.',
-        'session_not_initialized',
-      )
-    }
-    if (reservation.kind === 'another_session_active') {
-      throw new OperationError(
-        'Another session is currently active. Nothing was started.',
-        'another_session_active',
-        { id: reservation.active.id, state: reservation.active.state },
-      )
-    }
-    if (reservation.kind === 'turn_in_progress') {
-      throw new OperationError(
-        'A turn is already in progress for this session. Nothing was queued.',
-        'turn_in_progress',
+        'No execution scheduler is available. The send operation requires a scheduler context.',
+        'internal',
       )
     }
 
-    const { session, turn } = reservation
-
-    const chatSession = new ChatSession(
-      session!,
-      db,
-      lmStudioGateway,
-      session!.mcpProfileSnapshot ? mcpGateway : null,
-      maxToolRounds,
-      turn,
-      userContent,
-    )
-
-    chatSession.execute().catch((err: unknown) => {
-      logger?.error(
-        { sessionId, turnId: turn.id, err: err instanceof Error ? err.message : String(err) },
-        'Detached turn failed',
-      )
-      const failedTurn = listTurnRecordsBySession(db.connection, sessionId).find(existing => existing.id === turn.id)
-      if (failedTurn && (failedTurn.status === 'draft' || failedTurn.status === 'streaming' || failedTurn.status === 'awaiting-tools')) {
-        failedTurn.status = 'error'
-        failedTurn.completedAt = Date.now()
-        failedTurn.outcome = failedTurn.outcome ?? 'detached-failure'
-        updateTurnRecord(db.connection, failedTurn)
-      }
-    })
-
+    const job = ctx.scheduler.enqueueSession(ctx, sessionId, userContent)
+    // The worker may have promoted the draft turn to 'streaming' synchronously
+    // before this line runs, so accept either status.
+    const reservedTurn = listTurnRecordsBySession(ctx.db.connection, sessionId)
+      .find(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
     return {
       api_version: 1,
       session_id: sessionId,
-      turn: { id: turn.id, status: 'running' },
+      turn: {
+        id: reservedTurn?.id ?? job.jobId,
+        status: 'running',
+      },
     }
   },
 }

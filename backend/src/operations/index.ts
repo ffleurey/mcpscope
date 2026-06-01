@@ -16,8 +16,6 @@ export type { InspectInput, InspectResult } from './inspect.js'
 export { launchAnalysisOperation, launchAnalysisOutputSchema, launchAnalysisInputSchema } from './launchAnalysis.js'
 export type { LaunchAnalysisInput, LaunchAnalysisResult } from './launchAnalysis.js'
 
-export { streamAnalysisWorkflow } from './executeAnalysis.js'
-
 export { operationCatalog, operationList } from './catalog.js'
 export type { BackendOperationId } from './catalog.js'
 

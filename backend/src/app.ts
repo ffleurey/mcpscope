@@ -15,7 +15,6 @@ import {
   modelConfigSchema,
 } from './domain/configuration.js'
 import { getDomainModelSummary } from './domain/model.js'
-import type { SessionRecord, TurnRecord } from './domain/model.js'
 import { deriveContextEntries, deriveTranscriptEntries } from './domain/selectors.js'
 import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from './domain/trace.js'
 import { listArtifactsBySession } from './analysis/artifactRepository.js'
@@ -39,8 +38,6 @@ import {
   listRoundRecordsBySession,
   listStepRecordsBySession,
   listTurnRecordsBySession,
-  getNextTurnSequenceNumber,
-  insertTurnRecord,
   upsertLmConnection,
   upsertMcpServerProfile,
   upsertModelConfig,
@@ -62,14 +59,9 @@ import {
 } from './services/lmstudio/client.js'
 import { callMcpTool, initializeMcpSession, listMcpTools } from './services/mcp/httpClient.js'
 import { apiError } from './errors.js'
-import {
-  createModelOnlyTurn,
-  type LmStudioGateway,
-} from './runtime/modelTurns.js'
-import { createToolEnabledTurn, type McpGateway } from './runtime/toolTurns.js'
-import { formatTurnId } from './domain/hierarchicalIds.js'
+import type { LmStudioGateway } from './runtime/modelTurns.js'
+import type { McpGateway } from './runtime/toolTurns.js'
 import { importTraceBundle } from './runtime/traceImport.js'
-import { runSessionInitialization } from './runtime/sessionInit.js'
 import { registerMcpTransport } from './mcp/index.js'
 import {
   listOperation,
@@ -191,6 +183,30 @@ export async function buildBackendApp(
     scheduler,
   }
   registerMcpTransport(app, opCtx)
+
+  const toLifecycleState = (summary: {
+    id: string
+    status: string
+    initStatus: string
+  }): 'initializing' | 'ready' | 'running' | 'error' => {
+    const turns = listTurnRecordsBySession(database.connection, summary.id)
+    const activeTurn = [...turns]
+      .reverse()
+      .find(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
+      ?? null
+    const latestTurn = turns.at(-1) ?? null
+
+    if (summary.initStatus === 'error' || summary.status === 'error' || latestTurn?.status === 'error') {
+      return 'error'
+    }
+    if (summary.initStatus === 'pending' || summary.initStatus === 'initializing') {
+      return 'initializing'
+    }
+    if (activeTurn) {
+      return 'running'
+    }
+    return 'ready'
+  }
 
   app.get('/api/health', async () => {
     return healthResponseSchema.parse({
@@ -386,7 +402,7 @@ export async function buildBackendApp(
         sessions: rows.map(s => ({
           id: s.id,
           title: s.title,
-          status: s.status,
+          status: toLifecycleState(s),
           init_status: s.initStatus,
           session_type: s.sessionType,
           parent_kind: s.parentKind,
@@ -431,7 +447,7 @@ export async function buildBackendApp(
       children: children.map(s => ({
         id: s.id,
         title: s.title,
-        status: s.status,
+        status: toLifecycleState(s),
         init_status: s.initStatus,
         session_type: s.sessionType,
         parent_kind: s.parentKind,
@@ -910,99 +926,145 @@ export async function buildBackendApp(
   })
 
   app.post('/api/sessions/:sessionId/turns', async (request, reply) => {
+    // Compatibility shim — delegates execution to the scheduler.
+    // If the session has not been initialized, initialization is run inline first
+    // for backward compatibility. Awaits completion and returns turn/rounds/parts.
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     const input = createTurnInputSchema.parse(request.body)
 
-    // Reserve the turn atomically before any async work. Without this, the global
-    // lock check and the actual turn insertion would be non-atomic: another request
-    // could slip through the lock check during the async gap between the check and
-    // the turn being written to the DB by createModelOnlyTurn/createToolEnabledTurn.
-    type ReserveResult =
-      | { kind: 'not_found' }
-      | { kind: 'another_session_active'; active: ActiveSessionInfo }
-      | { kind: 'turn_in_progress' }
-      | { kind: 'reserved'; session: SessionRecord; turn: TurnRecord }
-
-    const reservation: ReserveResult = database.connection.transaction((): ReserveResult => {
-      const session = getSessionRecord(database.connection, sessionId)
-      if (!session) return { kind: 'not_found' }
-
-      const active = findActiveSession(database.connection, sessionId)
-      if (active) return { kind: 'another_session_active', active }
-
-      const hasActiveTurn = listTurnRecordsBySession(database.connection, sessionId)
-        .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
-      if (hasActiveTurn) return { kind: 'turn_in_progress' }
-
-      const createdAt = Date.now()
-      const nextSeq = getNextTurnSequenceNumber(database.connection, sessionId)
-      const turn: TurnRecord = {
-        id: formatTurnId(sessionId, nextSeq),
-        sessionId,
-        ownerStepId: null,
-        sequenceNumber: nextSeq,
-        status: 'streaming',
-        createdAt,
-        completedAt: null,
-        outcome: null,
-        usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
-        contextTokensAtTurnEnd: null,
-        contextTokensAfterCompaction: null,
-        compactionApplied: null,
-        compactionTokensRemoved: null,
-      }
-      insertTurnRecord(database.connection, turn)
-      return { kind: 'reserved', session, turn }
-    })()
-
-    if (reservation.kind === 'not_found') {
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
       reply.code(404)
       return apiError('not_found', 'Session not found')
     }
-    if (reservation.kind === 'another_session_active') {
-      reply.code(409)
-      return anotherSessionActiveError(reservation.active)
-    }
-    if (reservation.kind === 'turn_in_progress') {
-      reply.code(409)
-      return apiError('validation', 'A turn is already in progress for this session.', { code: 'turn_in_progress' })
+
+    // ── Inline init if needed (backward compat for test clients) ────────────
+    if (session.initStatus === 'pending' || session.initStatus === 'initializing') {
+      try {
+        const initJob = scheduler.enqueueInit(opCtx, sessionId)
+        await new Promise<void>(resolve => {
+          const unsub = scheduler.subscribe((evt: SchedulerEvent) => {
+            if (
+              (evt.type === 'scheduler-job-completed' || evt.type === 'scheduler-job-failed')
+              && evt.job.jobId === initJob.jobId
+            ) {
+              unsub()
+              resolve()
+            }
+          })
+          const snap = scheduler.getSnapshot()
+          const stillActive = snap.activeJob?.jobId === initJob.jobId
+            || snap.pendingJobs.some(j => j.jobId === initJob.jobId)
+          if (!stillActive && snap.lastTerminalJob?.jobId === initJob.jobId) {
+            unsub()
+            resolve()
+          }
+        })
+      } catch (err) {
+        if (err instanceof OperationError && err.code === 'session_already_initialized') {
+          // Already ready — continue
+        } else {
+          return handleOperationError(err, reply)
+        }
+      }
     }
 
-    const result = reservation.session.mcpProfileSnapshot
-      ? await createToolEnabledTurn(database, dependencies.lmStudioGateway, dependencies.mcpGateway, {
-          sessionId,
-          userContent: input.userContent,
-          maxToolRounds: config.maxToolRounds,
-          reservedTurn: reservation.turn,
-        })
-      : await createModelOnlyTurn(database, dependencies.lmStudioGateway, {
-          sessionId,
-          userContent: input.userContent,
-          reservedTurn: reservation.turn,
-        })
+    // ── Enqueue turn via scheduler ───────────────────────────────────────────
+    let job: ReturnType<typeof scheduler.enqueueSession>
+    try {
+      job = scheduler.enqueueSession(opCtx, sessionId, input.userContent)
+    } catch (err) {
+      return handleOperationError(err, reply)
+    }
+
+    // Capture reserved turn ID right after enqueue (draft or already streaming)
+    const reservedTurn = listTurnRecordsBySession(database.connection, sessionId)
+      .find(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
+    const turnId = reservedTurn?.id
+
+    // ── Await job completion ─────────────────────────────────────────────────
+    await new Promise<void>(resolve => {
+      const unsub = scheduler.subscribe((evt: SchedulerEvent) => {
+        if (
+          (evt.type === 'scheduler-job-completed' || evt.type === 'scheduler-job-failed'
+            || evt.type === 'scheduler-job-removed')
+          && ('job' in evt ? evt.job.jobId === job.jobId : evt.jobId === job.jobId)
+        ) {
+          unsub()
+          resolve()
+        }
+      })
+      const snap = scheduler.getSnapshot()
+      const stillActive = snap.activeJob?.jobId === job.jobId
+        || snap.pendingJobs.some(j => j.jobId === job.jobId)
+      if (!stillActive && snap.lastTerminalJob?.jobId === job.jobId) {
+        unsub()
+        resolve()
+      }
+    })
+
+    // ── Fetch completed turn data from DB ────────────────────────────────────
+    const completedTurn = turnId
+      ? listTurnRecordsBySession(database.connection, sessionId).find(t => t.id === turnId)
+      : null
+    if (!completedTurn) {
+      reply.code(500)
+      return apiError('internal', 'Turn could not be located after execution.')
+    }
+    const rounds = listRoundRecordsBySession(database.connection, sessionId)
+      .filter(r => r.turnId === completedTurn.id)
+    const parts = listPartRecordsBySession(database.connection, sessionId)
+      .filter(p => p.turnId === completedTurn.id)
 
     reply.code(201)
-    return result
+    return { turn: completedTurn, round: rounds[0], rounds, parts }
   })
 
   app.post('/api/sessions/:sessionId/initialize', async (request, reply) => {
+    // Routes session initialization through the scheduler.
+    // Prelude events flow as scheduler-execution-events and are streamed back as SSE
+    // for backward compatibility with clients that subscribe to this endpoint directly.
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
 
-    const prereq = database.connection.transaction(() => {
-      const session = getSessionRecord(database.connection, sessionId)
-      if (!session) return { kind: 'not_found' } as const
-      const active = findActiveSession(database.connection, sessionId)
-      if (active) return { kind: 'another_session_active', active } as const
-      return { kind: 'ok' } as const
-    })()
-
-    if (prereq.kind === 'not_found') {
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
       reply.code(404)
       return apiError('not_found', 'Session not found')
     }
-    if (prereq.kind === 'another_session_active') {
-      reply.code(409)
-      return anotherSessionActiveError(prereq.active)
+
+    // If already initialized, emit existing parts + trace inline and return
+    if (session.initStatus === 'ready') {
+      reply.hijack()
+      reply.raw.statusCode = 200
+      reply.raw.setHeader('content-type', 'text/event-stream; charset=utf-8')
+      reply.raw.setHeader('cache-control', 'no-cache, no-transform')
+      reply.raw.setHeader('connection', 'keep-alive')
+      const parts = listPartRecordsBySession(database.connection, sessionId)
+      const trace = buildSessionTraceBundle({
+        session,
+        steps: listStepRecordsBySession(database.connection, sessionId),
+        turns: listTurnRecordsBySession(database.connection, sessionId),
+        rounds: listRoundRecordsBySession(database.connection, sessionId),
+        parts,
+        rawExchanges: listRawExchangeRecordsBySession(database.connection, sessionId),
+        artifacts: listArtifactsBySession(database.connection, sessionId),
+        transcript: deriveTranscriptEntries(parts),
+        context: deriveContextEntries(parts),
+      })
+      for (const part of parts.filter(p => p.turnId === null)) {
+        reply.raw.write(`event: part-committed\ndata: ${JSON.stringify({ type: 'part-committed', part })}\n\n`)
+      }
+      reply.raw.write(`event: prelude-complete\ndata: ${JSON.stringify({ type: 'prelude-complete', trace })}\n\n`)
+      reply.raw.end()
+      return
+    }
+
+    // Enqueue init via scheduler
+    let job: ReturnType<typeof scheduler.enqueueInit>
+    try {
+      job = scheduler.enqueueInit(opCtx, sessionId)
+    } catch (err) {
+      return handleOperationError(err, reply)
     }
 
     reply.hijack()
@@ -1011,29 +1073,45 @@ export async function buildBackendApp(
     reply.raw.setHeader('cache-control', 'no-cache, no-transform')
     reply.raw.setHeader('connection', 'keep-alive')
 
-    const emitEvent = (event: { type: string; [key: string]: unknown }) => {
+    const emitSseEvent = (event: { type: string; [key: string]: unknown }) => {
       reply.raw.write(`event: ${event.type}\n`)
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
     }
 
-    try {
-      await runSessionInitialization(
-        database,
-        dependencies.lmStudioGateway,
-        dependencies.mcpGateway,
-        sessionId,
-        emitEvent,
-      )
-    } catch (error) {
-      app.log.error({ sessionId, err: error instanceof Error ? error.message : String(error) }, 'Session initialization failed')
-      emitEvent({
-        type: 'prelude-failed',
-        errorType: 'internal',
-        message: error instanceof Error ? error.message : 'Unknown initialization failure',
+    await new Promise<void>(resolve => {
+      const unsubscribe = scheduler.subscribe((schedulerEvent: SchedulerEvent) => {
+        if (schedulerEvent.type === 'scheduler-execution-event' && schedulerEvent.jobId === job.jobId) {
+          emitSseEvent(schedulerEvent.event as { type: string; [key: string]: unknown })
+          if (schedulerEvent.event.type === 'prelude-complete' || schedulerEvent.event.type === 'prelude-failed') {
+            unsubscribe()
+            resolve()
+          }
+          return
+        }
+        if (schedulerEvent.type === 'scheduler-job-completed' && schedulerEvent.job.jobId === job.jobId) {
+          unsubscribe()
+          resolve()
+          return
+        }
+        if (schedulerEvent.type === 'scheduler-job-failed' && schedulerEvent.job.jobId === job.jobId) {
+          emitSseEvent({ type: 'prelude-failed', message: schedulerEvent.job.error ?? 'Initialization failed' })
+          unsubscribe()
+          resolve()
+        }
       })
-    } finally {
-      reply.raw.end()
-    }
+      const snap = scheduler.getSnapshot()
+      const stillPresent = snap.activeJob?.jobId === job.jobId
+        || snap.pendingJobs.some(j => j.jobId === job.jobId)
+      if (!stillPresent && snap.lastTerminalJob?.jobId === job.jobId) {
+        if (snap.lastTerminalJob.outcome === 'failed') {
+          emitSseEvent({ type: 'prelude-failed', message: snap.lastTerminalJob.error ?? 'Initialization failed' })
+        }
+        unsubscribe()
+        resolve()
+      }
+    })
+
+    reply.raw.end()
   })
 
   app.post('/api/sessions/:sessionId/turns/stream', async (request, reply) => {
@@ -1157,7 +1235,34 @@ export async function buildBackendApp(
     }
   })
 
-  // GET /api/scheduler/stream — global SSE stream of all scheduler events
+  // POST /api/scheduler/enqueue-step — enqueue a single analysis step
+  // Auto-finds the cursor step for the given analysis session.
+  app.post('/api/scheduler/enqueue-step', async (request, reply) => {
+    const { session_id } = z.object({ session_id: z.string() }).parse(request.body)
+    const session = getSessionRecord(database.connection, session_id)
+    if (!session) {
+      reply.code(404)
+      return apiError('not_found', 'Session not found')
+    }
+    if (session.sessionType !== 'session_analysis') {
+      reply.code(400)
+      return apiError('validation', 'Session is not an analysis session.')
+    }
+    const steps = listStepRecordsBySession(database.connection, session_id)
+    const cursorStep = steps.find(s => s.stepTypeKey === 'analysis_v2_cursor')
+    if (!cursorStep) {
+      reply.code(422)
+      return apiError('validation', 'Analysis session has no cursor step.')
+    }
+    try {
+      const job = scheduler.enqueueStep(opCtx, session_id, cursorStep.id)
+      reply.code(202)
+      return { job }
+    } catch (err) {
+      return handleOperationError(err, reply)
+    }
+  })
+
   app.get('/api/scheduler/stream', async (_request, reply) => {
     reply.hijack()
     reply.raw.statusCode = 200

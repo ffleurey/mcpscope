@@ -1,16 +1,15 @@
 /**
- * executeAnalysis — SSE-streaming operation for POST /api/sessions/:id/execute
+ * executeAnalysis — internal helpers used by the scheduler's analysis dispatch.
  *
- * Resumes (or starts) the analysis workflow for a session_analysis session and
- * streams progress events back to the frontend:
- *   - TurnStreamEvents during bounded LLM turns (same format as regular turns)
- *   - analysis-step-started / analysis-step-completed for deterministic steps
- *   - analysis-phase-changed when the workflow phase transitions
- *   - analysis-complete with the final trace when the workflow finishes
- *   - analysis-failed on unrecoverable error
+ * The public execution path for analysis sessions goes through the scheduler
+ * (POST /api/sessions/:id/execute enqueues via scheduler.enqueueSession or
+ * scheduler.enqueueStep). The functions below are kept as internal reference
+ * only; the canonical flow runs through scheduler.executeAnalysisJob and
+ * scheduler.executeAnalysisOneStepJob.
  *
- * The frontend can display live streaming token output and deterministic step
- * blocks exactly as it does for regular sessions.
+ * @deprecated Use the scheduler execution path instead of calling these
+ * directly. These exports remain for test-harness use only and may be removed
+ * in a future cleanup pass.
  */
 
 import { OperationError } from './errors.js'
