@@ -77,7 +77,9 @@ npm run dev
 That starts:
 
 - the backend on `http://localhost:3030`
-- the frontend served from the same app during normal local development flow
+- the Vite frontend on `http://localhost:5173`
+
+In local development, the frontend and backend run as separate dev servers. The backend only serves the built frontend in production-style static mode when `BACKEND_STATIC_DIR` is set.
 
 Useful variants:
 

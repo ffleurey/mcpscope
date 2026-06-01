@@ -166,6 +166,24 @@ Job kinds:
 
 The scheduler is the only execution owner. No route or operation directly runs a model turn, analysis step, or initialization outside the scheduler in normal runtime flow.
 
+### Backend module map
+
+The backend structure is intentionally split so architectural seams are visible in code, not just in docs:
+
+- `backend/src/app.ts` bootstraps Fastify, opens the database, wires shared helpers, and registers route groups
+- `backend/src/routes/` groups HTTP routes by concern:
+	- `systemRoutes.ts` for health/runtime/meta
+	- `sessionRoutes.ts` for session creation, listing, status, and analysis launch
+	- `configurationRoutes.ts` for LM/MCP/default configuration CRUD and preflight
+	- `traceRoutes.ts` for trace import/export and compatibility execution endpoints
+	- `schedulerRoutes.ts` for scheduler snapshot/control/stream routes
+- `backend/src/runtime/scheduler.ts` owns scheduler state, queue lifecycle, subscriptions, pause/resume, and the worker loop
+- `backend/src/runtime/schedulerAdmission.ts` owns enqueue-time validation and turn reservation rules
+- `backend/src/runtime/schedulerDispatch.ts` owns execution dispatch by job/session kind
+- `backend/src/runtime/schedulerTypes.ts` holds shared scheduler contracts and event shapes
+
+This split is deliberate: route modules should stay thin HTTP adapters over backend-owned operations and scheduler entrypoints, while scheduler submodules separate queue ownership from admission and execution behavior.
+
 **Benchmark support note**: benchmark orchestration can be added as a thin layer above sessions and queue jobs without new execution infrastructure. The scheduler's sequential control plane, job kinds, and event stream are already the right primitives.
 
 The important rule is that mcpscope keeps one canonical model across persistence, API, UI, and
