@@ -28,6 +28,9 @@ export type LaunchPrimarySessionInput = z.infer<typeof launchPrimarySessionInput
 
 export interface LaunchPrimarySessionResult {
   session: SessionRecord
+  /** Job ID of the auto-enqueued init job, if one was created. Frontend can pass
+   *  this to awaitJob for precise completion tracking without session-ID ambiguity. */
+  initJobId?: string
 }
 
 export const launchPrimarySessionOutputSchema = {
@@ -152,15 +155,17 @@ export async function executePrimarySessionLaunch(
     case 'created': {
       // Auto-enqueue initialization via the scheduler so the frontend can watch
       // the scheduler stream for prelude events instead of calling /initialize separately.
+      let initJobId: string | undefined
       if (ctx.scheduler) {
         try {
-          ctx.scheduler.enqueueInit(ctx, result.session.id)
+          const initJob = ctx.scheduler.enqueueInit(ctx, result.session.id)
+          initJobId = initJob.jobId
         } catch {
           // Admission failure (e.g. another session active) is non-fatal here;
           // the frontend can fall back to calling /initialize explicitly.
         }
       }
-      return { session: result.session }
+      return { session: result.session, ...(initJobId ? { initJobId } : {}) }
     }
   }
 }

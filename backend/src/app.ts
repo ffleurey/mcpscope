@@ -942,24 +942,7 @@ export async function buildBackendApp(
     if (session.initStatus === 'pending' || session.initStatus === 'initializing') {
       try {
         const initJob = scheduler.enqueueInit(opCtx, sessionId)
-        await new Promise<void>(resolve => {
-          const unsub = scheduler.subscribe((evt: SchedulerEvent) => {
-            if (
-              (evt.type === 'scheduler-job-completed' || evt.type === 'scheduler-job-failed')
-              && evt.job.jobId === initJob.jobId
-            ) {
-              unsub()
-              resolve()
-            }
-          })
-          const snap = scheduler.getSnapshot()
-          const stillActive = snap.activeJob?.jobId === initJob.jobId
-            || snap.pendingJobs.some(j => j.jobId === initJob.jobId)
-          if (!stillActive && snap.lastTerminalJob?.jobId === initJob.jobId) {
-            unsub()
-            resolve()
-          }
-        })
+        await scheduler.awaitJob(initJob.jobId)
       } catch (err) {
         if (err instanceof OperationError && err.code === 'session_already_initialized') {
           // Already ready — continue
@@ -983,25 +966,7 @@ export async function buildBackendApp(
     const turnId = reservedTurn?.id
 
     // ── Await job completion ─────────────────────────────────────────────────
-    await new Promise<void>(resolve => {
-      const unsub = scheduler.subscribe((evt: SchedulerEvent) => {
-        if (
-          (evt.type === 'scheduler-job-completed' || evt.type === 'scheduler-job-failed'
-            || evt.type === 'scheduler-job-removed')
-          && ('job' in evt ? evt.job.jobId === job.jobId : evt.jobId === job.jobId)
-        ) {
-          unsub()
-          resolve()
-        }
-      })
-      const snap = scheduler.getSnapshot()
-      const stillActive = snap.activeJob?.jobId === job.jobId
-        || snap.pendingJobs.some(j => j.jobId === job.jobId)
-      if (!stillActive && snap.lastTerminalJob?.jobId === job.jobId) {
-        unsub()
-        resolve()
-      }
-    })
+    await scheduler.awaitJob(job.jobId)
 
     // ── Fetch completed turn data from DB ────────────────────────────────────
     const completedTurn = turnId
