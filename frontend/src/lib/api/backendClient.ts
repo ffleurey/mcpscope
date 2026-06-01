@@ -588,6 +588,13 @@ export function enqueueSession(sessionId: string, prompt?: string): Promise<{ jo
   })
 }
 
+export function enqueueStep(sessionId: string): Promise<{ job: ExecutionJob }> {
+  return request('/api/scheduler/enqueue-step', {
+    method: 'POST',
+    body: { session_id: sessionId },
+  })
+}
+
 export function pauseScheduler(): Promise<{ ok: boolean; controlState: string }> {
   return request('/api/scheduler/pause', { method: 'POST' })
 }

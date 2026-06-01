@@ -17,6 +17,7 @@ import {
   resumeScheduler,
   removeSchedulerJob,
   enqueueSession,
+  enqueueStep,
 } from './api/backendClient'
 import type {
   ExecutionSnapshot,
@@ -24,6 +25,7 @@ import type {
   SchedulerEvent,
   TurnStreamEvent,
   AnalysisStreamEvent,
+  PreludeStreamEvent,
 } from './backendTypes'
 
 // ── Core scheduler state ─────────────────────────────────────────────────────
@@ -43,7 +45,7 @@ export const schedulerError = writable<string | null>(null)
 // was executing. This allows the session transcript view to update from events
 // that arrived while the user had a different session selected.
 
-export const sessionStreamCache = writable<Map<string, (TurnStreamEvent | AnalysisStreamEvent)[]>>(new Map())
+export const sessionStreamCache = writable<Map<string, (TurnStreamEvent | AnalysisStreamEvent | PreludeStreamEvent)[]>>(new Map())
 
 // ── Derived helpers ──────────────────────────────────────────────────────────
 
@@ -153,16 +155,26 @@ function applySchedulerEvent(event: SchedulerEvent): void {
       updated.set(sessionId, [...existing, execEvent])
       return updated
     })
-    // Drive activeTurnStream / activeTrace for the currently open session.
-    const prompt = get(schedulerSnapshot).activeJob?.prompt ?? ''
-    import('./sessionStore').then(({ applyExternalStreamEvent }) => {
-      applyExternalStreamEvent(sessionId, prompt, execEvent)
-    })
+    // Route prelude events to the prelude handler; all other events to the turn/analysis handler.
+    if (
+      execEvent.type === 'part-committed'
+      || execEvent.type === 'prelude-complete'
+      || execEvent.type === 'prelude-failed'
+    ) {
+      import('./sessionStore').then(({ applyExternalPreludeEvent }) => {
+        applyExternalPreludeEvent(sessionId, execEvent as PreludeStreamEvent)
+      })
+    } else {
+      const prompt = get(schedulerSnapshot).activeJob?.prompt ?? ''
+      import('./sessionStore').then(({ applyExternalStreamEvent }) => {
+        applyExternalStreamEvent(sessionId, prompt, execEvent as TurnStreamEvent | AnalysisStreamEvent)
+      })
+    }
     return
   }
 }
 
-export function getSessionStreamEvents(sessionId: string): (TurnStreamEvent | AnalysisStreamEvent)[] {
+export function getSessionStreamEvents(sessionId: string): (TurnStreamEvent | AnalysisStreamEvent | PreludeStreamEvent)[] {
   return get(sessionStreamCache).get(sessionId) ?? []
 }
 
@@ -249,4 +261,49 @@ export async function enqueueSessionExecution(sessionId: string, prompt: string)
     pendingJobs: [...snap.pendingJobs, result.job],
   }))
   return result.job
+}
+
+export async function enqueueStepExecution(sessionId: string): Promise<ExecutionJob> {
+  const result = await enqueueStep(sessionId)
+  schedulerSnapshot.update(snap => ({
+    ...snap,
+    pendingJobs: [...snap.pendingJobs, result.job],
+  }))
+  return result.job
+}
+
+/**
+ * Waits until the scheduler has no active or pending job for the given sessionId.
+ * Resolves immediately if the session is already idle (lastTerminalJob matches, or never ran).
+ * Times out after timeoutMs (default 30s) to prevent indefinite waits.
+ */
+export function awaitJob(sessionId: string, timeoutMs = 30000): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let sawJob = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const done = () => {
+      if (timer !== null) clearTimeout(timer)
+      unsub()
+      resolve()
+    }
+
+    timer = setTimeout(() => {
+      unsub()
+      reject(new Error(`awaitJob(${sessionId}) timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    const unsub = schedulerSnapshot.subscribe($snap => {
+      const hasActive = $snap.activeJob?.target.sessionId === sessionId
+      const hasPending = $snap.pendingJobs.some(j => j.target.sessionId === sessionId)
+      if (hasActive || hasPending) {
+        sawJob = true
+        return
+      }
+      // Job is gone from active/pending
+      if (sawJob || $snap.lastTerminalJob?.target.sessionId === sessionId) {
+        done()
+      }
+    })
+  })
 }

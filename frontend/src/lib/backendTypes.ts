@@ -34,6 +34,7 @@ export const mcpServerProfileSchema = z.object({
 })
 
 export const sessionStatusSchema = z.enum(['draft', 'ready', 'active', 'error', 'archived'])
+export const sessionLifecycleStateSchema = z.enum(['initializing', 'ready', 'running', 'error'])
 export const sessionInitStatusSchema = z.enum(['pending', 'initializing', 'ready', 'error'])
 export const sessionTypeSchema = z.enum(['primary', 'session_analysis'])
 export const parentKindSchema = z.enum(['session', 'benchmark'])
@@ -165,7 +166,7 @@ export const sessionRecordSchema = z.object({
 export const sessionSummarySchema = z.object({
   id: z.string(),
   title: z.string(),
-  status: sessionStatusSchema,
+  status: sessionLifecycleStateSchema,
   init_status: sessionInitStatusSchema,
   session_type: sessionTypeSchema.default('primary'),
   parent_kind: parentKindSchema.nullable().default(null),
@@ -390,6 +391,7 @@ export type AnalysisStreamEvent = z.infer<typeof analysisStreamEventSchema>
 const executionTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('session'), sessionId: z.string() }),
   z.object({ kind: z.literal('step'), sessionId: z.string(), stepId: z.string() }),
+  z.object({ kind: z.literal('init'), sessionId: z.string() }),
 ])
 
 const executionJobSchema = z.object({
@@ -428,7 +430,7 @@ export const schedulerEventSchema = z.discriminatedUnion('type', [
     type: z.literal('scheduler-execution-event'),
     sessionId: z.string(),
     jobId: z.string(),
-    event: analysisStreamEventSchema,
+    event: z.union([analysisStreamEventSchema, preludeStreamEventSchema]),
   }),
   // Initial snapshot event sent when SSE connection opens
   z.object({
