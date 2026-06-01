@@ -58,6 +58,8 @@ Those surfaces share the same backend-owned session model and canonical hierarch
 
 ## Current deliberate limits
 
+- execution control is now backend-owned through an in-memory sequential scheduler, but explicit public step-target enqueue is still tracked as follow-up work
+- pausing execution is boundary-based: the backend stops after the current turn/step finishes; it does not interrupt an in-flight LM Studio or MCP request
 - runtime state persists on `session_containers` plus the `v2_*` tables; normal startup does not create the obsolete `sessions` / `turns` / `rounds` / `parts` / `raw_exchanges` runtime tables
 - session parent rules remain intentionally narrow: parents are limited to `session` and `benchmark`, depending on `session_type`
 - analysis-session deterministic workflow steps are shipped inside the normal session model; broader generalization and cleanup remain future work

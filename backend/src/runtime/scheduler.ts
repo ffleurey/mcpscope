@@ -615,7 +615,13 @@ export class ExecutionScheduler {
       if (!instance) {
         throw new Error('Failed to rehydrate analysis session from cursor step')
       }
-      await instance.resume(emitExecutionEvent)
+
+      while (instance.canContinue()) {
+        await instance.resumeOneStep(emitExecutionEvent)
+        if (this.controlState === 'paused') {
+          break
+        }
+      }
     } finally {
       // Mark session ready after completion (or on error, keep active state for error detection)
       const finalSession = getSessionRecord(db.connection, sessionId) ?? session
@@ -626,7 +632,9 @@ export class ExecutionScheduler {
       }
     }
 
-    // Build and emit final trace bundle (mirrors executeAnalysisWorkflow)
+    // Build and emit the latest trace bundle for the completed run segment.
+    // When paused, the job ends at the current boundary without claiming the
+    // workflow itself is complete; the SSE wrapper closes on job completion.
     const finalSession = getSessionRecord(db.connection, sessionId)!
     const finalParts = listPartRecordsBySession(db.connection, sessionId)
     const trace = buildSessionTraceBundle({
@@ -640,7 +648,11 @@ export class ExecutionScheduler {
       transcript: deriveTranscriptEntries(finalParts),
       context: deriveContextEntries(finalParts),
     })
-    emitExecutionEvent({ type: 'analysis-complete', trace })
+    const cursorStep = trace.steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
+    const phase = typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : null
+    if (phase === 'complete' || phase === 'error') {
+      emitExecutionEvent({ type: 'analysis-complete', trace })
+    }
   }
 
   private async executeAnalysisOneStepJob(

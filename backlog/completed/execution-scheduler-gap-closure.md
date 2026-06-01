@@ -1,5 +1,10 @@
 # Execution scheduler gap closure
 
+Completion note:
+
+- Landed on the `execution-scheduler` branch as the hardening follow-up for pause semantics, single-step analysis execution, and stream continuity work.
+- The remaining public generic step-enqueue surface was intentionally split into `backlog/specification/scheduler-public-step-enqueue.md`.
+
 This task is the follow-up implementation handoff for the scheduler work reviewed in PR #20.
 
 The scheduler branch is directionally correct, but it is not ready to merge. The follow-up must close the concrete gaps found in review rather than reopen the scheduler design.

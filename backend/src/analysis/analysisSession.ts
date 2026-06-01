@@ -223,6 +223,10 @@ export class AnalysisSession {
     await this.advance(emitEvent)
   }
 
+  canContinue(): boolean {
+    return this.state.phase !== 'complete' && this.state.phase !== 'error'
+  }
+
   private async advance(emitEvent?: AnalysisStreamEventSink): Promise<void> {
     const phase = this.state.phase
 

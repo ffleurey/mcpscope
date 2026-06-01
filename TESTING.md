@@ -90,6 +90,21 @@ Use that test before widening to a broader suite when the change is specifically
 - analysis artifacts and summary generation
 - reasoning slices around analyzed tool calls
 
+## Scheduler execution checks
+
+Use this focused scheduler slice when the change touches queue semantics, analysis stepping, or pause-at-boundary behavior:
+
+```bash
+npx vitest run backend/src/app.test.ts -t "single-step execute|pause stops analysis session execution" --reporter=dot
+```
+
+That slice should stay green when changing:
+
+- scheduler pause or resume semantics
+- session-target execution boundaries
+- analysis single-step execution
+- `/api/sessions/:sessionId/execute` compatibility behavior
+
 ## What we keep
 
 - pure logic tests

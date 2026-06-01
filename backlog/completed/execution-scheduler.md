@@ -1,5 +1,10 @@
 So far we do not really have an execution engine in the backend. Each session has an execution semantics and we have defined a stricly sequencial execution policy.
 
+Completion note:
+
+- Landed on the `execution-scheduler` branch with backend-owned queueing, global execution monitoring, execution-bar UI, and boundary-based stop/resume semantics.
+- Public generic step enqueue was split out afterwards into `backlog/specification/scheduler-public-step-enqueue.md` rather than widening the branch again.
+
 To prepare for more advanced scenarios and allow for easily controling and following the execution of sessions, analysis sessions and later benchmarks we would benefit from a more proper centralized execution queue and engine.
 
 This can be quite simple and the idea is with it is actually to simplify what we have today by having a central queue which can be managed to to which "jobs" can be added. The granularity we want to have is the session, step or turn, we want to remian with one queue and sequencial execution. No parallel and concurency for now.

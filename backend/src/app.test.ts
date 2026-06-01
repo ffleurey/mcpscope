@@ -4506,7 +4506,6 @@ describe('analysis launch', () => {
   it('single-step execute (?single_step=true) advances exactly one cursor step', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
-    // Only respond to the first LLM call (analysis_target / assess step)
     app = await buildBackendApp(config, {
       lmStudioGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
@@ -4523,7 +4522,6 @@ describe('analysis launch', () => {
     })
     expect(launchRes.statusCode).toBe(201)
     const childId = launchRes.json().session.id as string
-
     // Execute with single_step=true → should advance one step and return
     const execRes = await app.inject({
       method: 'POST',
@@ -4532,10 +4530,183 @@ describe('analysis launch', () => {
     expect(execRes.statusCode).toBe(200)
     expect(execRes.headers['content-type']).toContain('text/event-stream')
 
-    // The cursor step must still exist (analysis is not complete) OR
-    // if the workflow happened to complete in one step, the session is 'ready'
+    const steps = listStepRecordsBySession(app.backendDb.connection, childId)
+    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
+    const executedSteps = steps.filter(step => step.stepTypeKey !== 'analysis_v2_cursor')
+  expect(executedSteps.length).toBeGreaterThan(0)
+  expect((cursorStep?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+    expect(schemaKeys).not.toContain('analysis.final_analysis_report.v1')
+
     const sessionAfter = getSessionRecord(app.backendDb.connection, childId)
     expect(sessionAfter?.status).toBe('ready')
+  })
+
+  it('pause stops analysis session execution after the current step and allows restart from the next step', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const turnRef = { id: '' }
+    let callCount = 0
+
+    let notifyFirstLmCallStarted!: () => void
+    const firstLmCallStarted = new Promise<void>(resolve => {
+      notifyFirstLmCallStarted = resolve
+    })
+
+    let allowFirstLmCallToFinish!: () => void
+    const firstLmCallRelease = new Promise<void>(resolve => {
+      allowFirstLmCallToFinish = resolve
+    })
+
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          let content: string
+
+          if (idx === 0) {
+            notifyFirstLmCallStarted()
+            await firstLmCallRelease
+            content = JSON.stringify({
+              turn_id: turnRef.id,
+              round_id: `${turnRef.id}-R1`,
+              tool_call_part_id: `${turnRef.id}-P3`,
+              tool_name: 'test_tool',
+              expectation_match: 'match',
+              tool_call_assessment: 'The selected tool matched the stated intent and arguments.',
+              most_direct_cause: null,
+              parameter_or_call_issues: [],
+              post_call_assessment: null,
+            })
+          } else if (idx === 1) {
+            content = JSON.stringify({
+              turn_id: turnRef.id,
+              total_tool_calls_assessed: 1,
+              turn_outcome: 'successful',
+              turn_outcome_rationale: 'The assessed tool call was appropriate and successful.',
+              per_tool_findings: [{
+                tool_call_part_id: `${turnRef.id}-P3`,
+                tool_name: 'test_tool',
+                brief_finding: 'The tool call matched the user request.',
+              }],
+              cross_attempt_reconciliation: null,
+            })
+          } else {
+            content = JSON.stringify({
+              outcome: 'answered',
+              outcome_rationale: 'The session answered the question.',
+              primary_issue: null,
+              primary_issue_rationale: null,
+              path_efficiency: 'efficient',
+              path_efficiency_rationale: 'No unnecessary tool calls.',
+              findings: ['The session was effective.'],
+              tool_description_findings: [],
+              improvement_suggestions: [],
+              tool_description_improvement_suggestions: [],
+              total_tool_calls_assessed: 1,
+            })
+          }
+
+          return {
+            id: `cmpl-pause-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: { model_config_id: 'mc-1', target_turn_id: turnId, analysis_goal: 'Pause after the first assessed step.' },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const executePromise = app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+
+    await firstLmCallStarted
+
+    const pauseRes = await app.inject({
+      method: 'POST',
+      url: '/api/scheduler/pause',
+    })
+    expect(pauseRes.statusCode).toBe(200)
+
+    allowFirstLmCallToFinish()
+
+    const execRes = await executePromise
+    expect(execRes.statusCode).toBe(200)
+    expect(execRes.headers['content-type']).toContain('text/event-stream')
+
+    const artifactsAfterPause = app.backendDb.connection
+      .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ? ORDER BY created_at ASC`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeysAfterPause = artifactsAfterPause.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+    expect(schemaKeysAfterPause).toContain('analysis.tool_call_assessment.v1')
+    expect(schemaKeysAfterPause).not.toContain('analysis.turn_summary.v1')
+    expect(schemaKeysAfterPause).not.toContain('analysis.final_analysis_report.v1')
+
+    const stepsAfterPause = listStepRecordsBySession(app.backendDb.connection, childId)
+    const cursorStepAfterPause = stepsAfterPause.find(step => step.stepTypeKey === 'analysis_v2_cursor')
+    expect((cursorStepAfterPause?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+
+    const resumeRes = await app.inject({
+      method: 'POST',
+      url: '/api/scheduler/resume',
+    })
+    expect(resumeRes.statusCode).toBe(200)
+
+    const resumedExecRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(resumedExecRes.statusCode).toBe(200)
+
+    const artifactsAfterResume = app.backendDb.connection
+      .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ? ORDER BY created_at ASC`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeysAfterResume = artifactsAfterResume.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+    expect(schemaKeysAfterResume).toContain('analysis.turn_summary.v1')
+    expect(schemaKeysAfterResume).toContain('analysis.final_analysis_report.v1')
   })
 
   it('single-step execute on non-analysis session returns 400', async () => {

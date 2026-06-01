@@ -523,6 +523,11 @@ export async function buildBackendApp(
           }
           return
         }
+        if (schedulerEvent.type === 'scheduler-job-completed' && schedulerEvent.job.jobId === job.jobId) {
+          unsubscribe()
+          resolve()
+          return
+        }
         if (schedulerEvent.type === 'scheduler-job-failed' && schedulerEvent.job.jobId === job.jobId) {
           emitSseEvent({ type: 'analysis-failed', message: schedulerEvent.job.error ?? 'Job failed' })
           unsubscribe()
