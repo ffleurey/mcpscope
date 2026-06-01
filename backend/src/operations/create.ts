@@ -6,11 +6,8 @@ import {
   listLmConnections,
   listMcpServerProfiles,
   listModelConfigs,
-  getSessionRecord,
-  updateSessionRecord,
 } from '../persistence/repository.js'
 import { createSession, SessionIdConflictError, SessionIdGenerationError, SessionIdInputError } from '../runtime/modelTurns.js'
-import { runSessionInitialization } from '../runtime/sessionInit.js'
 import type { McpProfileSnapshot } from '../domain/model.js'
 import type { OperationContext } from './context.js'
 
@@ -66,7 +63,7 @@ export const createOperation = {
   schema: createInputSchema,
   outputSchema: createOutputSchema,
   async execute(ctx: OperationContext, input: CreateInput): Promise<CreateResult> {
-    const { db, lmStudioGateway, mcpGateway, logger } = ctx
+    const { db, logger } = ctx
     let mcpSnapshotRef: McpProfileSnapshot | null = null
 
     type TransactionResult =
@@ -172,19 +169,19 @@ export const createOperation = {
 
     const { session, modelConfigId, modelConfigName } = result
 
-    // Fire off initialization in background (caller polls via status)
-    runSessionInitialization(db, lmStudioGateway, mcpGateway, session.id, () => {}).catch((err: unknown) => {
-      logger?.error(
-        { sessionId: session.id, err: err instanceof Error ? err.message : String(err) },
-        'Detached session initialization failed',
-      )
-      const s = getSessionRecord(db.connection, session.id)
-      if (s && (s.initStatus === 'initializing' || s.initStatus === 'pending')) {
-        s.initStatus = 'error'
-        s.updatedAt = Date.now()
-        updateSessionRecord(db.connection, s)
+    // Enqueue initialization via the scheduler so init events flow through the
+    // centralized execution stream. Non-fatal: CLI/MCP callers that don't pass
+    // a scheduler (or where admission fails) can poll /status and wait for ready.
+    if (ctx.scheduler) {
+      try {
+        ctx.scheduler.enqueueInit(ctx, session.id)
+      } catch (err: unknown) {
+        logger?.error(
+          { sessionId: session.id, err: err instanceof Error ? err.message : String(err) },
+          'Scheduler init enqueue failed (non-fatal — session will initialize on first turn)',
+        )
       }
-    })
+    }
 
     return {
       api_version: 1,
