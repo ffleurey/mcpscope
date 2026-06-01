@@ -181,6 +181,43 @@ export class ExecutionScheduler {
   }
 
   /**
+   * Resolves when the given job reaches a terminal state (completed, failed, or
+   * removed). Resolves immediately if the job is already terminal.
+   *
+   * This is the canonical backend wait helper — use it inside route handlers
+   * that enqueue a job and need to await its outcome without opening an SSE
+   * stream. It removes the repeated subscribe-and-check boilerplate.
+   */
+  awaitJob(jobId: string): Promise<void> {
+    // Fast path: already terminal
+    if (this.lastTerminalJob?.jobId === jobId) return Promise.resolve()
+    const stillPresent = this.activeJob?.jobId === jobId
+      || this.pendingJobs.some(j => j.jobId === jobId)
+    if (!stillPresent) return Promise.resolve()
+
+    return new Promise<void>(resolve => {
+      const unsub = this.subscribe(evt => {
+        if (
+          (evt.type === 'scheduler-job-completed' || evt.type === 'scheduler-job-failed')
+          && evt.job.jobId === jobId
+        ) {
+          unsub(); resolve()
+          return
+        }
+        if (evt.type === 'scheduler-job-removed' && evt.jobId === jobId) {
+          unsub(); resolve()
+        }
+      })
+      // Re-check after subscribing to close the race window
+      if (this.lastTerminalJob?.jobId === jobId) { unsub(); resolve(); return }
+      if (
+        this.activeJob?.jobId !== jobId
+        && !this.pendingJobs.some(j => j.jobId === jobId)
+      ) { unsub(); resolve() }
+    })
+  }
+
+  /**
    * Remove a pending job from the queue.
    * Has no effect on the currently active job.
    * Returns true if the job was found and removed.
