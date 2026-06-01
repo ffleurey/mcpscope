@@ -55,7 +55,7 @@ These surfaces stay aligned around one backend-owned model and one backend-owned
 
 ### Backend-owned operation catalog
 
-The canonical operation layer lives in `backend/src/operations/`. Each operation in the catalog defines, in one place:
+The shared CLI/MCP operation catalog lives in `backend/src/operations/catalog.ts` and is re-exported through `backend/src/operations/index.ts`. Each shared operation in that catalog defines, in one place:
 
 - canonical operation ID
 - user-facing description (used by both CLI help and MCP tool descriptions)
@@ -75,9 +75,11 @@ Important rules:
 - the backend owns operation semantics and execution
 - the MCP interface does not call the backend API over loopback HTTP for shared operations
 - the CLI calls the backend over HTTP (it is a remote adapter by design)
-- machine-readable command semantics are defined once in `backend/src/operations/` (the single source of truth)
+- machine-readable command semantics are defined once in `backend/src/operations/catalog.ts` (the single source of truth)
 - presentation differences (text rendering, exit codes, MCP content formatting) are adapter concerns; semantic drift is not
-- every new shared operation should be added once to `backend/src/operations/` and then exposed automatically through both adapters
+- every new shared operation should be added once to `backend/src/operations/catalog.ts` and then exposed automatically through both adapters
+
+Backend-only HTTP operations may live alongside the shared ones under `backend/src/operations/`, but they are not part of the shared catalog unless they are added to `catalog.ts`.
 
 ## Runtime state and persistence
 

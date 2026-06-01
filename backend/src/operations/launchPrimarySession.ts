@@ -35,6 +35,15 @@ export interface LaunchPrimarySessionResult {
 
 export const launchPrimarySessionOutputSchema = {
   session: sessionRecordSchema,
+  initJobId: z.string().optional(),
+}
+
+export const launchPrimarySessionOperation = {
+  schema: launchPrimarySessionInputSchema,
+  outputSchema: launchPrimarySessionOutputSchema,
+  async execute(ctx: OperationContext, rawInput: unknown): Promise<LaunchPrimarySessionResult> {
+    return executePrimarySessionLaunch(ctx, rawInput)
+  },
 }
 
 export async function executePrimarySessionLaunch(

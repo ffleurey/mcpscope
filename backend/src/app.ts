@@ -68,7 +68,6 @@ import {
   createOperation,
   statusOperation,
   inspectOperation,
-  launchAnalysisOperation,
   OperationError,
   operationErrorResponse,
   operationErrorToHttpStatus,
@@ -76,8 +75,11 @@ import {
 } from './operations/index.js'
 import { ExecutionScheduler } from './runtime/scheduler.js'
 import type { SchedulerEvent } from './runtime/scheduler.js'
-import { executeCreateExplicit } from './operations/createExplicit.js'
-import { executePrimarySessionLaunch } from './operations/launchPrimarySession.js'
+import {
+  createExplicitOperation,
+  launchAnalysisSessionOperation,
+  launchPrimarySessionOperation,
+} from './operations/internal.js'
 import { buildAnalysisSystemPrompt, normalizeAnalysisGoal } from './analysis/systemPrompt.js'
 
 interface RuntimeDependencies {
@@ -320,10 +322,10 @@ export async function buildBackendApp(
 
   // ─── Create session (explicit config) ─────────────────────────────────────
   // Used by the frontend, which supplies its own fully-resolved model/MCP snapshots.
-  // Business logic is owned by executeCreateExplicit (backend/src/operations/createExplicit.ts).
+  // This stays backend-owned, but is intentionally not part of the shared CLI/MCP catalog.
   app.post('/api/sessions', async (request, reply) => {
     try {
-      const result = await executeCreateExplicit(opCtx, request.body)
+      const result = await createExplicitOperation.execute(opCtx, request.body)
       reply.code(201)
       return result
     } catch (err) {
@@ -353,7 +355,7 @@ export async function buildBackendApp(
 
   app.post('/api/session-constructors/primary', async (request, reply) => {
     try {
-      const result = await executePrimarySessionLaunch(opCtx, request.body)
+      const result = await launchPrimarySessionOperation.execute(opCtx, request.body)
       reply.code(201)
       return result
     } catch (err) {
@@ -362,30 +364,8 @@ export async function buildBackendApp(
   })
 
   app.post('/api/session-constructors/session-analysis', async (request, reply) => {
-    const body = z.object({
-      target_session_id: z.string(),
-      target_turn_id: z.string(),
-      analysis_goal: z.string().optional(),
-      model_config_id: z.string().optional(),
-      additional_instructions: z.string().optional(),
-      system_prompt_override: z.string().optional(),
-      temperature: z.number().optional(),
-      selected_tool_names: z.array(z.string()).optional(),
-      only_failed_tool_calls: z.boolean().optional(),
-      evaluation_criteria: z.array(z.string()).optional(),
-    }).parse(request.body)
     try {
-      const result = await launchAnalysisOperation.execute(opCtx, body.target_session_id, {
-        target_turn_id: body.target_turn_id,
-        analysis_goal: body.analysis_goal,
-        model_config_id: body.model_config_id,
-        additional_instructions: body.additional_instructions,
-        system_prompt_override: body.system_prompt_override,
-        temperature: body.temperature,
-        selected_tool_names: body.selected_tool_names,
-        only_failed_tool_calls: body.only_failed_tool_calls,
-        evaluation_criteria: body.evaluation_criteria,
-      })
+      const result = await launchAnalysisSessionOperation.execute(opCtx, request.body)
       reply.code(201)
       return result
     } catch (err) {
@@ -539,7 +519,11 @@ export async function buildBackendApp(
   app.post('/api/sessions/:sessionId/analyze', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     try {
-      const result = await launchAnalysisOperation.execute(opCtx, sessionId, request.body)
+      const body = z.object({}).passthrough().parse(request.body)
+      const result = await launchAnalysisSessionOperation.execute(opCtx, {
+        ...body,
+        target_session_id: sessionId,
+      })
       reply.code(201)
       return result
     } catch (err) {

@@ -75,9 +75,9 @@ Result field naming is snake_case throughout (same shapes as CLI `--json` mode).
 
 ## Backend-owned operation catalog
 
-The tool descriptions, input schemas, output schemas, and execution functions come from `backend/src/operations/`. MCP operations execute directly in the backend process — no loopback HTTP.
+The tool descriptions, input schemas, output schemas, and execution functions come from the shared backend operation catalog in `backend/src/operations/catalog.ts` and `backend/src/operations/index.ts`. MCP operations execute directly in the backend process — no loopback HTTP.
 
-There is no separate shared package. The backend operation catalog is the single source of truth for both the CLI result types and the MCP tool surface.
+There is no separate shared package. The backend operation catalog is the single source of truth for both the CLI result types and the MCP tool surface. Backend-only HTTP operations may live nearby in `backend/src/operations/`, but they are not exposed to MCP unless added to the shared catalog.
 
 To verify parity: `npm test` — the parity test suite in `backend/src/mcp/mcp.test.ts` enforces:
 

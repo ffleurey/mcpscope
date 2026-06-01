@@ -1,12 +1,10 @@
 /**
- * launchAnalysis — backend-owned operation for POST /api/sessions/:sessionId/analyze.
+ * launchAnalysis — backend-owned HTTP operation for creating a session_analysis
+ * child session from a target session and completed target turn.
  *
- * v2: Creates a session_analysis child session and runs the full analysis
- * workflow synchronously on the backend. Returns the completed analysis session
- * once the workflow finishes (or errors).
- *
- * Supersedes the v1 split-ownership model where the frontend drove prelude
- * init and the first turn.
+ * This is intentionally not part of the shared CLI/MCP catalog. It exists for
+ * backend HTTP routes and frontend flows, while shared CLI/MCP operations stay
+ * limited to the published catalog in catalog.ts.
  */
 import { z } from 'zod'
 import { OperationError } from './errors.js'
@@ -55,6 +53,12 @@ export const launchAnalysisInputSchema = z.object({
 
 export type LaunchAnalysisInput = z.infer<typeof launchAnalysisInputSchema>
 
+export const launchAnalysisSessionInputSchema = launchAnalysisInputSchema.extend({
+  target_session_id: z.string().min(1, 'target_session_id must not be empty'),
+})
+
+export type LaunchAnalysisSessionInput = z.infer<typeof launchAnalysisSessionInputSchema>
+
 // ─── Result ───────────────────────────────────────────────────────────────────
 
 export interface LaunchAnalysisResult {
@@ -66,17 +70,12 @@ export const launchAnalysisOutputSchema = {
   session: sessionRecordSchema,
 }
 
-export const launchAnalysisOperation = {
-  id: 'launch_analysis' as const,
-  description: 'Launch a session_analysis child session for a target session and completed target turn.',
-  schema: launchAnalysisInputSchema,
+export const launchAnalysisSessionOperation = {
+  schema: launchAnalysisSessionInputSchema,
   outputSchema: launchAnalysisOutputSchema,
-  async execute(
-    ctx: OperationContext,
-    targetSessionId: string,
-    rawInput: unknown,
-  ): Promise<LaunchAnalysisResult> {
-    return executeAnalysisLaunch(ctx, targetSessionId, rawInput)
+  async execute(ctx: OperationContext, rawInput: unknown): Promise<LaunchAnalysisResult> {
+    const input = launchAnalysisSessionInputSchema.parse(rawInput)
+    return executeAnalysisLaunch(ctx, input.target_session_id, input)
   },
 }
 
