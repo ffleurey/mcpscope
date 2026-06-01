@@ -1,6 +1,7 @@
 import type { BackendDatabase } from '../persistence/db.js'
 import type { LmStudioGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
+import type { ExecutionScheduler } from '../runtime/scheduler.js'
 
 /**
  * Runtime context passed to every backend operation execute function.
@@ -16,4 +17,6 @@ export interface OperationContext {
   analysisMcpUrl?: string
   /** Optional logger for background error reporting. */
   logger?: { error: (data: Record<string, unknown>, msg: string) => void }
+  /** Backend-owned execution scheduler. Present when the app is initialized normally. */
+  scheduler?: ExecutionScheduler
 }

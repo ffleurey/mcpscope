@@ -122,6 +122,7 @@ The important distinction is architectural rather than cosmetic:
 The shipped product implements:
 
 - `Session` and `Step` / `Turn` execution model with explicit loop boundaries
+- a backend-owned sequential execution scheduler with one active slot, one in-memory queue, and one global execution event stream
 - `SessionContainer` ownership: sessions may belong to a parent session or a `Benchmark` container
 - `Benchmark` as a minimal `SessionContainer` for grouping sessions (full benchmark domain design is future work)
 - generic container/session/step persistence without table-per-subtype growth
@@ -134,7 +135,22 @@ The shipped product implements:
 What is **not** implemented yet:
 
 - full benchmark product work beyond minimal container support
+- public generic step enqueue across all adapters and client helpers
 - broader workflow automation and cleanup beyond the shipped analysis-session workflow
+
+### Execution control plane
+
+Execution ownership now sits behind a backend scheduler rather than being spread across per-route detached execution paths.
+
+Current scheduler behavior:
+
+- one sequential worker and one in-memory queue
+- one active job at a time across all sessions
+- global snapshot plus global scheduler SSE stream for UI/CLI/MCP-facing monitoring
+- session-target jobs are still executed at step boundaries rather than as opaque whole-session black boxes
+- pausing is boundary-based: the scheduler stops after the current running step or turn finishes, then leaves the remaining session state resumable from persisted runtime records
+
+This means a request to execute a session does not grant that session an uninterrupted private loop. The scheduler still owns control between steps so queue pause/resume semantics remain coherent.
 
 The important rule is that mcpscope keeps one canonical model across persistence, API, UI, and
 CLI. Provider-specific transport structures are normalized into that model at the integration

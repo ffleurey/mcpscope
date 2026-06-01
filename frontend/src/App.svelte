@@ -3,27 +3,30 @@
   import { currentView } from './lib/navStore'
   import { initConnectionStore, backendError } from './lib/connectionStore'
   import { initSessionStore } from './lib/sessionStore'
+  import { initExecutionStore, destroyExecutionStore } from './lib/executionStore'
   import Sidebar from './lib/components/Sidebar.svelte'
   import LmConnections from './lib/components/LmConnections.svelte'
   import ModelConfigs from './lib/components/ModelConfigs.svelte'
   import McpProfiles from './lib/components/McpProfiles.svelte'
   import ChatView from './lib/components/ChatView.svelte'
   import ErrorDialog from './lib/components/ErrorDialog.svelte'
+  import ExecutionBar from './lib/components/ExecutionBar.svelte'
 
   let loading = $state(true)
 
-  onMount(async () => {
-    try {
-      await Promise.all([initConnectionStore(), initSessionStore()])
-    } finally {
-      loading = false
-    }
+  onMount(() => {
+    Promise.all([initConnectionStore(), initSessionStore()])
+      .then(() => { initExecutionStore() })
+      .finally(() => { loading = false })
+    return destroyExecutionStore
   })
 </script>
 
 <div class="app-shell">
   <Sidebar />
   <main class="main-content">
+    <ExecutionBar />
+
     {#if $backendError}
       <div class="backend-error">
         <strong>Backend error:</strong> {$backendError}

@@ -161,7 +161,7 @@ export const stepRecordSchema = z.object({
 export const turnRecordSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
-  ownerStepId: z.string().nullable(),
+  ownerStepId: z.string().nullable().default(null),
   sequenceNumber: z.number().int().nonnegative(),
   status: turnStatusSchema,
   createdAt: z.number().int().nonnegative(),

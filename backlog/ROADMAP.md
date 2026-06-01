@@ -32,9 +32,9 @@ Future work should build on those constraints rather than reopening them casuall
 
 ## Current Planning Posture
 
-There is no active near-term specification task at the moment.
+One near-term follow-up is active in specification: public generic step enqueue for the scheduler.
 
-The backlog is intentionally parked again until the next direction is chosen explicitly.
+That follow-up is intentionally narrow and should not reopen the already-landed scheduler control-plane work.
 
 The shipped session-analysis workflow should now be treated as established project behavior, not as
 an open specification exercise.

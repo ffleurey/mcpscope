@@ -86,7 +86,7 @@ function buildMcpProfileSnapshot(mcpProfile: McpServerProfile) {
   }
 }
 
-async function refreshSessions(): Promise<SessionSummary[]> {
+export async function refreshSessions(): Promise<SessionSummary[]> {
   const response = await listSessions({ includeChildren: true })
   const sessions = response.sessions
   chatSessions.set(sessions)
@@ -156,6 +156,61 @@ export function startDraftSession(): void {
   activeTurnStream.set(null)
 }
 
+/**
+ * Called by executionStore when the scheduler starts a job for a session.
+ * If that session is currently open and not already streaming, prime
+ * activeTurnStream so live scheduler-execution-events will render.
+ */
+export function initExternalTurnStream(sessionId: string, prompt: string): void {
+  if (get(activeChatId) !== sessionId) return
+  if (get(activeTurnStream) !== null) return
+  activeTurnStream.set(createTurnStreamingState(sessionId, prompt))
+}
+
+/**
+ * Called by executionStore when a scheduler-execution-event arrives for a
+ * session that is currently open. Routes the event to activeTurnStream /
+ * activeTrace exactly as the frontend-initiated streaming path does.
+ */
+export function applyExternalStreamEvent(
+  sessionId: string,
+  prompt: string,
+  event: TurnStreamEvent | AnalysisStreamEvent,
+): void {
+  if (get(activeChatId) !== sessionId) return
+  // Skip when the frontend is already streaming this session via its own SSE
+  // call (sendTurn, executeAnalysis, executeAnalysisStep). Those paths handle
+  // the events themselves; we only drive activeTurnStream for external turns.
+  if (get(isSendingTurn) || get(isExecutingAnalysis) || get(isSteppingAnalysis)) return
+  const session = get(chatSessions).find(s => s.id === sessionId) ?? null
+  const isAnalysis = session?.session_type === 'session_analysis'
+  const isTurnEvent = (
+    event.type === 'turn-started'
+    || event.type === 'round-started'
+    || event.type === 'part-delta'
+    || event.type === 'part-committed'
+    || event.type === 'round-committed'
+    || event.type === 'turn-committed'
+    || event.type === 'turn-failed'
+  )
+  // For analysis sessions, route all events (including turn-committed) through
+  // applyAnalysisStreamEvent so it can keep activeTurnStream alive between turns.
+  if (isAnalysis) {
+    applyAnalysisStreamEvent(session, event as AnalysisStreamEvent)
+  } else if (isTurnEvent && session) {
+    applyTurnStreamEvent(session, prompt, event as TurnStreamEvent)
+  } else if (!isTurnEvent) {
+    applyAnalysisStreamEvent(session, event as AnalysisStreamEvent)
+  }
+}
+
+/**
+ * Exported for executionStore — refreshes the active trace after a job completes.
+ */
+export async function refreshActiveTurnTrace(): Promise<void> {
+  await refreshActiveTrace()
+}
+
 export function openPrimaryLaunchDialog(): void {
   clearSessionError()
   isPrimaryLaunchDialogOpen.set(true)
@@ -171,6 +226,52 @@ export async function selectChat(sessionId: string): Promise<void> {
 
   try {
     await refreshActiveTrace()
+    // If a scheduler job is running for this session, restore live streaming state.
+    // Replay cached execution events that arrived while this session was not selected,
+    // then prime activeTurnStream for any new events still in flight.
+    const { schedulerSnapshot: snap, getSessionStreamEvents, clearSessionStreamCache } = await import('./executionStore')
+    const currentSnap = get(snap)
+    const isJobActive = currentSnap.activeJob?.target.sessionId === sessionId
+      || currentSnap.pendingJobs.some(j => j.target.sessionId === sessionId)
+
+    if (isJobActive) {
+      const cachedEvents = getSessionStreamEvents(sessionId)
+      if (cachedEvents.length > 0) {
+        // Find the boundary: only replay events after the last terminal event
+        // (turn-committed / analysis-complete / analysis-failed). Events before
+        // the boundary are already reflected in the DB-loaded trace.
+        const TERMINAL_TYPES = new Set(['turn-committed', 'analysis-complete', 'analysis-failed'])
+        let startIdx = 0
+        for (let i = cachedEvents.length - 1; i >= 0; i--) {
+          if (TERMINAL_TYPES.has(cachedEvents[i]!.type)) {
+            startIdx = i + 1
+            break
+          }
+        }
+        const eventsToReplay = cachedEvents.slice(startIdx)
+
+        if (eventsToReplay.length > 0) {
+          // Initialize activeTurnStream so replay deltas have somewhere to land
+          activeTurnStream.set(createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''))
+          const sessionSummary = get(chatSessions).find(s => s.id === sessionId) ?? null
+          const isAnalysis = sessionSummary?.session_type === 'session_analysis'
+          for (const event of eventsToReplay) {
+            if (isAnalysis && sessionSummary) {
+              applyAnalysisStreamEvent(sessionSummary, event as AnalysisStreamEvent)
+            } else if (!isAnalysis && sessionSummary) {
+              applyTurnStreamEvent(sessionSummary, currentSnap.activeJob?.prompt ?? '', event as TurnStreamEvent)
+            }
+          }
+        } else if (get(activeTurnStream) === null) {
+          // No in-flight events but job is still running — keep stream open
+          activeTurnStream.set(createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''))
+        }
+        // Cache served its purpose — clear it; new events come in live
+        clearSessionStreamCache(sessionId)
+      } else if (get(activeTurnStream) === null) {
+        activeTurnStream.set(createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''))
+      }
+    }
   } catch (error) {
     setSessionError(toAppError(error))
     throw error
@@ -369,7 +470,7 @@ export async function importTraceFile(file: File): Promise<void> {
   }
 }
 
-function applyTurnStreamEvent(
+export function applyTurnStreamEvent(
   session: SessionSummary,
   userContent: string,
   event: TurnStreamEvent,
@@ -489,7 +590,9 @@ export async function executeAnalysis(): Promise<void> {
 
   clearSessionError()
   isExecutingAnalysis.set(true)
-  activeTurnStream.set(null)
+  // Initialize streaming state so part-delta events render immediately.
+  // Analysis sessions use '' as userContent (no single user message).
+  activeTurnStream.set(createTurnStreamingState(sessionId, ''))
 
   const sessionSummary = get(activeSession)
 
@@ -522,7 +625,7 @@ export async function executeAnalysisStep(): Promise<void> {
 
   clearSessionError()
   isSteppingAnalysis.set(true)
-  activeTurnStream.set(null)
+  activeTurnStream.set(createTurnStreamingState(sessionId, ''))
 
   const sessionSummary = get(activeSession)
 
@@ -542,18 +645,28 @@ export async function executeAnalysisStep(): Promise<void> {
   }
 }
 
-function applyAnalysisStreamEvent(
+export function applyAnalysisStreamEvent(
   session: SessionSummary | null,
   event: AnalysisStreamEvent,
 ): void {
-  // Route turn-stream events to the existing handler
+  // Route turn-stream events to the existing handler, with a special case for
+  // turn-committed: primary sessions clear activeTurnStream on turn-committed,
+  // but analysis sessions may run multiple turns. Reset to a fresh streaming
+  // state so the next turn-started can bind its turn ID correctly.
+  if (event.type === 'turn-committed') {
+    activeTrace.set(event.trace)
+    upsertSessionSummary(event.trace.session)
+    if (session) {
+      activeTurnStream.set(createTurnStreamingState(session.id, ''))
+    }
+    return
+  }
   if (
     event.type === 'turn-started'
     || event.type === 'round-started'
     || event.type === 'part-delta'
     || event.type === 'part-committed'
     || event.type === 'round-committed'
-    || event.type === 'turn-committed'
     || event.type === 'turn-failed'
   ) {
     if (session) {
