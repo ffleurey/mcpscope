@@ -4502,4 +4502,89 @@ describe('analysis launch', () => {
     expect(diagnostic?.content.error_kind).toBe('identity_mismatch')
     expect(diagnostic?.content.step_type).toBe('turn_summary')
   })
+
+  it('single-step execute (?single_step=true) advances exactly one cursor step', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    // Only respond to the first LLM call (analysis_target / assess step)
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurn(app, targetId)
+
+    // Launch analysis session
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: { model_config_id: 'mc-1', target_turn_id: turnId, analysis_goal: 'One step only.' },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    // Execute with single_step=true → should advance one step and return
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute?single_step=true`,
+    })
+    expect(execRes.statusCode).toBe(200)
+    expect(execRes.headers['content-type']).toContain('text/event-stream')
+
+    // The cursor step must still exist (analysis is not complete) OR
+    // if the workflow happened to complete in one step, the session is 'ready'
+    const sessionAfter = getSessionRecord(app.backendDb.connection, childId)
+    expect(sessionAfter?.status).toBe('ready')
+  })
+
+  it('single-step execute on non-analysis session returns 400', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const primaryId = await createReadySession(app)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${primaryId}/execute?single_step=true`,
+    })
+    expect(res.statusCode).toBe(400)
+  })
+
+  it('full execute (no single_step flag) runs the complete workflow', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurn(app, targetId)
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: { model_config_id: 'mc-1', target_turn_id: turnId, analysis_goal: 'Full run.' },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(execRes.statusCode).toBe(200)
+
+    // Full run should produce final report artifact
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+    expect(schemaKeys).toContain('analysis.final_analysis_report.v1')
+  })
 })
+

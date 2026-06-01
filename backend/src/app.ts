@@ -467,6 +467,8 @@ export async function buildBackendApp(
   // Replaces the previous direct-execution path.
   app.post('/api/sessions/:sessionId/execute', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const { single_step } = z.object({ single_step: z.string().optional() }).parse(request.query)
+    const isSingleStep = single_step === 'true' || single_step === '1'
 
     // Validate session before enqueue
     const session = getSessionRecord(database.connection, sessionId)
@@ -479,9 +481,20 @@ export async function buildBackendApp(
       return apiError('validation', 'Session is not an analysis session.')
     }
 
-    let job: Awaited<ReturnType<typeof scheduler.enqueueSession>>
+    let job: Awaited<ReturnType<typeof scheduler.enqueueSession | typeof scheduler.enqueueStep>>
     try {
-      job = scheduler.enqueueSession(opCtx, sessionId)
+      if (isSingleStep) {
+        // Find the cursor step and enqueue a single-step job
+        const steps = listStepRecordsBySession(database.connection, sessionId)
+        const cursorStep = steps.find(s => s.stepTypeKey === 'analysis_v2_cursor')
+        if (!cursorStep) {
+          reply.code(422)
+          return apiError('validation', 'Analysis session has no cursor step — it may not have been initialized correctly.')
+        }
+        job = scheduler.enqueueStep(opCtx, sessionId, cursorStep.id)
+      } else {
+        job = scheduler.enqueueSession(opCtx, sessionId)
+      }
     } catch (err) {
       return handleOperationError(err, reply)
     }

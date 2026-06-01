@@ -437,6 +437,93 @@ export class ExecutionScheduler {
     }
   }
 
+  /**
+   * Enqueue a step target.
+   *
+   * Admission: the session must be a ready analysis session, the step must be
+   * the cursor step (analysis_v2_cursor) for that session, the cursor phase must
+   * not be complete or error, and the session must not already have an active
+   * or pending job.
+   *
+   * Returns the new job.
+   */
+  enqueueStep(opCtx: SchedulerContext, sessionId: string, stepId: string): ExecutionJob {
+    const { db } = opCtx
+
+    const session = getSessionRecord(db.connection, sessionId)
+    if (!session) {
+      throw new OperationError('Session not found', SCHEDULER_ERROR.SESSION_NOT_FOUND)
+    }
+    if (session.sessionType !== 'session_analysis') {
+      throw new OperationError(
+        'Step execution is only supported for analysis sessions.',
+        SCHEDULER_ERROR.STEP_NOT_READY,
+      )
+    }
+    if (session.initStatus !== 'ready') {
+      throw new OperationError(
+        `Session is not ready (initStatus = '${session.initStatus}')`,
+        SCHEDULER_ERROR.SESSION_NOT_INITIALIZED,
+      )
+    }
+
+    // Validate the step exists and belongs to this session
+    const steps = listStepRecordsBySession(db.connection, sessionId)
+    const targetStep = steps.find(s => s.id === stepId)
+    if (!targetStep) {
+      throw new OperationError(
+        `Step '${stepId}' not found in session '${sessionId}'.`,
+        SCHEDULER_ERROR.STEP_NOT_FOUND,
+      )
+    }
+
+    // The step must be the cursor step — only the cursor tracks what comes next
+    const CURSOR_STEP_TYPE = 'analysis_v2_cursor'
+    if (targetStep.stepTypeKey !== CURSOR_STEP_TYPE) {
+      throw new OperationError(
+        `Step '${stepId}' is not the cursor step for this session.`,
+        SCHEDULER_ERROR.STEP_NOT_READY,
+      )
+    }
+
+    // Cursor phase must be runnable (not complete / error)
+    const phase = (targetStep.state as { phase?: string }).phase
+    if (phase === 'complete' || phase === 'error') {
+      throw new OperationError(
+        `Analysis workflow is already in terminal phase '${phase}'.`,
+        SCHEDULER_ERROR.STEP_NOT_READY,
+      )
+    }
+
+    // No duplicate jobs for the same session
+    if (this.hasJobForSession(sessionId)) {
+      throw new OperationError(
+        'This session already has an active or pending job in the scheduler.',
+        SCHEDULER_ERROR.SESSION_ALREADY_QUEUED,
+      )
+    }
+
+    // Check for another active session
+    const active = findActiveSession(db.connection, sessionId)
+    if (active) {
+      throw new OperationError(
+        'Another session is currently active. Nothing was queued.',
+        SCHEDULER_ERROR.SESSION_ACTIVE,
+        { id: active.id, state: active.state },
+      )
+    }
+
+    const job: ExecutionJob = {
+      jobId: randomUUID(),
+      target: { kind: 'step', sessionId, stepId },
+      createdAt: Date.now(),
+    }
+    this.pendingJobs.push(job)
+    this.emit({ type: 'scheduler-job-enqueued', job: { ...job } })
+    this.kickWorker(opCtx)
+    return job
+  }
+
   // ── Execution dispatch ────────────────────────────────────────────────────
 
   private async executeJob(job: ActiveExecutionJob, opCtx: SchedulerContext): Promise<void> {
@@ -455,7 +542,9 @@ export class ExecutionScheduler {
       })
     }
 
-    if (session.sessionType === 'primary') {
+    if (target.kind === 'step') {
+      await this.executeAnalysisOneStepJob(job, opCtx, emitExecutionEvent)
+    } else if (session.sessionType === 'primary') {
       await this.executePrimaryJob(job, opCtx, emitExecutionEvent)
     } else if (session.sessionType === 'session_analysis') {
       await this.executeAnalysisJob(job, opCtx, emitExecutionEvent)
@@ -538,6 +627,55 @@ export class ExecutionScheduler {
     }
 
     // Build and emit final trace bundle (mirrors executeAnalysisWorkflow)
+    const finalSession = getSessionRecord(db.connection, sessionId)!
+    const finalParts = listPartRecordsBySession(db.connection, sessionId)
+    const trace = buildSessionTraceBundle({
+      session: finalSession,
+      steps: listStepRecordsBySession(db.connection, sessionId),
+      turns: listTurnRecordsBySession(db.connection, sessionId),
+      rounds: listRoundRecordsBySession(db.connection, sessionId),
+      parts: finalParts,
+      rawExchanges: listRawExchangeRecordsBySession(db.connection, sessionId),
+      artifacts: listArtifactsBySession(db.connection, sessionId),
+      transcript: deriveTranscriptEntries(finalParts),
+      context: deriveContextEntries(finalParts),
+    })
+    emitExecutionEvent({ type: 'analysis-complete', trace })
+  }
+
+  private async executeAnalysisOneStepJob(
+    job: ActiveExecutionJob,
+    opCtx: SchedulerContext,
+    emitExecutionEvent: (event: TurnStreamEvent | AnalysisStreamEvent) => void,
+  ): Promise<void> {
+    const { db, lmStudioGateway, mcpGateway } = opCtx
+    const sessionId = job.target.sessionId
+
+    const session = getSessionRecord(db.connection, sessionId)
+    if (!session) throw new Error(`Session ${sessionId} not found at one-step execution time`)
+
+    // Mark session active
+    session.status = 'active'
+    session.updatedAt = Date.now()
+    updateSessionRecord(db.connection, session)
+
+    try {
+      const instance = AnalysisSession.rehydrateFromDb(db, lmStudioGateway, mcpGateway, sessionId)
+      if (!instance) {
+        throw new Error('Failed to rehydrate analysis session from cursor step')
+      }
+      // Execute exactly one step, then stop
+      await instance.resumeOneStep(emitExecutionEvent)
+    } finally {
+      const finalSession = getSessionRecord(db.connection, sessionId) ?? session
+      if (finalSession.status === 'active') {
+        finalSession.status = 'ready'
+        finalSession.updatedAt = Date.now()
+        updateSessionRecord(db.connection, finalSession)
+      }
+    }
+
+    // Emit final trace after the one step completes
     const finalSession = getSessionRecord(db.connection, sessionId)!
     const finalParts = listPartRecordsBySession(db.connection, sessionId)
     const trace = buildSessionTraceBundle({

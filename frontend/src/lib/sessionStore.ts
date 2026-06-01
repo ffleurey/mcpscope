@@ -226,16 +226,51 @@ export async function selectChat(sessionId: string): Promise<void> {
 
   try {
     await refreshActiveTrace()
-    // If a scheduler job is already running for this session (e.g. opened from
-    // the sidebar while a MCP/CLI turn is in progress), prime activeTurnStream
-    // so incoming scheduler-execution-event updates render live.
-    const { schedulerSnapshot: snap } = await import('./executionStore')
-    const activeJob = get(snap).activeJob
-    if (
-      activeJob?.target.sessionId === sessionId
-      && get(activeTurnStream) === null
-    ) {
-      activeTurnStream.set(createTurnStreamingState(sessionId, activeJob.prompt ?? ''))
+    // If a scheduler job is running for this session, restore live streaming state.
+    // Replay cached execution events that arrived while this session was not selected,
+    // then prime activeTurnStream for any new events still in flight.
+    const { schedulerSnapshot: snap, getSessionStreamEvents, clearSessionStreamCache } = await import('./executionStore')
+    const currentSnap = get(snap)
+    const isJobActive = currentSnap.activeJob?.target.sessionId === sessionId
+      || currentSnap.pendingJobs.some(j => j.target.sessionId === sessionId)
+
+    if (isJobActive) {
+      const cachedEvents = getSessionStreamEvents(sessionId)
+      if (cachedEvents.length > 0) {
+        // Find the boundary: only replay events after the last terminal event
+        // (turn-committed / analysis-complete / analysis-failed). Events before
+        // the boundary are already reflected in the DB-loaded trace.
+        const TERMINAL_TYPES = new Set(['turn-committed', 'analysis-complete', 'analysis-failed'])
+        let startIdx = 0
+        for (let i = cachedEvents.length - 1; i >= 0; i--) {
+          if (TERMINAL_TYPES.has(cachedEvents[i]!.type)) {
+            startIdx = i + 1
+            break
+          }
+        }
+        const eventsToReplay = cachedEvents.slice(startIdx)
+
+        if (eventsToReplay.length > 0) {
+          // Initialize activeTurnStream so replay deltas have somewhere to land
+          activeTurnStream.set(createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''))
+          const sessionSummary = get(chatSessions).find(s => s.id === sessionId) ?? null
+          const isAnalysis = sessionSummary?.session_type === 'session_analysis'
+          for (const event of eventsToReplay) {
+            if (isAnalysis && sessionSummary) {
+              applyAnalysisStreamEvent(sessionSummary, event as AnalysisStreamEvent)
+            } else if (!isAnalysis && sessionSummary) {
+              applyTurnStreamEvent(sessionSummary, currentSnap.activeJob?.prompt ?? '', event as TurnStreamEvent)
+            }
+          }
+        } else if (get(activeTurnStream) === null) {
+          // No in-flight events but job is still running — keep stream open
+          activeTurnStream.set(createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''))
+        }
+        // Cache served its purpose — clear it; new events come in live
+        clearSessionStreamCache(sessionId)
+      } else if (get(activeTurnStream) === null) {
+        activeTurnStream.set(createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''))
+      }
     }
   } catch (error) {
     setSessionError(toAppError(error))

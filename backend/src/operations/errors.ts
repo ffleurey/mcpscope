@@ -31,6 +31,7 @@ export function operationErrorToHttpStatus(code: string | undefined): number {
     case 'session_not_found':
     case 'hierarchical_id_not_found':
     case 'not_found':
+    case 'step_not_found':
       return 404
     case 'invalid_session_id':
     case 'invalid_hierarchical_id':
@@ -39,6 +40,7 @@ export function operationErrorToHttpStatus(code: string | undefined): number {
     case 'turn_in_progress':
     case 'session_not_initialized':
     case 'session_already_queued':
+    case 'step_not_ready':
     case 'duplicate_session_id':
     case 'session_id_generation_failed':
       return 409
