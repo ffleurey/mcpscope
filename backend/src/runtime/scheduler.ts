@@ -34,6 +34,8 @@ import { buildSessionTraceBundle } from '../domain/trace.js'
 import { deriveTranscriptEntries, deriveContextEntries } from '../domain/selectors.js'
 import { ChatSession } from './chatSession.js'
 import type { TurnStreamEvent, AnalysisStreamEvent } from './streamEvents.js'
+import { runSessionInitialization } from './sessionInit.js'
+import type { PreludeStreamEvent } from './sessionInit.js'
 import { OperationError } from '../operations/errors.js'
 import { formatTurnId } from '../domain/hierarchicalIds.js'
 import type { TurnRecord } from '../domain/model.js'
@@ -67,10 +69,12 @@ export interface SchedulerContext {
  * Generic execution target.
  * Session target: continue the session until it blocks or completes.
  * Step target: execute exactly one ready step.
+ * Init target: run session initialization (prelude) for a primary session.
  */
 export type ExecutionTarget =
   | { kind: 'session'; sessionId: string }
   | { kind: 'step'; sessionId: string; stepId: string }
+  | { kind: 'init'; sessionId: string }
 
 /** A queued execution job. */
 export interface ExecutionJob {
@@ -113,7 +117,7 @@ export type SchedulerEvent =
   | { type: 'scheduler-job-removed'; jobId: string; target: ExecutionTarget }
   | { type: 'scheduler-paused' }
   | { type: 'scheduler-resumed' }
-  | { type: 'scheduler-execution-event'; sessionId: string; jobId: string; event: TurnStreamEvent | AnalysisStreamEvent }
+  | { type: 'scheduler-execution-event'; sessionId: string; jobId: string; event: TurnStreamEvent | AnalysisStreamEvent | PreludeStreamEvent }
 
 export type SchedulerEventListener = (event: SchedulerEvent) => void
 
@@ -188,6 +192,63 @@ export class ExecutionScheduler {
     if (!job) return false
     this.emit({ type: 'scheduler-job-removed', jobId, target: job.target })
     return true
+  }
+
+  /**
+   * Enqueue a session initialization (prelude) job for a primary session.
+   *
+   * Admission: the session must exist, be a primary session, have initStatus
+   * in ['pending', 'initializing'], no other session must be active, and no
+   * duplicate job for the same session may be pending or active.
+   *
+   * Prelude events (part-committed, prelude-complete, prelude-failed) are
+   * emitted through the scheduler event stream as scheduler-execution-events.
+   *
+   * Returns the new job.
+   */
+  enqueueInit(opCtx: SchedulerContext, sessionId: string): ExecutionJob {
+    const { db } = opCtx
+
+    const session = getSessionRecord(db.connection, sessionId)
+    if (!session) {
+      throw new OperationError('Session not found', SCHEDULER_ERROR.SESSION_NOT_FOUND)
+    }
+    if (session.sessionType !== 'primary') {
+      throw new OperationError(
+        'Init jobs are only supported for primary sessions.',
+        'validation',
+      )
+    }
+    if (session.initStatus === 'ready') {
+      throw new OperationError(
+        'Session is already initialized.',
+        'session_already_initialized' as const,
+      )
+    }
+    const active = findActiveSession(db.connection, sessionId)
+    if (active) {
+      throw new OperationError(
+        'Another session is currently active. Nothing was started.',
+        SCHEDULER_ERROR.SESSION_ACTIVE,
+        active,
+      )
+    }
+    if (this.hasJobForSession(sessionId)) {
+      throw new OperationError(
+        'This session already has an active or pending job in the scheduler.',
+        SCHEDULER_ERROR.SESSION_ALREADY_QUEUED,
+      )
+    }
+
+    const job: ExecutionJob = {
+      jobId: randomUUID(),
+      target: { kind: 'init', sessionId },
+      createdAt: Date.now(),
+    }
+    this.pendingJobs.push(job)
+    this.emit({ type: 'scheduler-job-enqueued', job: { ...job } })
+    this.kickWorker(opCtx)
+    return job
   }
 
   /**
@@ -382,6 +443,12 @@ export class ExecutionScheduler {
     this.workerActive = true
     this.runWorker(opCtx).finally(() => {
       this.workerActive = false
+      // If jobs arrived during the window between the worker's last while-check
+      // and this .finally() (e.g. a route handler continued from a job-completed
+      // subscription before workerActive was cleared), restart the worker now.
+      if (this.pendingJobs.length > 0) {
+        this.kickWorker(opCtx)
+      }
     })
   }
 
@@ -533,7 +600,7 @@ export class ExecutionScheduler {
       throw new Error(`Session ${target.sessionId} not found at execution time`)
     }
 
-    const emitExecutionEvent = (event: TurnStreamEvent | AnalysisStreamEvent) => {
+    const emitExecutionEvent = (event: TurnStreamEvent | AnalysisStreamEvent | PreludeStreamEvent) => {
       this.emit({
         type: 'scheduler-execution-event',
         sessionId: target.sessionId,
@@ -542,15 +609,27 @@ export class ExecutionScheduler {
       })
     }
 
-    if (target.kind === 'step') {
-      await this.executeAnalysisOneStepJob(job, opCtx, emitExecutionEvent)
+    if (target.kind === 'init') {
+      await this.executeInitJob(job, opCtx, emitExecutionEvent)
+    } else if (target.kind === 'step') {
+      await this.executeAnalysisOneStepJob(job, opCtx, emitExecutionEvent as (e: TurnStreamEvent | AnalysisStreamEvent) => void)
     } else if (session.sessionType === 'primary') {
-      await this.executePrimaryJob(job, opCtx, emitExecutionEvent)
+      await this.executePrimaryJob(job, opCtx, emitExecutionEvent as (e: TurnStreamEvent) => void)
     } else if (session.sessionType === 'session_analysis') {
-      await this.executeAnalysisJob(job, opCtx, emitExecutionEvent)
+      await this.executeAnalysisJob(job, opCtx, emitExecutionEvent as (e: TurnStreamEvent | AnalysisStreamEvent) => void)
     } else {
       throw new Error(`Unsupported session type: ${session.sessionType}`)
     }
+  }
+
+  private async executeInitJob(
+    job: ActiveExecutionJob,
+    opCtx: SchedulerContext,
+    emitExecutionEvent: (event: PreludeStreamEvent) => void,
+  ): Promise<void> {
+    const { db, lmStudioGateway, mcpGateway } = opCtx
+    const sessionId = job.target.sessionId
+    await runSessionInitialization(db, lmStudioGateway, mcpGateway, sessionId, emitExecutionEvent)
   }
 
   private async executePrimaryJob(
