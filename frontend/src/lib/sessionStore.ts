@@ -353,7 +353,7 @@ export async function startSession(input: {
       },
     })
 
-    const { session } = await createPrimarySession({
+    const { session, initJobId } = await createPrimarySession({
       session_id: input.sessionId,
       model_config_id: selectedModelConfig.id,
       mcp_profile_id: resolvedMcpProfileId ?? null,
@@ -369,7 +369,7 @@ export async function startSession(input: {
     // Prelude events flow through executionStore → applyExternalPreludeEvent
     // so the trace updates in real time without a dedicated SSE stream.
     const { awaitJob } = await import('./executionStore')
-    await awaitJob(session.id)
+    await awaitJob(session.id, initJobId)
 
     await refreshSessions()
     isPrimaryLaunchDialogOpen.set(false)
@@ -425,8 +425,8 @@ export async function sendMessage(input: {
     activeTurnStream.set(createTurnStreamingState(sessionId, userContent))
 
     const { enqueueSessionExecution, awaitJob } = await import('./executionStore')
-    await enqueueSessionExecution(sessionId, userContent)
-    await awaitJob(sessionId)
+    const job = await enqueueSessionExecution(sessionId, userContent)
+    await awaitJob(sessionId, job.jobId)
 
     await refreshSessions()
   } catch (error) {
@@ -600,8 +600,8 @@ export async function executeAnalysis(): Promise<void> {
 
   try {
     const { enqueueSessionExecution, awaitJob } = await import('./executionStore')
-    await enqueueSessionExecution(sessionId, '')
-    await awaitJob(sessionId)
+    const job = await enqueueSessionExecution(sessionId, '')
+    await awaitJob(sessionId, job.jobId)
 
     await refreshSessions()
   } catch (error) {
@@ -631,8 +631,8 @@ export async function executeAnalysisStep(): Promise<void> {
 
   try {
     const { enqueueStepExecution, awaitJob } = await import('./executionStore')
-    await enqueueStepExecution(sessionId)
-    await awaitJob(sessionId)
+    const job = await enqueueStepExecution(sessionId)
+    await awaitJob(sessionId, job.jobId)
 
     await refreshSessions()
   } catch (error) {

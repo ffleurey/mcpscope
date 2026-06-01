@@ -468,6 +468,10 @@ export const listMcpProfilesResponseSchema = z.object({
 
 export const createSessionResponseSchema = z.object({
   session: sessionRecordSchema,
+  /** Job ID of the auto-enqueued init job. Present when the backend scheduler
+   *  accepted the init job; absent if admission failed. Pass to awaitJob for
+   *  precise completion tracking. */
+  initJobId: z.string().optional(),
 })
 
 export const hierarchicalLookupResponseSchema = z.object({

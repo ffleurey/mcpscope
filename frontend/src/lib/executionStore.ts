@@ -74,12 +74,29 @@ export const queueLength = derived(
   $snap => $snap.pendingJobs.length,
 )
 
-// ── SSE subscription ─────────────────────────────────────────────────────────
+// ── Terminal job tracking ────────────────────────────────────────────────────
+// Keeps a bounded record of terminal job IDs so awaitJob can resolve
+// immediately after an SSE reconnect where lastTerminalJob moved on.
+// Capped to prevent unbounded growth across long sessions.
+
+const MAX_TERMINAL_JOB_HISTORY = 50
+const terminalJobIds = new Set<string>()
+
+function recordTerminalJobId(jobId: string): void {
+  if (terminalJobIds.size >= MAX_TERMINAL_JOB_HISTORY) {
+    const oldest = terminalJobIds.values().next().value
+    if (oldest) terminalJobIds.delete(oldest)
+  }
+  terminalJobIds.add(jobId)
+}
+
+
 
 let streamAbort: AbortController | null = null
 
 function applySchedulerEvent(event: SchedulerEvent): void {
   if (event.type === 'scheduler-snapshot') {
+    if (event.lastTerminalJob) recordTerminalJobId(event.lastTerminalJob.jobId)
     schedulerSnapshot.set({
       controlState: event.controlState,
       activeJob: event.activeJob,
@@ -114,6 +131,7 @@ function applySchedulerEvent(event: SchedulerEvent): void {
   }
 
   if (event.type === 'scheduler-job-completed' || event.type === 'scheduler-job-failed') {
+    recordTerminalJobId(event.job.jobId)
     schedulerSnapshot.update(snap => ({
       ...snap,
       activeJob: snap.activeJob?.jobId === event.job.jobId ? null : snap.activeJob,
@@ -130,6 +148,7 @@ function applySchedulerEvent(event: SchedulerEvent): void {
   }
 
   if (event.type === 'scheduler-job-removed') {
+    recordTerminalJobId(event.jobId)
     schedulerSnapshot.update(snap => ({
       ...snap,
       pendingJobs: snap.pendingJobs.filter(j => j.jobId !== event.jobId),
@@ -273,17 +292,27 @@ export async function enqueueStepExecution(sessionId: string): Promise<Execution
 }
 
 /**
- * Waits until the scheduler has no active or pending job for the given sessionId.
- * Resolves immediately if the session is already idle (lastTerminalJob matches, or never ran).
- * Times out after timeoutMs (default 30s) to prevent indefinite waits.
+ * Waits until the scheduler has finished with the given job.
+ *
+ * Pass `jobId` (from the enqueue response) whenever possible — it enables
+ * precise per-job matching that survives SSE reconnects and overlapping jobs.
+ * Without `jobId`, falls back to session-ID matching (less precise, still
+ * correct for the common single-job-per-session case).
+ *
+ * The default timeout (10 minutes) is intentionally long to accommodate slow
+ * LLM inference. Timeouts before that threshold indicate a genuine stall or
+ * backend error, not normal latency.
  */
-export function awaitJob(sessionId: string, timeoutMs = 30000): Promise<void> {
+export function awaitJob(sessionId: string, jobId?: string, timeoutMs = 600000): Promise<void> {
+  // Fast path: already recorded as terminal
+  if (jobId && terminalJobIds.has(jobId)) return Promise.resolve()
+
   return new Promise<void>((resolve, reject) => {
     let sawJob = false
     let timer: ReturnType<typeof setTimeout> | null = null
 
     const done = () => {
-      if (timer !== null) clearTimeout(timer)
+      if (timer !== null) { clearTimeout(timer); timer = null }
       unsub()
       resolve()
     }
@@ -294,16 +323,25 @@ export function awaitJob(sessionId: string, timeoutMs = 30000): Promise<void> {
     }, timeoutMs)
 
     const unsub = schedulerSnapshot.subscribe($snap => {
-      const hasActive = $snap.activeJob?.target.sessionId === sessionId
-      const hasPending = $snap.pendingJobs.some(j => j.target.sessionId === sessionId)
-      if (hasActive || hasPending) {
-        sawJob = true
+      if (jobId) {
+        // Precise jobId matching — check terminalJobIds first (handles reconnect gaps)
+        if (terminalJobIds.has(jobId)) { done(); return }
+
+        const hasActive = $snap.activeJob?.jobId === jobId
+        const hasPending = $snap.pendingJobs.some(j => j.jobId === jobId)
+        if (hasActive || hasPending) { sawJob = true; return }
+
+        // Job is no longer in active/pending
+        if (sawJob || $snap.lastTerminalJob?.jobId === jobId) { done(); return }
+        // Don't resolve yet if job hasn't appeared — it may still be queueing
         return
       }
-      // Job is gone from active/pending
-      if (sawJob || $snap.lastTerminalJob?.target.sessionId === sessionId) {
-        done()
-      }
+
+      // Fallback: session-ID matching (for init job when jobId is unavailable)
+      const hasActive = $snap.activeJob?.target.sessionId === sessionId
+      const hasPending = $snap.pendingJobs.some(j => j.target.sessionId === sessionId)
+      if (hasActive || hasPending) { sawJob = true; return }
+      if (sawJob || $snap.lastTerminalJob?.target.sessionId === sessionId) { done() }
     })
   })
 }
