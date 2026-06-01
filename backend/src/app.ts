@@ -1,6 +1,6 @@
 import cors from '@fastify/cors'
 import staticFiles from '@fastify/static'
-import Fastify from 'fastify'
+import Fastify, { type FastifyReply } from 'fastify'
 import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
@@ -183,6 +183,76 @@ export async function buildBackendApp(
     scheduler,
   }
   registerMcpTransport(app, opCtx)
+
+  type SchedulerExecutionPayload = Extract<SchedulerEvent, { type: 'scheduler-execution-event' }>['event']
+  type SsePayload = { type: string; [key: string]: unknown }
+
+  async function relaySchedulerJobStream(
+    reply: FastifyReply,
+    jobId: string,
+    options: {
+      shouldCloseOnExecutionEvent: (event: SchedulerExecutionPayload) => boolean
+      failureEvent: (message: string) => SsePayload
+    },
+  ): Promise<void> {
+    reply.hijack()
+    reply.raw.statusCode = 200
+    reply.raw.setHeader('content-type', 'text/event-stream; charset=utf-8')
+    reply.raw.setHeader('cache-control', 'no-cache, no-transform')
+    reply.raw.setHeader('connection', 'keep-alive')
+
+    const emitSseEvent = (event: SsePayload) => {
+      reply.raw.write(`event: ${event.type}\n`)
+      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
+    }
+
+    await new Promise<void>(resolve => {
+      const finish = () => {
+        unsubscribe()
+        resolve()
+      }
+      const emitFailure = (message: string) => {
+        emitSseEvent(options.failureEvent(message))
+      }
+
+      const unsubscribe = scheduler.subscribe((schedulerEvent: SchedulerEvent) => {
+        if (schedulerEvent.type === 'scheduler-execution-event' && schedulerEvent.jobId === jobId) {
+          emitSseEvent(schedulerEvent.event as SsePayload)
+          if (options.shouldCloseOnExecutionEvent(schedulerEvent.event)) {
+            finish()
+          }
+          return
+        }
+
+        if (schedulerEvent.type === 'scheduler-job-failed' && schedulerEvent.job.jobId === jobId) {
+          emitFailure(schedulerEvent.job.error ?? 'Job failed')
+          finish()
+          return
+        }
+
+        if (schedulerEvent.type === 'scheduler-job-completed' && schedulerEvent.job.jobId === jobId) {
+          finish()
+          return
+        }
+
+        if (schedulerEvent.type === 'scheduler-job-removed' && schedulerEvent.jobId === jobId) {
+          finish()
+        }
+      })
+
+      const snapshot = scheduler.getSnapshot()
+      const stillPresent = snapshot.activeJob?.jobId === jobId
+        || snapshot.pendingJobs.some(job => job.jobId === jobId)
+      if (!stillPresent && snapshot.lastTerminalJob?.jobId === jobId) {
+        if (snapshot.lastTerminalJob.outcome === 'failed') {
+          emitFailure(snapshot.lastTerminalJob.error ?? 'Job failed')
+        }
+        finish()
+      }
+    })
+
+    reply.raw.end()
+  }
 
   const toLifecycleState = (summary: {
     id: string
@@ -515,62 +585,10 @@ export async function buildBackendApp(
       return handleOperationError(err, reply)
     }
 
-    reply.hijack()
-    reply.raw.statusCode = 200
-    reply.raw.setHeader('content-type', 'text/event-stream; charset=utf-8')
-    reply.raw.setHeader('cache-control', 'no-cache, no-transform')
-    reply.raw.setHeader('connection', 'keep-alive')
-
-    const emitSseEvent = (event: { type: string; [key: string]: unknown }) => {
-      reply.raw.write(`event: ${event.type}\n`)
-      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
-    }
-
-    await new Promise<void>(resolve => {
-      const unsubscribe = scheduler.subscribe((schedulerEvent: SchedulerEvent) => {
-        if (schedulerEvent.type === 'scheduler-execution-event' && schedulerEvent.jobId === job.jobId) {
-          emitSseEvent(schedulerEvent.event as { type: string; [key: string]: unknown })
-          if (
-            schedulerEvent.event.type === 'analysis-complete'
-            || schedulerEvent.event.type === 'analysis-failed'
-          ) {
-            unsubscribe()
-            resolve()
-          }
-          return
-        }
-        if (schedulerEvent.type === 'scheduler-job-completed' && schedulerEvent.job.jobId === job.jobId) {
-          unsubscribe()
-          resolve()
-          return
-        }
-        if (schedulerEvent.type === 'scheduler-job-failed' && schedulerEvent.job.jobId === job.jobId) {
-          emitSseEvent({ type: 'analysis-failed', message: schedulerEvent.job.error ?? 'Job failed' })
-          unsubscribe()
-          resolve()
-        }
-        if (
-          schedulerEvent.type === 'scheduler-job-removed'
-          && schedulerEvent.jobId === job.jobId
-        ) {
-          unsubscribe()
-          resolve()
-        }
-      })
-
-      const snapshot = scheduler.getSnapshot()
-      const stillPresent = snapshot.activeJob?.jobId === job.jobId
-        || snapshot.pendingJobs.some(j => j.jobId === job.jobId)
-      if (!stillPresent && snapshot.lastTerminalJob?.jobId === job.jobId) {
-        if (snapshot.lastTerminalJob.outcome === 'failed') {
-          emitSseEvent({ type: 'analysis-failed', message: snapshot.lastTerminalJob.error ?? 'Job failed' })
-        }
-        unsubscribe()
-        resolve()
-      }
+    await relaySchedulerJobStream(reply, job.jobId, {
+      shouldCloseOnExecutionEvent: event => event.type === 'analysis-complete' || event.type === 'analysis-failed',
+      failureEvent: message => ({ type: 'analysis-failed', message }),
     })
-
-    reply.raw.end()
   })
 
   app.patch('/api/sessions/:sessionId', async (request, reply) => {
@@ -1032,51 +1050,10 @@ export async function buildBackendApp(
       return handleOperationError(err, reply)
     }
 
-    reply.hijack()
-    reply.raw.statusCode = 200
-    reply.raw.setHeader('content-type', 'text/event-stream; charset=utf-8')
-    reply.raw.setHeader('cache-control', 'no-cache, no-transform')
-    reply.raw.setHeader('connection', 'keep-alive')
-
-    const emitSseEvent = (event: { type: string; [key: string]: unknown }) => {
-      reply.raw.write(`event: ${event.type}\n`)
-      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
-    }
-
-    await new Promise<void>(resolve => {
-      const unsubscribe = scheduler.subscribe((schedulerEvent: SchedulerEvent) => {
-        if (schedulerEvent.type === 'scheduler-execution-event' && schedulerEvent.jobId === job.jobId) {
-          emitSseEvent(schedulerEvent.event as { type: string; [key: string]: unknown })
-          if (schedulerEvent.event.type === 'prelude-complete' || schedulerEvent.event.type === 'prelude-failed') {
-            unsubscribe()
-            resolve()
-          }
-          return
-        }
-        if (schedulerEvent.type === 'scheduler-job-completed' && schedulerEvent.job.jobId === job.jobId) {
-          unsubscribe()
-          resolve()
-          return
-        }
-        if (schedulerEvent.type === 'scheduler-job-failed' && schedulerEvent.job.jobId === job.jobId) {
-          emitSseEvent({ type: 'prelude-failed', message: schedulerEvent.job.error ?? 'Initialization failed' })
-          unsubscribe()
-          resolve()
-        }
-      })
-      const snap = scheduler.getSnapshot()
-      const stillPresent = snap.activeJob?.jobId === job.jobId
-        || snap.pendingJobs.some(j => j.jobId === job.jobId)
-      if (!stillPresent && snap.lastTerminalJob?.jobId === job.jobId) {
-        if (snap.lastTerminalJob.outcome === 'failed') {
-          emitSseEvent({ type: 'prelude-failed', message: snap.lastTerminalJob.error ?? 'Initialization failed' })
-        }
-        unsubscribe()
-        resolve()
-      }
+    await relaySchedulerJobStream(reply, job.jobId, {
+      shouldCloseOnExecutionEvent: event => event.type === 'prelude-complete' || event.type === 'prelude-failed',
+      failureEvent: message => ({ type: 'prelude-failed', message }),
     })
-
-    reply.raw.end()
   })
 
   app.post('/api/sessions/:sessionId/turns/stream', async (request, reply) => {
@@ -1092,66 +1069,10 @@ export async function buildBackendApp(
       return handleOperationError(err, reply)
     }
 
-    // Hijack the response to stream turn events from the scheduler.
-    reply.hijack()
-    reply.raw.statusCode = 200
-    reply.raw.setHeader('content-type', 'text/event-stream; charset=utf-8')
-    reply.raw.setHeader('cache-control', 'no-cache, no-transform')
-    reply.raw.setHeader('connection', 'keep-alive')
-
-    const emitSseEvent = (event: { type: string; [key: string]: unknown }) => {
-      reply.raw.write(`event: ${event.type}\n`)
-      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
-    }
-
-    await new Promise<void>(resolve => {
-      const unsubscribe = scheduler.subscribe((schedulerEvent: SchedulerEvent) => {
-        // Relay execution events for this job/session as SSE
-        if (schedulerEvent.type === 'scheduler-execution-event' && schedulerEvent.jobId === job.jobId) {
-          emitSseEvent(schedulerEvent.event as { type: string; [key: string]: unknown })
-          // Close stream when turn reaches a terminal event
-          if (schedulerEvent.event.type === 'turn-committed' || schedulerEvent.event.type === 'turn-failed') {
-            unsubscribe()
-            resolve()
-          }
-          return
-        }
-        // Close stream if job failed before reaching a terminal turn event
-        if (schedulerEvent.type === 'scheduler-job-failed' && schedulerEvent.job.jobId === job.jobId) {
-          emitSseEvent({ type: 'turn-failed', turnId: null, message: schedulerEvent.job.error ?? 'Job failed' })
-          unsubscribe()
-          resolve()
-          return
-        }
-        // Close stream if job completed without a terminal turn event (e.g. error absorbed)
-        if (schedulerEvent.type === 'scheduler-job-completed' && schedulerEvent.job.jobId === job.jobId) {
-          unsubscribe()
-          resolve()
-          return
-        }
-        // Close stream if job was removed
-        if (schedulerEvent.type === 'scheduler-job-removed' && schedulerEvent.jobId === job.jobId) {
-          unsubscribe()
-          resolve()
-          return
-        }
-      })
-
-      // Guard: if the job is already gone from the scheduler by the time we subscribe,
-      // resolve immediately.
-      const snapshot = scheduler.getSnapshot()
-      const stillPresent = snapshot.activeJob?.jobId === job.jobId
-        || snapshot.pendingJobs.some(j => j.jobId === job.jobId)
-      if (!stillPresent && snapshot.lastTerminalJob?.jobId === job.jobId) {
-        if (snapshot.lastTerminalJob.outcome === 'failed') {
-          emitSseEvent({ type: 'turn-failed', turnId: null, message: snapshot.lastTerminalJob.error ?? 'Job failed' })
-        }
-        unsubscribe()
-        resolve()
-      }
+    await relaySchedulerJobStream(reply, job.jobId, {
+      shouldCloseOnExecutionEvent: event => event.type === 'turn-committed' || event.type === 'turn-failed',
+      failureEvent: message => ({ type: 'turn-failed', turnId: null, message }),
     })
-
-    reply.raw.end()
   })
 
   // ─── Scheduler monitoring and control routes ───────────────────────────────

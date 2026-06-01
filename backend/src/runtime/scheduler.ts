@@ -721,7 +721,7 @@ export class ExecutionScheduler {
     const session = getSessionRecord(db.connection, sessionId)
     if (!session) throw new Error(`Session ${sessionId} not found at analysis execution time`)
 
-    // Mark session active (mirrors executeAnalysisWorkflow behavior)
+    // Mark the analysis session active while the scheduler owns execution.
     session.status = 'active'
     session.updatedAt = Date.now()
     updateSessionRecord(db.connection, session)

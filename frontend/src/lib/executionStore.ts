@@ -109,7 +109,9 @@ function applySchedulerEvent(event: SchedulerEvent): void {
   if (event.type === 'scheduler-job-enqueued') {
     schedulerSnapshot.update(snap => ({
       ...snap,
-      pendingJobs: [...snap.pendingJobs, event.job],
+      pendingJobs: snap.pendingJobs.some(job => job.jobId === event.job.jobId)
+        ? snap.pendingJobs
+        : [...snap.pendingJobs, event.job],
     }))
     return
   }
@@ -135,6 +137,7 @@ function applySchedulerEvent(event: SchedulerEvent): void {
     schedulerSnapshot.update(snap => ({
       ...snap,
       activeJob: snap.activeJob?.jobId === event.job.jobId ? null : snap.activeJob,
+      pendingJobs: snap.pendingJobs.filter(job => job.jobId !== event.job.jobId),
       lastTerminalJob: event.job,
     }))
     const sessionId = event.job.target.sessionId
@@ -257,37 +260,23 @@ export function destroyExecutionStore(): void {
 
 export async function pauseExecution(): Promise<void> {
   await pauseScheduler()
-  schedulerSnapshot.update(snap => ({ ...snap, controlState: 'paused' }))
 }
 
 export async function resumeExecution(): Promise<void> {
   await resumeScheduler()
-  schedulerSnapshot.update(snap => ({ ...snap, controlState: 'running' }))
 }
 
 export async function removePendingJob(jobId: string): Promise<void> {
   await removeSchedulerJob(jobId)
-  schedulerSnapshot.update(snap => ({
-    ...snap,
-    pendingJobs: snap.pendingJobs.filter(j => j.jobId !== jobId),
-  }))
 }
 
 export async function enqueueSessionExecution(sessionId: string, prompt: string): Promise<ExecutionJob> {
   const result = await enqueueSession(sessionId, prompt)
-  schedulerSnapshot.update(snap => ({
-    ...snap,
-    pendingJobs: [...snap.pendingJobs, result.job],
-  }))
   return result.job
 }
 
 export async function enqueueStepExecution(sessionId: string): Promise<ExecutionJob> {
   const result = await enqueueStep(sessionId)
-  schedulerSnapshot.update(snap => ({
-    ...snap,
-    pendingJobs: [...snap.pendingJobs, result.job],
-  }))
   return result.job
 }
 
