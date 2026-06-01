@@ -55,7 +55,7 @@ These surfaces stay aligned around one backend-owned model and one backend-owned
 
 ### Backend-owned operation catalog
 
-The canonical operation layer lives in `backend/src/operations/`. Each operation in the catalog defines, in one place:
+The shared CLI/MCP operation catalog lives in `backend/src/operations/catalog.ts` and is re-exported through `backend/src/operations/index.ts`. Each shared operation in that catalog defines, in one place:
 
 - canonical operation ID
 - user-facing description (used by both CLI help and MCP tool descriptions)
@@ -75,9 +75,11 @@ Important rules:
 - the backend owns operation semantics and execution
 - the MCP interface does not call the backend API over loopback HTTP for shared operations
 - the CLI calls the backend over HTTP (it is a remote adapter by design)
-- machine-readable command semantics are defined once in `backend/src/operations/` (the single source of truth)
+- machine-readable command semantics are defined once in `backend/src/operations/catalog.ts` (the single source of truth)
 - presentation differences (text rendering, exit codes, MCP content formatting) are adapter concerns; semantic drift is not
-- every new shared operation should be added once to `backend/src/operations/` and then exposed automatically through both adapters
+- every new shared operation should be added once to `backend/src/operations/catalog.ts` and then exposed automatically through both adapters
+
+Backend-only HTTP operations may live alongside the shared ones under `backend/src/operations/`, but they are not part of the shared catalog unless they are added to `catalog.ts`.
 
 ## Runtime state and persistence
 
@@ -140,17 +142,49 @@ What is **not** implemented yet:
 
 ### Execution control plane
 
-Execution ownership now sits behind a backend scheduler rather than being spread across per-route detached execution paths.
+All executable work runs through a single backend scheduler. The canonical flow is:
 
-Current scheduler behavior:
+```
+trigger (HTTP / CLI / MCP)
+  → enqueue (scheduler.enqueueSession / enqueueInit / enqueueStep)
+  → scheduler execution (one sequential worker, one active job at a time)
+  → scheduler events (SSE on /api/scheduler/stream)
+  → view state (frontend executionStore + sessionStore derived stores)
+```
+
+Scheduler characteristics:
 
 - one sequential worker and one in-memory queue
 - one active job at a time across all sessions
 - global snapshot plus global scheduler SSE stream for UI/CLI/MCP-facing monitoring
-- session-target jobs are still executed at step boundaries rather than as opaque whole-session black boxes
 - pausing is boundary-based: the scheduler stops after the current running step or turn finishes, then leaves the remaining session state resumable from persisted runtime records
 
-This means a request to execute a session does not grant that session an uninterrupted private loop. The scheduler still owns control between steps so queue pause/resume semantics remain coherent.
+Job kinds:
+- `init` — session initialization (prelude token probing, MCP setup); auto-enqueued when a primary session is created
+- `session` — primary turn execution or analysis session execution
+- `step` — single analysis step execution (for debug step-through)
+
+The scheduler is the only execution owner. No route or operation directly runs a model turn, analysis step, or initialization outside the scheduler in normal runtime flow.
+
+### Backend module map
+
+The backend structure is intentionally split so architectural seams are visible in code, not just in docs:
+
+- `backend/src/app.ts` bootstraps Fastify, opens the database, wires shared helpers, and registers route groups
+- `backend/src/routes/` groups HTTP routes by concern:
+	- `systemRoutes.ts` for health/runtime/meta
+	- `sessionRoutes.ts` for session creation, listing, status, and analysis launch
+	- `configurationRoutes.ts` for LM/MCP/default configuration CRUD and preflight
+	- `traceRoutes.ts` for trace import/export and compatibility execution endpoints
+	- `schedulerRoutes.ts` for scheduler snapshot/control/stream routes
+- `backend/src/runtime/scheduler.ts` owns scheduler state, queue lifecycle, subscriptions, pause/resume, and the worker loop
+- `backend/src/runtime/schedulerAdmission.ts` owns enqueue-time validation and turn reservation rules
+- `backend/src/runtime/schedulerDispatch.ts` owns execution dispatch by job/session kind
+- `backend/src/runtime/schedulerTypes.ts` holds shared scheduler contracts and event shapes
+
+This split is deliberate: route modules should stay thin HTTP adapters over backend-owned operations and scheduler entrypoints, while scheduler submodules separate queue ownership from admission and execution behavior.
+
+**Benchmark support note**: benchmark orchestration can be added as a thin layer above sessions and queue jobs without new execution infrastructure. The scheduler's sequential control plane, job kinds, and event stream are already the right primitives.
 
 The important rule is that mcpscope keeps one canonical model across persistence, API, UI, and
 CLI. Provider-specific transport structures are normalized into that model at the integration
@@ -581,26 +615,41 @@ Key files:
 - `frontend/src/lib/api/` — typed backend API client
 - `frontend/src/lib/backendTypes.ts` — backend payload types
 - `frontend/src/lib/connectionStore.ts` — backend CRUD for LM connections, model configs, MCP profiles
-- `frontend/src/lib/sessionStore.ts` — session summaries, active trace loading, turn submission
+- `frontend/src/lib/sessionStore.ts` — session summaries, active trace loading, action triggers
+- `frontend/src/lib/executionStore.ts` — sole receiver of execution events; connects to `/api/scheduler/stream`
+
+### Frontend execution model
+
+The frontend uses a single execution event subscription:
+
+1. `executionStore` maintains a persistent SSE connection to `/api/scheduler/stream`
+2. All scheduler events (job lifecycle + per-event execution deltas) arrive through this one stream
+3. When an action is triggered (`sendMessage`, `executeAnalysis`, `startSession`, etc.), `sessionStore` enqueues a scheduler job and awaits completion by watching `schedulerSnapshot`
+4. Execution events emitted during job execution (`turn-started`, `part-delta`, `part-committed`, `prelude-complete`, etc.) arrive via the scheduler stream and are routed to `applyExternalStreamEvent` or `applyExternalPreludeEvent` in `sessionStore`
+
+`sessionStore` does not open action-specific SSE streams. All execution progress flows through `executionStore`.
 
 ### Streaming contract
 
 1. The frontend keeps the latest backend trace snapshot in memory.
-2. While a turn is live, the backend streams only small transient updates.
+2. While a turn is live, the backend streams only small transient updates through `scheduler-execution-event` events.
 3. When a part is complete, the backend commits a canonical part and sends a `part-committed` event.
 4. At round and turn boundaries the backend sends authoritative committed updates.
 
 The frontend may hold a small in-memory overlay for currently streaming deltas, but it must discard that overlay as soon as committed backend parts arrive.
 
-SSE event types emitted by `POST /api/sessions/:sessionId/turns/stream`:
+Execution event types emitted as `scheduler-execution-event` payloads on the scheduler stream:
 
-1. `turn-started`
-2. `round-started`
-3. `part-delta`
-4. `part-committed`
-5. `round-committed`
-6. `turn-committed`
-7. `turn-failed`
+**Turn events** (primary sessions):
+`turn-started`, `round-started`, `part-delta`, `part-committed`, `round-committed`, `turn-committed`, `turn-failed`
+
+**Prelude events** (session initialization):
+`part-committed`, `prelude-complete`, `prelude-failed`
+
+**Analysis events** (analysis sessions):
+All turn event types plus `analysis-step-started`, `analysis-step-completed`, `analysis-phase-changed`, `analysis-complete`, `analysis-failed`
+
+The compatibility SSE endpoints (`POST /api/sessions/:id/turns/stream` and `POST /api/sessions/:id/execute`) remain as shims for CLI/MCP backward compatibility — they delegate to the scheduler and proxy its events as SSE.
 
 ### Import/export semantics
 

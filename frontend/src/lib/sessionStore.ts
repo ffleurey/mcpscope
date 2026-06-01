@@ -7,9 +7,6 @@ import {
   launchAnalysis as launchBackendAnalysis,
   listSessions,
   preflightSession,
-  streamExecuteAnalysis as streamBackendExecuteAnalysis,
-  streamPreludeInit,
-  streamTurn as streamBackendTurn,
 } from './api/backendClient'
 import { lmConnections, mcpProfiles, modelConfigs, sessionCreationDefaults } from './connectionStore'
 import type {
@@ -94,10 +91,18 @@ export async function refreshSessions(): Promise<SessionSummary[]> {
 }
 
 function toSessionSummary(record: SessionRecord): SessionSummary {
+  const status: SessionSummary['status'] = record.initStatus === 'error' || record.status === 'error'
+    ? 'error'
+    : record.initStatus === 'pending' || record.initStatus === 'initializing'
+      ? 'initializing'
+      : record.status === 'active'
+        ? 'running'
+        : 'ready'
+
   return {
     id: record.id,
     title: record.title,
-    status: record.status,
+    status,
     init_status: record.initStatus,
     session_type: record.sessionType,
     parent_kind: record.parentKind,
@@ -178,10 +183,6 @@ export function applyExternalStreamEvent(
   event: TurnStreamEvent | AnalysisStreamEvent,
 ): void {
   if (get(activeChatId) !== sessionId) return
-  // Skip when the frontend is already streaming this session via its own SSE
-  // call (sendTurn, executeAnalysis, executeAnalysisStep). Those paths handle
-  // the events themselves; we only drive activeTurnStream for external turns.
-  if (get(isSendingTurn) || get(isExecutingAnalysis) || get(isSteppingAnalysis)) return
   const session = get(chatSessions).find(s => s.id === sessionId) ?? null
   const isAnalysis = session?.session_type === 'session_analysis'
   const isTurnEvent = (
@@ -202,6 +203,16 @@ export function applyExternalStreamEvent(
   } else if (!isTurnEvent) {
     applyAnalysisStreamEvent(session, event as AnalysisStreamEvent)
   }
+}
+
+/**
+ * Called by executionStore when a prelude event arrives from the scheduler
+ * for a session that is currently open. Routes part-committed / prelude-complete
+ * / prelude-failed events to update the active trace.
+ */
+export function applyExternalPreludeEvent(sessionId: string, event: PreludeStreamEvent): void {
+  if (get(activeChatId) !== sessionId) return
+  applyPreludeStreamEvent(event)
 }
 
 /**
@@ -342,7 +353,7 @@ export async function startSession(input: {
       },
     })
 
-    const { session } = await createPrimarySession({
+    const { session, initJobId } = await createPrimarySession({
       session_id: input.sessionId,
       model_config_id: selectedModelConfig.id,
       mcp_profile_id: resolvedMcpProfileId ?? null,
@@ -354,8 +365,11 @@ export async function startSession(input: {
     upsertSessionSummary(session)
     activeTrace.set(createEmptyTrace(summary))
 
-    // Stream the prelude initialization — parts and token probing appear in real-time
-    await streamPreludeInit(session.id, (event) => applyPreludeStreamEvent(event))
+    // Wait for the scheduler to finish the auto-enqueued init job.
+    // Prelude events flow through executionStore → applyExternalPreludeEvent
+    // so the trace updates in real time without a dedicated SSE stream.
+    const { awaitJob } = await import('./executionStore')
+    await awaitJob(session.id, initJobId)
 
     await refreshSessions()
     isPrimaryLaunchDialogOpen.set(false)
@@ -402,7 +416,6 @@ export async function sendMessage(input: {
   activeTurnStream.set(null)
 
   const sessionSummary = get(activeSession)
-  let streamOutcome: 'committed' | 'failed' | null = null
 
   try {
     if (!sessionSummary) {
@@ -411,20 +424,11 @@ export async function sendMessage(input: {
 
     activeTurnStream.set(createTurnStreamingState(sessionId, userContent))
 
-    await streamBackendTurn(sessionId, userContent, async (event) => {
-      if (event.type === 'turn-committed') {
-        streamOutcome = 'committed'
-      } else if (event.type === 'turn-failed') {
-        streamOutcome = 'failed'
-      }
-
-      applyTurnStreamEvent(sessionSummary, userContent, event)
-    })
+    const { enqueueSessionExecution, awaitJob } = await import('./executionStore')
+    const job = await enqueueSessionExecution(sessionId, userContent)
+    await awaitJob(sessionId, job.jobId)
 
     await refreshSessions()
-    if (streamOutcome !== 'committed') {
-      await refreshActiveTrace().catch(() => undefined)
-    }
   } catch (error) {
     setSessionError(toAppError(error))
     await refreshSessions().catch(() => undefined)
@@ -594,12 +598,10 @@ export async function executeAnalysis(): Promise<void> {
   // Analysis sessions use '' as userContent (no single user message).
   activeTurnStream.set(createTurnStreamingState(sessionId, ''))
 
-  const sessionSummary = get(activeSession)
-
   try {
-    await streamBackendExecuteAnalysis(sessionId, async (event: AnalysisStreamEvent) => {
-      applyAnalysisStreamEvent(sessionSummary, event)
-    })
+    const { enqueueSessionExecution, awaitJob } = await import('./executionStore')
+    const job = await enqueueSessionExecution(sessionId, '')
+    await awaitJob(sessionId, job.jobId)
 
     await refreshSessions()
   } catch (error) {
@@ -627,12 +629,10 @@ export async function executeAnalysisStep(): Promise<void> {
   isSteppingAnalysis.set(true)
   activeTurnStream.set(createTurnStreamingState(sessionId, ''))
 
-  const sessionSummary = get(activeSession)
-
   try {
-    await streamBackendExecuteAnalysis(sessionId, async (event: AnalysisStreamEvent) => {
-      applyAnalysisStreamEvent(sessionSummary, event)
-    }, { singleStep: true })
+    const { enqueueStepExecution, awaitJob } = await import('./executionStore')
+    const job = await enqueueStepExecution(sessionId)
+    await awaitJob(sessionId, job.jobId)
 
     await refreshSessions()
   } catch (error) {

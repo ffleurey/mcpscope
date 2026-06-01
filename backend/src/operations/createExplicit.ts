@@ -21,7 +21,7 @@ import {
   modelProfileSnapshotInputSchema,
   mcpProfileSnapshotInputSchema,
 } from '../domain/apiSchemas.js'
-import type { SessionRecord } from '../domain/model.js'
+import { sessionRecordSchema, type SessionRecord } from '../domain/model.js'
 import type { OperationContext } from './context.js'
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
@@ -41,6 +41,18 @@ export type CreateExplicitInput = z.infer<typeof createExplicitInputSchema>
 /** Full session record returned to the frontend (camelCase — matches frontend sessionRecordSchema). */
 export interface CreateExplicitResult {
   session: SessionRecord
+}
+
+export const createExplicitOutputSchema = {
+  session: sessionRecordSchema,
+}
+
+export const createExplicitOperation = {
+  schema: createExplicitInputSchema,
+  outputSchema: createExplicitOutputSchema,
+  async execute(ctx: OperationContext, rawInput: unknown): Promise<CreateExplicitResult> {
+    return executeCreateExplicit(ctx, rawInput)
+  },
 }
 
 // ─── Execution ────────────────────────────────────────────────────────────────

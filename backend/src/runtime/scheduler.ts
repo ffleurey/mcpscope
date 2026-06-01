@@ -16,120 +16,33 @@
 
 import { randomUUID } from 'node:crypto'
 import {
-  findActiveSession,
-  getSessionRecord,
-  listTurnRecordsBySession,
-  listRoundRecordsBySession,
-  listPartRecordsBySession,
-  listRawExchangeRecordsBySession,
-  listStepRecordsBySession,
-  updateTurnRecord,
-  updateSessionRecord,
-  getNextTurnSequenceNumber,
-  insertTurnRecord,
-} from '../persistence/repository.js'
-import { AnalysisSession } from '../analysis/analysisSession.js'
-import { listArtifactsBySession } from '../analysis/artifactRepository.js'
-import { buildSessionTraceBundle } from '../domain/trace.js'
-import { deriveTranscriptEntries, deriveContextEntries } from '../domain/selectors.js'
-import { ChatSession } from './chatSession.js'
-import type { TurnStreamEvent, AnalysisStreamEvent } from './streamEvents.js'
-import { OperationError } from '../operations/errors.js'
-import { formatTurnId } from '../domain/hierarchicalIds.js'
-import type { TurnRecord } from '../domain/model.js'
-import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from './modelTurns.js'
-import type { McpGateway } from './toolTurns.js'
+  assertAnalysisSessionJobAllowed,
+  assertInitJobAllowed,
+  assertStepJobAllowed,
+  getSessionExecutionKind,
+  reservePrimaryTurn,
+} from './schedulerAdmission.js'
+import { dispatchSchedulerJob } from './schedulerDispatch.js'
+import type {
+  ActiveExecutionJob,
+  ExecutionJob,
+  ExecutionSnapshot,
+  SchedulerContext,
+  SchedulerEvent,
+  SchedulerEventListener,
+  TerminalJob,
+} from './schedulerTypes.js'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Scheduler's own context interface (avoids circular import with SchedulerContext)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Minimal runtime context the scheduler needs to execute jobs.
- * This mirrors the relevant fields of SchedulerContext without importing it
- * (which would create a circular dependency since SchedulerContext references
- * ExecutionScheduler).
- */
-export interface SchedulerContext {
-  db: BackendDatabase
-  lmStudioGateway: LmStudioGateway
-  mcpGateway: McpGateway
-  maxToolRounds: number
-  logger?: { error: (data: Record<string, unknown>, msg: string) => void }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Public types
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Generic execution target.
- * Session target: continue the session until it blocks or completes.
- * Step target: execute exactly one ready step.
- */
-export type ExecutionTarget =
-  | { kind: 'session'; sessionId: string }
-  | { kind: 'step'; sessionId: string; stepId: string }
-
-/** A queued execution job. */
-export interface ExecutionJob {
-  jobId: string
-  target: ExecutionTarget
-  /** For primary session turns: the user message content to execute. */
-  prompt?: string
-  createdAt: number
-}
-
-/** An execution job that is currently running. */
-export interface ActiveExecutionJob extends ExecutionJob {
-  startedAt: number
-}
-
-/** Terminal outcome for a completed, failed, or removed job. */
-export interface TerminalJob extends ActiveExecutionJob {
-  endedAt: number
-  outcome: 'completed' | 'failed' | 'removed'
-  error?: string
-}
-
-/** Current scheduler state snapshot. */
-export interface ExecutionSnapshot {
-  controlState: 'running' | 'paused'
-  activeJob: ActiveExecutionJob | null
-  pendingJobs: ExecutionJob[]
-  lastTerminalJob: TerminalJob | null
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Scheduler events
-// ─────────────────────────────────────────────────────────────────────────────
-
-export type SchedulerEvent =
-  | { type: 'scheduler-job-enqueued'; job: ExecutionJob }
-  | { type: 'scheduler-job-started'; job: ActiveExecutionJob }
-  | { type: 'scheduler-job-completed'; job: TerminalJob }
-  | { type: 'scheduler-job-failed'; job: TerminalJob }
-  | { type: 'scheduler-job-removed'; jobId: string; target: ExecutionTarget }
-  | { type: 'scheduler-paused' }
-  | { type: 'scheduler-resumed' }
-  | { type: 'scheduler-execution-event'; sessionId: string; jobId: string; event: TurnStreamEvent | AnalysisStreamEvent }
-
-export type SchedulerEventListener = (event: SchedulerEvent) => void
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Admission error codes
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const SCHEDULER_ERROR = {
-  SESSION_NOT_FOUND: 'session_not_found',
-  SESSION_NOT_INITIALIZED: 'session_not_initialized',
-  SESSION_ALREADY_QUEUED: 'session_already_queued',
-  TURN_IN_PROGRESS: 'turn_in_progress',
-  STEP_NOT_FOUND: 'step_not_found',
-  STEP_NOT_READY: 'step_not_ready',
-  SESSION_ACTIVE: 'another_session_active',
-} as const
+export type {
+  SchedulerContext,
+  ExecutionTarget,
+  ExecutionJob,
+  ActiveExecutionJob,
+  TerminalJob,
+  ExecutionSnapshot,
+  SchedulerEvent,
+  SchedulerEventListener,
+} from './schedulerTypes.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ExecutionScheduler
@@ -177,6 +90,43 @@ export class ExecutionScheduler {
   }
 
   /**
+   * Resolves when the given job reaches a terminal state (completed, failed, or
+   * removed). Resolves immediately if the job is already terminal.
+   *
+   * This is the canonical backend wait helper — use it inside route handlers
+   * that enqueue a job and need to await its outcome without opening an SSE
+   * stream. It removes the repeated subscribe-and-check boilerplate.
+   */
+  awaitJob(jobId: string): Promise<void> {
+    // Fast path: already terminal
+    if (this.lastTerminalJob?.jobId === jobId) return Promise.resolve()
+    const stillPresent = this.activeJob?.jobId === jobId
+      || this.pendingJobs.some(j => j.jobId === jobId)
+    if (!stillPresent) return Promise.resolve()
+
+    return new Promise<void>(resolve => {
+      const unsub = this.subscribe(evt => {
+        if (
+          (evt.type === 'scheduler-job-completed' || evt.type === 'scheduler-job-failed')
+          && evt.job.jobId === jobId
+        ) {
+          unsub(); resolve()
+          return
+        }
+        if (evt.type === 'scheduler-job-removed' && evt.jobId === jobId) {
+          unsub(); resolve()
+        }
+      })
+      // Re-check after subscribing to close the race window
+      if (this.lastTerminalJob?.jobId === jobId) { unsub(); resolve(); return }
+      if (
+        this.activeJob?.jobId !== jobId
+        && !this.pendingJobs.some(j => j.jobId === jobId)
+      ) { unsub(); resolve() }
+    })
+  }
+
+  /**
    * Remove a pending job from the queue.
    * Has no effect on the currently active job.
    * Returns true if the job was found and removed.
@@ -188,6 +138,32 @@ export class ExecutionScheduler {
     if (!job) return false
     this.emit({ type: 'scheduler-job-removed', jobId, target: job.target })
     return true
+  }
+
+  /**
+   * Enqueue a session initialization (prelude) job for a primary session.
+   *
+   * Admission: the session must exist, be a primary session, have initStatus
+   * in ['pending', 'initializing'], no other session must be active, and no
+   * duplicate job for the same session may be pending or active.
+   *
+   * Prelude events (part-committed, prelude-complete, prelude-failed) are
+   * emitted through the scheduler event stream as scheduler-execution-events.
+   *
+   * Returns the new job.
+   */
+  enqueueInit(opCtx: SchedulerContext, sessionId: string): ExecutionJob {
+    assertInitJobAllowed(opCtx, sessionId, value => this.hasJobForSession(value))
+
+    const job: ExecutionJob = {
+      jobId: randomUUID(),
+      target: { kind: 'init', sessionId },
+      createdAt: Date.now(),
+    }
+    this.pendingJobs.push(job)
+    this.emit({ type: 'scheduler-job-enqueued', job: { ...job } })
+    this.kickWorker(opCtx)
+    return job
   }
 
   /**
@@ -204,137 +180,20 @@ export class ExecutionScheduler {
    * Returns the new job.
    */
   enqueueSession(opCtx: SchedulerContext, sessionId: string, prompt?: string): ExecutionJob {
-    const { db } = opCtx
-
-    // ── Validate session exists ───────────────────────────────────────────────
-    const session = getSessionRecord(db.connection, sessionId)
-    if (!session) {
-      throw new OperationError('Session not found', SCHEDULER_ERROR.SESSION_NOT_FOUND)
-    }
-
-    // ── Session-type-specific admission ──────────────────────────────────────
-    if (session.sessionType === 'primary') {
-      if (!prompt || prompt.trim() === '') {
-        throw new OperationError(
-          'A prompt is required to enqueue a primary session turn.',
-          'validation',
-        )
-      }
-      // For primary sessions: check for another active session BEFORE checking
-      // initStatus (mirrors original turns/stream route behavior — allows the
-      // global-lock error to take precedence over not-initialized error).
-      const activeFirst = findActiveSession(db.connection, sessionId)
-      if (activeFirst) {
-        throw new OperationError(
-          'Another session is currently active. Nothing was queued.',
-          SCHEDULER_ERROR.SESSION_ACTIVE,
-          activeFirst,
-        )
-      }
-      if (session.initStatus !== 'ready') {
-        throw new OperationError(
-          `Session is not ready (initStatus = '${session.initStatus}')`,
-          SCHEDULER_ERROR.SESSION_NOT_INITIALIZED,
-        )
-      }
-      // For primary sessions the transactional turn check in enqueuePrimarySession
-      // handles the in-progress guard. The in-memory hasJobForSession is an
-      // additional early-reject, but uses the same canonical error code.
-      if (this.hasJobForSession(sessionId)) {
-        throw new OperationError(
-          'A turn is already in progress or reserved for this session.',
-          SCHEDULER_ERROR.TURN_IN_PROGRESS,
-        )
-      }
-      return this.enqueuePrimarySession(opCtx, session, sessionId, prompt)
-    }
-
-    if (session.sessionType === 'session_analysis') {
-      if (session.initStatus !== 'ready') {
-        throw new OperationError(
-          `Session is not ready (initStatus = '${session.initStatus}')`,
-          SCHEDULER_ERROR.SESSION_NOT_INITIALIZED,
-        )
-      }
-      // ── Reject duplicate jobs for the same session ──────────────────────────
-      if (this.hasJobForSession(sessionId)) {
-        throw new OperationError(
-          'This session already has an active or pending job in the scheduler.',
-          SCHEDULER_ERROR.SESSION_ALREADY_QUEUED,
-        )
-      }
-      return this.enqueueAnalysisSession(opCtx, sessionId)
-    }
-
-    throw new OperationError(
-      `Session type '${session.sessionType}' is not supported by the scheduler.`,
-      'validation',
-    )
+    const executionKind = getSessionExecutionKind(opCtx, sessionId, prompt, value => this.hasJobForSession(value))
+    return executionKind === 'primary'
+      ? this.enqueuePrimarySession(opCtx, sessionId, prompt as string)
+      : this.enqueueAnalysisSession(opCtx, sessionId)
   }
 
   // ── Private admission helpers ───────────────────────────────────────────────
 
   private enqueuePrimarySession(
     opCtx: SchedulerContext,
-    _session: ReturnType<typeof getSessionRecord>,
     sessionId: string,
     prompt: string,
   ): ExecutionJob {
-    const { db } = opCtx
-
-    // Reserve the turn atomically in the DB
-    type ReservationResult =
-      | { kind: 'another_session_active'; active: { id: string; state: string } }
-      | { kind: 'turn_in_progress' }
-      | { kind: 'reserved'; turn: TurnRecord }
-
-    const reservation = db.connection.transaction((): ReservationResult => {
-      const active = findActiveSession(db.connection, sessionId)
-      if (active) return { kind: 'another_session_active', active }
-
-      const hasPendingTurn = listTurnRecordsBySession(db.connection, sessionId)
-        .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
-      if (hasPendingTurn) return { kind: 'turn_in_progress' }
-
-      const createdAt = Date.now()
-      const nextSeq = getNextTurnSequenceNumber(db.connection, sessionId)
-      const turn: TurnRecord = {
-        id: formatTurnId(sessionId, nextSeq),
-        sessionId,
-        ownerStepId: null,
-        sequenceNumber: nextSeq,
-        status: 'draft',
-        createdAt,
-        completedAt: null,
-        outcome: null,
-        usage: {
-          promptTokens: null,
-          completionTokens: null,
-          reasoningTokens: null,
-          totalTokens: null,
-        },
-        contextTokensAtTurnEnd: null,
-        contextTokensAfterCompaction: null,
-        compactionApplied: null,
-        compactionTokensRemoved: null,
-      }
-      insertTurnRecord(db.connection, turn)
-      return { kind: 'reserved', turn }
-    })()
-
-    if (reservation.kind === 'another_session_active') {
-      throw new OperationError(
-        'Another session is currently active. Nothing was queued.',
-        SCHEDULER_ERROR.SESSION_ACTIVE,
-        reservation.active,
-      )
-    }
-    if (reservation.kind === 'turn_in_progress') {
-      throw new OperationError(
-        'A turn is already in progress or reserved for this session.',
-        SCHEDULER_ERROR.TURN_IN_PROGRESS,
-      )
-    }
+    reservePrimaryTurn(opCtx, sessionId)
 
     // Turn reserved as 'draft'; will become 'streaming' when the worker starts it
     const job: ExecutionJob = {
@@ -350,17 +209,7 @@ export class ExecutionScheduler {
   }
 
   private enqueueAnalysisSession(opCtx: SchedulerContext, sessionId: string): ExecutionJob {
-    const { db } = opCtx
-
-    // Check that there isn't another session already running
-    const active = findActiveSession(db.connection, sessionId)
-    if (active) {
-      throw new OperationError(
-        'Another session is currently active. Nothing was queued.',
-        SCHEDULER_ERROR.SESSION_ACTIVE,
-        { id: active.id, state: active.state },
-      )
-    }
+    assertAnalysisSessionJobAllowed(opCtx, sessionId)
 
     const job: ExecutionJob = {
       jobId: randomUUID(),
@@ -382,6 +231,12 @@ export class ExecutionScheduler {
     this.workerActive = true
     this.runWorker(opCtx).finally(() => {
       this.workerActive = false
+      // If jobs arrived during the window between the worker's last while-check
+      // and this .finally() (e.g. a route handler continued from a job-completed
+      // subscription before workerActive was cleared), restart the worker now.
+      if (this.pendingJobs.length > 0) {
+        this.kickWorker(opCtx)
+      }
     })
   }
 
@@ -448,70 +303,7 @@ export class ExecutionScheduler {
    * Returns the new job.
    */
   enqueueStep(opCtx: SchedulerContext, sessionId: string, stepId: string): ExecutionJob {
-    const { db } = opCtx
-
-    const session = getSessionRecord(db.connection, sessionId)
-    if (!session) {
-      throw new OperationError('Session not found', SCHEDULER_ERROR.SESSION_NOT_FOUND)
-    }
-    if (session.sessionType !== 'session_analysis') {
-      throw new OperationError(
-        'Step execution is only supported for analysis sessions.',
-        SCHEDULER_ERROR.STEP_NOT_READY,
-      )
-    }
-    if (session.initStatus !== 'ready') {
-      throw new OperationError(
-        `Session is not ready (initStatus = '${session.initStatus}')`,
-        SCHEDULER_ERROR.SESSION_NOT_INITIALIZED,
-      )
-    }
-
-    // Validate the step exists and belongs to this session
-    const steps = listStepRecordsBySession(db.connection, sessionId)
-    const targetStep = steps.find(s => s.id === stepId)
-    if (!targetStep) {
-      throw new OperationError(
-        `Step '${stepId}' not found in session '${sessionId}'.`,
-        SCHEDULER_ERROR.STEP_NOT_FOUND,
-      )
-    }
-
-    // The step must be the cursor step — only the cursor tracks what comes next
-    const CURSOR_STEP_TYPE = 'analysis_v2_cursor'
-    if (targetStep.stepTypeKey !== CURSOR_STEP_TYPE) {
-      throw new OperationError(
-        `Step '${stepId}' is not the cursor step for this session.`,
-        SCHEDULER_ERROR.STEP_NOT_READY,
-      )
-    }
-
-    // Cursor phase must be runnable (not complete / error)
-    const phase = (targetStep.state as { phase?: string }).phase
-    if (phase === 'complete' || phase === 'error') {
-      throw new OperationError(
-        `Analysis workflow is already in terminal phase '${phase}'.`,
-        SCHEDULER_ERROR.STEP_NOT_READY,
-      )
-    }
-
-    // No duplicate jobs for the same session
-    if (this.hasJobForSession(sessionId)) {
-      throw new OperationError(
-        'This session already has an active or pending job in the scheduler.',
-        SCHEDULER_ERROR.SESSION_ALREADY_QUEUED,
-      )
-    }
-
-    // Check for another active session
-    const active = findActiveSession(db.connection, sessionId)
-    if (active) {
-      throw new OperationError(
-        'Another session is currently active. Nothing was queued.',
-        SCHEDULER_ERROR.SESSION_ACTIVE,
-        { id: active.id, state: active.state },
-      )
-    }
+    assertStepJobAllowed(opCtx, sessionId, stepId, value => this.hasJobForSession(value))
 
     const job: ExecutionJob = {
       jobId: randomUUID(),
@@ -527,181 +319,19 @@ export class ExecutionScheduler {
   // ── Execution dispatch ────────────────────────────────────────────────────
 
   private async executeJob(job: ActiveExecutionJob, opCtx: SchedulerContext): Promise<void> {
-    const { target } = job
-    const session = getSessionRecord(opCtx.db.connection, target.sessionId)
-    if (!session) {
-      throw new Error(`Session ${target.sessionId} not found at execution time`)
-    }
-
-    const emitExecutionEvent = (event: TurnStreamEvent | AnalysisStreamEvent) => {
+    const emitExecutionEvent = (event: SchedulerEvent['type'] extends never ? never : any) => {
       this.emit({
         type: 'scheduler-execution-event',
-        sessionId: target.sessionId,
+        sessionId: job.target.sessionId,
         jobId: job.jobId,
         event,
       })
     }
 
-    if (target.kind === 'step') {
-      await this.executeAnalysisOneStepJob(job, opCtx, emitExecutionEvent)
-    } else if (session.sessionType === 'primary') {
-      await this.executePrimaryJob(job, opCtx, emitExecutionEvent)
-    } else if (session.sessionType === 'session_analysis') {
-      await this.executeAnalysisJob(job, opCtx, emitExecutionEvent)
-    } else {
-      throw new Error(`Unsupported session type: ${session.sessionType}`)
-    }
-  }
-
-  private async executePrimaryJob(
-    job: ActiveExecutionJob,
-    opCtx: SchedulerContext,
-    emitExecutionEvent: (event: TurnStreamEvent) => void,
-  ): Promise<void> {
-    const { db, lmStudioGateway, mcpGateway, maxToolRounds } = opCtx
-    const sessionId = job.target.sessionId
-    const prompt = job.prompt
-
-    if (!prompt) {
-      throw new Error('Primary session job is missing prompt')
-    }
-
-    const session = getSessionRecord(db.connection, sessionId)
-    if (!session) throw new Error(`Session ${sessionId} not found`)
-
-    // Find the draft turn reserved during enqueue
-    const turns = listTurnRecordsBySession(db.connection, sessionId)
-    const draftTurn = turns.find(t => t.status === 'draft')
-    if (!draftTurn) {
-      throw new Error(`No draft turn found for session ${sessionId}`)
-    }
-
-    // Promote turn to 'streaming' before execution
-    const activeTurn: TurnRecord = { ...draftTurn, status: 'streaming' }
-    updateTurnRecord(db.connection, activeTurn)
-
-    const chatSession = new ChatSession(
-      session,
-      db,
-      lmStudioGateway,
-      session.mcpProfileSnapshot ? mcpGateway : null,
-      maxToolRounds,
-      activeTurn,
-      prompt,
+    await dispatchSchedulerJob(job, opCtx, {
       emitExecutionEvent,
-    )
-
-    await chatSession.execute()
-  }
-
-  private async executeAnalysisJob(
-    job: ActiveExecutionJob,
-    opCtx: SchedulerContext,
-    emitExecutionEvent: (event: TurnStreamEvent | AnalysisStreamEvent) => void,
-  ): Promise<void> {
-    const { db, lmStudioGateway, mcpGateway } = opCtx
-    const sessionId = job.target.sessionId
-
-    const session = getSessionRecord(db.connection, sessionId)
-    if (!session) throw new Error(`Session ${sessionId} not found at analysis execution time`)
-
-    // Mark session active (mirrors executeAnalysisWorkflow behavior)
-    session.status = 'active'
-    session.updatedAt = Date.now()
-    updateSessionRecord(db.connection, session)
-
-    try {
-      const instance = AnalysisSession.rehydrateFromDb(db, lmStudioGateway, mcpGateway, sessionId)
-      if (!instance) {
-        throw new Error('Failed to rehydrate analysis session from cursor step')
-      }
-
-      while (instance.canContinue()) {
-        await instance.resumeOneStep(emitExecutionEvent)
-        if (this.controlState === 'paused') {
-          break
-        }
-      }
-    } finally {
-      // Mark session ready after completion (or on error, keep active state for error detection)
-      const finalSession = getSessionRecord(db.connection, sessionId) ?? session
-      if (finalSession.status === 'active') {
-        finalSession.status = 'ready'
-        finalSession.updatedAt = Date.now()
-        updateSessionRecord(db.connection, finalSession)
-      }
-    }
-
-    // Build and emit the latest trace bundle for the completed run segment.
-    // When paused, the job ends at the current boundary without claiming the
-    // workflow itself is complete; the SSE wrapper closes on job completion.
-    const finalSession = getSessionRecord(db.connection, sessionId)!
-    const finalParts = listPartRecordsBySession(db.connection, sessionId)
-    const trace = buildSessionTraceBundle({
-      session: finalSession,
-      steps: listStepRecordsBySession(db.connection, sessionId),
-      turns: listTurnRecordsBySession(db.connection, sessionId),
-      rounds: listRoundRecordsBySession(db.connection, sessionId),
-      parts: finalParts,
-      rawExchanges: listRawExchangeRecordsBySession(db.connection, sessionId),
-      artifacts: listArtifactsBySession(db.connection, sessionId),
-      transcript: deriveTranscriptEntries(finalParts),
-      context: deriveContextEntries(finalParts),
+      shouldPauseAtBoundary: () => this.controlState === 'paused',
     })
-    const cursorStep = trace.steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    const phase = typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : null
-    if (phase === 'complete' || phase === 'error') {
-      emitExecutionEvent({ type: 'analysis-complete', trace })
-    }
-  }
-
-  private async executeAnalysisOneStepJob(
-    job: ActiveExecutionJob,
-    opCtx: SchedulerContext,
-    emitExecutionEvent: (event: TurnStreamEvent | AnalysisStreamEvent) => void,
-  ): Promise<void> {
-    const { db, lmStudioGateway, mcpGateway } = opCtx
-    const sessionId = job.target.sessionId
-
-    const session = getSessionRecord(db.connection, sessionId)
-    if (!session) throw new Error(`Session ${sessionId} not found at one-step execution time`)
-
-    // Mark session active
-    session.status = 'active'
-    session.updatedAt = Date.now()
-    updateSessionRecord(db.connection, session)
-
-    try {
-      const instance = AnalysisSession.rehydrateFromDb(db, lmStudioGateway, mcpGateway, sessionId)
-      if (!instance) {
-        throw new Error('Failed to rehydrate analysis session from cursor step')
-      }
-      // Execute exactly one step, then stop
-      await instance.resumeOneStep(emitExecutionEvent)
-    } finally {
-      const finalSession = getSessionRecord(db.connection, sessionId) ?? session
-      if (finalSession.status === 'active') {
-        finalSession.status = 'ready'
-        finalSession.updatedAt = Date.now()
-        updateSessionRecord(db.connection, finalSession)
-      }
-    }
-
-    // Emit final trace after the one step completes
-    const finalSession = getSessionRecord(db.connection, sessionId)!
-    const finalParts = listPartRecordsBySession(db.connection, sessionId)
-    const trace = buildSessionTraceBundle({
-      session: finalSession,
-      steps: listStepRecordsBySession(db.connection, sessionId),
-      turns: listTurnRecordsBySession(db.connection, sessionId),
-      rounds: listRoundRecordsBySession(db.connection, sessionId),
-      parts: finalParts,
-      rawExchanges: listRawExchangeRecordsBySession(db.connection, sessionId),
-      artifacts: listArtifactsBySession(db.connection, sessionId),
-      transcript: deriveTranscriptEntries(finalParts),
-      context: deriveContextEntries(finalParts),
-    })
-    emitExecutionEvent({ type: 'analysis-complete', trace })
   }
 
   // ── Internal helpers ──────────────────────────────────────────────────────

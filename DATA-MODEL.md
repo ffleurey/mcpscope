@@ -105,7 +105,7 @@ Current implementations may also expose metadata around the session tree such as
 | Property | Type | Meaning |
 |---|---|---|
 | `id` | `string` | Canonical setup ID |
-| `parts` | `Part[]` | Ordered setup parts: `system_prompt`, `mcp_instructions`, `tool_definitions` |
+| `parts` | `Part[]` | Ordered setup parts. `system_prompt` is present when the configured system prompt is non-empty; `mcp_instructions` and `tool_definitions` are present when MCP is configured for the session. |
 
 ### Turn
 

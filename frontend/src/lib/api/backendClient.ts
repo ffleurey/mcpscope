@@ -6,8 +6,6 @@ import {
   listMcpProfilesResponseSchema,
   listModelConfigsResponseSchema,
   listSessionsResponseSchema,
-  preludeStreamEventSchema,
-  turnStreamEventSchema,
   sessionTraceBundleSchema,
   sessionCreationDefaultsResponseSchema,
   upsertLmConnectionResponseSchema,
@@ -20,13 +18,9 @@ import {
   type LmStudioConnection,
   type McpServerProfile,
   type ModelConfig,
-  type PreludeStreamEvent,
   type SessionCreationDefaults,
   type SessionTraceBundle,
   type HierarchicalLookupResponse,
-  type TurnStreamEvent,
-  analysisStreamEventSchema,
-  type AnalysisStreamEvent,
   type ExecutionSnapshot,
   type SchedulerEvent,
   type ExecutionJob,
@@ -156,142 +150,6 @@ function parseSseBlock(block: string): { eventName: string | null; dataText: str
   }
 }
 
-export async function streamTurn(
-  sessionId: string,
-  userContent: string,
-  onEvent: (event: TurnStreamEvent) => void | Promise<void>,
-): Promise<void> {
-  const response = await fetch(buildUrl(`/api/sessions/${sessionId}/turns/stream`), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-    },
-    body: JSON.stringify({ userContent }),
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    const payload = text.length > 0 ? JSON.parse(text) : null
-    const message = (
-      payload
-      && typeof payload === 'object'
-      && 'error' in payload
-      && typeof payload.error === 'string'
-    )
-      ? payload.error
-      : `Backend request failed (${response.status})`
-    throw new Error(message)
-  }
-
-  if (!response.body) {
-    throw new Error('Streaming response body is missing')
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
-
-    let separatorIndex = buffer.search(/\r?\n\r?\n/)
-    while (separatorIndex >= 0) {
-      const block = buffer.slice(0, separatorIndex)
-      buffer = buffer.slice(separatorIndex + (buffer[separatorIndex] === '\r' ? 4 : 2))
-      const parsed = parseSseBlock(block)
-      if (parsed?.dataText) {
-        const event = turnStreamEventSchema.parse(JSON.parse(parsed.dataText))
-        if (parsed.eventName && parsed.eventName !== event.type) {
-          throw new Error(`Streaming event mismatch: header=${parsed.eventName} payload=${event.type}`)
-        }
-        await onEvent(event)
-      }
-      separatorIndex = buffer.search(/\r?\n\r?\n/)
-    }
-
-    if (done) {
-      break
-    }
-  }
-
-  const trailing = parseSseBlock(buffer.trim())
-  if (trailing?.dataText) {
-    const event = turnStreamEventSchema.parse(JSON.parse(trailing.dataText))
-    if (trailing.eventName && trailing.eventName !== event.type) {
-      throw new Error(`Streaming event mismatch: header=${trailing.eventName} payload=${event.type}`)
-    }
-    await onEvent(event)
-  }
-}
-
-export async function streamPreludeInit(
-  sessionId: string,
-  onEvent: (event: PreludeStreamEvent) => void | Promise<void>,
-): Promise<void> {
-  const response = await fetch(buildUrl(`/api/sessions/${sessionId}/initialize`), {
-    method: 'POST',
-    headers: {
-      Accept: 'text/event-stream',
-    },
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    const payload = text.length > 0 ? JSON.parse(text) : null
-    const message = (
-      payload
-      && typeof payload === 'object'
-      && 'error' in payload
-      && typeof payload.error === 'string'
-    )
-      ? payload.error
-      : `Backend request failed (${response.status})`
-    throw new Error(message)
-  }
-
-  if (!response.body) {
-    throw new Error('Streaming response body is missing')
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
-
-    let separatorIndex = buffer.search(/\r?\n\r?\n/)
-    while (separatorIndex >= 0) {
-      const block = buffer.slice(0, separatorIndex)
-      buffer = buffer.slice(separatorIndex + (buffer[separatorIndex] === '\r' ? 4 : 2))
-      const parsed = parseSseBlock(block)
-      if (parsed?.dataText) {
-        const event = preludeStreamEventSchema.parse(JSON.parse(parsed.dataText))
-        if (parsed.eventName && parsed.eventName !== event.type) {
-          throw new Error(`Streaming event mismatch: header=${parsed.eventName} payload=${event.type}`)
-        }
-        await onEvent(event)
-      }
-      separatorIndex = buffer.search(/\r?\n\r?\n/)
-    }
-
-    if (done) {
-      break
-    }
-  }
-
-  const trailing = parseSseBlock(buffer.trim())
-  if (trailing?.dataText) {
-    const event = preludeStreamEventSchema.parse(JSON.parse(trailing.dataText))
-    if (trailing.eventName && trailing.eventName !== event.type) {
-      throw new Error(`Streaming event mismatch: header=${trailing.eventName} payload=${event.type}`)
-    }
-    await onEvent(event)
-  }
-}
 
 export function importTrace(trace: SessionTraceBundle) {
   return request('/api/traces/import', {
@@ -510,71 +368,6 @@ export function getDefaultAnalysisSystemPrompt(input: {
   })
 }
 
-export async function streamExecuteAnalysis(
-  analysisSessionId: string,
-  onEvent: (event: AnalysisStreamEvent) => void | Promise<void>,
-  options: { singleStep?: boolean } = {},
-): Promise<void> {
-  const url = options.singleStep
-    ? buildUrl(`/api/sessions/${analysisSessionId}/execute?single_step=true`)
-    : buildUrl(`/api/sessions/${analysisSessionId}/execute`)
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Accept: 'text/event-stream',
-    },
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    const payload = text.length > 0 ? JSON.parse(text) : null
-    const message = (
-      payload
-      && typeof payload === 'object'
-      && 'error' in payload
-      && typeof payload.error === 'string'
-    )
-      ? payload.error
-      : `Backend request failed (${response.status})`
-    throw new Error(message)
-  }
-
-  if (!response.body) {
-    throw new Error('Streaming response body is missing')
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done })
-
-    let separatorIndex = buffer.search(/\r?\n\r?\n/)
-    while (separatorIndex >= 0) {
-      const block = buffer.slice(0, separatorIndex)
-      buffer = buffer.slice(separatorIndex + (buffer[separatorIndex] === '\r' ? 4 : 2))
-      const parsed = parseSseBlock(block)
-      if (parsed?.dataText) {
-        const event = analysisStreamEventSchema.parse(JSON.parse(parsed.dataText))
-        await onEvent(event)
-      }
-      separatorIndex = buffer.search(/\r?\n\r?\n/)
-    }
-
-    if (done) {
-      break
-    }
-  }
-
-  const trailing = parseSseBlock(buffer.trim())
-  if (trailing?.dataText) {
-    const event = analysisStreamEventSchema.parse(JSON.parse(trailing.dataText))
-    await onEvent(event)
-  }
-}
-
 // ─── Scheduler API ──────────────────────────────────────────────────────────
 
 export function getSchedulerSnapshot(): Promise<ExecutionSnapshot> {
@@ -585,6 +378,13 @@ export function enqueueSession(sessionId: string, prompt?: string): Promise<{ jo
   return request('/api/scheduler/enqueue', {
     method: 'POST',
     body: { session_id: sessionId, ...(prompt !== undefined ? { prompt } : {}) },
+  })
+}
+
+export function enqueueStep(sessionId: string): Promise<{ job: ExecutionJob }> {
+  return request('/api/scheduler/enqueue-step', {
+    method: 'POST',
+    body: { session_id: sessionId },
   })
 }
 

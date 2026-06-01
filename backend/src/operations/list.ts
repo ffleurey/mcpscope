@@ -1,6 +1,36 @@
 import { z } from 'zod'
-import { listSessionSummaries } from '../persistence/repository.js'
+import { listSessionSummaries, listTurnRecordsBySession } from '../persistence/repository.js'
 import type { OperationContext } from './context.js'
+
+function toLifecycleState(
+  ctx: OperationContext,
+  summary: {
+    id: string
+  status: string
+  initStatus: string
+  },
+): 'initializing' | 'ready' | 'running' | 'error' {
+  const turns = listTurnRecordsBySession(ctx.db.connection, summary.id)
+  const activeTurn = [...turns]
+    .reverse()
+    .find(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
+    ?? null
+  const latestTurn = turns.at(-1) ?? null
+
+  if (summary.initStatus === 'error' || summary.status === 'error' || latestTurn?.status === 'error') {
+    return 'error'
+  }
+  if (summary.initStatus === 'error' || summary.status === 'error') {
+    return 'error'
+  }
+  if (summary.initStatus === 'pending' || summary.initStatus === 'initializing') {
+    return 'initializing'
+  }
+  if (activeTurn) {
+    return 'running'
+  }
+  return 'ready'
+}
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
@@ -12,7 +42,7 @@ export type ListInput = z.infer<typeof listInputSchema>
 export interface SessionSummary {
   id: string
   title: string
-  status: string
+  status: 'initializing' | 'ready' | 'running' | 'error'
   init_status: string
   session_type: string
   parent_kind: string | null
@@ -37,7 +67,7 @@ export const listOutputSchema = {
   sessions: z.array(z.object({
     id: z.string(),
     title: z.string(),
-    status: z.string(),
+    status: z.enum(['initializing', 'ready', 'running', 'error']),
     init_status: z.string(),
     session_type: z.string(),
     parent_kind: z.string().nullable(),
@@ -64,7 +94,7 @@ export const listOperation = {
       sessions: rows.map(s => ({
         id: s.id,
         title: s.title,
-        status: s.status,
+        status: toLifecycleState(ctx, s),
         init_status: s.initStatus,
         session_type: s.sessionType,
         parent_kind: s.parentKind,

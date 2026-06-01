@@ -28,10 +28,22 @@ export type LaunchPrimarySessionInput = z.infer<typeof launchPrimarySessionInput
 
 export interface LaunchPrimarySessionResult {
   session: SessionRecord
+  /** Job ID of the auto-enqueued init job, if one was created. Frontend can pass
+   *  this to awaitJob for precise completion tracking without session-ID ambiguity. */
+  initJobId?: string
 }
 
 export const launchPrimarySessionOutputSchema = {
   session: sessionRecordSchema,
+  initJobId: z.string().optional(),
+}
+
+export const launchPrimarySessionOperation = {
+  schema: launchPrimarySessionInputSchema,
+  outputSchema: launchPrimarySessionOutputSchema,
+  async execute(ctx: OperationContext, rawInput: unknown): Promise<LaunchPrimarySessionResult> {
+    return executePrimarySessionLaunch(ctx, rawInput)
+  },
 }
 
 export async function executePrimarySessionLaunch(
@@ -149,7 +161,20 @@ export async function executePrimarySessionLaunch(
       throw new OperationError(result.error.message, 'duplicate_session_id')
     case 'id_generation_error':
       throw new OperationError(result.error.message, 'session_id_generation_failed')
-    case 'created':
-      return { session: result.session }
+    case 'created': {
+      // Auto-enqueue initialization via the scheduler so the frontend can watch
+      // the scheduler stream for prelude events instead of calling /initialize separately.
+      let initJobId: string | undefined
+      if (ctx.scheduler) {
+        try {
+          const initJob = ctx.scheduler.enqueueInit(ctx, result.session.id)
+          initJobId = initJob.jobId
+        } catch {
+          // Admission failure (e.g. another session active) is non-fatal here;
+          // the frontend can fall back to calling /initialize explicitly.
+        }
+      }
+      return { session: result.session, ...(initJobId ? { initJobId } : {}) }
+    }
   }
 }
