@@ -44,18 +44,10 @@ export interface FastAssessmentTurnResult {
 }
 
 function validateAssessmentIdentity(packet: EvidencePacket, parsed: {
-  turn_id: string
-  round_id: string
   tool_call_part_id: string
   tool_name: string
 }): string[] {
   const failures: string[] = []
-  if (parsed.turn_id !== packet.turn_id) {
-    failures.push(`turn_id mismatch: expected ${packet.turn_id}, got ${parsed.turn_id}`)
-  }
-  if (parsed.round_id !== packet.round_id) {
-    failures.push(`round_id mismatch: expected ${packet.round_id}, got ${parsed.round_id}`)
-  }
   if (parsed.tool_call_part_id !== packet.tool_call_part_id) {
     failures.push(`tool_call_part_id mismatch: expected ${packet.tool_call_part_id}, got ${parsed.tool_call_part_id}`)
   }
@@ -71,8 +63,9 @@ function normalizeFastAssessmentPayload(payload: unknown): unknown {
   }
 
   const normalized = { ...payload } as Record<string, unknown>
-  if (normalized.result_status === 'tool_error') {
-    normalized.result_status = 'response_error'
+  // Handle legacy field names or normalize values if needed
+  if (normalized.tool_call_result === 'tool_error') {
+    normalized.tool_call_result = 'response_error'
   }
   return normalized
 }
@@ -254,10 +247,10 @@ export async function runFastToolCallAssessmentTurn(
 function buildFastAssessmentQuestion(packet: EvidencePacket, analysisTarget: AnalysisTarget): string {
   return renderPromptResource('fast-session.tool-call-assessment.txt', {
     analysis_focus_instructions: buildAnalysisFocusInstructions(analysisTarget),
-    turn_id: packet.turn_id,
-    round_id: packet.round_id,
     tool_call_part_id: packet.tool_call_part_id,
     tool_name: packet.tool_name,
+    pre_reasoning_part_id: packet.reasoning_before_part_id,
+    post_reasoning_part_id: packet.reasoning_after_part_id,
   })
 }
 

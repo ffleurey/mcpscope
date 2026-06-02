@@ -182,47 +182,18 @@ export const toolCallAssessmentSchema = z.object({
 export type ToolCallAssessment = z.infer<typeof toolCallAssessmentSchema>
 
 export const fastToolCallAssessmentSchema = z.object({
-  turn_id: z.string(),
-  round_id: z.string(),
   tool_call_part_id: z.string(),
   tool_name: z.string(),
-  result_status: z.enum([
+  tool_call_reasoning: z.string(),
+  tool_call_result: z.enum([
     'successful',
     'partially_successful',
     'unsuccessful',
-    'request_error',
+    'parameter_error',
     'response_error',
-    'tool_error',
-    'empty',
     'unclear',
   ]),
-  efficiency: z.enum([
-    'efficient',
-    'acceptable',
-    'inefficient',
-    'unnecessary',
-    'unclear',
-  ]),
-  primary_issue: z.enum([
-    'none',
-    'wrong_tool',
-    'wrong_parameters',
-    'request_construction_error',
-    'response_interpretation_error',
-    'tool_error',
-    'missing_evidence',
-    'unclear',
-  ]),
-  short_rationale: z.string(),
-  post_call_outcome: z.enum([
-    'correctly_used',
-    'partially_used',
-    'misused',
-    'ignored',
-    'not_applicable',
-    'unclear',
-  ]),
-  follow_up_priority: z.enum(['none', 'low', 'medium', 'high']),
+  tool_call_diagnostic: z.string().nullable().optional(),
 })
 export type FastToolCallAssessment = z.infer<typeof fastToolCallAssessmentSchema>
 
@@ -257,7 +228,14 @@ export const fastTurnSummarySchema = z.object({
   per_tool_findings: z.array(z.object({
     tool_call_part_id: z.string(),
     tool_name: z.string(),
-    result_status: fastToolCallAssessmentSchema.shape.result_status,
+    result_status: z.enum([
+      'successful',
+      'partially_successful',
+      'unsuccessful',
+      'parameter_error',
+      'response_error',
+      'unclear',
+    ]),
     brief_finding: z.string(),
   })),
   cross_attempt_reconciliation: z.string().nullable(),
@@ -326,8 +304,14 @@ export const fastFinalAnalysisReportSchema = z.object({
   notable_failures: z.array(z.object({
     tool_call_part_id: z.string(),
     tool_name: z.string(),
-    result_status: fastToolCallAssessmentSchema.shape.result_status,
-    primary_issue: fastToolCallAssessmentSchema.shape.primary_issue,
+    result_status: z.enum([
+      'successful',
+      'partially_successful',
+      'unsuccessful',
+      'parameter_error',
+      'response_error',
+      'unclear',
+    ]),
     reason: z.string(),
   })),
   follow_up_candidates: z.array(z.object({

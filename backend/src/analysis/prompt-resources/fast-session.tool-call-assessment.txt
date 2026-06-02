@@ -1,23 +1,40 @@
-Assess tool call {{tool_call_part_id}} ({{tool_name}}) using only the inspected evidence above.
+Assess call of ({{tool_name}}) using the evidence structure below.
+
+## Evidence Structure
+
+**Pre-tool-call reasoning block {{pre_reasoning_part_id}}:**
+Contains the model's thinking before the tool call. Review this to understand:
+- Why the model selected this tool (as opposed to other available tools)
+- How the model prepared the tool call parameters
+- What assumptions or information guided the decision
+
+**Tool call and result block {{tool_call_part_id}}:**
+The actual tool call (showing parameters) and the result/output returned by the tool.
+Review this to assess:
+- Whether parameters match the tool's expected signature
+- Whether the result data is what was requested
+- Any errors, malformed responses, or empty results
+
+**Post-tool-call reasoning block {{post_reasoning_part_id}}:**
+Contains the model's reflection on the tool result. Review this to understand:
+- Whether the model was able to use the result to make progress
+- If expectations were met or if issues arose
+- How the model integrated the result into the next step
+
+**Tool descriptions context:**
+The tool definitions that were available to the model during the call decision.
+Use these to assess whether the model correctly understood the tool's purpose and parameters.
+If an error has occured, check the tool call against the documentated parameters and include any findings in the diagnostic.
+
+## Assessment Task
 
 {{analysis_focus_instructions}}
 
-This is the fast session workflow. Prefer compact, benchmark-friendly judgments over narrative explanation.
-- Distinguish result_status, efficiency, and primary_issue separately.
-- Use short_rationale for one concise explanation only.
-- Use follow_up_priority to flag deeper review candidates.
-- Return sparse routine-success outputs. Do not add prose outside JSON.
-
-Return exactly one JSON object with this shape:
+Make a compact assessment of this tool call. Return exactly one JSON object with this shape:
 {
-  "turn_id": "{{turn_id}}",
-  "round_id": "{{round_id}}",
-  "tool_call_part_id": "{{tool_call_part_id}}",
   "tool_name": "{{tool_name}}",
-  "result_status": "successful" | "partially_successful" | "unsuccessful" | "request_error" | "response_error" | "empty" | "unclear",
-  "efficiency": "efficient" | "acceptable" | "inefficient" | "unnecessary" | "unclear",
-  "primary_issue": "none" | "wrong_tool" | "wrong_parameters" | "request_construction_error" | "response_interpretation_error" | "tool_error" | "missing_evidence" | "unclear",
-  "short_rationale": "<one short sentence>",
-  "post_call_outcome": "correctly_used" | "partially_used" | "misused" | "ignored" | "not_applicable" | "unclear",
-  "follow_up_priority": "none" | "low" | "medium" | "high"
+  "tool_call_part_id": "{{tool_call_part_id}}",
+  "tool_call_reasoning": "<Explain why this tool was selected. If this is a retry of a previously failed approach in the same turn, state what the model learned and what parameters or strategy changed. If multiple tools were considered, name them.>",
+  "tool_call_result": "successful" | "partially_successful" | "unsuccessful" | "parameter_error" | "response_error" | "unclear",
+  "tool_call_diagnostic": "<if result is not fully successful, explain what went wrong based on evidence. Reference tool description if relevant. Omit if successful.>"
 }
