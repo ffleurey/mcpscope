@@ -57,8 +57,3 @@ mcpscope is a backend-centered runtime analysis tool for MCP and multi-turn LLM 
 - Returning `camelCase` fields from machine-readable results.
 - Reconstructing backend flow in tests when an exported trace and replay test would be more robust.
 - Moving backend-owned defaults or validation logic into the frontend.
-
-## Custom Agents
-
-- Use [.github/agents/planning.agent.md](.github/agents/planning.agent.md) for backlog shaping, roadmap and doc consistency, coding-agent handoff prompts, and PR review.
-- Use [.github/agents/coding.agent.md](.github/agents/coding.agent.md) for implementation work on one approved backlog task, including branch preparation, focused validation, and PR handoff.
