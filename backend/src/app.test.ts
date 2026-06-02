@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import { createServer } from 'node:http'
+import { createRequire } from 'node:module'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { FastifyInstance } from 'fastify'
@@ -12,6 +13,30 @@ import {
   capturedReasoningThreeBatchRounds,
   capturedReasoningThreeBatchSession,
 } from './testing/fixtures/capturedReasoningThreeBatch.js'
+
+const require = createRequire(import.meta.url)
+const LightMyRequest = require('light-my-request/lib/request') as new (options: { url: string; method: string }) => { socket: Record<string, unknown> }
+const injectedSocketPrototype = Object.getPrototypeOf(new LightMyRequest({ url: '/', method: 'GET' }).socket) as {
+  destroyed?: boolean
+  destroy?: (error?: Error) => void
+  destroySoon?: () => void
+}
+
+if (typeof injectedSocketPrototype.destroy !== 'function') {
+  injectedSocketPrototype.destroy = function destroy(error?: Error) {
+    this.destroyed = true
+    if (error) {
+      ;(this as { emit?: (event: string, value?: Error) => void }).emit?.('error', error)
+    }
+    ;(this as { emit?: (event: string) => void }).emit?.('close')
+  }
+}
+
+if (typeof injectedSocketPrototype.destroySoon !== 'function') {
+  injectedSocketPrototype.destroySoon = function destroySoon() {
+    this.destroy?.()
+  }
+}
 
 function makeTestConfig() {
   const dataDir = `.tmp-test-data/${crypto.randomUUID()}`
@@ -2822,7 +2847,7 @@ describe('CLI session lifecycle endpoints', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
   })
 
-  describe('global session execution lock', () => {
+  describe('cross-session admission with queued execution', () => {
     const minimalModelProfile = {
       id: 'model-1',
       name: 'Model',
@@ -2876,7 +2901,7 @@ describe('CLI session lifecycle endpoints', () => {
       updateSessionRecord(a.backendDb.connection, s)
     }
 
-    it('POST /api/sessions is blocked when another session is initializing', async () => {
+    it('POST /api/sessions is allowed when another session is initializing', async () => {
       const config = makeTestConfig()
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
@@ -2891,19 +2916,17 @@ describe('CLI session lifecycle endpoints', () => {
       const blockerId = first.json().session.id as string
       makeSessionInitializing(app, blockerId)
 
-      // Second creation must fail
+      // Second creation should still succeed; initialization is queued.
       const second = await app.inject({
         method: 'POST',
         url: '/api/sessions',
         payload: { title: 'Should Be Blocked', modelProfileSnapshot: minimalModelProfile },
       })
-      expect(second.statusCode).toBe(409)
-      expect(second.json().error.code).toBe('another_session_active')
-      expect(second.json().error.active_session.id).toBe(blockerId)
-      expect(second.json().error.active_session.state).toBe('initializing')
+      expect(second.statusCode).toBe(201)
+      expect(second.json().session.id).not.toBe(blockerId)
     })
 
-    it('POST /api/sessions is blocked when another session is running a turn', async () => {
+    it('POST /api/sessions is allowed when another session is running a turn', async () => {
       const config = makeTestConfig()
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
@@ -2916,13 +2939,11 @@ describe('CLI session lifecycle endpoints', () => {
         url: '/api/sessions',
         payload: { title: 'Should Be Blocked', modelProfileSnapshot: minimalModelProfile },
       })
-      expect(second.statusCode).toBe(409)
-      expect(second.json().error.code).toBe('another_session_active')
-      expect(second.json().error.active_session.id).toBe(blockerId)
-      expect(second.json().error.active_session.state).toBe('running')
+      expect(second.statusCode).toBe(201)
+      expect(second.json().session.id).not.toBe(blockerId)
     })
 
-    it('POST /api/sessions/from-defaults is blocked when another session is active', async () => {
+    it('POST /api/sessions/from-defaults is allowed when another session is active', async () => {
       const config = makeTestConfig()
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
@@ -2948,13 +2969,11 @@ describe('CLI session lifecycle endpoints', () => {
         url: '/api/sessions/from-defaults',
         payload: { title: 'Should Be Blocked' },
       })
-      expect(blocked.statusCode).toBe(409)
-      expect(blocked.json().error.code).toBe('another_session_active')
-      expect(blocked.json().error.active_session.id).toBe(blockerId)
-      expect(blocked.json().error.active_session.state).toBe('initializing')
+      expect(blocked.statusCode).toBe(201)
+      expect(blocked.json().session.id).not.toBe(blockerId)
     })
 
-    it('POST /api/sessions/:sessionId/initialize is blocked when another session is running', async () => {
+    it('POST /api/sessions/:sessionId/initialize is allowed when another session is running', async () => {
       const config = makeTestConfig()
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
@@ -2978,13 +2997,10 @@ describe('CLI session lifecycle endpoints', () => {
         method: 'POST',
         url: `/api/sessions/${targetId}/initialize`,
       })
-      expect(initRes.statusCode).toBe(409)
-      expect(initRes.json().error.code).toBe('another_session_active')
-      expect(initRes.json().error.active_session.id).toBe(blockerId)
-      expect(initRes.json().error.active_session.state).toBe('running')
+      expect(initRes.statusCode).toBe(200)
     })
 
-    it('POST /api/sessions/:sessionId/turns/start is blocked when another session is initializing', async () => {
+    it('POST /api/sessions/:sessionId/turns/start is allowed when another session is initializing', async () => {
       const config = makeTestConfig()
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
@@ -3017,13 +3033,10 @@ describe('CLI session lifecycle endpoints', () => {
         url: `/api/sessions/${targetId}/turns/start`,
         payload: { userContent: 'Hello' },
       })
-      expect(startRes.statusCode).toBe(409)
-      expect(startRes.json().error.code).toBe('another_session_active')
-      expect(startRes.json().error.active_session.id).toBe(blockerId)
-      expect(startRes.json().error.active_session.state).toBe('initializing')
+      expect(startRes.statusCode).toBe(202)
     })
 
-    it('POST /api/sessions/:sessionId/turns/start is blocked when another session is running', async () => {
+    it('POST /api/sessions/:sessionId/turns/start is allowed when another session is running', async () => {
       const config = makeTestConfig()
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
@@ -3060,13 +3073,10 @@ describe('CLI session lifecycle endpoints', () => {
         url: `/api/sessions/${targetId}/turns/start`,
         payload: { userContent: 'Hello' },
       })
-      expect(startRes.statusCode).toBe(409)
-      expect(startRes.json().error.code).toBe('another_session_active')
-      expect(startRes.json().error.active_session.id).toBe(blockerId)
-      expect(startRes.json().error.active_session.state).toBe('running')
+      expect(startRes.statusCode).toBe(202)
     })
 
-    it('POST /api/sessions/:sessionId/turns is blocked when another session is active', async () => {
+    it('POST /api/sessions/:sessionId/turns is allowed when another session is active', async () => {
       const config = makeTestConfig()
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
@@ -3098,13 +3108,10 @@ describe('CLI session lifecycle endpoints', () => {
         url: `/api/sessions/${targetId}/turns`,
         payload: { userContent: 'Hello' },
       })
-      expect(turnRes.statusCode).toBe(409)
-      expect(turnRes.json().error.code).toBe('another_session_active')
-      expect(turnRes.json().error.active_session.id).toBe(blockerId)
-      expect(turnRes.json().error.active_session.state).toBe('running')
+      expect(turnRes.statusCode).toBe(201)
     })
 
-    it('POST /api/sessions/:sessionId/turns/stream is blocked when another session is active', async () => {
+    it('POST /api/sessions/:sessionId/turns/stream is allowed when another session is active', async () => {
       const config = makeTestConfig()
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
@@ -3139,10 +3146,7 @@ describe('CLI session lifecycle endpoints', () => {
         url: `/api/sessions/${targetId}/turns/stream`,
         payload: { userContent: 'Hello' },
       })
-      expect(streamRes.statusCode).toBe(409)
-      expect(streamRes.json().error.code).toBe('another_session_active')
-      expect(streamRes.json().error.active_session.id).toBe(blockerId)
-      expect(streamRes.json().error.active_session.state).toBe('running')
+      expect(streamRes.statusCode).toBe(200)
     })
 
     it('global lock does not block operations on the same session', async () => {
@@ -3175,7 +3179,7 @@ describe('CLI session lifecycle endpoints', () => {
       expect(startRes.statusCode).toBe(202)
     })
 
-    it('POST /api/sessions/preflight is blocked when another session is initializing', async () => {
+    it('POST /api/sessions/preflight is not blocked when another session is initializing', async () => {
       const config = makeTestConfig()
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
@@ -3200,13 +3204,11 @@ describe('CLI session lifecycle endpoints', () => {
         },
       })
 
-      expect(preflightRes.statusCode).toBe(409)
-      expect(preflightRes.json().error.code).toBe('another_session_active')
-      expect(preflightRes.json().error.active_session.id).toBe(blockerId)
-      expect(preflightRes.json().error.active_session.state).toBe('initializing')
+      expect(preflightRes.statusCode).toBe(503)
+      expect(preflightRes.json().error.code).toBe('lm_studio_unreachable')
     })
 
-    it('POST /api/sessions/preflight is blocked when another session is running', async () => {
+    it('POST /api/sessions/preflight is not blocked when another session is running', async () => {
       const config = makeTestConfig()
       dataDir = config.dataDir
       app = await buildBackendApp(config, baseGateway)
@@ -3224,17 +3226,13 @@ describe('CLI session lifecycle endpoints', () => {
         },
       })
 
-      expect(preflightRes.statusCode).toBe(409)
-      expect(preflightRes.json().error.code).toBe('another_session_active')
-      expect(preflightRes.json().error.active_session.id).toBe(blockerId)
-      expect(preflightRes.json().error.active_session.state).toBe('running')
+      expect(preflightRes.statusCode).toBe(503)
+      expect(preflightRes.json().error.code).toBe('lm_studio_unreachable')
     })
 
-    it('concurrent: session creation is blocked while turns/stream is in flight', async () => {
-      // This test proves the lock is actually held during the async gap inside turns/stream.
-      // The gateway probe is blocked mid-turn so that the event loop can run a concurrent
-      // session-creation request. The pre-inserted turn record must be visible to
-      // findActiveSession at that point, causing the creation to return 409.
+    it('concurrent: session creation succeeds while turns/stream is in flight', async () => {
+      // The stream request reserves a draft turn before yielding. Session creation
+      // should still succeed because cross-session work is now serialized by the scheduler.
       const releaseProbe = createDeferred<void>()
       const config = makeTestConfig()
       dataDir = config.dataDir
@@ -3265,8 +3263,7 @@ describe('CLI session lifecycle endpoints', () => {
       await new Promise(r => setImmediate(r))
       await new Promise(r => setImmediate(r))
 
-      // Now try to create a new session. The pre-inserted turn should make findActiveSession
-      // find session A as "running", blocking the creation with 409.
+      // Now try to create a new session while the existing turn is still in flight.
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/sessions',
@@ -3277,9 +3274,8 @@ describe('CLI session lifecycle endpoints', () => {
       releaseProbe.resolve()
       await streamPromise
 
-      expect(createRes.statusCode).toBe(409)
-      expect(createRes.json().error.code).toBe('another_session_active')
-      expect(createRes.json().error.active_session.id).toBe(sessionAId)
+      expect(createRes.statusCode).toBe(201)
+      expect(createRes.json().session.id).not.toBe(sessionAId)
     }, 15_000)
   })
 })
@@ -3745,7 +3741,7 @@ describe('analysis launch', () => {
     // v2: no analysis_prompt in response
     expect(body.analysis_prompt).toBeUndefined()
 
-    expect(body.session.title).toBe('Analysis: Target Session')
+    expect(body.session.title).toBe('Full Analysis: Target Session')
 
     // Analysis sessions now have a built-in MCP binding (analysis MCP endpoint)
     expect(body.session.mcpProfileSnapshot).not.toBeNull()
@@ -3954,7 +3950,7 @@ describe('analysis launch', () => {
     )
   })
 
-  it('analysis child session appears in GET /api/sessions?include_children=true but not in the primary list', async () => {
+  it('analysis child session appears in both default and include_children session lists', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
@@ -3973,14 +3969,14 @@ describe('analysis launch', () => {
     expect(launchRes.statusCode).toBe(201)
     const childId = launchRes.json().session.id as string
 
-    // Primary-only list should NOT include the analysis child
+    // Default list now includes analysis children as well.
     const primaryList = await app!.inject({ method: 'GET', url: '/api/sessions' })
     expect(primaryList.statusCode).toBe(200)
     const primaryIds = primaryList.json().sessions.map((s: { id: string }) => s.id)
     expect(primaryIds).toContain(targetId)
-    expect(primaryIds).not.toContain(childId)
+    expect(primaryIds).toContain(childId)
 
-    // include_children=true list SHOULD include both
+    // include_children=true preserves the same inclusive behavior.
     const fullList = await app!.inject({ method: 'GET', url: '/api/sessions?include_children=true' })
     expect(fullList.statusCode).toBe(200)
     const fullIds = fullList.json().sessions.map((s: { id: string }) => s.id)
@@ -3991,6 +3987,52 @@ describe('analysis launch', () => {
     const childEntry = fullList.json().sessions.find((s: { id: string }) => s.id === childId)
     expect(childEntry.session_type).toBe('session_analysis')
     expect(childEntry.parent_id).toBe(targetId)
+  })
+
+  it('analysis launch and queued execution are allowed while another session is running', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config, {
+      lmStudioGateway: makeAnalysisMockGateway(),
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+
+    const blockerId = await createReadySession(app)
+    insertTurnRecord(app.backendDb.connection, {
+      id: `${blockerId}.1`,
+      sessionId: blockerId,
+      ownerStepId: null,
+      sequenceNumber: 1,
+      status: 'streaming',
+      outcome: null,
+      usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+      contextTokensAtTurnEnd: null,
+      contextTokensAfterCompaction: null,
+      compactionApplied: null,
+      compactionTokensRemoved: null,
+      createdAt: Date.now(),
+      completedAt: null,
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurn(app, targetId)
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: { model_config_id: 'mc-1', target_turn_id: turnId, analysis_goal: 'Queue this analysis.' },
+    })
+    expect(launchRes.statusCode).toBe(201)
+
+    const childId = launchRes.json().session.id as string
+    const enqueueRes = await app.inject({
+      method: 'POST',
+      url: '/api/scheduler/enqueue',
+      payload: { session_id: childId },
+    })
+    expect(enqueueRes.statusCode).toBe(202)
+    expect(enqueueRes.json().job.target).toMatchObject({ kind: 'session', sessionId: childId })
   })
 
   it('analysis MCP endpoint is restricted to inspect and status tools only', async () => {
@@ -4308,6 +4350,480 @@ describe('analysis launch', () => {
       .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND payload_summary LIKE 'Evidence for packet%'`)
       .all(childId) as Array<{ id: string }>
     expect(injectParts).toHaveLength(0)
+  })
+
+  it('v2 fast session flow with tool calls: produces fast assessment, fast turn summary, and fast final report artifacts', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const inspectIds: string[] = []
+    const turnRef = { id: '' }
+    let callCount = 0
+
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          const content = idx === 0
+            ? JSON.stringify({
+                turn_id: turnRef.id,
+                round_id: `${turnRef.id}-R1`,
+                tool_call_part_id: `${turnRef.id}-P3`,
+                tool_name: 'test_tool',
+                result_status: 'successful',
+                efficiency: 'efficient',
+                primary_issue: 'none',
+                short_rationale: 'The tool call succeeded with the right request shape.',
+                post_call_outcome: 'correctly_used',
+                follow_up_priority: 'none',
+              })
+            : idx === 1
+              ? JSON.stringify({
+                  turn_id: turnRef.id,
+                  total_tool_calls_assessed: 1,
+                  turn_outcome: 'answered',
+                  turn_outcome_rationale: 'The turn answered the request directly.',
+                  per_tool_findings: [{
+                    tool_call_part_id: `${turnRef.id}-P3`,
+                    tool_name: 'test_tool',
+                    result_status: 'successful',
+                    brief_finding: 'The tool was used correctly and efficiently.',
+                  }],
+                  cross_attempt_reconciliation: null,
+                  follow_up_candidates: [],
+                })
+              : JSON.stringify({
+                  overall_outcome: 'answered',
+                  overall_rationale: 'The session answered the request with one successful tool call.',
+                  path_efficiency: 'efficient',
+                  tool_summaries: [{
+                    tool_name: 'test_tool',
+                    total_tool_calls: 1,
+                    successful_tool_calls: 1,
+                    request_error_tool_calls: 0,
+                    response_error_tool_calls: 0,
+                    empty_tool_calls: 0,
+                    inefficient_tool_calls: 0,
+                    summary: 'The tool performed well in the assessed scope.',
+                  }],
+                  notable_failures: [],
+                  follow_up_candidates: [],
+                  total_tool_calls_assessed: 1,
+                })
+
+          return {
+            id: `cmpl-fast-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-fast-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(inspectIds),
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: {
+        model_config_id: 'mc-1',
+        target_turn_id: turnId,
+        analysis_goal: 'Quickly grade this tool call.',
+        workflow_kind: 'fast_session_analysis',
+      },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(execRes.statusCode).toBe(200)
+    expect(callCount).toBe(3)
+
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+
+    expect(schemaKeys).toContain('analysis.analysis_target.v1')
+    expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
+    expect(schemaKeys).toContain('analysis.fast_session_tool_call_assessment.v1')
+    expect(schemaKeys).toContain('analysis.fast_session_turn_summary.v1')
+    expect(schemaKeys).toContain('analysis.fast_session_final_analysis_report.v1')
+    expect(inspectIds).toEqual([
+      targetId,
+      `${turnId}-P2`,
+      `${turnId}-P3`,
+      `${turnId}-P5`,
+    ])
+  })
+
+  it('v2 fast session single-step execution does not emit analysis-complete before the workflow finishes', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const turnRef = { id: '' }
+    let callCount = 0
+
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          const content = idx === 0
+            ? JSON.stringify({
+                turn_id: turnRef.id,
+                round_id: `${turnRef.id}-R1`,
+                tool_call_part_id: `${turnRef.id}-P3`,
+                tool_name: 'test_tool',
+                result_status: 'successful',
+                efficiency: 'efficient',
+                primary_issue: 'none',
+                short_rationale: 'The tool call succeeded with the right request shape.',
+                post_call_outcome: 'correctly_used',
+                follow_up_priority: 'none',
+              })
+            : JSON.stringify({
+                overall_outcome: 'answered',
+                overall_rationale: 'unused in single-step validation',
+                path_efficiency: 'efficient',
+                tool_summaries: [],
+                notable_failures: [],
+                follow_up_candidates: [],
+                total_tool_calls_assessed: 1,
+              })
+
+          return {
+            id: `cmpl-fast-single-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-fast-single-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: {
+        model_config_id: 'mc-1',
+        target_turn_id: turnId,
+        analysis_goal: 'Quickly grade this tool call.',
+        workflow_kind: 'fast_session_analysis',
+      },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute?single_step=true`,
+    })
+    expect(execRes.statusCode).toBe(200)
+    expect(execRes.body).not.toContain('analysis-complete')
+
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+    expect(schemaKeys).toContain('analysis.analysis_target.v1')
+    expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
+    expect(schemaKeys).not.toContain('analysis.fast_session_final_analysis_report.v1')
+
+    const steps = listStepRecordsBySession(app.backendDb.connection, childId)
+    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
+    expect((cursorStep?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+  })
+
+  it('v2 fast tool flow with tool calls: produces grouped tool assessment and fast tool final report artifacts', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const inspectIds: string[] = []
+    const turnRef = { id: '' }
+    let callCount = 0
+
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          const content = idx === 0
+            ? JSON.stringify({
+                work_unit_id: 'tool-group-1',
+                tool_name: 'test_tool',
+                tool_call_part_ids: [`${turnRef.id}-P3`],
+                turn_ids: [turnRef.id],
+                total_tool_calls: 1,
+                usefulness: 'high',
+                efficiency: 'efficient',
+                common_failure_mode: 'none',
+                summary: 'The tool was used effectively for the target task.',
+                follow_up_priority: 'none',
+                notable_part_ids: [`${turnRef.id}-P3`],
+              })
+            : JSON.stringify({
+                overall_tool_use_outcome: 'strong',
+                overall_rationale: 'Tool use was strong and directly supported the answer.',
+                tool_summaries: [{
+                  work_unit_id: 'tool-group-1',
+                  tool_name: 'test_tool',
+                  usefulness: 'high',
+                  efficiency: 'efficient',
+                  common_failure_mode: 'none',
+                  summary: 'The tool performed well in the assessed scope.',
+                  follow_up_priority: 'none',
+                }],
+                repeated_failure_patterns: [],
+                follow_up_candidates: [],
+                total_tool_groups_assessed: 1,
+                total_tool_calls_assessed: 1,
+              })
+
+          return {
+            id: `cmpl-fast-tool-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-fast-tool-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(inspectIds),
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: {
+        model_config_id: 'mc-1',
+        target_turn_id: turnId,
+        analysis_goal: 'Assess tool performance by tool name.',
+        workflow_kind: 'fast_tool_analysis',
+      },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const execRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute`,
+    })
+    expect(execRes.statusCode).toBe(200)
+    expect(callCount).toBe(2)
+
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+
+    expect(schemaKeys).toContain('analysis.analysis_target.v1')
+    expect(schemaKeys).toContain('analysis.fast_tool_work_index.v1')
+    expect(schemaKeys).toContain('analysis.fast_tool_group_assessment.v1')
+    expect(schemaKeys).toContain('analysis.fast_tool_final_report.v1')
+    expect(inspectIds).toEqual([
+      targetId,
+      `${turnId}-P2`,
+      `${turnId}-P3`,
+      `${turnId}-P4`,
+      `${turnId}-P5`,
+    ])
+  })
+
+  it('v2 fast tool single-step execution advances one grouped assessment without completing the workflow', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    const turnRef = { id: '' }
+    let callCount = 0
+
+    app = await buildBackendApp(config, {
+      lmStudioGateway: {
+        async createChatCompletion() {
+          const idx = callCount++
+          const content = idx === 0
+            ? JSON.stringify({
+                work_unit_id: 'tool-group-1',
+                tool_name: 'test_tool',
+                tool_call_part_ids: [`${turnRef.id}-P3`],
+                turn_ids: [turnRef.id],
+                total_tool_calls: 1,
+                usefulness: 'high',
+                efficiency: 'efficient',
+                common_failure_mode: 'none',
+                summary: 'The tool was used effectively for the target task.',
+                follow_up_priority: 'none',
+                notable_part_ids: [`${turnRef.id}-P3`],
+              })
+            : JSON.stringify({
+                overall_tool_use_outcome: 'strong',
+                overall_rationale: 'unused in single-step validation',
+                tool_summaries: [],
+                repeated_failure_patterns: [],
+                follow_up_candidates: [],
+                total_tool_groups_assessed: 1,
+                total_tool_calls_assessed: 1,
+              })
+
+          return {
+            id: `cmpl-fast-tool-single-${idx}`,
+            object: 'chat.completion',
+            created: Date.now(),
+            model: 'test-model',
+            choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          }
+        },
+        async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
+          const messages = (body.messages as unknown[]) ?? []
+          const promptTokens = messages.length * 5
+          return {
+            promptTokens,
+            completion: {
+              id: 'probe-fast-tool-single-test', object: 'chat.completion', created: Date.now(), model: 'test-model',
+              choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: '' } }],
+              usage: { prompt_tokens: promptTokens, completion_tokens: 1, total_tokens: promptTokens + 1 },
+            },
+            rawExchange: {
+              requestUrl: 'https://example.com/v1/chat/completions',
+              requestMethod: 'POST',
+              requestHeadersJson: {},
+              requestBody: JSON.stringify(body),
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: '{}',
+            },
+          }
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(),
+    })
+
+    const targetId = await createReadySession(app)
+    await createAnalysisModelConfig(app)
+    const turnId = createCompleteTurnWithToolCall(app, targetId)
+    turnRef.id = turnId
+
+    const launchRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: {
+        model_config_id: 'mc-1',
+        target_turn_id: turnId,
+        analysis_goal: 'Assess tool performance by tool name.',
+        workflow_kind: 'fast_tool_analysis',
+      },
+    })
+    expect(launchRes.statusCode).toBe(201)
+    const childId = launchRes.json().session.id as string
+
+    const firstExecRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute?single_step=true`,
+    })
+    expect(firstExecRes.statusCode).toBe(200)
+    expect(firstExecRes.body).not.toContain('analysis-complete')
+
+    const secondExecRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute?single_step=true`,
+    })
+    expect(secondExecRes.statusCode).toBe(200)
+    expect(secondExecRes.body).not.toContain('analysis-complete')
+
+    const artifacts = app.backendDb.connection
+      .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ metadata_json: string }>
+    const schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+    expect(schemaKeys).toContain('analysis.analysis_target.v1')
+    expect(schemaKeys).toContain('analysis.fast_tool_work_index.v1')
+    expect(schemaKeys).toContain('analysis.fast_tool_group_assessment.v1')
+    expect(schemaKeys).not.toContain('analysis.fast_tool_final_report.v1')
+
+    const steps = listStepRecordsBySession(app.backendDb.connection, childId)
+    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
+    expect((cursorStep?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
   })
 
   it('analysis execute rejects an assessment response whose identity does not match the expected packet', async () => {

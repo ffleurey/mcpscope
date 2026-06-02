@@ -1,0 +1,37 @@
+You have produced {{assessment_count}} grouped tool assessment result(s) for this fast tool workflow.
+
+{{analysis_focus_instructions}}
+
+Produce a session-wide summary of grouped tool performance.
+- Summarize tool-by-tool performance.
+- Identify repeated failure patterns only when grounded in the grouped assessments.
+- Include only medium/high follow-up candidates.
+- Return exactly one JSON object and no prose.
+
+Return exactly one JSON object with this shape:
+{
+  "overall_tool_use_outcome": "strong" | "mixed" | "weak" | "unclear",
+  "overall_rationale": "<short rationale>",
+  "tool_summaries": [
+    {
+      "work_unit_id": "<work-unit-id>",
+      "tool_name": "<tool-name>",
+      "usefulness": "high" | "mixed" | "low" | "none" | "unclear",
+      "efficiency": "efficient" | "acceptable" | "inefficient" | "unclear",
+      "common_failure_mode": "none" | "wrong_tool" | "wrong_parameters" | "request_construction_error" | "response_interpretation_error" | "tool_error" | "missing_evidence" | "unclear",
+      "summary": "<short summary>",
+      "follow_up_priority": "none" | "low" | "medium" | "high"
+    }
+  ],
+  "repeated_failure_patterns": ["<pattern>"],
+  "follow_up_candidates": [
+    {
+      "work_unit_id": "<work-unit-id>",
+      "tool_name": "<tool-name>",
+      "reason": "<short reason>",
+      "priority": "medium" | "high"
+    }
+  ],
+  "total_tool_groups_assessed": {{assessment_count}},
+  "total_tool_calls_assessed": {{total_tool_call_count}}
+}

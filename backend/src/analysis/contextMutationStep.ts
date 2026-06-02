@@ -22,35 +22,39 @@ import {
 } from './artifactRepository.js'
 import {
   SCHEMA_KEY,
-  type AnalysisSessionState,
   type EvidencePacketIndex,
 } from './schemas.js'
 
 export interface ContextMutationInput {
-  state: AnalysisSessionState
+  analysisSessionId: string
+  currentTurnId: string
+  nextPacketIndex: number
+  injectPartIds: string[]
+  reasoningPartIds: string[]
+  userTurnId: string | null
 }
 
 export interface ContextMutationResult {
-  updatedState: AnalysisSessionState
+  nextPhase: 'assessing' | 'turn_summary'
 }
 
 export function runContextMutationStep(
   database: BackendDatabase,
   input: ContextMutationInput,
 ): ContextMutationResult {
-  const { state } = input
   const {
     analysisSessionId,
-    pendingMutationTurnId,
-    pendingInjectPartIds,
-    pendingReasoningPartIds,
+    currentTurnId,
     nextPacketIndex,
-  } = state
+    injectPartIds,
+    reasoningPartIds,
+    userTurnId,
+  } = input
 
   const mutatedAt = Date.now()
 
   // ── 1. Exclude deterministic inspect evidence parts ─────────────────────
-  for (const partId of pendingInjectPartIds) {
+  for (const partId of injectPartIds) {
     const part = getPartRecord(database.connection, partId)
     if (part) {
       updatePartRecord(database.connection, {
@@ -66,7 +70,7 @@ export function runContextMutationStep(
   }
 
   // ── 2. Exclude assessment reasoning parts ─────────────────────────────────
-  for (const partId of pendingReasoningPartIds) {
+  for (const partId of reasoningPartIds) {
     const part = getPartRecord(database.connection, partId)
     if (part) {
       updatePartRecord(database.connection, {
@@ -82,10 +86,10 @@ export function runContextMutationStep(
   }
 
   // ── 3. Mark assessment turn user-message as historical-only ───────────────
-  if (pendingMutationTurnId) {
+  if (userTurnId) {
     const sessionParts = listPartRecordsBySession(database.connection, analysisSessionId)
     const userPart = sessionParts.find(
-      p => p.turnId === pendingMutationTurnId && p.partType === 'user-message',
+      p => p.turnId === userTurnId && p.partType === 'user-message',
     )
     if (userPart) {
       updatePartRecord(database.connection, {
@@ -114,17 +118,8 @@ export function runContextMutationStep(
   // Determine next phase:
   // - If no more packets, or next packet is in a different turn → turn_summary
   // - If next packet is in the same turn → stay in assessing
-  const isTurnComplete = !nextPacket || nextPacket.turn_id !== state.currentTurnId
+  const isTurnComplete = !nextPacket || nextPacket.turn_id !== currentTurnId
   const nextPhase = isTurnComplete ? 'turn_summary' : 'assessing'
 
-  const updatedState: AnalysisSessionState = {
-    ...state,
-    phase: nextPhase,
-    awaitingContextMutation: false,
-    pendingMutationTurnId: null,
-    pendingInjectPartIds: [],
-    pendingReasoningPartIds: [],
-  }
-
-  return { updatedState }
+  return { nextPhase }
 }

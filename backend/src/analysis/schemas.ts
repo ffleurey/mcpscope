@@ -21,6 +21,12 @@ export const SCHEMA_KEY = {
   TOOL_CALL_ASSESSMENT: 'analysis.tool_call_assessment.v1',
   TURN_SUMMARY: 'analysis.turn_summary.v1',
   FINAL_ANALYSIS_REPORT: 'analysis.final_analysis_report.v1',
+  FAST_TOOL_CALL_ASSESSMENT: 'analysis.fast_session_tool_call_assessment.v1',
+  FAST_TURN_SUMMARY: 'analysis.fast_session_turn_summary.v1',
+  FAST_FINAL_ANALYSIS_REPORT: 'analysis.fast_session_final_analysis_report.v1',
+  FAST_TOOL_WORK_INDEX: 'analysis.fast_tool_work_index.v1',
+  FAST_TOOL_GROUP_ASSESSMENT: 'analysis.fast_tool_group_assessment.v1',
+  FAST_TOOL_FINAL_REPORT: 'analysis.fast_tool_final_report.v1',
   DIAGNOSTIC: 'analysis.diagnostic.v1',
 } as const
 
@@ -61,14 +67,6 @@ export interface AnalysisSessionState {
   nextPacketIndex: number
   /** Total number of packets discovered by bootstrap. */
   packetCount: number
-  /** True if the last assessment turn needs a context-mutation step first. */
-  awaitingContextMutation: boolean
-  /** ID of the analysis turn whose user-message part needs mutation. */
-  pendingMutationTurnId: string | null
-  /** IDs of synthetic evidence inject parts to exclude after the current assessment. */
-  pendingInjectPartIds: string[]
-  /** IDs of assistant-reasoning parts from the current assessment to exclude. */
-  pendingReasoningPartIds: string[]
   /** The turn_id of the target session turn currently being assessed. */
   currentTurnId: string | null
   /** True after AnalysisCoverageValidationStep completes successfully. */
@@ -183,6 +181,51 @@ export const toolCallAssessmentSchema = z.object({
 })
 export type ToolCallAssessment = z.infer<typeof toolCallAssessmentSchema>
 
+export const fastToolCallAssessmentSchema = z.object({
+  turn_id: z.string(),
+  round_id: z.string(),
+  tool_call_part_id: z.string(),
+  tool_name: z.string(),
+  result_status: z.enum([
+    'successful',
+    'partially_successful',
+    'unsuccessful',
+    'request_error',
+    'response_error',
+    'tool_error',
+    'empty',
+    'unclear',
+  ]),
+  efficiency: z.enum([
+    'efficient',
+    'acceptable',
+    'inefficient',
+    'unnecessary',
+    'unclear',
+  ]),
+  primary_issue: z.enum([
+    'none',
+    'wrong_tool',
+    'wrong_parameters',
+    'request_construction_error',
+    'response_interpretation_error',
+    'tool_error',
+    'missing_evidence',
+    'unclear',
+  ]),
+  short_rationale: z.string(),
+  post_call_outcome: z.enum([
+    'correctly_used',
+    'partially_used',
+    'misused',
+    'ignored',
+    'not_applicable',
+    'unclear',
+  ]),
+  follow_up_priority: z.enum(['none', 'low', 'medium', 'high']),
+})
+export type FastToolCallAssessment = z.infer<typeof fastToolCallAssessmentSchema>
+
 // ─────────────────────────────────────────────────────────────────────────────
 // analysis.turn_summary.v1
 // ─────────────────────────────────────────────────────────────────────────────
@@ -205,6 +248,22 @@ export const turnSummarySchema = z.object({
   cross_attempt_reconciliation: z.string().nullable(),
 })
 export type TurnSummary = z.infer<typeof turnSummarySchema>
+
+export const fastTurnSummarySchema = z.object({
+  turn_id: z.string(),
+  total_tool_calls_assessed: z.number().int().nonnegative(),
+  turn_outcome: z.enum(['answered', 'partially_answered', 'not_answered', 'unclear']),
+  turn_outcome_rationale: z.string(),
+  per_tool_findings: z.array(z.object({
+    tool_call_part_id: z.string(),
+    tool_name: z.string(),
+    result_status: fastToolCallAssessmentSchema.shape.result_status,
+    brief_finding: z.string(),
+  })),
+  cross_attempt_reconciliation: z.string().nullable(),
+  follow_up_candidates: z.array(z.string()),
+})
+export type FastTurnSummary = z.infer<typeof fastTurnSummarySchema>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // analysis.final_analysis_report.v1
@@ -249,6 +308,101 @@ export const finalAnalysisReportSchema = z.object({
   total_tool_calls_assessed: z.number().int().nonnegative(),
 })
 export type FinalAnalysisReport = z.infer<typeof finalAnalysisReportSchema>
+
+export const fastFinalAnalysisReportSchema = z.object({
+  overall_outcome: z.enum(['answered', 'partially_answered', 'not_answered', 'unclear']),
+  overall_rationale: z.string(),
+  path_efficiency: z.enum(['efficient', 'mixed', 'inefficient', 'unclear']),
+  tool_summaries: z.array(z.object({
+    tool_name: z.string(),
+    total_tool_calls: z.number().int().nonnegative(),
+    successful_tool_calls: z.number().int().nonnegative(),
+    request_error_tool_calls: z.number().int().nonnegative(),
+    response_error_tool_calls: z.number().int().nonnegative(),
+    empty_tool_calls: z.number().int().nonnegative(),
+    inefficient_tool_calls: z.number().int().nonnegative(),
+    summary: z.string(),
+  })),
+  notable_failures: z.array(z.object({
+    tool_call_part_id: z.string(),
+    tool_name: z.string(),
+    result_status: fastToolCallAssessmentSchema.shape.result_status,
+    primary_issue: fastToolCallAssessmentSchema.shape.primary_issue,
+    reason: z.string(),
+  })),
+  follow_up_candidates: z.array(z.object({
+    tool_call_part_id: z.string(),
+    tool_name: z.string(),
+    reason: z.string(),
+    priority: z.enum(['medium', 'high']),
+  })),
+  total_tool_calls_assessed: z.number().int().nonnegative(),
+})
+export type FastFinalAnalysisReport = z.infer<typeof fastFinalAnalysisReportSchema>
+
+export const fastToolWorkGroupSchema = z.object({
+  work_unit_id: z.string(),
+  tool_name: z.string(),
+  tool_call_part_ids: z.array(z.string()),
+  tool_result_part_ids: z.array(z.string()),
+  reasoning_before_part_ids: z.array(z.string()),
+  reasoning_after_part_ids: z.array(z.string()),
+  turn_ids: z.array(z.string()),
+  round_ids: z.array(z.string()),
+})
+export const fastToolWorkIndexSchema = z.object({
+  tool_groups: z.array(fastToolWorkGroupSchema),
+})
+export type FastToolWorkGroup = z.infer<typeof fastToolWorkGroupSchema>
+export type FastToolWorkIndex = z.infer<typeof fastToolWorkIndexSchema>
+
+export const fastToolGroupedAssessmentSchema = z.object({
+  work_unit_id: z.string(),
+  tool_name: z.string(),
+  tool_call_part_ids: z.array(z.string()),
+  turn_ids: z.array(z.string()),
+  total_tool_calls: z.number().int().nonnegative(),
+  usefulness: z.enum(['high', 'mixed', 'low', 'none', 'unclear']),
+  efficiency: z.enum(['efficient', 'acceptable', 'inefficient', 'unclear']),
+  common_failure_mode: z.enum([
+    'none',
+    'wrong_tool',
+    'wrong_parameters',
+    'request_construction_error',
+    'response_interpretation_error',
+    'tool_error',
+    'missing_evidence',
+    'unclear',
+  ]),
+  summary: z.string(),
+  follow_up_priority: z.enum(['none', 'low', 'medium', 'high']),
+  notable_part_ids: z.array(z.string()),
+})
+export type FastToolGroupedAssessment = z.infer<typeof fastToolGroupedAssessmentSchema>
+
+export const fastToolFinalReportSchema = z.object({
+  overall_tool_use_outcome: z.enum(['strong', 'mixed', 'weak', 'unclear']),
+  overall_rationale: z.string(),
+  tool_summaries: z.array(z.object({
+    work_unit_id: z.string(),
+    tool_name: z.string(),
+    usefulness: fastToolGroupedAssessmentSchema.shape.usefulness,
+    efficiency: fastToolGroupedAssessmentSchema.shape.efficiency,
+    common_failure_mode: fastToolGroupedAssessmentSchema.shape.common_failure_mode,
+    summary: z.string(),
+    follow_up_priority: fastToolGroupedAssessmentSchema.shape.follow_up_priority,
+  })),
+  repeated_failure_patterns: z.array(z.string()),
+  follow_up_candidates: z.array(z.object({
+    work_unit_id: z.string(),
+    tool_name: z.string(),
+    reason: z.string(),
+    priority: z.enum(['medium', 'high']),
+  })),
+  total_tool_groups_assessed: z.number().int().nonnegative(),
+  total_tool_calls_assessed: z.number().int().nonnegative(),
+})
+export type FastToolFinalReport = z.infer<typeof fastToolFinalReportSchema>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // analysis.diagnostic.v1

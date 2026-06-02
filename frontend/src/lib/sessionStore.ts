@@ -7,6 +7,7 @@ import {
   launchAnalysis as launchBackendAnalysis,
   listSessions,
   preflightSession,
+  retryFailedAnalysisStep as retryBackendFailedAnalysisStep,
 } from './api/backendClient'
 import { lmConnections, mcpProfiles, modelConfigs, sessionCreationDefaults } from './connectionStore'
 import type {
@@ -48,6 +49,7 @@ export const isImportingTrace = writable(false)
 export const isLaunchingAnalysis = writable(false)
 export const isExecutingAnalysis = writable(false)
 export const isSteppingAnalysis = writable(false)
+export const isRetryingAnalysis = writable(false)
 export const activeTurnStream = writable<TurnStreamingState | null>(null)
 export const isPrimaryLaunchDialogOpen = writable(false)
 
@@ -112,6 +114,8 @@ function toSessionSummary(record: SessionRecord): SessionSummary {
     is_context_exhausted: record.isContextExhausted,
     loaded_context_length: record.loadedContextLength,
     compaction_strategy: record.compactionStrategy,
+    workflow_kind: undefined,
+    latest_error: undefined,
     model_profile_snapshot: { name: record.modelProfileSnapshot.name },
     mcp_profile_snapshot: record.mcpProfileSnapshot ? { name: record.mcpProfileSnapshot.name } : null,
   }
@@ -368,11 +372,11 @@ export async function startSession(input: {
     // Wait for the scheduler to finish the auto-enqueued init job.
     // Prelude events flow through executionStore → applyExternalPreludeEvent
     // so the trace updates in real time without a dedicated SSE stream.
+    isPrimaryLaunchDialogOpen.set(false)
     const { awaitJob } = await import('./executionStore')
     await awaitJob(session.id, initJobId)
 
     await refreshSessions()
-    isPrimaryLaunchDialogOpen.set(false)
   } catch (error) {
     setSessionError(toAppError(error), 'new-session')
   } finally {
@@ -538,6 +542,7 @@ export function applyTurnStreamEvent(
 export async function launchAnalysis(input: {
   targetSessionId: string
   targetTurnId: string
+  workflowKind?: 'full_session_analysis' | 'fast_session_analysis' | 'fast_tool_analysis'
   analysisGoal?: string
   modelConfigId?: string
   additionalInstructions?: string
@@ -553,6 +558,7 @@ export async function launchAnalysis(input: {
     const { session } = await launchBackendAnalysis({
       target_session_id: input.targetSessionId,
       target_turn_id: input.targetTurnId,
+      workflow_kind: input.workflowKind,
       analysis_goal: input.analysisGoal,
       model_config_id: input.modelConfigId,
       additional_instructions: input.additionalInstructions,
@@ -642,6 +648,30 @@ export async function executeAnalysisStep(): Promise<void> {
   } finally {
     activeTurnStream.set(null)
     isSteppingAnalysis.set(false)
+  }
+}
+
+export async function retryFailedAnalysisStep(): Promise<void> {
+  const sessionId = get(activeChatId)
+  if (!sessionId) {
+    setSessionError(new AppError('No active analysis session', 'internal', 0))
+    return
+  }
+
+  clearSessionError()
+  isRetryingAnalysis.set(true)
+
+  try {
+    await retryBackendFailedAnalysisStep(sessionId)
+    await refreshSessions()
+    await refreshActiveTrace()
+    await executeAnalysisStep()
+  } catch (error) {
+    setSessionError(toAppError(error))
+    await refreshSessions().catch(() => undefined)
+    await refreshActiveTrace().catch(() => undefined)
+  } finally {
+    isRetryingAnalysis.set(false)
   }
 }
 

@@ -9,7 +9,6 @@
 import { z } from 'zod'
 import { OperationError } from './errors.js'
 import {
-  findActiveSession,
   getSessionCreationDefaults,
   getSessionRecord,
   getTurnRecord,
@@ -25,8 +24,12 @@ import {
 import { sessionRecordSchema, type McpProfileSnapshot, type ModelProfileSnapshot, type SessionRecord } from '../domain/model.js'
 import type { OperationContext } from './context.js'
 import { AnalysisSession } from '../analysis/analysisSession.js'
+import { FastToolAnalysisSession } from '../analysis/fastToolAnalysisSession.js'
 import { buildAnalysisSystemPrompt, normalizeAnalysisGoal } from '../analysis/systemPrompt.js'
 import { runSessionInitialization } from '../runtime/sessionInit.js'
+import { ANALYSIS_WORKFLOW_KIND } from '../analysis/workflowKinds.js'
+import { FastSessionAnalysisSession } from '../analysis/fastSessionAnalysisSession.js'
+import { getAnalysisTitlePrefix } from '../analysis/analysisSessionPresentation.js'
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
 
@@ -49,6 +52,12 @@ export const launchAnalysisInputSchema = z.object({
   only_failed_tool_calls: z.boolean().optional(),
   /** Optional additional evaluation criteria. */
   evaluation_criteria: z.array(z.string().min(1)).optional(),
+  /** The analysis workflow to run. */
+  workflow_kind: z.enum([
+    ANALYSIS_WORKFLOW_KIND.FULL_SESSION,
+    ANALYSIS_WORKFLOW_KIND.FAST_SESSION,
+    ANALYSIS_WORKFLOW_KIND.FAST_TOOL,
+  ]).optional(),
 })
 
 export type LaunchAnalysisInput = z.infer<typeof launchAnalysisInputSchema>
@@ -95,6 +104,7 @@ export async function executeAnalysisLaunch(
   const selectedToolNames = [...new Set((input.selected_tool_names ?? []).map((name) => name.trim()).filter(Boolean))]
   const onlyFailedToolCalls = input.only_failed_tool_calls === true
   const evaluationCriteria = [...new Set((input.evaluation_criteria ?? []).map((criterion) => criterion.trim()).filter(Boolean))]
+  const workflowKind = input.workflow_kind ?? ANALYSIS_WORKFLOW_KIND.FULL_SESSION
 
   type TxResult =
     | { kind: 'target_not_found' }
@@ -105,7 +115,6 @@ export async function executeAnalysisLaunch(
     | { kind: 'default_model_config_not_found'; modelConfigId: string }
     | { kind: 'model_config_not_found'; modelConfigId: string }
     | { kind: 'lm_connection_not_found'; connectionId: string }
-    | { kind: 'another_session_active'; active: { id: string; state: string } }
     | { kind: 'id_input_error'; error: SessionIdInputError }
     | { kind: 'id_conflict_error'; error: SessionIdConflictError }
     | { kind: 'id_generation_error'; error: SessionIdGenerationError }
@@ -155,10 +164,6 @@ export async function executeAnalysisLaunch(
       return { kind: 'lm_connection_not_found', connectionId: modelConfig.connectionId }
     }
 
-    // Enforce global session lock
-    const active = findActiveSession(db.connection)
-    if (active) return { kind: 'another_session_active', active }
-
     // Build model profile snapshot
     const modelProfileSnapshot: ModelProfileSnapshot = {
       id: modelConfig.id,
@@ -172,6 +177,7 @@ export async function executeAnalysisLaunch(
         : buildAnalysisSystemPrompt({
             analysisGoal,
             additionalInstructions,
+            workflowKind,
           }),
       temperature,
       reasoning: modelConfig.reasoning ?? null,
@@ -179,7 +185,7 @@ export async function executeAnalysisLaunch(
       updatedAt: modelConfig.updatedAt,
     }
 
-    const title = `Analysis: ${target.title}`
+    const title = `${getAnalysisTitlePrefix(workflowKind)}: ${target.title}`
 
     try {
       // Build a synthetic MCP profile snapshot pointing to the restricted analysis
@@ -212,7 +218,7 @@ export async function executeAnalysisLaunch(
 
       // Pre-create the cursor step so the execute endpoint can always use rehydrateFromDb.
       // This persists targetTurnId and analysisGoal into the cursor step params.
-      const analysisInstance = new AnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, {
+      const analysisInput = {
         analysisSessionId: session.id,
         targetSessionId,
         targetTurnId: input.target_turn_id,
@@ -220,7 +226,12 @@ export async function executeAnalysisLaunch(
         selectedToolNames,
         onlyFailedToolCalls,
         evaluationCriteria,
-      })
+      }
+      const analysisInstance = workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_SESSION
+        ? new FastSessionAnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, analysisInput)
+        : workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_TOOL
+          ? new FastToolAnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, analysisInput)
+        : new AnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, analysisInput)
       analysisInstance.initializeCursorStep()
 
       // Leave initStatus as 'pending' — runSessionInitialization (called below, outside
@@ -270,12 +281,6 @@ export async function executeAnalysisLaunch(
       throw new OperationError(
         `LM connection "${result.connectionId}" referenced by the model config no longer exists.`,
         'analysis_lm_connection_not_found',
-      )
-    case 'another_session_active':
-      throw new OperationError(
-        'Another session is currently active. Nothing was started.',
-        'another_session_active',
-        { id: result.active.id, state: result.active.state },
       )
     case 'id_input_error':
       throw new OperationError(result.error.message, 'invalid_session_id')

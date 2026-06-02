@@ -12,6 +12,13 @@ import {
   listStepRecordsBySession,
   listTurnRecordsBySession,
 } from '../persistence/repository.js'
+import { listArtifactsBySession } from '../analysis/artifactRepository.js'
+import {
+  getAnalysisWorkflowKindFromStep,
+  getAnalysisWorkflowLabel,
+  getLatestAnalysisDiagnosticSummary,
+  getLatestAnalysisDiagnosticSummaryForStep,
+} from '../analysis/analysisSessionPresentation.js'
 
 type LookupMode = 'summary' | 'full'
 
@@ -278,6 +285,7 @@ function buildStepNode(
   turns: TurnRecord[],
   rounds: RoundRecord[],
   allParts: PartRecord[],
+  artifacts: ReturnType<typeof listArtifactsBySession>,
   mode: LookupMode,
   isDirectLookup: boolean,
 ): object {
@@ -317,12 +325,20 @@ function buildStepNode(
   const compactionEvidence = step.stepTypeKey === 'compaction'
     ? buildCompactionStepEvidence(step, allParts, mode)
     : {}
+  const diagnostic = getLatestAnalysisDiagnosticSummaryForStep(artifacts, step.id)
+  const workflowKind = step.stepTypeKey === 'analysis_v2_cursor'
+    ? getAnalysisWorkflowKindFromStep(step)
+    : null
+  const workflowLabel = getAnalysisWorkflowLabel(workflowKind)
 
   return {
     id: step.id,
     type: step.stepTypeKey,
     number: step.ordinal + 1,
     status: step.status,
+    ...(workflowKind ? { workflow_kind: workflowKind } : {}),
+    ...(workflowLabel ? { workflow_label: workflowLabel } : {}),
+    ...(diagnostic ? { latest_error: diagnostic } : {}),
     strategy: typeof step.params.strategy === 'string' ? step.params.strategy : null,
     source_turn_id: typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null,
     source_turn_number: typeof step.params.sourceTurnSequenceNumber === 'number' ? step.params.sourceTurnSequenceNumber : null,
@@ -363,8 +379,12 @@ export function resolveHierarchicalId(
       .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
     const steps = listStepRecordsBySession(connection, session.id)
     const allParts = listPartRecordsBySession(connection, session.id)
+    const artifacts = listArtifactsBySession(connection, session.id)
     const setupParts = allParts.filter(p => p.turnId === null).sort((a, b) => a.ordinal - b.ordinal)
     const allRounds = listRoundRecordsBySession(connection, session.id)
+    const workflowKind = getAnalysisWorkflowKindFromStep(steps.find(step => step.stepTypeKey === 'analysis_v2_cursor'))
+    const workflowLabel = getAnalysisWorkflowLabel(workflowKind)
+    const latestError = getLatestAnalysisDiagnosticSummary(artifacts)
 
     const turnNodes = turns.map(turn => {
       const turnRounds = allRounds
@@ -386,8 +406,11 @@ export function resolveHierarchicalId(
         available: session.loadedContextLength ?? null,
         used: deriveContextWindowUsed(turns),
       },
+      ...(workflowKind ? { workflow_kind: workflowKind } : {}),
+      ...(workflowLabel ? { workflow_label: workflowLabel } : {}),
+      ...(latestError ? { latest_error: latestError } : {}),
       setup: buildSetupNode(session.id, setupParts, mode, false),
-      steps: steps.map(step => buildStepNode(step, steps, turns, allRounds, allParts, mode, false)),
+      steps: steps.map(step => buildStepNode(step, steps, turns, allRounds, allParts, artifacts, mode, false)),
       turns: turnNodes,
     }
 
@@ -439,7 +462,8 @@ export function resolveHierarchicalId(
     const rounds = listRoundRecordsBySession(connection, step.sessionId)
     const parts = listPartRecordsBySession(connection, step.sessionId)
     const steps = listStepRecordsBySession(connection, step.sessionId)
-    const data = buildStepNode(step, steps, turns, rounds, parts, mode, true)
+    const artifacts = listArtifactsBySession(connection, step.sessionId)
+    const data = buildStepNode(step, steps, turns, rounds, parts, artifacts, mode, true)
 
     return { status: 'ok', payload: { id: step.id, type: 'step', mode, data } }
   }

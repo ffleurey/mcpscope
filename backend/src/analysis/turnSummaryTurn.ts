@@ -41,6 +41,7 @@ import {
   type TurnSummary,
 } from './schemas.js'
 import type { ZodError } from 'zod'
+import { renderPromptResource } from './promptResources.js'
 
 function uuid(): string {
   return crypto.randomUUID()
@@ -452,39 +453,13 @@ export async function runTurnSummaryTurn(
   // ── Build summary question ────────────────────────────────────────────────
   // The accumulated context already contains the turn context inject and all
   // assessment result parts for this turn.
-  const summaryQuestion = `You have just completed assessing ${turnPackets.length} tool call(s) for turn ${currentTurnId}. The individual assessment results are in the context above.
-
-${buildAnalysisFocusInstructions(analysisTarget)}
-
-Synthesize a turn-level summary of your findings.
-
-If the same tool appears multiple times for the same goal in this turn, compare those attempts directly.
-- If there are no mismatches and no repeated-tool retries to explain, keep turn_outcome_rationale to one short sentence and keep each brief_finding terse.
-- Identify the smallest concrete difference that best explains why one attempt failed and a later one succeeded.
-- Compare exact tool-call payloads, not just high-level intent. Array vs scalar values, singular vs plural field names, and one changed argument value all count as meaningful differences.
-- Prefer a discriminating explanation such as a changed parameter shape, field name, or value over a broad claim such as "the tool is inconsistent".
-- Repeated tools in this turn: ${repeatedTools.length > 0 ? repeatedTools.join(', ') : 'none'}.
-- Backend-computed repeated-attempt comparison:${repeatedAttemptGuidance ? `\n${repeatedAttemptGuidance}` : ' none'}
-- Treat the backend-computed comparison above as authoritative. If it shows a concrete payload difference, do not describe the attempts as identical or explain success as instability.
-- In cross_attempt_reconciliation and brief_finding, describe payload values in words. Do not paste raw quoted JSON snippets or JSON arrays inside string fields.
-- If repeated tools are present, cross_attempt_reconciliation must not be null.
-- If there is no meaningful cross-attempt pattern and there are no repeated tools, return null for cross_attempt_reconciliation.
-
-Return exactly one JSON object with this shape (no prose, just JSON):
-{
-  "turn_id": "${currentTurnId}",
-  "total_tool_calls_assessed": ${turnPackets.length},
-  "turn_outcome": "successful" | "partially_successful" | "failed" | "unclear",
-  "turn_outcome_rationale": "<1-2 sentences explaining the overall tool usage quality>",
-  "per_tool_findings": [
-    {
-      "tool_call_part_id": "<tool-call-part-id>",
-      "tool_name": "<name>",
-      "brief_finding": "<short concrete finding>"
-    }
-  ],
-  "cross_attempt_reconciliation": "<required 1-3 sentence comparison across repeated attempts of the same tool when repeated tools are present, otherwise null>"
-}`
+  const summaryQuestion = renderPromptResource('full.turn-summary.txt', {
+    analysis_focus_instructions: buildAnalysisFocusInstructions(analysisTarget),
+    current_turn_id: currentTurnId,
+    turn_packet_count: turnPackets.length,
+    repeated_tools: repeatedTools.length > 0 ? repeatedTools.join(', ') : 'none',
+    repeated_attempt_guidance_block: repeatedAttemptGuidance ? `\n${repeatedAttemptGuidance}` : ' none',
+  })
 
   // ── Run context-aware LLM turn ────────────────────────────────────────────
   const turnResult = await runAnalysisTurn(

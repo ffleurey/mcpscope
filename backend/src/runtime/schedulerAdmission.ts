@@ -1,5 +1,4 @@
 import {
-  findActiveSession,
   getNextTurnSequenceNumber,
   getSessionRecord,
   insertTurnRecord,
@@ -27,14 +26,6 @@ export function assertInitJobAllowed(
   if (session.initStatus === 'ready') {
     throw new OperationError('Session is already initialized.', 'session_already_initialized' as const)
   }
-  const active = findActiveSession(opCtx.db.connection, sessionId)
-  if (active) {
-    throw new OperationError(
-      'Another session is currently active. Nothing was started.',
-      SCHEDULER_ERROR.SESSION_ACTIVE,
-      active,
-    )
-  }
   if (hasJobForSession(sessionId)) {
     throw new OperationError(
       'This session already has an active or pending job in the scheduler.',
@@ -57,14 +48,6 @@ export function getSessionExecutionKind(
   if (session.sessionType === 'primary') {
     if (!prompt || prompt.trim() === '') {
       throw new OperationError('A prompt is required to enqueue a primary session turn.', 'validation')
-    }
-    const activeFirst = findActiveSession(opCtx.db.connection, sessionId)
-    if (activeFirst) {
-      throw new OperationError(
-        'Another session is currently active. Nothing was queued.',
-        SCHEDULER_ERROR.SESSION_ACTIVE,
-        activeFirst,
-      )
     }
     if (session.initStatus !== 'ready') {
       throw new OperationError(
@@ -102,14 +85,10 @@ export function getSessionExecutionKind(
 
 export function reservePrimaryTurn(opCtx: SchedulerContext, sessionId: string): TurnRecord {
   type ReservationResult =
-    | { kind: 'another_session_active'; active: { id: string; state: string } }
     | { kind: 'turn_in_progress' }
     | { kind: 'reserved'; turn: TurnRecord }
 
   const reservation = opCtx.db.connection.transaction((): ReservationResult => {
-    const active = findActiveSession(opCtx.db.connection, sessionId)
-    if (active) return { kind: 'another_session_active', active }
-
     const hasPendingTurn = listTurnRecordsBySession(opCtx.db.connection, sessionId)
       .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
     if (hasPendingTurn) return { kind: 'turn_in_progress' }
@@ -140,13 +119,6 @@ export function reservePrimaryTurn(opCtx: SchedulerContext, sessionId: string): 
     return { kind: 'reserved', turn }
   })()
 
-  if (reservation.kind === 'another_session_active') {
-    throw new OperationError(
-      'Another session is currently active. Nothing was queued.',
-      SCHEDULER_ERROR.SESSION_ACTIVE,
-      reservation.active,
-    )
-  }
   if (reservation.kind === 'turn_in_progress') {
     throw new OperationError(
       'A turn is already in progress or reserved for this session.',
@@ -158,17 +130,9 @@ export function reservePrimaryTurn(opCtx: SchedulerContext, sessionId: string): 
 }
 
 export function assertAnalysisSessionJobAllowed(
-  opCtx: SchedulerContext,
-  sessionId: string,
+  _opCtx: SchedulerContext,
+  _sessionId: string,
 ): void {
-  const active = findActiveSession(opCtx.db.connection, sessionId)
-  if (active) {
-    throw new OperationError(
-      'Another session is currently active. Nothing was queued.',
-      SCHEDULER_ERROR.SESSION_ACTIVE,
-      { id: active.id, state: active.state },
-    )
-  }
 }
 
 export function assertStepJobAllowed(
@@ -207,14 +171,6 @@ export function assertStepJobAllowed(
     throw new OperationError(
       'This session already has an active or pending job in the scheduler.',
       SCHEDULER_ERROR.SESSION_ALREADY_QUEUED,
-    )
-  }
-  const active = findActiveSession(opCtx.db.connection, sessionId)
-  if (active) {
-    throw new OperationError(
-      'Another session is currently active. Nothing was queued.',
-      SCHEDULER_ERROR.SESSION_ACTIVE,
-      { id: active.id, state: active.state },
     )
   }
 }

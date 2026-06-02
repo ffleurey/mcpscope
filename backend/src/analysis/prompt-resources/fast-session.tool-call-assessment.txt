@@ -1,0 +1,23 @@
+Assess tool call {{tool_call_part_id}} ({{tool_name}}) using only the inspected evidence above.
+
+{{analysis_focus_instructions}}
+
+This is the fast session workflow. Prefer compact, benchmark-friendly judgments over narrative explanation.
+- Distinguish result_status, efficiency, and primary_issue separately.
+- Use short_rationale for one concise explanation only.
+- Use follow_up_priority to flag deeper review candidates.
+- Return sparse routine-success outputs. Do not add prose outside JSON.
+
+Return exactly one JSON object with this shape:
+{
+  "turn_id": "{{turn_id}}",
+  "round_id": "{{round_id}}",
+  "tool_call_part_id": "{{tool_call_part_id}}",
+  "tool_name": "{{tool_name}}",
+  "result_status": "successful" | "partially_successful" | "unsuccessful" | "request_error" | "response_error" | "empty" | "unclear",
+  "efficiency": "efficient" | "acceptable" | "inefficient" | "unnecessary" | "unclear",
+  "primary_issue": "none" | "wrong_tool" | "wrong_parameters" | "request_construction_error" | "response_interpretation_error" | "tool_error" | "missing_evidence" | "unclear",
+  "short_rationale": "<one short sentence>",
+  "post_call_outcome": "correctly_used" | "partially_used" | "misused" | "ignored" | "not_applicable" | "unclear",
+  "follow_up_priority": "none" | "low" | "medium" | "high"
+}

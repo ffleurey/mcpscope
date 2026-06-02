@@ -1,12 +1,15 @@
 import { z } from 'zod'
+import { ANALYSIS_WORKFLOW_KIND } from '../analysis/workflowKinds.js'
 import { apiError } from '../errors.js'
 import {
   deleteSessionRecord,
   getSessionRecord,
   listAllSessionSummaries,
   listChildSessionSummaries,
+  listPartRecordsBySession,
   listStepRecordsBySession,
   listTurnRecordsBySession,
+  updatePartRecord,
   updateSessionRecord,
 } from '../persistence/repository.js'
 import {
@@ -22,9 +25,139 @@ import {
 } from '../operations/internal.js'
 import { buildAnalysisSystemPrompt, normalizeAnalysisGoal } from '../analysis/systemPrompt.js'
 import type { RouteDeps } from './types.js'
+import { updateStepRecord } from '../persistence/repositoryV2.js'
+import {
+  getAnalysisWorkflowKindFromSteps,
+  getLatestAnalysisDiagnosticSummaryForSession,
+  getRetryPhaseForFailedAnalysisStep,
+} from '../analysis/analysisSessionPresentation.js'
+
+function buildSessionSummaryPayload(
+  deps: Pick<RouteDeps, 'database' | 'toLifecycleState'>,
+  summary: {
+    id: string
+    title: string
+    status: string
+    initStatus: string
+    sessionType: string
+    parentKind: string | null
+    parentId: string | null
+    createdAt: number
+    updatedAt: number
+    isContextExhausted: boolean
+    loadedContextLength: number | null
+    compactionStrategy: string
+    modelProfileSnapshot: { name: string }
+    mcpProfileSnapshot: { name: string } | null
+  },
+) {
+  const workflowKind = summary.sessionType === 'session_analysis'
+    ? getAnalysisWorkflowKindFromSteps(listStepRecordsBySession(deps.database.connection, summary.id))
+    : null
+  const latestError = deps.toLifecycleState(summary) === 'error' && summary.sessionType === 'session_analysis'
+    ? getLatestAnalysisDiagnosticSummaryForSession(deps.database.connection, summary.id) ?? undefined
+    : undefined
+
+  return {
+    id: summary.id,
+    title: summary.title,
+    status: deps.toLifecycleState(summary),
+    init_status: summary.initStatus,
+    session_type: summary.sessionType,
+    parent_kind: summary.parentKind,
+    parent_id: summary.parentId,
+    created_at: summary.createdAt,
+    updated_at: summary.updatedAt,
+    is_context_exhausted: summary.isContextExhausted,
+    loaded_context_length: summary.loadedContextLength,
+    compaction_strategy: summary.compactionStrategy,
+    ...(workflowKind ? { workflow_kind: workflowKind } : {}),
+    ...(latestError ? { latest_error: latestError } : {}),
+    model_profile_snapshot: { name: summary.modelProfileSnapshot.name },
+    mcp_profile_snapshot: summary.mcpProfileSnapshot ? { name: summary.mcpProfileSnapshot.name } : null,
+  }
+}
+
+function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessionId: string) {
+  const session = getSessionRecord(database.connection, sessionId)
+  if (!session) {
+    throw new Error('Session not found')
+  }
+
+  const steps = listStepRecordsBySession(database.connection, sessionId)
+  const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
+  if (!cursorStep) {
+    throw new Error('Analysis session has no cursor step')
+  }
+
+  const phase = typeof cursorStep.state.phase === 'string' ? cursorStep.state.phase : null
+  if (cursorStep.status !== 'error' && phase !== 'error') {
+    throw new Error('Analysis session is not in a failed state')
+  }
+
+  const failedStep = [...steps]
+    .reverse()
+    .find(step => step.stepTypeKey !== 'analysis_v2_cursor' && step.status === 'error')
+  if (!failedStep) {
+    throw new Error('Analysis session has no failed step to retry')
+  }
+
+  const retryPhase = getRetryPhaseForFailedAnalysisStep(failedStep)
+  if (!retryPhase) {
+    throw new Error(`Failed step ${failedStep.id} is not retryable`)
+  }
+
+  const ownedTurnIds = new Set(
+    listTurnRecordsBySession(database.connection, sessionId)
+      .filter(turn => turn.ownerStepId === failedStep.id)
+      .map(turn => turn.id),
+  )
+  const retryParts = listPartRecordsBySession(database.connection, sessionId)
+    .filter(part => part.turnId && ownedTurnIds.has(part.turnId))
+
+  const updatedCursorStep: ReturnType<typeof listStepRecordsBySession>[number] = {
+    ...cursorStep,
+    status: 'running',
+    state: {
+      ...cursorStep.state,
+      phase: retryPhase,
+      retry_failed_step_id: failedStep.id,
+      retry_requested_at: Date.now(),
+    },
+    completedAt: null,
+  }
+
+  const updatedSession = {
+    ...session,
+    status: 'ready' as const,
+    updatedAt: Date.now(),
+  }
+
+  const tx = database.connection.transaction(() => {
+    updateStepRecord(database.connection, updatedCursorStep as Parameters<typeof updateStepRecord>[1])
+    updateSessionRecord(database.connection, updatedSession)
+    for (const part of retryParts) {
+      updatePartRecord(database.connection, {
+        ...part,
+        context: {
+          ...part.context,
+          state: 'excluded',
+        },
+        updatedAt: updatedSession.updatedAt,
+      })
+    }
+  })
+  tx()
+
+  return {
+    failedStepId: failedStep.id,
+    retryPhase,
+    latestError: getLatestAnalysisDiagnosticSummaryForSession(database.connection, sessionId),
+  }
+}
 
 export function registerSessionRoutes(deps: RouteDeps): void {
-  const { app, database, scheduler, opCtx, handleOperationError, toLifecycleState } = deps
+  const { app, database, scheduler, opCtx, handleOperationError } = deps
 
   app.post('/api/sessions', async (request, reply) => {
     try {
@@ -76,17 +209,26 @@ export function registerSessionRoutes(deps: RouteDeps): void {
   })
 
   app.get('/api/analysis/system-prompt-default', async (request) => {
-    const { analysis_goal, additional_instructions } = z.object({
+    const { analysis_goal, additional_instructions, workflow_kind } = z.object({
       analysis_goal: z.string().optional(),
       additional_instructions: z.string().optional(),
+      workflow_kind: z.enum([
+        ANALYSIS_WORKFLOW_KIND.FULL_SESSION,
+        ANALYSIS_WORKFLOW_KIND.FAST_SESSION,
+        ANALYSIS_WORKFLOW_KIND.FAST_TOOL,
+      ]).optional(),
     }).parse(request.query)
 
     return {
       systemPrompt: additional_instructions === undefined
-        ? buildAnalysisSystemPrompt({ analysisGoal: normalizeAnalysisGoal(analysis_goal) })
+        ? buildAnalysisSystemPrompt({
+            analysisGoal: normalizeAnalysisGoal(analysis_goal),
+            ...(workflow_kind ? { workflowKind: workflow_kind } : {}),
+          })
         : buildAnalysisSystemPrompt({
             analysisGoal: normalizeAnalysisGoal(analysis_goal),
             additionalInstructions: additional_instructions,
+            ...(workflow_kind ? { workflowKind: workflow_kind } : {}),
           }),
     }
   })
@@ -135,22 +277,7 @@ export function registerSessionRoutes(deps: RouteDeps): void {
       const rows = listAllSessionSummaries(database.connection)
       return {
         api_version: 1,
-        sessions: rows.map(s => ({
-          id: s.id,
-          title: s.title,
-          status: toLifecycleState(s),
-          init_status: s.initStatus,
-          session_type: s.sessionType,
-          parent_kind: s.parentKind,
-          parent_id: s.parentId,
-          created_at: s.createdAt,
-          updated_at: s.updatedAt,
-          is_context_exhausted: s.isContextExhausted,
-          loaded_context_length: s.loadedContextLength,
-          compaction_strategy: s.compactionStrategy,
-          model_profile_snapshot: { name: s.modelProfileSnapshot.name },
-          mcp_profile_snapshot: s.mcpProfileSnapshot ? { name: s.mcpProfileSnapshot.name } : null,
-        })),
+        sessions: rows.map(s => buildSessionSummaryPayload(deps, s)),
       }
     }
     return listOperation.execute(opCtx, {})
@@ -178,22 +305,7 @@ export function registerSessionRoutes(deps: RouteDeps): void {
     return {
       api_version: 1,
       parent_session_id: sessionId,
-      children: children.map(s => ({
-        id: s.id,
-        title: s.title,
-        status: toLifecycleState(s),
-        init_status: s.initStatus,
-        session_type: s.sessionType,
-        parent_kind: s.parentKind,
-        parent_id: s.parentId,
-        created_at: s.createdAt,
-        updated_at: s.updatedAt,
-        is_context_exhausted: s.isContextExhausted,
-        loaded_context_length: s.loadedContextLength,
-        compaction_strategy: s.compactionStrategy,
-        model_profile_snapshot: { name: s.modelProfileSnapshot.name },
-        mcp_profile_snapshot: s.mcpProfileSnapshot ? { name: s.mcpProfileSnapshot.name } : null,
-      })),
+      children: children.map(s => buildSessionSummaryPayload(deps, s)),
     }
   })
 
@@ -245,6 +357,36 @@ export function registerSessionRoutes(deps: RouteDeps): void {
       shouldCloseOnExecutionEvent: event => event.type === 'analysis-complete' || event.type === 'analysis-failed',
       failureEvent: message => ({ type: 'analysis-failed', message }),
     })
+  })
+
+  app.post('/api/sessions/:sessionId/retry-failed-step', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return apiError('not_found', 'Session not found')
+    }
+    if (session.sessionType !== 'session_analysis') {
+      reply.code(400)
+      return apiError('validation', 'Session is not an analysis session.')
+    }
+
+    try {
+      const result = resetFailedAnalysisStepForRetry(database, sessionId)
+      return {
+        api_version: 1 as const,
+        session_id: sessionId,
+        failed_step_id: result.failedStepId,
+        retry_phase: result.retryPhase,
+        ...(result.latestError ? { latest_error: result.latestError } : {}),
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        reply.code(422)
+        return apiError('validation', err.message)
+      }
+      throw err
+    }
   })
 
   app.patch('/api/sessions/:sessionId', async (request, reply) => {

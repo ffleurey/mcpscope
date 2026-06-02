@@ -146,10 +146,6 @@ function makeAnalysisState(overrides: Partial<AnalysisSessionState>): AnalysisSe
     bootstrapComplete: overrides.bootstrapComplete ?? false,
     nextPacketIndex: overrides.nextPacketIndex ?? 0,
     packetCount: overrides.packetCount ?? 0,
-    awaitingContextMutation: overrides.awaitingContextMutation ?? false,
-    pendingMutationTurnId: overrides.pendingMutationTurnId ?? null,
-    pendingInjectPartIds: overrides.pendingInjectPartIds ?? [],
-    pendingReasoningPartIds: overrides.pendingReasoningPartIds ?? [],
     currentTurnId: overrides.currentTurnId ?? null,
     coverageValidated: overrides.coverageValidated ?? false,
     finalAggregationComplete: overrides.finalAggregationComplete ?? false,
@@ -480,21 +476,18 @@ describe('analysis workflow helpers', () => {
     })
 
     const result = runContextMutationStep(db, {
-      state: makeAnalysisState({
-        analysisSessionId: 'ANLY',
-        phase: 'assessing',
-        nextPacketIndex: 1,
-        currentTurnId: 'TURN-1',
-        pendingMutationTurnId: 'ANLY.2',
-        pendingInjectPartIds: ['INJECT-1'],
-        pendingReasoningPartIds: ['REASON-1'],
-      }),
+      analysisSessionId: 'ANLY',
+      currentTurnId: 'TURN-1',
+      nextPacketIndex: 1,
+      userTurnId: 'ANLY.2',
+      injectPartIds: ['INJECT-1'],
+      reasoningPartIds: ['REASON-1'],
     })
 
     expect(getPartRecord(db.connection, 'INJECT-1')?.context.state).toBe('excluded')
     expect(getPartRecord(db.connection, 'REASON-1')?.context.state).toBe('excluded')
     expect(getPartRecord(db.connection, 'ANLY.2.1.1-U')?.context.state).toBe('historical-only')
-    expect(result.updatedState.phase).toBe('turn_summary')
+    expect(result.nextPhase).toBe('turn_summary')
   })
 
   it('coverage validation derives completion from tool call ids plus accepted assessments', () => {

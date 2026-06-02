@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { OperationError } from './errors.js'
 import {
-  findActiveSession,
   getSessionCreationDefaults,
   listLmConnections,
   listMcpServerProfiles,
@@ -54,7 +53,6 @@ export async function executePrimarySessionLaunch(
   const input = launchPrimarySessionInputSchema.parse(rawInput)
 
   type TxResult =
-    | { kind: 'blocked'; active: { id: string; state: string } }
     | { kind: 'default_model_not_configured' }
     | { kind: 'model_config_not_found'; modelConfigId: string }
     | { kind: 'lm_connection_not_found'; connectionId: string }
@@ -65,9 +63,6 @@ export async function executePrimarySessionLaunch(
     | { kind: 'created'; session: SessionRecord }
 
   const result: TxResult = db.connection.transaction((): TxResult => {
-    const active = findActiveSession(db.connection)
-    if (active) return { kind: 'blocked', active }
-
     const defaults = getSessionCreationDefaults(db.connection)
     const resolvedModelConfigId = input.model_config_id ?? defaults.defaultModelConfigId
     if (!resolvedModelConfigId) return { kind: 'default_model_not_configured' }
@@ -138,12 +133,6 @@ export async function executePrimarySessionLaunch(
   })()
 
   switch (result.kind) {
-    case 'blocked':
-      throw new OperationError(
-        'Another session is currently active. Nothing was started.',
-        'another_session_active',
-        { id: result.active.id, state: result.active.state },
-      )
     case 'default_model_not_configured':
       throw new OperationError('No default model config is configured for new sessions.', 'default_model_not_configured')
     case 'model_config_not_found':

@@ -173,6 +173,25 @@ export function patchSessionTitle(sessionId: string, title: string) {
   })
 }
 
+const retryAnalysisStepResponseSchema = z.object({
+  api_version: z.literal(1),
+  session_id: z.string(),
+  failed_step_id: z.string(),
+  retry_phase: z.string(),
+  latest_error: z.object({
+    step_id: z.string().nullable(),
+    error_kind: z.string().nullable(),
+    message: z.string(),
+  }).optional(),
+})
+
+export function retryFailedAnalysisStep(sessionId: string) {
+  return request(`/api/sessions/${sessionId}/retry-failed-step`, {
+    method: 'POST',
+    schema: retryAnalysisStepResponseSchema,
+  })
+}
+
 export function listLmConnections() {
   return request('/api/lm-connections', {
     schema: listLmConnectionsResponseSchema,
@@ -334,6 +353,7 @@ export function launchAnalysis(
   input: {
     target_session_id: string
     target_turn_id: string
+    workflow_kind?: 'full_session_analysis' | 'fast_session_analysis' | 'fast_tool_analysis'
     analysis_goal?: string
     model_config_id?: string
     additional_instructions?: string
@@ -354,6 +374,7 @@ export function launchAnalysis(
 export function getDefaultAnalysisSystemPrompt(input: {
   analysis_goal?: string
   additional_instructions?: string
+  workflow_kind?: 'full_session_analysis' | 'fast_session_analysis' | 'fast_tool_analysis'
 } = {}) {
   const params = new URLSearchParams()
   if (input.analysis_goal) {
@@ -361,6 +382,9 @@ export function getDefaultAnalysisSystemPrompt(input: {
   }
   if (input.additional_instructions) {
     params.set('additional_instructions', input.additional_instructions)
+  }
+  if (input.workflow_kind) {
+    params.set('workflow_kind', input.workflow_kind)
   }
   const query = params.size > 0 ? `?${params.toString()}` : ''
   return request(`/api/analysis/system-prompt-default${query}`, {
