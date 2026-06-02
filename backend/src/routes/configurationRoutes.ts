@@ -4,7 +4,6 @@ import {
   deleteLmConnection,
   deleteMcpServerProfile,
   deleteModelConfig,
-  findActiveSession,
   getSessionCreationDefaults,
   listLmConnections,
   listMcpServerProfiles,
@@ -28,7 +27,7 @@ import {
 } from '../services/lmstudio/client.js'
 import type { RouteDeps } from './types.js'
 
-export function registerConfigurationRoutes({ app, database, anotherSessionActiveError }: RouteDeps): void {
+export function registerConfigurationRoutes({ app, database }: RouteDeps): void {
   app.get('/api/lm-connections', async () => ({
     lmConnections: listLmConnections(database.connection),
   }))
@@ -238,12 +237,6 @@ export function registerConfigurationRoutes({ app, database, anotherSessionActiv
       mcpProfileSnapshot: z.object({ url: z.string() }).nullable().optional(),
       selectedModel: z.object({ modelKey: z.string().min(1), modelDisplayName: z.string().min(1).optional() }),
     }).parse(request.body)
-
-    const activeBeforePreflight = findActiveSession(database.connection)
-    if (activeBeforePreflight) {
-      reply.code(409)
-      return anotherSessionActiveError(activeBeforePreflight)
-    }
 
     let listedByCompatApi: boolean
     try {

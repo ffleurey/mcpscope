@@ -173,6 +173,25 @@ export function patchSessionTitle(sessionId: string, title: string) {
   })
 }
 
+const retryAnalysisStepResponseSchema = z.object({
+  api_version: z.literal(1),
+  session_id: z.string(),
+  failed_step_id: z.string(),
+  retry_phase: z.string(),
+  latest_error: z.object({
+    step_id: z.string().nullable(),
+    error_kind: z.string().nullable(),
+    message: z.string(),
+  }).optional(),
+})
+
+export function retryFailedAnalysisStep(sessionId: string) {
+  return request(`/api/sessions/${sessionId}/retry-failed-step`, {
+    method: 'POST',
+    schema: retryAnalysisStepResponseSchema,
+  })
+}
+
 export function listLmConnections() {
   return request('/api/lm-connections', {
     schema: listLmConnectionsResponseSchema,

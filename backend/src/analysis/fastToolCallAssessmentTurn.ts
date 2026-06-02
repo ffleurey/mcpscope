@@ -65,6 +65,18 @@ function validateAssessmentIdentity(packet: EvidencePacket, parsed: {
   return failures
 }
 
+function normalizeFastAssessmentPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return payload
+  }
+
+  const normalized = { ...payload } as Record<string, unknown>
+  if (normalized.result_status === 'tool_error') {
+    normalized.result_status = 'response_error'
+  }
+  return normalized
+}
+
 export async function runFastToolCallAssessmentTurn(
   database: BackendDatabase,
   lmGateway: LmStudioGateway,
@@ -139,7 +151,7 @@ export async function runFastToolCallAssessmentTurn(
     }
   }
 
-  const parsed = fastToolCallAssessmentSchema.safeParse(parsedJson)
+  const parsed = fastToolCallAssessmentSchema.safeParse(normalizeFastAssessmentPayload(parsedJson))
   if (!parsed.success) {
     insertJsonArtifact(database.connection, {
       id: uuid(),

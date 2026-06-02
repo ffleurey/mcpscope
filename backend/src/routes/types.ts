@@ -16,7 +16,7 @@ export interface RouteDeps {
   opCtx: OperationContext
   handleOperationError: (err: unknown, reply: { code(n: number): void }) => { error: Record<string, unknown> }
   anotherSessionActiveError: (active: ActiveSessionInfo) => { error: Record<string, unknown> }
-  toLifecycleState: (summary: { id: string; status: string; initStatus: string }) => 'initializing' | 'ready' | 'running' | 'error'
+  toLifecycleState: (summary: { id: string; status: string; initStatus: string; sessionType?: string }) => 'initializing' | 'ready' | 'running' | 'error'
   relaySchedulerJobStream: (
     reply: FastifyReply,
     jobId: string,

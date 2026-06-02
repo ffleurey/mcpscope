@@ -1,7 +1,12 @@
 import { z } from 'zod'
 import { OperationError } from './errors.js'
-import { getSessionRecord, listTurnRecordsBySession } from '../persistence/repository.js'
+import { getSessionRecord, listTurnRecordsBySession, listStepRecordsBySession } from '../persistence/repository.js'
 import type { OperationContext } from './context.js'
+import {
+  getAnalysisWorkflowKindFromSteps,
+  getLatestAnalysisDiagnosticSummaryForSession,
+  isAnalysisSessionTerminalError,
+} from '../analysis/analysisSessionPresentation.js'
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
@@ -13,7 +18,12 @@ export type StatusInput = z.infer<typeof statusInputSchema>
 
 export interface StatusResult {
   api_version: 1
-  session: { id: string; state: 'initializing' | 'ready' | 'running' | 'error' }
+  session: {
+    id: string
+    state: 'initializing' | 'ready' | 'running' | 'error'
+    workflow_kind?: string
+    latest_error?: { step_id: string | null; error_kind: string | null; message: string }
+  }
   active_turn: { id: string; status: string } | null
 }
 
@@ -23,6 +33,12 @@ export const statusOutputSchema = {
   session: z.object({
     id: z.string(),
     state: z.enum(['initializing', 'ready', 'running', 'error']),
+    workflow_kind: z.string().optional(),
+    latest_error: z.object({
+      step_id: z.string().nullable(),
+      error_kind: z.string().nullable(),
+      message: z.string(),
+    }).optional(),
   }),
   active_turn: z.object({ id: z.string(), status: z.string() }).nullable(),
 }
@@ -50,7 +66,12 @@ export const statusOperation = {
     const latestTurn = turns.at(-1) ?? null
 
     let state: StatusResult['session']['state']
-    if (session.initStatus === 'error' || session.status === 'error' || latestTurn?.status === 'error') {
+    const workflowSteps = session.sessionType === 'session_analysis'
+      ? listStepRecordsBySession(db.connection, input.session_id)
+      : []
+    const isAnalysisError = isAnalysisSessionTerminalError(db.connection, session)
+
+    if (isAnalysisError || latestTurn?.status === 'error') {
       state = 'error'
     } else if (session.initStatus === 'pending' || session.initStatus === 'initializing') {
       state = 'initializing'
@@ -66,9 +87,19 @@ export const statusOperation = {
         ? latestTurn
         : null
 
+    const workflowKind = getAnalysisWorkflowKindFromSteps(workflowSteps)
+    const latestError = state === 'error' && session.sessionType === 'session_analysis'
+      ? getLatestAnalysisDiagnosticSummaryForSession(db.connection, session.id) ?? undefined
+      : undefined
+
     return {
       api_version: 1,
-      session: { id: session.id, state },
+      session: {
+        id: session.id,
+        state,
+        ...(workflowKind ? { workflow_kind: workflowKind } : {}),
+        ...(latestError ? { latest_error: latestError } : {}),
+      },
       active_turn: relevantTurn
         ? { id: relevantTurn.id, status: relevantTurn.status }
         : null,

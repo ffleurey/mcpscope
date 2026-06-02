@@ -16,7 +16,6 @@
 import { z } from 'zod'
 import { OperationError } from './errors.js'
 import { createSession, SessionIdConflictError, SessionIdGenerationError, SessionIdInputError } from '../runtime/modelTurns.js'
-import { findActiveSession } from '../persistence/repository.js'
 import {
   modelProfileSnapshotInputSchema,
   mcpProfileSnapshotInputSchema,
@@ -66,15 +65,12 @@ export async function executeCreateExplicit(
   const input = createExplicitInputSchema.parse(rawInput)
 
   type TxResult =
-    | { kind: 'blocked'; active: { id: string; state: string } }
     | { kind: 'id_input_error'; error: SessionIdInputError }
     | { kind: 'id_conflict_error'; error: SessionIdConflictError }
     | { kind: 'id_generation_error'; error: SessionIdGenerationError }
     | { kind: 'created'; session: SessionRecord }
 
   const result: TxResult = db.connection.transaction((): TxResult => {
-    const active = findActiveSession(db.connection)
-    if (active) return { kind: 'blocked', active: { id: active.id, state: active.state } }
     try {
       const session = createSession(db, {
         sessionId: input.sessionId,
@@ -92,13 +88,6 @@ export async function executeCreateExplicit(
     }
   })()
 
-  if (result.kind === 'blocked') {
-    throw new OperationError(
-      'Another session is currently active. Nothing was started.',
-      'another_session_active',
-      { id: result.active.id, state: result.active.state },
-    )
-  }
   if (result.kind === 'id_input_error') {
     throw new OperationError(result.error.message, 'invalid_session_id')
   }

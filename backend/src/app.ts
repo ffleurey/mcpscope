@@ -36,6 +36,7 @@ import { registerSchedulerRoutes } from './routes/schedulerRoutes.js'
 import { registerSessionRoutes } from './routes/sessionRoutes.js'
 import { registerSystemRoutes } from './routes/systemRoutes.js'
 import { registerTraceRoutes } from './routes/traceRoutes.js'
+import { isAnalysisSessionTerminalError } from './analysis/analysisSessionPresentation.js'
 
 interface RuntimeDependencies {
   lmStudioGateway: LmStudioGateway
@@ -224,6 +225,7 @@ export async function buildBackendApp(
     id: string
     status: string
     initStatus: string
+    sessionType?: string
   }): 'initializing' | 'ready' | 'running' | 'error' => {
     const turns = listTurnRecordsBySession(database.connection, summary.id)
     const activeTurn = [...turns]
@@ -232,7 +234,10 @@ export async function buildBackendApp(
       ?? null
     const latestTurn = turns.at(-1) ?? null
 
-    if (summary.initStatus === 'error' || summary.status === 'error' || latestTurn?.status === 'error') {
+    if (isAnalysisSessionTerminalError(database.connection, {
+      ...summary,
+      sessionType: summary.sessionType === 'session_analysis' ? 'session_analysis' : 'primary',
+    }) || latestTurn?.status === 'error') {
       return 'error'
     }
     if (summary.initStatus === 'pending' || summary.initStatus === 'initializing') {

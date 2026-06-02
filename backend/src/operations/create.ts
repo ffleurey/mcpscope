@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { OperationError } from './errors.js'
 import {
-  findActiveSession,
   getSessionCreationDefaults,
   listLmConnections,
   listMcpServerProfiles,
@@ -67,7 +66,6 @@ export const createOperation = {
     let mcpSnapshotRef: McpProfileSnapshot | null = null
 
     type TransactionResult =
-      | { kind: 'blocked'; active: { id: string; state: string } }
       | { kind: 'validation_error'; message: string; code: string }
       | { kind: 'id_input_error'; error: SessionIdInputError }
       | { kind: 'id_conflict_error'; error: SessionIdConflictError }
@@ -75,9 +73,6 @@ export const createOperation = {
       | { kind: 'created'; session: ReturnType<typeof createSession>; modelConfigId: string; modelConfigName: string }
 
     const result: TransactionResult = db.connection.transaction((): TransactionResult => {
-      const active = findActiveSession(db.connection)
-      if (active) return { kind: 'blocked', active }
-
       const defaults = getSessionCreationDefaults(db.connection)
 
       if (!defaults.defaultModelConfigId) {
@@ -147,13 +142,6 @@ export const createOperation = {
       }
     })()
 
-    if (result.kind === 'blocked') {
-      throw new OperationError(
-        'Another session is currently active. Nothing was started.',
-        'another_session_active',
-        { id: result.active.id, state: result.active.state },
-      )
-    }
     if (result.kind === 'validation_error') {
       throw new OperationError(result.message, result.code)
     }

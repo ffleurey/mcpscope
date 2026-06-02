@@ -176,6 +176,12 @@ export const sessionSummarySchema = z.object({
   is_context_exhausted: z.boolean(),
   loaded_context_length: z.number().int().positive().nullable(),
   compaction_strategy: compactionStrategyWithFallbackSchema,
+  workflow_kind: z.enum(['full_session_analysis', 'fast_session_analysis', 'fast_tool_analysis']).optional(),
+  latest_error: z.object({
+    step_id: z.string().nullable(),
+    error_kind: z.string().nullable(),
+    message: z.string(),
+  }).optional(),
   model_profile_snapshot: z.object({ name: z.string() }),
   mcp_profile_snapshot: z.object({ name: z.string() }).nullable(),
 })

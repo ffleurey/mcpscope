@@ -78,6 +78,22 @@
       .map((artifact) => typeof artifact.metadata.schema_key === 'string' ? artifact.metadata.schema_key : artifact.id)
       .filter((value, index, all) => all.indexOf(value) === index),
   )
+  const latestDiagnostic = $derived.by(() => {
+    const diagnostic = [...workflowStep.artifacts]
+      .filter((artifact) => artifact.metadata.schema_key === 'analysis.diagnostic.v1')
+      .sort((left, right) => right.createdAt - left.createdAt)[0]
+    if (!diagnostic || typeof diagnostic.content !== 'object' || diagnostic.content === null || Array.isArray(diagnostic.content)) {
+      return null
+    }
+    const content = diagnostic.content as { message?: string; error_kind?: string }
+    if (typeof content.message !== 'string') {
+      return null
+    }
+    return {
+      message: content.message,
+      errorKind: typeof content.error_kind === 'string' ? content.error_kind : null,
+    }
+  })
 
   function labelOwnedTurn(index: number): string {
     if (step.stepTypeKey === 'analysis_bootstrap') {
@@ -159,6 +175,16 @@
         {#each artifactLabels as label (label)}
           <span class="analysis-workflow-artifact">{label}</span>
         {/each}
+      </div>
+    {/if}
+
+    {#if latestDiagnostic}
+      <div class="analysis-workflow-error">
+        <span class="analysis-workflow-error-label">Step failure</span>
+        <span class="analysis-workflow-error-message">{latestDiagnostic.message}</span>
+        {#if latestDiagnostic.errorKind}
+          <span class="analysis-workflow-error-kind">{latestDiagnostic.errorKind}</span>
+        {/if}
       </div>
     {/if}
 
@@ -258,6 +284,32 @@
   .analysis-workflow-content {
     display: grid;
     gap: 0.45rem;
+  }
+
+  .analysis-workflow-error {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-panel) 78%, #b43b25 22%);
+    color: var(--text);
+  }
+
+  .analysis-workflow-error-label {
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .analysis-workflow-error-message,
+  .analysis-workflow-error-kind {
+    font-size: 0.77rem;
+  }
+
+  .analysis-workflow-error-kind {
+    color: var(--text-muted);
   }
 
   .analysis-workflow-section {

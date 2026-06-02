@@ -2,8 +2,8 @@
  * Session metadata foundation tests.
  *
  * Covers: schema migration, repository persistence, validation, parent/child
- * lookups, primary-only listing, cascade delete, and API serialization of
- * the new session_type / parent_ref fields.
+ * lookups, session listing, cascade delete, and API serialization of
+ * session_type / parent_ref plus analysis-session metadata.
  */
 import fs from 'node:fs'
 import Database from 'better-sqlite3'
@@ -19,9 +19,16 @@ import {
   listSessionSummaries,
   updateSessionRecord,
 } from './persistence/repository.js'
+import { insertStepRecord, listStepRecordsBySession } from './persistence/repositoryV2.js'
 import { openBackendDatabase } from './persistence/db.js'
 import { initializeBackendSchema, validateBackendSchema } from './persistence/schema.js'
 import { importTraceBundle } from './runtime/traceImport.js'
+import { insertJsonArtifact } from './analysis/artifactRepository.js'
+import { SCHEMA_KEY } from './analysis/schemas.js'
+import { stepTypeKey } from './domain/executionModel.js'
+import { getPartRecord, insertPartRecord, insertTurnRecord } from './persistence/repository.js'
+import type { PartRecord } from './domain/model.js'
+import type { StepPersistenceRecord } from './domain/persistenceContract.js'
 
 const LEGACY_RUNTIME_TABLES = ['sessions', 'turns', 'rounds', 'parts', 'raw_exchanges']
 
@@ -74,6 +81,47 @@ function makeSessionRecord(overrides: Partial<Parameters<typeof createSessionRec
     isContextExhausted: false,
     compactionStrategy: 'strip-reasoning',
     ...overrides,
+  }
+}
+
+function makeStepRecord(
+  overrides: Partial<StepPersistenceRecord> & Pick<StepPersistenceRecord, 'id' | 'sessionId' | 'stepTypeKey' | 'ordinal'>,
+): StepPersistenceRecord {
+  return {
+    id: overrides.id,
+    sessionId: overrides.sessionId,
+    stepTypeKey: overrides.stepTypeKey,
+    ordinal: overrides.ordinal,
+    status: overrides.status ?? 'complete',
+    params: overrides.params ?? {},
+    state: overrides.state ?? {},
+    createdAt: overrides.createdAt ?? 1,
+    completedAt: overrides.completedAt ?? 1,
+  }
+}
+
+function makePartRecord(overrides: Partial<PartRecord> & Pick<PartRecord, 'id' | 'sessionId' | 'ordinal' | 'partType'>): PartRecord {
+  return {
+    id: overrides.id,
+    sessionId: overrides.sessionId,
+    turnId: overrides.turnId ?? null,
+    roundId: overrides.roundId ?? null,
+    parentPartId: overrides.parentPartId ?? null,
+    ordinal: overrides.ordinal,
+    partType: overrides.partType,
+    roleLabel: overrides.roleLabel ?? null,
+    payload: overrides.payload ?? {
+      text: null,
+      json: null,
+      mimeType: null,
+      summary: null,
+    },
+    display: overrides.display ?? { state: 'transcript', collapsedByDefault: false },
+    context: overrides.context ?? { state: 'included', note: null, strippedByCompactionAtTurnId: null },
+    tokens: overrides.tokens ?? { count: null, source: 'unknown', confidence: 'unknown', note: null },
+    provenanceJson: overrides.provenanceJson ?? null,
+    createdAt: overrides.createdAt ?? 1,
+    updatedAt: overrides.updatedAt ?? 1,
   }
 }
 
@@ -447,7 +495,7 @@ describe('session metadata API', () => {
     }
   })
 
-  it('GET /api/sessions lists only primary sessions', async () => {
+  it('GET /api/sessions includes analysis sessions and their failure metadata', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config)
@@ -464,13 +512,13 @@ describe('session metadata API', () => {
     expect(createRes.statusCode).toBe(201)
     const primaryId = createRes.json().session.id as string
 
-    // Insert a non-primary session directly into the DB
+    // Insert a failed analysis session directly into the DB.
     const ts = Date.now()
     createSessionRecord(app.backendDb.connection, {
       id: 'ANLZ',
-      title: 'Analysis session',
+      title: 'Fast session analysis',
       status: 'ready',
-      initStatus: 'pending',
+      initStatus: 'ready',
       sessionType: 'session_analysis',
       parentKind: 'session',
       parentId: primaryId,
@@ -485,11 +533,77 @@ describe('session metadata API', () => {
       compactionStrategy: 'strip-reasoning',
     })
 
+    insertStepRecord(app.backendDb.connection, makeStepRecord({
+      id: 'ANLZ.wf0',
+      sessionId: 'ANLZ',
+      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
+      ordinal: 0,
+      status: 'error',
+      params: { workflow_kind: 'fast_session_analysis' },
+      state: { phase: 'error' },
+      createdAt: ts + 1,
+      completedAt: ts + 1,
+    }))
+    insertStepRecord(app.backendDb.connection, makeStepRecord({
+      id: 'ANLZ.wf3',
+      sessionId: 'ANLZ',
+      stepTypeKey: stepTypeKey('analysis_tool_call_assessment'),
+      ordinal: 3,
+      status: 'error',
+      createdAt: ts + 2,
+      completedAt: ts + 2,
+    }))
+    insertJsonArtifact(app.backendDb.connection, {
+      id: 'artifact-1',
+      sessionId: 'ANLZ',
+      stepId: 'ANLZ.wf3',
+      content: {
+        step_type: 'fast_tool_call_assessment',
+        error_kind: 'schema_validation_error',
+        message: 'Fast assessment response did not match fast schema',
+      },
+      metadata: {
+        schema_key: SCHEMA_KEY.DIAGNOSTIC,
+      },
+      createdAt: ts + 3,
+    })
+
     const listRes = await app.inject({ method: 'GET', url: '/api/sessions' })
     expect(listRes.statusCode).toBe(200)
-    const sessionIds = listRes.json().sessions.map((s: { id: string }) => s.id)
+    const sessions = listRes.json().sessions as Array<{
+      id: string
+      status: string
+      workflow_kind?: string
+      latest_error?: { message: string; error_kind: string | null; step_id: string | null }
+    }>
+    const sessionIds = sessions.map(s => s.id)
     expect(sessionIds).toContain(primaryId)
-    expect(sessionIds).not.toContain('ANLZ')
+    expect(sessionIds).toContain('ANLZ')
+    expect(sessions).toContainEqual(expect.objectContaining({
+      id: 'ANLZ',
+      status: 'error',
+      workflow_kind: 'fast_session_analysis',
+      latest_error: {
+        step_id: 'ANLZ.wf3',
+        error_kind: 'schema_validation_error',
+        message: 'Fast assessment response did not match fast schema',
+      },
+    }))
+
+    const statusRes = await app.inject({ method: 'GET', url: '/api/sessions/ANLZ/status' })
+    expect(statusRes.statusCode).toBe(200)
+    expect(statusRes.json()).toMatchObject({
+      session: {
+        id: 'ANLZ',
+        state: 'error',
+        workflow_kind: 'fast_session_analysis',
+        latest_error: {
+          step_id: 'ANLZ.wf3',
+          error_kind: 'schema_validation_error',
+          message: 'Fast assessment response did not match fast schema',
+        },
+      },
+    })
   })
 
   it('GET /api/sessions returns session_type in list payload', async () => {
@@ -625,6 +739,155 @@ describe('session metadata API', () => {
     expect(body.children[0].id).toBe('ANL1')
     expect(body.children[0].session_type).toBe('session_analysis')
     expect(body.children[0].parent_id).toBe('PRNT')
+  })
+
+  it('GET /api/lookup and retry-failed-step expose and reset failed analysis sessions', async () => {
+    const config = makeTestConfig()
+    dataDir = config.dataDir
+    app = await buildBackendApp(config)
+
+    const ts = Date.now()
+    createSessionRecord(app.backendDb.connection, {
+      id: 'PRNT',
+      title: 'Parent',
+      status: 'ready',
+      initStatus: 'ready',
+      sessionType: 'primary',
+      parentKind: null,
+      parentId: null,
+      createdAt: ts,
+      updatedAt: ts,
+      modelProfileSnapshot: BASE_MODEL_SNAPSHOT,
+      mcpProfileSnapshot: null,
+      loadedContextLength: null,
+      systemPromptTokens: null,
+      toolDefinitionsTokens: null,
+      isContextExhausted: false,
+      compactionStrategy: 'strip-reasoning',
+    })
+    createSessionRecord(app.backendDb.connection, {
+      id: 'ANLZ',
+      title: 'Fast session analysis',
+      status: 'ready',
+      initStatus: 'ready',
+      sessionType: 'session_analysis',
+      parentKind: 'session',
+      parentId: 'PRNT',
+      createdAt: ts + 1,
+      updatedAt: ts + 1,
+      modelProfileSnapshot: BASE_MODEL_SNAPSHOT,
+      mcpProfileSnapshot: null,
+      loadedContextLength: null,
+      systemPromptTokens: null,
+      toolDefinitionsTokens: null,
+      isContextExhausted: false,
+      compactionStrategy: 'strip-reasoning',
+    })
+
+    insertStepRecord(app.backendDb.connection, makeStepRecord({
+      id: 'ANLZ.wf0',
+      sessionId: 'ANLZ',
+      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
+      ordinal: 0,
+      status: 'error',
+      params: { workflow_kind: 'fast_session_analysis' },
+      state: { phase: 'error' },
+      createdAt: ts + 2,
+      completedAt: ts + 2,
+    }))
+    insertStepRecord(app.backendDb.connection, makeStepRecord({
+      id: 'ANLZ.wf3',
+      sessionId: 'ANLZ',
+      stepTypeKey: stepTypeKey('analysis_tool_call_assessment'),
+      ordinal: 3,
+      status: 'error',
+      createdAt: ts + 3,
+      completedAt: ts + 3,
+    }))
+    insertJsonArtifact(app.backendDb.connection, {
+      id: 'artifact-2',
+      sessionId: 'ANLZ',
+      stepId: 'ANLZ.wf3',
+      content: {
+        step_type: 'fast_tool_call_assessment',
+        error_kind: 'schema_validation_error',
+        message: 'Fast assessment response did not match fast schema',
+      },
+      metadata: {
+        schema_key: SCHEMA_KEY.DIAGNOSTIC,
+      },
+      createdAt: ts + 4,
+    })
+
+    insertTurnRecord(app.backendDb.connection, {
+      id: 'ANLZ.1',
+      sessionId: 'ANLZ',
+      ownerStepId: 'ANLZ.wf3',
+      sequenceNumber: 1,
+      status: 'complete',
+      createdAt: ts + 5,
+      completedAt: ts + 5,
+      outcome: 'model-response',
+      usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
+      contextTokensAtTurnEnd: null,
+      contextTokensAfterCompaction: null,
+      compactionApplied: 'strip-reasoning',
+      compactionTokensRemoved: null,
+    })
+    insertPartRecord(app.backendDb.connection, makePartRecord({
+      id: 'ANLZ.1.1.1-A',
+      sessionId: 'ANLZ',
+      turnId: 'ANLZ.1',
+      ordinal: 1,
+      partType: 'assistant-content',
+      roleLabel: 'assistant',
+      payload: { text: '{"bad":"payload"}', json: null, mimeType: 'text/plain', summary: null },
+      createdAt: ts + 5,
+      updatedAt: ts + 5,
+    }))
+
+    const lookupRes = await app.inject({ method: 'GET', url: '/api/lookup/ANLZ' })
+    expect(lookupRes.statusCode).toBe(200)
+    expect(lookupRes.json()).toMatchObject({
+      id: 'ANLZ',
+      type: 'session',
+      data: {
+        workflow_kind: 'fast_session_analysis',
+        workflow_label: 'Fast Session Analysis',
+        latest_error: {
+          step_id: 'ANLZ.wf3',
+          error_kind: 'schema_validation_error',
+          message: 'Fast assessment response did not match fast schema',
+        },
+      },
+    })
+
+    const retryRes = await app.inject({ method: 'POST', url: '/api/sessions/ANLZ/retry-failed-step' })
+    expect(retryRes.statusCode).toBe(200)
+    expect(retryRes.json()).toMatchObject({
+      session_id: 'ANLZ',
+      failed_step_id: 'ANLZ.wf3',
+      retry_phase: 'assessing',
+      latest_error: {
+        step_id: 'ANLZ.wf3',
+        error_kind: 'schema_validation_error',
+        message: 'Fast assessment response did not match fast schema',
+      },
+    })
+
+    const steps = listStepRecordsBySession(app.backendDb.connection, 'ANLZ')
+    const cursorStep = steps.find(step => step.id === 'ANLZ.wf0')
+    expect(cursorStep).toMatchObject({
+      status: 'running',
+      state: expect.objectContaining({
+        phase: 'assessing',
+        retry_failed_step_id: 'ANLZ.wf3',
+      }),
+      completedAt: null,
+    })
+
+    const retriedPart = getPartRecord(app.backendDb.connection, 'ANLZ.1.1.1-A')
+    expect(retriedPart?.context.state).toBe('excluded')
   })
 
   it('GET /api/sessions/:sessionId/children returns 404 for unknown session', async () => {

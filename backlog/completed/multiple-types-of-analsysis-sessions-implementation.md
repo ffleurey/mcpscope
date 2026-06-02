@@ -1,6 +1,6 @@
 # Multiple Types of Analysis Sessions
 
-Implementation task for the specification in [backlog/specification/multiple-types-of-analsysis-sessions.md](../specification/multiple-types-of-analsysis-sessions.md).
+Implementation task for the specification in [backlog/completed/multiple-types-of-analsysis-sessions-specification.md](./multiple-types-of-analsysis-sessions-specification.md).
 
 This is one implementation task with staged milestones and gates. It is not split into separate backlog tasks.
 

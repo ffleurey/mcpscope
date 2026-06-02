@@ -11,11 +11,15 @@
     executeAnalysisStep,
     exportActiveTrace,
     isExecutingAnalysis,
+    isRetryingAnalysis,
     isSteppingAnalysis,
     isSendingTurn,
+    retryFailedAnalysisStep,
     sendMessage,
   } from '../sessionStore'
   import { appVersion } from '../connectionStore'
+  import { schedulerSnapshot } from '../executionStore'
+  import { sessionHasQueuedOrActiveJob } from '../executionSelectors'
   import type { StreamingRoundState } from '../traceStreaming'
   import { deriveContextSnapshotAtRound } from '../traceStreaming'
   import { patchSessionTitle } from '../api/backendClient'
@@ -135,6 +139,10 @@
     return m
   })
   let sessionPreludeRawExchanges = $derived(traceRawExchanges.filter((x) => x.turnId === null))
+  let sessionHasExecutionJob = $derived.by(() => {
+    return sessionHasQueuedOrActiveJob($schedulerSnapshot, session?.id)
+  })
+  let analysisRunDisabled = $derived(sessionHasExecutionJob || $isRetryingAnalysis)
   let timelineItems = $derived.by((): TimelineItem[] => {
     const items: TimelineItem[] = [
       ...traceTurns.map((turn) => ({
@@ -203,7 +211,28 @@
     const cursorStep = traceSteps.find((s) => s.stepTypeKey === 'analysis_v2_cursor')
     return typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : 'bootstrap'
   })
+  let analysisWorkflowKind = $derived.by(() => {
+    if (!isAnalysisSession) return null
+    const fromSummary = session?.workflow_kind
+    if (fromSummary) return fromSummary
+    const cursorStep = traceSteps.find((s) => s.stepTypeKey === 'analysis_v2_cursor')
+    return typeof cursorStep?.params.workflow_kind === 'string' ? cursorStep.params.workflow_kind : null
+  })
+  let analysisWorkflowLabel = $derived.by(() => {
+    switch (analysisWorkflowKind) {
+      case 'full_session_analysis':
+        return 'Full Analysis'
+      case 'fast_session_analysis':
+        return 'Fast Session Analysis'
+      case 'fast_tool_analysis':
+        return 'Fast Tool Analysis'
+      default:
+        return 'Analysis session'
+    }
+  })
+  let analysisLatestError = $derived(isAnalysisSession ? (session?.latest_error ?? null) : null)
   let analysisComplete = $derived(analysisPhase === 'complete')
+  let analysisFailed = $derived(analysisPhase === 'error' || session?.status === 'error')
   let hasTraceContent = $derived(
     isInitializing
       || sessionPreludeParts.length > 0
@@ -295,7 +324,7 @@
 
   async function handleSend() {
     const text = composerText.trim()
-    if (!text || $isSendingTurn || isExhausted || !session) return
+    if (!text || sessionHasExecutionJob || isExhausted || !session) return
     composerText = ''
     await tick()
     resizeTextarea()
@@ -360,7 +389,7 @@
       {:else if !hasTraceContent}
         <div class="empty-state">
           {#if isAnalysisSession}
-            <span class="empty-hint">Analysis session ready — click Run Analysis to start</span>
+            <span class="empty-hint">{analysisWorkflowLabel} ready — click Run Analysis to start</span>
           {:else}
             <span class="empty-hint">Session ready — type your first message below</span>
           {/if}
@@ -434,27 +463,45 @@
         <!-- ── Analysis control bar ──────────────────────────────────── -->
         <div class="analysis-bar">
           <div class="analysis-bar-info">
-            <span class="analysis-bar-label">Analysis session</span>
+            <span class="analysis-bar-label">{analysisWorkflowLabel}</span>
             {#if analysisPhase}
               <span class="analysis-bar-phase">Phase: <strong>{analysisPhase}</strong></span>
+            {/if}
+            {#if analysisLatestError}
+              <span class="analysis-bar-error">
+                Failure: {analysisLatestError.message}
+                {#if analysisLatestError.error_kind}
+                  <em>({analysisLatestError.error_kind})</em>
+                {/if}
+              </span>
             {/if}
           </div>
           {#if !analysisComplete}
             <button
               class="btn btn-primary"
-              disabled={$isExecutingAnalysis || $isSteppingAnalysis}
+              disabled={analysisRunDisabled}
               onclick={() => void executeAnalysis()}
             >
-              {$isExecutingAnalysis ? '⏳ Running…' : '▶ Run Analysis'}
+              {sessionHasExecutionJob ? '⏳ Queued…' : '▶ Run Analysis'}
             </button>
+            {#if analysisFailed}
+              <button
+                class="btn btn-secondary"
+                disabled={analysisRunDisabled}
+                onclick={() => void retryFailedAnalysisStep()}
+                title="Reset the failed cursor phase and rerun the failed step once"
+              >
+                {$isRetryingAnalysis ? '⏳ Retrying…' : '↻ Retry failed step'}
+              </button>
+            {/if}
             {#if viewMode === 'inspect'}
               <button
                 class="btn btn-secondary"
-                disabled={$isExecutingAnalysis || $isSteppingAnalysis}
+                disabled={analysisRunDisabled}
                 onclick={() => void executeAnalysisStep()}
                 title="Advance one workflow step (debug)"
               >
-                {$isSteppingAnalysis ? '⏳ Stepping…' : '⏭ Step (Debug)'}
+                {sessionHasExecutionJob ? '⏳ Queued…' : '⏭ Step (Debug)'}
               </button>
             {/if}
           {:else}
@@ -463,19 +510,19 @@
         </div>
       {:else}
         <div class="composer">
-          <div class="composer-bubble" class:is-disabled={$isSendingTurn || isExhausted}>
+          <div class="composer-bubble" class:is-disabled={sessionHasExecutionJob || isExhausted}>
             <textarea
               bind:this={textareaEl}
               bind:value={composerText}
               placeholder={
                 isExhausted
                   ? 'Context window full — start a new session'
-                  : $isSendingTurn
-                  ? 'Waiting for response…'
+                  : sessionHasExecutionJob
+                  ? 'Queued or running for this session…'
                   : 'Message… (Ctrl+Enter to send)'
               }
               rows="2"
-              disabled={$isSendingTurn || isExhausted}
+              disabled={sessionHasExecutionJob || isExhausted}
               oninput={resizeTextarea}
               onkeydown={handleKeydown}
             ></textarea>
@@ -725,6 +772,16 @@
 
   .analysis-bar-phase {
     font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+
+  .analysis-bar-error {
+    font-size: 0.8rem;
+    color: color-mix(in srgb, var(--text) 88%, #b43b25 12%);
+  }
+
+  .analysis-bar-error em {
+    font-style: normal;
     color: var(--text-muted);
   }
 

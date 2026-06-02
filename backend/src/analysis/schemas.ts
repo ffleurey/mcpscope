@@ -192,6 +192,7 @@ export const fastToolCallAssessmentSchema = z.object({
     'unsuccessful',
     'request_error',
     'response_error',
+    'tool_error',
     'empty',
     'unclear',
   ]),
