@@ -9,17 +9,17 @@ import {
 } from '../runtime/toolTurns.js'
 import { runAnalysisTurn } from './boundedTurn.js'
 import {
-  buildAnalysisFocusInstructions,
-  fastToolCallAssessmentSchema,
   SCHEMA_KEY,
+  evaluationResultSchema,
   type AnalysisSessionState,
   type AnalysisTarget,
   type EvidencePacket,
+  type EvaluationResult,
 } from './schemas.js'
 import type { ZodError } from 'zod'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
-import { runContextMutationStep } from './contextMutationStep.js'
-import { renderPromptResource } from './promptResources.js'
+import { runFastToolContextMutationStep } from './fastToolContextMutationStep.js'
+import { buildFastSessionToolCallAssessmentPrompt } from './evaluationPromptFactory.js'
 
 function uuid(): string {
   return crypto.randomUUID()
@@ -43,31 +43,18 @@ export interface FastAssessmentTurnResult {
   turnId: string
 }
 
-function validateAssessmentIdentity(packet: EvidencePacket, parsed: {
-  tool_call_part_id: string
-  tool_name: string
-}): string[] {
+function validateAssessmentIdentity(
+  packet: EvidencePacket,
+  parsed: Pick<EvaluationResult, 'subject_scope' | 'subject_id'>,
+): string[] {
   const failures: string[] = []
-  if (parsed.tool_call_part_id !== packet.tool_call_part_id) {
-    failures.push(`tool_call_part_id mismatch: expected ${packet.tool_call_part_id}, got ${parsed.tool_call_part_id}`)
+  if (parsed.subject_scope !== 'tool_call') {
+    failures.push(`subject_scope mismatch: expected tool_call, got ${parsed.subject_scope}`)
   }
-  if (parsed.tool_name !== packet.tool_name) {
-    failures.push(`tool_name mismatch: expected ${packet.tool_name}, got ${parsed.tool_name}`)
+  if (parsed.subject_id !== packet.tool_call_part_id) {
+    failures.push(`subject_id mismatch: expected ${packet.tool_call_part_id}, got ${parsed.subject_id}`)
   }
   return failures
-}
-
-function normalizeFastAssessmentPayload(payload: unknown): unknown {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return payload
-  }
-
-  const normalized = { ...payload } as Record<string, unknown>
-  // Handle legacy field names or normalize values if needed
-  if (normalized.tool_call_result === 'tool_error') {
-    normalized.tool_call_result = 'response_error'
-  }
-  return normalized
 }
 
 export async function runFastToolCallAssessmentTurn(
@@ -144,7 +131,7 @@ export async function runFastToolCallAssessmentTurn(
     }
   }
 
-  const parsed = fastToolCallAssessmentSchema.safeParse(normalizeFastAssessmentPayload(parsedJson))
+  const parsed = evaluationResultSchema.safeParse(parsedJson)
   if (!parsed.success) {
     insertJsonArtifact(database.connection, {
       id: uuid(),
@@ -153,7 +140,7 @@ export async function runFastToolCallAssessmentTurn(
       content: {
         step_type: 'fast_tool_call_assessment',
         error_kind: 'schema_validation_error',
-        message: 'Fast assessment response did not match fast schema',
+        message: 'Fast assessment response did not match evaluation_result schema',
         detail: {
           raw_response: turnResult.responseText,
           errors: (parsed.error as ZodError).issues,
@@ -187,6 +174,10 @@ export async function runFastToolCallAssessmentTurn(
         message: 'Fast assessment response matched the schema but not the expected packet identity',
         detail: {
           raw_response: turnResult.responseText,
+          expected_subject_scope: 'tool_call',
+          expected_subject_id: packet.tool_call_part_id,
+          actual_subject_scope: parsed.data.subject_scope,
+          actual_subject_id: parsed.data.subject_id,
           failures: identityFailures,
         },
       },
@@ -218,14 +209,16 @@ export async function runFastToolCallAssessmentTurn(
       turn_id: packet.turn_id,
       round_id: packet.round_id,
       tool_name: packet.tool_name,
+      subject_scope: parsed.data.subject_scope,
+      subject_id: parsed.data.subject_id,
     },
     createdAt: ts,
   })
 
-  const { nextPhase } = runContextMutationStep(database, {
+  const { nextPhase } = runFastToolContextMutationStep(database, {
     analysisSessionId: state.analysisSessionId,
-    currentTurnId: packet.turn_id,
-    nextPacketIndex: state.nextPacketIndex + 1,
+    nextWorkUnitIndex: state.nextPacketIndex + 1,
+    totalWorkUnitCount: state.packetCount,
     injectPartIds,
     reasoningPartIds: turnResult.assistantReasoningPartIds,
     userTurnId: turnResult.turnId,
@@ -245,13 +238,16 @@ export async function runFastToolCallAssessmentTurn(
 }
 
 function buildFastAssessmentQuestion(packet: EvidencePacket, analysisTarget: AnalysisTarget): string {
-  return renderPromptResource('fast-session.tool-call-assessment.txt', {
-    analysis_focus_instructions: buildAnalysisFocusInstructions(analysisTarget),
-    tool_call_part_id: packet.tool_call_part_id,
-    tool_name: packet.tool_name,
-    tool_call_parameters: packet.tool_call_parameters,
-    pre_reasoning_part_id: packet.reasoning_before_part_id,
-    post_reasoning_part_id: packet.reasoning_after_part_id,
+  return buildFastSessionToolCallAssessmentPrompt({
+    analysisTarget,
+    subjectId: packet.tool_call_part_id,
+    turnId: packet.turn_id,
+    roundId: packet.round_id,
+    toolCallPartId: packet.tool_call_part_id,
+    toolName: packet.tool_name,
+    toolCallParameters: packet.tool_call_parameters,
+    preReasoningPartId: packet.reasoning_before_part_id,
+    postReasoningPartId: packet.reasoning_after_part_id,
   })
 }
 

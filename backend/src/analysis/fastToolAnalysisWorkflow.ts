@@ -13,6 +13,7 @@ import { getLatestArtifactBySchemaKey } from './artifactRepository.js'
 import {
   SCHEMA_KEY,
   type AnalysisSessionState,
+  type AnalysisTarget,
   type FastToolWorkIndex,
 } from './schemas.js'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
@@ -167,7 +168,7 @@ async function runGroupedAssessment(
     deps.database,
     deps.lmGateway,
     deps.mcpGateway,
-    { state, stepId, workUnit, analysisTarget: targetArtifact.content as any },
+    { state, stepId, workUnit, analysisTarget: targetArtifact.content as AnalysisTarget },
     emitEvent,
   )
 

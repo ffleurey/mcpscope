@@ -18,6 +18,7 @@ import { runFastFinalAggregationTurn } from './fastFinalAggregationTurn.js'
 import {
   SCHEMA_KEY,
   type AnalysisSessionState,
+  type AnalysisTarget,
   type EvidencePacketIndex,
 } from './schemas.js'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
@@ -182,7 +183,7 @@ async function runNextAssessment(
       state: state.currentTurnId === packet.turn_id ? state : { ...state, currentTurnId: packet.turn_id },
       stepId,
       packet,
-      analysisTarget: targetArtifact.content as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      analysisTarget: targetArtifact.content as AnalysisTarget,
     },
     emitEvent,
   )
