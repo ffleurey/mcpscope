@@ -15,10 +15,10 @@ import type { LmStudioGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import { runBootstrapStep } from './bootstrapStep.js'
 import { getLatestArtifactBySchemaKey, insertJsonArtifact } from './artifactRepository.js'
-import { runContextMutationStep } from './contextMutationStep.js'
+import { runContextMutationStep } from './fullSession/contextMutationStep.js'
 import { runCoverageValidationStep } from './coverageValidationStep.js'
-import { runFinalAggregationTurn } from './finalAggregationTurn.js'
-import { buildRepeatedAttemptGuidance } from './turnSummaryTurn.js'
+import { runFinalAggregationTurn } from './fullSession/finalAggregationTurn.js'
+import { buildRepeatedAttemptGuidance } from './fullSession/turnSummaryTurn.js'
 import { SCHEMA_KEY, type AnalysisSessionState, type EvidencePacketIndex } from './schemas.js'
 import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 
@@ -970,6 +970,7 @@ describe('analysis workflow helpers', () => {
         round_id: 'TARG.1.1',
         tool_call_part_id: 'TARG.1.1.1-T',
         tool_name: 'ha_history_get_sensor_stats',
+        tool_call_parameters: '{"entity_ids":["sensor.temperature"],"interval":"hour"}',
         reasoning_before_part_id: null,
         tool_result_part_id: 'TARG.1.1.2-TR',
         reasoning_after_part_id: null,
@@ -979,6 +980,7 @@ describe('analysis workflow helpers', () => {
         round_id: 'TARG.1.2',
         tool_call_part_id: 'TARG.1.2.1-T',
         tool_name: 'ha_history_get_sensor_stats',
+        tool_call_parameters: '{"entity_ids":["sensor.temperature"],"interval":"hour"}',
         reasoning_before_part_id: null,
         tool_result_part_id: 'TARG.1.2.2-TR',
         reasoning_after_part_id: null,

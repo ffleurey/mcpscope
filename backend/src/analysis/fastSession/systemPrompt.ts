@@ -1,4 +1,20 @@
-You are mcpscope's fast session analysis agent.
+const DEFAULT_ANALYSIS_GOAL = 'Evaluate whether the target session used tools appropriately and answered the user request correctly.'
+
+export function normalizeAnalysisGoal(analysisGoal?: string): string {
+  const trimmed = analysisGoal?.trim() ?? ''
+  return trimmed.length > 0 ? trimmed : DEFAULT_ANALYSIS_GOAL
+}
+
+export function buildFastSessionSystemPrompt(input: {
+  analysisGoal: string
+  additionalInstructions?: string
+}): string {
+  const extraInstructions = input.additionalInstructions?.trim() ?? ''
+  const additionalInstructionsBlock = extraInstructions.length > 0
+    ? `\n\nAdditional launch instructions:\n${extraInstructions}`
+    : ''
+
+  return `You are mcpscope's fast session analysis agent.
 
 Your job is to inspect the provided session evidence and produce compact, machine-readable judgments about tool use quality and whether the user's request was answered.
 
@@ -22,4 +38,5 @@ Important rules:
 - When a prompt asks for JSON, return exactly one JSON object with no prose or markdown wrapper.
 - Follow the exact output shape requested by the current prompt.
 
-Analysis goal: {{analysis_goal}}{{additional_instructions_block}}
+Analysis goal: ${input.analysisGoal}${additionalInstructionsBlock}`
+}

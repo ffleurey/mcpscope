@@ -6,33 +6,30 @@
  */
 
 import crypto from 'node:crypto'
-import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { BackendDatabase } from '../../persistence/db.js'
+import type { LmStudioGateway } from '../../runtime/modelTurns.js'
 import {
   getSessionRecord,
   getPartRecord,
   updatePartRecord,
-} from '../persistence/repository.js'
+} from '../../persistence/repository.js'
 import {
   insertJsonArtifact,
   getLatestArtifactBySchemaKey,
   listArtifactsBySessionAndSchemaKey,
-} from './artifactRepository.js'
-import type { McpGateway } from '../runtime/toolTurns.js'
-import { runAnalysisTurn } from './boundedTurn.js'
-import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
+} from '../artifactRepository.js'
+import type { McpGateway } from '../../runtime/toolTurns.js'
+import { runAnalysisTurn } from '../boundedTurn.js'
+import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
 import {
-  buildAnalysisFocusInstructions,
+  evaluationResultSchema,
   SCHEMA_KEY,
-  finalAnalysisReportSchema,
   type AnalysisSessionState,
   type AnalysisTarget,
-  type FinalAnalysisReport,
-  type ToolCallAssessment,
-  type TurnSummary,
-} from './schemas.js'
+  type EvaluationResult,
+} from '../schemas.js'
 import type { ZodError } from 'zod'
-import { renderPromptResource } from './promptResources.js'
+import { buildFinalAggregationEvaluationPrompt } from './evaluationPrompts.js'
 
 function uuid(): string {
   return crypto.randomUUID()
@@ -63,15 +60,12 @@ function extractJsonBlock(text: string): string {
   return trimmed
 }
 
-function normalizeFinalReportIdentity(parsedJson: unknown, totalToolCallsAssessed: number): unknown {
+function normalizeFinalReportIdentity(parsedJson: unknown): unknown {
   if (!parsedJson || typeof parsedJson !== 'object' || Array.isArray(parsedJson)) {
     return parsedJson
   }
 
-  return {
-    ...parsedJson,
-    total_tool_calls_assessed: totalToolCallsAssessed,
-  }
+  return parsedJson
 }
 
 function retireFinalAggregationPromptContext(
@@ -120,129 +114,33 @@ function firstSentence(text: string): string {
   return sentence?.[0]?.trim() ?? trimmed
 }
 
-function derivePrimaryIssue(assessments: ToolCallAssessment[]): FinalAnalysisReport['primary_issue'] {
-  const causes = assessments
-    .map(assessment => assessment.most_direct_cause)
-    .filter((cause): cause is NonNullable<ToolCallAssessment['most_direct_cause']> => cause !== null && cause !== 'unclear')
-
-  if (causes.length === 0) {
-    return 'none'
-  }
-
-  const counts = new Map<string, number>()
-  for (const cause of causes) {
-    counts.set(cause, (counts.get(cause) ?? 0) + 1)
-  }
-
-  const sorted = [...counts.entries()].sort((left, right) => right[1] - left[1])
-  const top = sorted[0]?.[0] ?? null
-  const second = sorted[1]?.[1] ?? 0
-  const topCount = sorted[0]?.[1] ?? 0
-
-  if (top && topCount > second) {
-    return top as FinalAnalysisReport['primary_issue']
-  }
-
-  return 'unclear'
-}
-
-function buildDocumentationFinding(assessments: ToolCallAssessment[]): string | null {
-  for (const assessment of assessments) {
-    const combined = `${assessment.tool_call_assessment} ${assessment.parameter_or_call_issues.join(' ')}`
-    if (!/(tool description|documentation|contradict|states?|described|valid values)/i.test(combined)) {
-      continue
-    }
-    return firstSentence(combined)
-  }
-  return null
-}
-
-function buildDocumentationSuggestion(assessments: ToolCallAssessment[]): string | null {
-  for (const assessment of assessments) {
-    const combined = `${assessment.tool_call_assessment} ${assessment.parameter_or_call_issues.join(' ')}`
-    if (/aggregation/i.test(combined)) {
-      return `Clarify whether ${assessment.tool_name} expects a single aggregation as a scalar string or a single-element array.`
-    }
-    if (/(tool description|documentation|contradict|described|valid values)/i.test(combined)) {
-      return `Clarify the expected runtime contract for ${assessment.tool_name} so the documented parameter shape matches observed behavior.`
-    }
-  }
-  return null
-}
-
 function buildDeterministicFinalReport(
-  assessments: ToolCallAssessment[],
-  turnSummaries: TurnSummary[],
-): FinalAnalysisReport | null {
-  if (turnSummaries.length !== 1) {
+  analysisSessionId: string,
+  assessments: EvaluationResult[],
+  turnSummaries: EvaluationResult[],
+): EvaluationResult | null {
+  if (turnSummaries.length !== 1 || assessments.length === 0) {
     return null
   }
 
-  if (!turnSummaries.every(summary => summary.turn_outcome === 'successful')) {
+  const summary = turnSummaries[0]
+  if (!summary) {
     return null
   }
 
-  const mismatchedAssessments = assessments.filter(assessment => assessment.expectation_match !== 'match')
-  const issueTurnIds = new Set<string>()
-
-  for (const summary of turnSummaries) {
-    if (summary.cross_attempt_reconciliation) {
-      issueTurnIds.add(summary.turn_id)
-    }
-  }
-  for (const assessment of mismatchedAssessments) {
-    issueTurnIds.add(assessment.turn_id)
-  }
-
-  if (issueTurnIds.size > 1) {
+  const severeAssessment = assessments.find(assessment => assessment.verdict === 'fail' || assessment.score <= 2)
+  if (severeAssessment) {
     return null
   }
-
-  const issueTurnId = issueTurnIds.values().next().value as string | undefined
-  const issueSummary = issueTurnId
-    ? (turnSummaries.find(summary => summary.turn_id === issueTurnId) ?? null)
-    : null
-  const primaryIssue = derivePrimaryIssue(mismatchedAssessments)
-  const documentationFinding = buildDocumentationFinding(mismatchedAssessments)
-  const documentationSuggestion = buildDocumentationSuggestion(mismatchedAssessments)
-
-  const findings: string[] = []
-  if (issueSummary?.cross_attempt_reconciliation) {
-    findings.push(firstSentence(issueSummary.cross_attempt_reconciliation))
-  }
-  for (const summary of turnSummaries) {
-    const firstFinding = summary.per_tool_findings[0]?.brief_finding
-    if (!firstFinding) {
-      continue
-    }
-    const normalized = firstSentence(firstFinding)
-    if (!findings.includes(normalized)) {
-      findings.push(normalized)
-    }
-  }
-
-  const answeredWithoutIssues = mismatchedAssessments.length === 0
 
   return {
-    outcome: 'answered',
-    outcome_rationale: answeredWithoutIssues
-      ? 'The session answered the user request across the assessed turns without material tool-use issues.'
-      : 'The session answered the user request, and the main tool-use issue was resolved within the workflow before the final answer was produced.',
-    primary_issue: answeredWithoutIssues ? 'none' : primaryIssue,
-    primary_issue_rationale: answeredWithoutIssues
-      ? null
-      : issueSummary?.cross_attempt_reconciliation
-        ? firstSentence(issueSummary.cross_attempt_reconciliation)
-        : firstSentence(mismatchedAssessments[0]?.tool_call_assessment ?? ''),
-    path_efficiency: answeredWithoutIssues ? 'efficient' : 'mixed',
-    path_efficiency_rationale: answeredWithoutIssues
-      ? 'The assessed turns reached the required answer path directly without retries or corrective tool-call changes.'
-      : 'The workflow still reached the correct answer, but it required retries or a corrected tool-call shape before succeeding.',
-    findings,
-    tool_description_findings: documentationFinding ? [documentationFinding] : [],
-    improvement_suggestions: [],
-    tool_description_improvement_suggestions: documentationSuggestion ? [documentationSuggestion] : [],
-    total_tool_calls_assessed: assessments.length,
+    subject_scope: 'session',
+    subject_id: analysisSessionId,
+    evaluation_focus: 'Summarize the overall quality and outcome of the analysis session.',
+    reasoning: firstSentence(summary.reasoning),
+    verdict: summary.verdict,
+    score: summary.score,
+    evidence_part_id: summary.evidence_part_id ?? assessments[0]?.evidence_part_id ?? null,
   }
 }
 
@@ -282,9 +180,9 @@ export async function runFinalAggregationTurn(
     analysisSessionId,
     SCHEMA_KEY.TURN_SUMMARY,
   )
-  const typedAssessments = assessments.map(artifact => artifact.content as ToolCallAssessment)
-  const typedTurnSummaries = turnSummaries.map(artifact => artifact.content as TurnSummary)
-  const deterministicReport = buildDeterministicFinalReport(typedAssessments, typedTurnSummaries)
+  const typedAssessments = assessments.map(artifact => artifact.content as EvaluationResult)
+  const typedTurnSummaries = turnSummaries.map(artifact => artifact.content as EvaluationResult)
+  const deterministicReport = buildDeterministicFinalReport(analysisSessionId, typedAssessments, typedTurnSummaries)
 
   if (deterministicReport) {
     const reportArtifactId = uuid()
@@ -299,6 +197,8 @@ export async function runFinalAggregationTurn(
         target_turn_id: state.targetTurnId,
         total_packets: assessments.length,
         synthesis_mode: 'deterministic_success_path',
+        subject_scope: deterministicReport.subject_scope,
+        subject_id: deterministicReport.subject_id,
       },
       createdAt: now(),
     })
@@ -317,10 +217,11 @@ export async function runFinalAggregationTurn(
   // ── Build synthesis question ──────────────────────────────────────────────
   // The accumulated context already contains: system-prompt, mcp-instructions,
   // accepted assessment results, and turn summaries. Ask the LLM to consolidate.
-  const synthesisQuestion = renderPromptResource('full.final-aggregation.txt', {
-    analysis_focus_instructions: buildAnalysisFocusInstructions(analysisTarget),
-    assessment_count: assessments.length,
-    turn_summary_count: turnSummaries.length,
+  const synthesisQuestion = buildFinalAggregationEvaluationPrompt({
+    analysisTarget,
+    assessmentCount: assessments.length,
+    turnSummaryCount: turnSummaries.length,
+    subjectId: analysisSessionId,
   })
 
   // ── Run context-aware LLM turn ────────────────────────────────────────────
@@ -361,9 +262,9 @@ export async function runFinalAggregationTurn(
     }
   }
 
-  parsedJson = normalizeFinalReportIdentity(parsedJson, assessments.length)
+  parsedJson = normalizeFinalReportIdentity(parsedJson)
 
-  const parsed = finalAnalysisReportSchema.safeParse(parsedJson)
+  const parsed = evaluationResultSchema.safeParse(parsedJson)
   if (!parsed.success) {
     const diagnosticId = uuid()
     insertJsonArtifact(database.connection, {
@@ -373,7 +274,7 @@ export async function runFinalAggregationTurn(
       content: {
         step_type: 'final_aggregation',
         error_kind: 'schema_validation_error',
-        message: 'Final aggregation response did not match final_analysis_report schema',
+        message: 'Final aggregation response did not match evaluation_result schema',
         detail: {
           raw_response: turnResult.responseText,
           errors: (parsed.error as ZodError).issues,
@@ -401,6 +302,8 @@ export async function runFinalAggregationTurn(
       target_session_id: state.targetSessionId,
       target_turn_id: state.targetTurnId,
       total_packets: assessments.length,
+      subject_scope: parsed.data.subject_scope,
+      subject_id: parsed.data.subject_id,
     },
     createdAt: ts,
   })

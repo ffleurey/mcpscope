@@ -132,4 +132,4 @@ See [TESTING.md](TESTING.md) for the test strategy and how to add regressions.
 
 - `backend-data/` is local runtime state and live integration output; only its README is tracked.
 - `research/` contains reference material and archived investigations, not active implementation specs.
-- `backlog/` is organized as lightweight workflow state folders: `candidates/`, `specification/`, `implementation/`, `fixme/`, and `completed/`.
+- `backlog/` is a lightweight historical board and workflow state area, not up-to-date project documentation. Only use a specific backlog file when task instructions explicitly point to it.

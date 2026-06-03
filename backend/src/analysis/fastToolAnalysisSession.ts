@@ -11,7 +11,7 @@ import {
   getFastToolAnalysisCursorParams,
   isFastToolAnalysisTerminal,
   type FastToolAnalysisWorkflowInput,
-} from './fastToolAnalysisWorkflow.js'
+} from './fastTool/fastToolAnalysisWorkflow.js'
 import { ANALYSIS_CURSOR_STEP_TYPE } from './analysisSession.js'
 
 export class FastToolAnalysisSession {

@@ -39,12 +39,15 @@
   let markdownPreviewSource = $state('')
   /** Chat mode: collapsed = show only answers; expanded = show full round detail */
   let chatCollapsed = $state(true)
+  /** Assessment prompt: collapsed by default for analysis turns */
+  let promptCollapsed = $state(true)
 
   const sortedRounds = $derived([...rounds].sort((a, b) => a.roundIndex - b.roundIndex))
   const sortedParts = $derived([...parts].sort((a, b) => a.ordinal - b.ordinal))
   const turnIsComplete = $derived(
     turn.status === 'complete' || turn.status === 'error' || turn.status === 'aborted',
   )
+  const isAnalysisWorkflowTurn = $derived(turn.ownerStepId !== null && turn.ownerStepId !== undefined)
   const lastRound = $derived(sortedRounds.at(-1) ?? null)
   const partsByRound = $derived.by(() => {
     const m = new Map<string, PartRecord[]>()
@@ -64,8 +67,8 @@
   const assistantContentParts = $derived(sortedParts.filter((p) => p.partType === 'assistant-content'))
   const toolCallCount = $derived(sortedParts.filter((p) => p.partType === 'tool-call').length)
   const hasReasoning = $derived(sortedParts.some((p) => p.partType === 'assistant-reasoning'))
-  /** True when there's something worth expanding (tool calls, reasoning, multiple rounds) */
-  const hasDetail = $derived(toolCallCount > 0 || hasReasoning || sortedRounds.length > 1 || turn.status === 'error')
+  /** True when there's something worth expanding (tool calls, reasoning, multiple rounds, or assessment prompt) */
+  const hasDetail = $derived(toolCallCount > 0 || hasReasoning || sortedRounds.length > 1 || turn.status === 'error' || (isAnalysisWorkflowTurn && userPart !== null))
 
   function normalizeText(text: string | null | undefined): string | null {
     if (!text) return null
@@ -82,9 +85,25 @@
 <!-- ─── Both modes share the compact-turn foundation ───────────────────── -->
 <section class="compact-turn">
 
-  <!-- User message: always visible -->
+  <!-- User message: collapsible for analysis workflows, always visible elsewhere -->
   {#if userPart}
-    <TracePartBlock part={userPart} mode="compact" />
+    {#if isAnalysisWorkflowTurn && mode === 'chat'}
+      <!-- Assessment prompt: collapsible with toggle -->
+      <button
+        class="assessment-prompt-toggle"
+        onclick={() => { promptCollapsed = !promptCollapsed }}
+        title={promptCollapsed ? 'Expand prompt' : 'Collapse prompt'}
+      >
+        <span class="toggle-arrow" class:open={!promptCollapsed}>▶</span>
+        <span class="toggle-label">Assessment Prompt</span>
+      </button>
+      {#if !promptCollapsed}
+        <TracePartBlock part={userPart} mode="compact" />
+      {/if}
+    {:else}
+      <!-- Regular turn: always visible -->
+      <TracePartBlock part={userPart} mode="compact" />
+    {/if}
   {/if}
 
   {#if ungroupedParts.length > 0 && userPart === null}
@@ -478,6 +497,42 @@
     border: 1px solid var(--border-subtle);
     border-radius: 999px;
     padding: 0.06rem 0.35rem;
+  }
+
+  /* ── Assessment prompt toggle ──────────────────────────────────────── */
+  .assessment-prompt-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.22rem var(--chat-pad);
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-left: 2px solid var(--border-subtle);
+    border-radius: 0 4px 4px 0;
+    width: 100%;
+    text-align: left;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .assessment-prompt-toggle:hover {
+    background: var(--bg-hover, rgba(0,0,0,0.04));
+  }
+
+  .assessment-prompt-toggle .toggle-arrow {
+    font-size: 0.55rem;
+    color: var(--text-muted);
+    transition: transform 0.12s;
+    flex-shrink: 0;
+  }
+
+  .assessment-prompt-toggle .toggle-arrow.open {
+    transform: rotate(90deg);
+  }
+
+  .assessment-prompt-toggle .toggle-label {
+    font-weight: 500;
   }
 
   /* ── Compaction note ────────────────────────────────────────────────── */

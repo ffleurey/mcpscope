@@ -1,24 +1,25 @@
 import crypto from 'node:crypto'
-import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
-import { getSessionRecord } from '../persistence/repository.js'
+import type { BackendDatabase } from '../../persistence/db.js'
+import type { LmStudioGateway } from '../../runtime/modelTurns.js'
+import { getSessionRecord } from '../../persistence/repository.js'
 import {
   getLatestArtifactBySchemaKey,
   insertJsonArtifact,
-} from './artifactRepository.js'
-import type { McpGateway } from '../runtime/toolTurns.js'
-import { runAnalysisTurn } from './boundedTurn.js'
-import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
+  listArtifactsBySessionAndSchemaKey,
+} from '../artifactRepository.js'
+import type { McpGateway } from '../../runtime/toolTurns.js'
+import { runAnalysisTurn } from '../boundedTurn.js'
+import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
 import {
-  buildAnalysisFocusInstructions,
-  fastTurnSummarySchema,
   SCHEMA_KEY,
+  evaluationResultSchema,
   type AnalysisSessionState,
   type AnalysisTarget,
   type EvidencePacketIndex,
-} from './schemas.js'
+  type EvaluationResult,
+} from '../schemas.js'
 import type { ZodError } from 'zod'
-import { renderPromptResource } from './promptResources.js'
+import { buildFastSessionTurnSummaryPrompt } from './evaluationPrompts.js'
 
 function uuid(): string {
   return crypto.randomUUID()
@@ -49,31 +50,40 @@ export interface FastTurnSummaryResult {
   success: boolean
 }
 
-function validateIdentity(
-  currentTurnId: string,
-  turnPackets: EvidencePacketIndex['packets'],
-  parsed: ReturnType<typeof fastTurnSummarySchema.parse>,
-): string[] {
+function validateIdentity(currentTurnId: string, parsed: Pick<EvaluationResult, 'subject_scope' | 'subject_id'>): string[] {
   const failures: string[] = []
-  if (parsed.turn_id !== currentTurnId) {
-    failures.push(`turn_id mismatch: expected ${currentTurnId}, got ${parsed.turn_id}`)
+  if (parsed.subject_scope !== 'turn') {
+    failures.push(`subject_scope mismatch: expected turn, got ${parsed.subject_scope}`)
   }
-  if (parsed.total_tool_calls_assessed !== turnPackets.length) {
-    failures.push(`total_tool_calls_assessed mismatch: expected ${turnPackets.length}, got ${parsed.total_tool_calls_assessed}`)
-  }
-
-  const expectedIds = new Set(turnPackets.map(packet => packet.tool_call_part_id))
-  for (const finding of parsed.per_tool_findings) {
-    if (!expectedIds.has(finding.tool_call_part_id)) {
-      failures.push(`unexpected tool_call_part_id in summary: ${finding.tool_call_part_id}`)
-    }
-  }
-  for (const candidate of parsed.follow_up_candidates) {
-    if (!expectedIds.has(candidate)) {
-      failures.push(`unexpected follow_up_candidate: ${candidate}`)
-    }
+  if (parsed.subject_id !== currentTurnId) {
+    failures.push(`subject_id mismatch: expected ${currentTurnId}, got ${parsed.subject_id}`)
   }
   return failures
+}
+
+function buildDeterministicSummary(
+  currentTurnId: string,
+  turnPackets: EvidencePacketIndex['packets'],
+  assessments: EvaluationResult[],
+): EvaluationResult | null {
+  if (turnPackets.length !== 1 || assessments.length !== 1) {
+    return null
+  }
+
+  const assessment = assessments[0]
+  if (!assessment) {
+    return null
+  }
+
+  return {
+    subject_scope: 'turn',
+    subject_id: currentTurnId,
+    evaluation_focus: 'Summarize the overall quality of this turn’s tool usage.',
+    reasoning: assessment.reasoning,
+    verdict: assessment.verdict,
+    score: assessment.score,
+    evidence_part_id: assessment.evidence_part_id ?? null,
+  }
 }
 
 export async function runFastTurnSummaryTurn(
@@ -110,16 +120,55 @@ export async function runFastTurnSummaryTurn(
     throw new Error('FastTurnSummaryTurn: analysis_target artifact missing')
   }
   const analysisTarget = analysisTargetArtifact.content as AnalysisTarget
-  const repeatedTools = [...new Set(
-    turnPackets
-      .map(packet => packet.tool_name)
-      .filter((toolName, index, all) => all.indexOf(toolName) !== index),
-  )]
-  const question = renderPromptResource('fast-session.turn-summary.txt', {
-    analysis_focus_instructions: buildAnalysisFocusInstructions(analysisTarget),
-    current_turn_id: currentTurnId,
-    turn_packet_count: turnPackets.length,
-    repeated_tools: repeatedTools.length > 0 ? repeatedTools.join(', ') : 'none',
+  const repeatedTools = [...new Set(turnPackets.map(packet => packet.tool_name))]
+
+  const assessmentArtifacts = listArtifactsBySessionAndSchemaKey(
+    database.connection,
+    analysisSessionId,
+    SCHEMA_KEY.FAST_TOOL_CALL_ASSESSMENT,
+  ).map(artifact => artifact.content as EvaluationResult)
+
+  const assessmentsForTurn = assessmentArtifacts.filter(
+    assessment => assessment.subject_scope === 'tool_call' && assessment.subject_id.length > 0,
+  )
+  const deterministicSummary = repeatedTools.length === 0
+    ? buildDeterministicSummary(currentTurnId, turnPackets, assessmentsForTurn)
+    : null
+
+  if (deterministicSummary) {
+    const summaryArtifactId = uuid()
+    insertJsonArtifact(database.connection, {
+      id: summaryArtifactId,
+      sessionId: analysisSessionId,
+      stepId,
+      content: deterministicSummary,
+      metadata: {
+        schema_key: SCHEMA_KEY.FAST_TURN_SUMMARY,
+        turn_id: currentTurnId,
+        total_assessed: turnPackets.length,
+        subject_scope: deterministicSummary.subject_scope,
+        subject_id: deterministicSummary.subject_id,
+      },
+      createdAt: now(),
+    })
+
+    return {
+      updatedState: {
+        ...state,
+        phase: state.nextPacketIndex < state.packetCount ? 'assessing' : 'coverage_validation',
+        currentTurnId: null,
+      },
+      summaryArtifactId,
+      success: true,
+    }
+  }
+
+  const question = buildFastSessionTurnSummaryPrompt({
+    analysisTarget,
+    subjectId: currentTurnId,
+    currentTurnId,
+    turnPacketCount: turnPackets.length,
+    repeatedTools: repeatedTools.length > 0 ? repeatedTools.join(', ') : 'none',
   })
 
   const turnResult = await runAnalysisTurn(
@@ -153,7 +202,7 @@ export async function runFastTurnSummaryTurn(
     return { updatedState: { ...state, phase: 'error' }, summaryArtifactId: null, success: false }
   }
 
-  const parsed = fastTurnSummarySchema.safeParse(parsedJson)
+  const parsed = evaluationResultSchema.safeParse(parsedJson)
   if (!parsed.success) {
     insertJsonArtifact(database.connection, {
       id: uuid(),
@@ -162,7 +211,7 @@ export async function runFastTurnSummaryTurn(
       content: {
         step_type: 'fast_turn_summary',
         error_kind: 'schema_validation_error',
-        message: 'Fast turn summary response did not match schema',
+        message: 'Fast turn summary response did not match evaluation_result schema',
         detail: { raw_response: turnResult.responseText, errors: (parsed.error as ZodError).issues },
       },
       metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC },
@@ -171,7 +220,7 @@ export async function runFastTurnSummaryTurn(
     return { updatedState: { ...state, phase: 'error' }, summaryArtifactId: null, success: false }
   }
 
-  const identityFailures = validateIdentity(currentTurnId, turnPackets, parsed.data)
+  const identityFailures = validateIdentity(currentTurnId, parsed.data)
   if (identityFailures.length > 0) {
     insertJsonArtifact(database.connection, {
       id: uuid(),
@@ -199,6 +248,8 @@ export async function runFastTurnSummaryTurn(
       schema_key: SCHEMA_KEY.FAST_TURN_SUMMARY,
       turn_id: currentTurnId,
       total_assessed: turnPackets.length,
+      subject_scope: parsed.data.subject_scope,
+      subject_id: parsed.data.subject_id,
     },
     createdAt: ts,
   })

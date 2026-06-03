@@ -13,17 +13,17 @@ import { listStepRecordsBySession } from '../persistence/repositoryV2.js'
 import type { AnalysisSessionState } from './schemas.js'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
 import { AnalysisWorkflowRuntime } from './analysisWorkflowRuntime.js'
+import type { AnalysisWorkflowInput } from './analysisWorkflowInput.js'
 import {
   advanceFullSessionAnalysisStep,
   createFullSessionAnalysisState,
   getFullSessionAnalysisCursorParams,
   isFullSessionAnalysisTerminal,
-  type FullSessionAnalysisWorkflowInput,
-} from './fullSessionAnalysisWorkflow.js'
+} from './fullSession/fullSessionAnalysisWorkflow.js'
 
 export const ANALYSIS_CURSOR_STEP_TYPE = 'analysis_v2_cursor'
 
-export type AnalysisSessionInput = FullSessionAnalysisWorkflowInput
+export type AnalysisSessionInput = AnalysisWorkflowInput
 
 export class AnalysisSession {
   private readonly database: BackendDatabase

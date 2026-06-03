@@ -105,8 +105,9 @@ export function collectAnalysisPlanningData(
       .sort((left, right) => left.ordinal - right.ordinal)
 
     for (const toolCallPart of toolCallParts) {
-      const toolCallJson = toolCallPart.payload.json as { name?: string; id?: string } | null
+      const toolCallJson = toolCallPart.payload.json as { name?: string; id?: string; arguments?: string } | null
       const toolName = toolCallJson?.name ?? 'unknown'
+      const toolCallParameters = toolCallJson?.arguments ?? '{}'
       const toolResultPart = toolResultParts.find(toolResult => {
         const toolResultJson = toolResult.payload.json as { tool_call_id?: string } | null
         if (toolResultJson?.tool_call_id) {
@@ -132,6 +133,7 @@ export function collectAnalysisPlanningData(
         round_id: round.id,
         tool_call_part_id: toolCallPart.id,
         tool_name: toolName,
+        tool_call_parameters: toolCallParameters,
         reasoning_before_part_id: reasoningBeforePart?.id ?? null,
         tool_result_part_id: toolResultPart?.id ?? null,
         reasoning_after_part_id: reasoningAfterPart?.id ?? null,

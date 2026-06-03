@@ -7,31 +7,31 @@
  */
 
 import crypto from 'node:crypto'
-import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { BackendDatabase } from '../../persistence/db.js'
+import type { LmStudioGateway } from '../../runtime/modelTurns.js'
 import {
   getSessionRecord,
-} from '../persistence/repository.js'
+} from '../../persistence/repository.js'
 import {
   insertJsonArtifact,
-} from './artifactRepository.js'
+} from '../artifactRepository.js'
 import {
   runDeterministicMcpToolCallsInSingleTurn,
   type McpGateway,
-} from '../runtime/toolTurns.js'
-import { runAnalysisTurn } from './boundedTurn.js'
+} from '../../runtime/toolTurns.js'
+import { runAnalysisTurn } from '../boundedTurn.js'
 import {
-  buildAnalysisFocusInstructions,
   SCHEMA_KEY,
-  toolCallAssessmentSchema,
+  evaluationResultSchema,
   type AnalysisSessionState,
   type EvidencePacket,
   type AnalysisTarget,
-} from './schemas.js'
+  type EvaluationResult,
+} from '../schemas.js'
 import type { ZodError } from 'zod'
-import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
+import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
 import { runContextMutationStep } from './contextMutationStep.js'
-import { renderPromptResource } from './promptResources.js'
+import { buildToolCallEvaluationPrompt } from './evaluationPrompts.js'
 
 function uuid(): string {
   return crypto.randomUUID()
@@ -61,25 +61,14 @@ interface AssessmentIdentityValidation {
   failures: string[]
 }
 
-function validateAssessmentIdentity(packet: EvidencePacket, parsed: {
-  turn_id: string
-  round_id: string
-  tool_call_part_id: string
-  tool_name: string
-}): AssessmentIdentityValidation {
+function validateAssessmentIdentity(packet: EvidencePacket, parsed: EvaluationResult): AssessmentIdentityValidation {
   const failures: string[] = []
 
-  if (parsed.turn_id !== packet.turn_id) {
-    failures.push(`turn_id mismatch: expected ${packet.turn_id}, got ${parsed.turn_id}`)
+  if (parsed.subject_scope !== 'tool_call') {
+    failures.push(`subject_scope mismatch: expected tool_call, got ${parsed.subject_scope}`)
   }
-  if (parsed.round_id !== packet.round_id) {
-    failures.push(`round_id mismatch: expected ${packet.round_id}, got ${parsed.round_id}`)
-  }
-  if (parsed.tool_call_part_id !== packet.tool_call_part_id) {
-    failures.push(`tool_call_part_id mismatch: expected ${packet.tool_call_part_id}, got ${parsed.tool_call_part_id}`)
-  }
-  if (parsed.tool_name !== packet.tool_name) {
-    failures.push(`tool_name mismatch: expected ${packet.tool_name}, got ${parsed.tool_name}`)
+  if (parsed.subject_id !== packet.tool_call_part_id) {
+    failures.push(`subject_id mismatch: expected ${packet.tool_call_part_id}, got ${parsed.subject_id}`)
   }
 
   return {
@@ -180,7 +169,7 @@ export async function runToolCallAssessmentTurn(
     }
   }
 
-  const parsed = toolCallAssessmentSchema.safeParse(parsedJson)
+  const parsed = evaluationResultSchema.safeParse(parsedJson)
   if (!parsed.success) {
     const diagnosticId = uuid()
     insertJsonArtifact(database.connection, {
@@ -190,7 +179,7 @@ export async function runToolCallAssessmentTurn(
       content: {
         step_type: 'tool_call_assessment',
         error_kind: 'schema_validation_error',
-        message: 'LLM response did not match tool_call_assessment schema',
+        message: 'LLM response did not match evaluation_result schema',
         detail: {
           raw_response: turnResult.responseText,
           errors: (parsed.error as ZodError).issues,
@@ -230,16 +219,12 @@ export async function runToolCallAssessmentTurn(
         detail: {
           raw_response: turnResult.responseText,
           expected: {
-            turn_id: packet.turn_id,
-            round_id: packet.round_id,
-            tool_call_part_id: packet.tool_call_part_id,
-            tool_name: packet.tool_name,
+            subject_scope: 'tool_call',
+            subject_id: packet.tool_call_part_id,
           },
           actual: {
-            turn_id: parsed.data.turn_id,
-            round_id: parsed.data.round_id,
-            tool_call_part_id: parsed.data.tool_call_part_id,
-            tool_name: parsed.data.tool_name,
+            subject_scope: parsed.data.subject_scope,
+            subject_id: parsed.data.subject_id,
           },
           failures: identityValidation.failures,
         },
@@ -277,6 +262,8 @@ export async function runToolCallAssessmentTurn(
       turn_id: packet.turn_id,
       round_id: packet.round_id,
       tool_name: packet.tool_name,
+      subject_scope: parsed.data.subject_scope,
+      subject_id: parsed.data.subject_id,
     },
     createdAt: parseTs,
   })
@@ -313,12 +300,14 @@ export async function runToolCallAssessmentTurn(
  * Builds the short assessment question that becomes the LLM turn's user message.
  */
 function buildAssessmentQuestion(packet: EvidencePacket, analysisTarget: AnalysisTarget): string {
-  return renderPromptResource('full.tool-call-assessment.txt', {
-    analysis_focus_instructions: buildAnalysisFocusInstructions(analysisTarget),
-    turn_id: packet.turn_id,
-    round_id: packet.round_id,
-    tool_call_part_id: packet.tool_call_part_id,
-    tool_name: packet.tool_name,
+  return buildToolCallEvaluationPrompt({
+    analysisTarget,
+    subjectId: packet.tool_call_part_id,
+    turnId: packet.turn_id,
+    roundId: packet.round_id,
+    toolCallPartId: packet.tool_call_part_id,
+    toolName: packet.tool_name,
+    toolCallParameters: packet.tool_call_parameters,
   })
 }
 

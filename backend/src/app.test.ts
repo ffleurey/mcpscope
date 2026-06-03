@@ -4365,16 +4365,10 @@ describe('analysis launch', () => {
           const idx = callCount++
           const content = idx === 0
             ? JSON.stringify({
-                turn_id: turnRef.id,
-                round_id: `${turnRef.id}-R1`,
                 tool_call_part_id: `${turnRef.id}-P3`,
                 tool_name: 'test_tool',
-                result_status: 'successful',
-                efficiency: 'efficient',
-                primary_issue: 'none',
-                short_rationale: 'The tool call succeeded with the right request shape.',
-                post_call_outcome: 'correctly_used',
-                follow_up_priority: 'none',
+                tool_call_reasoning: 'Tool was selected to retrieve the requested information.',
+                tool_call_result: 'successful',
               })
             : idx === 1
               ? JSON.stringify({
@@ -4499,16 +4493,10 @@ describe('analysis launch', () => {
           const idx = callCount++
           const content = idx === 0
             ? JSON.stringify({
-                turn_id: turnRef.id,
-                round_id: `${turnRef.id}-R1`,
                 tool_call_part_id: `${turnRef.id}-P3`,
                 tool_name: 'test_tool',
-                result_status: 'successful',
-                efficiency: 'efficient',
-                primary_issue: 'none',
-                short_rationale: 'The tool call succeeded with the right request shape.',
-                post_call_outcome: 'correctly_used',
-                follow_up_priority: 'none',
+                tool_call_reasoning: 'Tool was selected to retrieve the requested information.',
+                tool_call_result: 'successful',
               })
             : JSON.stringify({
                 overall_outcome: 'answered',

@@ -1,50 +1,44 @@
-import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
-import type { McpGateway } from '../runtime/toolTurns.js'
+import type { BackendDatabase } from '../../persistence/db.js'
+import type { LmStudioGateway } from '../../runtime/modelTurns.js'
+import type { McpGateway } from '../../runtime/toolTurns.js'
 import {
   insertStepRecord,
   updateStepRecord,
   getNextStepOrdinal,
-} from '../persistence/repositoryV2.js'
-import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
-import { stepTypeKey as mkStepTypeKey } from '../domain/executionModel.js'
-import { formatStepId } from '../domain/hierarchicalIds.js'
-import { getLatestArtifactBySchemaKey } from './artifactRepository.js'
-import { runBootstrapStep } from './bootstrapStep.js'
-import { runToolCallAssessmentTurn } from './toolCallAssessmentTurn.js'
-import { runCoverageValidationStep } from './coverageValidationStep.js'
-import { runTurnSummaryTurn } from './turnSummaryTurn.js'
-import { runFinalAggregationTurn } from './finalAggregationTurn.js'
+} from '../../persistence/repositoryV2.js'
+import type { StepPersistenceRecord } from '../../domain/persistenceContract.js'
+import { stepTypeKey as mkStepTypeKey } from '../../domain/executionModel.js'
+import { formatStepId } from '../../domain/hierarchicalIds.js'
+import { getLatestArtifactBySchemaKey } from '../artifactRepository.js'
+import { runBootstrapStep } from '../bootstrapStep.js'
+import { runCoverageValidationStep } from '../coverageValidationStep.js'
+import { runFastToolCallAssessmentTurn } from './fastToolCallAssessmentTurn.js'
+import { runFastTurnSummaryTurn } from './fastTurnSummaryTurn.js'
+import { runFastFinalAggregationTurn } from './fastFinalAggregationTurn.js'
+import type { AnalysisWorkflowInput } from '../analysisWorkflowInput.js'
 import {
   SCHEMA_KEY,
   type AnalysisSessionState,
+  type AnalysisTarget,
   type EvidencePacketIndex,
-} from './schemas.js'
-import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
-import { ANALYSIS_WORKFLOW_KIND } from './workflowKinds.js'
+} from '../schemas.js'
+import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
+import { ANALYSIS_WORKFLOW_KIND } from '../workflowKinds.js'
 
 function now(): number {
   return Date.now()
 }
 
-export interface FullSessionAnalysisWorkflowInput {
-  analysisSessionId: string
-  targetSessionId: string
-  targetTurnId: string
-  analysisGoal: string
-  selectedToolNames: string[]
-  onlyFailedToolCalls: boolean
-  evaluationCriteria: string[]
-}
+export type FastSessionAnalysisWorkflowInput = AnalysisWorkflowInput
 
-export interface FullSessionAnalysisWorkflowDeps {
+export interface FastSessionAnalysisWorkflowDeps {
   database: BackendDatabase
   lmGateway: LmStudioGateway
   mcpGateway: McpGateway
 }
 
-export function createFullSessionAnalysisState(
-  input: FullSessionAnalysisWorkflowInput,
+export function createFastSessionAnalysisState(
+  input: FastSessionAnalysisWorkflowInput,
 ): AnalysisSessionState {
   return {
     phase: 'bootstrap',
@@ -64,9 +58,9 @@ export function createFullSessionAnalysisState(
   }
 }
 
-export function getFullSessionAnalysisCursorParams(state: AnalysisSessionState): Record<string, unknown> {
+export function getFastSessionAnalysisCursorParams(state: AnalysisSessionState): Record<string, unknown> {
   return {
-    workflow_kind: ANALYSIS_WORKFLOW_KIND.FULL_SESSION,
+    workflow_kind: ANALYSIS_WORKFLOW_KIND.FAST_SESSION,
     targetSessionId: state.targetSessionId,
     targetTurnId: state.targetTurnId,
     analysisGoal: state.analysisGoal,
@@ -76,12 +70,12 @@ export function getFullSessionAnalysisCursorParams(state: AnalysisSessionState):
   }
 }
 
-export function isFullSessionAnalysisTerminal(state: AnalysisSessionState): boolean {
+export function isFastSessionAnalysisTerminal(state: AnalysisSessionState): boolean {
   return state.phase === 'complete' || state.phase === 'error'
 }
 
-export async function advanceFullSessionAnalysisStep(
-  deps: FullSessionAnalysisWorkflowDeps,
+export async function advanceFastSessionAnalysisStep(
+  deps: FastSessionAnalysisWorkflowDeps,
   state: AnalysisSessionState,
   emitEvent?: AnalysisStreamEventSink,
 ): Promise<AnalysisSessionState> {
@@ -104,7 +98,7 @@ export async function advanceFullSessionAnalysisStep(
 }
 
 async function runBootstrap(
-  deps: FullSessionAnalysisWorkflowDeps,
+  deps: FastSessionAnalysisWorkflowDeps,
   state: AnalysisSessionState,
   emitEvent?: AnalysisStreamEventSink,
 ): Promise<AnalysisSessionState> {
@@ -141,7 +135,7 @@ async function runBootstrap(
 }
 
 async function runNextAssessment(
-  deps: FullSessionAnalysisWorkflowDeps,
+  deps: FastSessionAnalysisWorkflowDeps,
   state: AnalysisSessionState,
   emitEvent?: AnalysisStreamEventSink,
 ): Promise<AnalysisSessionState> {
@@ -167,7 +161,7 @@ async function runNextAssessment(
 
   const ordinal = getNextStepOrdinal(deps.database.connection, state.analysisSessionId)
   const stepId = formatStepId(state.analysisSessionId, ordinal)
-  const assessStep: StepPersistenceRecord = {
+  const stepRecord: StepPersistenceRecord = {
     id: stepId,
     sessionId: state.analysisSessionId,
     stepTypeKey: mkStepTypeKey('analysis_tool_call_assessment'),
@@ -178,10 +172,10 @@ async function runNextAssessment(
     createdAt: now(),
     completedAt: null,
   }
-  insertStepRecord(deps.database.connection, assessStep)
-  emitEvent?.({ type: 'analysis-step-started', step: { ...assessStep } })
+  insertStepRecord(deps.database.connection, stepRecord)
+  emitEvent?.({ type: 'analysis-step-started', step: { ...stepRecord } })
 
-  const result = await runToolCallAssessmentTurn(
+  const result = await runFastToolCallAssessmentTurn(
     deps.database,
     deps.lmGateway,
     deps.mcpGateway,
@@ -189,25 +183,25 @@ async function runNextAssessment(
       state: state.currentTurnId === packet.turn_id ? state : { ...state, currentTurnId: packet.turn_id },
       stepId,
       packet,
-      analysisTarget: targetArtifact.content as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+      analysisTarget: targetArtifact.content as AnalysisTarget,
     },
     emitEvent,
   )
 
-  const completedAssessStep: StepPersistenceRecord = {
-    ...assessStep,
+  const completedStep: StepPersistenceRecord = {
+    ...stepRecord,
     status: result.success ? 'complete' : 'error',
     state: { assessment_artifact_id: result.assessmentArtifactId },
     completedAt: now(),
   }
-  updateStepRecord(deps.database.connection, completedAssessStep)
-  emitEvent?.({ type: 'analysis-step-completed', step: completedAssessStep })
+  updateStepRecord(deps.database.connection, completedStep)
+  emitEvent?.({ type: 'analysis-step-completed', step: completedStep })
 
   return result.updatedState
 }
 
 async function runTurnSummary(
-  deps: FullSessionAnalysisWorkflowDeps,
+  deps: FastSessionAnalysisWorkflowDeps,
   state: AnalysisSessionState,
   emitEvent?: AnalysisStreamEventSink,
 ): Promise<AnalysisSessionState> {
@@ -228,7 +222,7 @@ async function runTurnSummary(
   emitEvent?.({ type: 'analysis-step-started', step: { ...stepRecord } })
   emitEvent?.({ type: 'analysis-phase-changed', phase: 'turn_summary' })
 
-  const result = await runTurnSummaryTurn(deps.database, deps.lmGateway, deps.mcpGateway, {
+  const result = await runFastTurnSummaryTurn(deps.database, deps.lmGateway, deps.mcpGateway, {
     state,
     stepId,
   }, emitEvent)
@@ -247,20 +241,21 @@ async function runTurnSummary(
 }
 
 function runCoverageValidation(
-  deps: FullSessionAnalysisWorkflowDeps,
+  deps: FastSessionAnalysisWorkflowDeps,
   state: AnalysisSessionState,
   emitEvent?: AnalysisStreamEventSink,
 ): AnalysisSessionState {
   const result = runCoverageValidationStep(deps.database, {
     state,
     stepId: state.analysisSessionId,
+    assessmentSchemaKey: SCHEMA_KEY.FAST_TOOL_CALL_ASSESSMENT,
   })
   emitEvent?.({ type: 'analysis-phase-changed', phase: result.updatedState.phase })
   return result.updatedState
 }
 
 async function runFinalAggregation(
-  deps: FullSessionAnalysisWorkflowDeps,
+  deps: FastSessionAnalysisWorkflowDeps,
   state: AnalysisSessionState,
   emitEvent?: AnalysisStreamEventSink,
 ): Promise<AnalysisSessionState> {
@@ -281,7 +276,7 @@ async function runFinalAggregation(
   emitEvent?.({ type: 'analysis-step-started', step: { ...stepRecord } })
   emitEvent?.({ type: 'analysis-phase-changed', phase: 'final_aggregation' })
 
-  const result = await runFinalAggregationTurn(deps.database, deps.lmGateway, deps.mcpGateway, {
+  const result = await runFastFinalAggregationTurn(deps.database, deps.lmGateway, deps.mcpGateway, {
     state,
     stepId,
   }, emitEvent)

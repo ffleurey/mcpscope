@@ -15,33 +15,31 @@
  */
 
 import crypto from 'node:crypto'
-import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { BackendDatabase } from '../../persistence/db.js'
+import type { LmStudioGateway } from '../../runtime/modelTurns.js'
 import {
   getSessionRecord,
   getPartRecord,
   updatePartRecord,
-} from '../persistence/repository.js'
+} from '../../persistence/repository.js'
 import {
   insertJsonArtifact,
   getLatestArtifactBySchemaKey,
   listArtifactsBySessionAndSchemaKey,
-} from './artifactRepository.js'
-import type { McpGateway } from '../runtime/toolTurns.js'
-import { runAnalysisTurn } from './boundedTurn.js'
-import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
+} from '../artifactRepository.js'
+import type { McpGateway } from '../../runtime/toolTurns.js'
+import { runAnalysisTurn } from '../boundedTurn.js'
+import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
 import {
-  buildAnalysisFocusInstructions,
   SCHEMA_KEY,
-  turnSummarySchema,
+  evaluationResultSchema,
   type AnalysisSessionState,
   type AnalysisTarget,
   type EvidencePacketIndex,
-  type ToolCallAssessment,
-  type TurnSummary,
-} from './schemas.js'
+  type EvaluationResult,
+} from '../schemas.js'
 import type { ZodError } from 'zod'
-import { renderPromptResource } from './promptResources.js'
+import { buildTurnSummaryEvaluationPrompt } from './evaluationPrompts.js'
 
 function uuid(): string {
   return crypto.randomUUID()
@@ -237,57 +235,12 @@ export function buildRepeatedAttemptGuidance(
 
 function validateTurnSummaryIdentity(
   currentTurnId: string,
-  turnPackets: EvidencePacketIndex['packets'],
-  parsed: {
-    turn_id: string
-    total_tool_calls_assessed: number
-    cross_attempt_reconciliation: string | null
-    per_tool_findings: Array<{
-      tool_call_part_id: string
-      tool_name: string
-    }>
-  },
+  parsed: Pick<EvaluationResult, 'subject_id'>,
 ): string[] {
   const failures: string[] = []
 
-  if (parsed.turn_id !== currentTurnId) {
-    failures.push(`turn_id mismatch: expected ${currentTurnId}, got ${parsed.turn_id}`)
-  }
-
-  if (parsed.total_tool_calls_assessed !== turnPackets.length) {
-    failures.push(`total_tool_calls_assessed mismatch: expected ${turnPackets.length}, got ${parsed.total_tool_calls_assessed}`)
-  }
-
-  const repeatedTools = buildRepeatedToolSummary(turnPackets)
-  if (repeatedTools.length > 0 && (!parsed.cross_attempt_reconciliation || parsed.cross_attempt_reconciliation.trim().length === 0)) {
-    failures.push(`cross_attempt_reconciliation is required when repeated tools are present: ${repeatedTools.join(', ')}`)
-  }
-
-  const expectedByToolCallPartId = new Map(
-    turnPackets.map(packet => [packet.tool_call_part_id, packet.tool_name]),
-  )
-  const seen = new Set<string>()
-
-  for (const finding of parsed.per_tool_findings) {
-    const expectedToolName = expectedByToolCallPartId.get(finding.tool_call_part_id)
-    if (!expectedToolName) {
-      failures.push(`unexpected tool_call_part_id in summary: ${finding.tool_call_part_id}`)
-      continue
-    }
-    if (seen.has(finding.tool_call_part_id)) {
-      failures.push(`duplicate tool_call_part_id in summary: ${finding.tool_call_part_id}`)
-    }
-    seen.add(finding.tool_call_part_id)
-
-    if (finding.tool_name !== expectedToolName) {
-      failures.push(`tool_name mismatch for ${finding.tool_call_part_id}: expected ${expectedToolName}, got ${finding.tool_name}`)
-    }
-  }
-
-  for (const packet of turnPackets) {
-    if (!seen.has(packet.tool_call_part_id)) {
-      failures.push(`missing tool_call_part_id in summary: ${packet.tool_call_part_id}`)
-    }
+  if (parsed.subject_id !== currentTurnId) {
+    failures.push(`subject_id mismatch: expected ${currentTurnId}, got ${parsed.subject_id}`)
   }
 
   return failures
@@ -333,9 +286,10 @@ function retireSummaryTurnPromptContext(
 }
 
 function buildDeterministicTurnSummary(
+  currentTurnId: string,
   turnPackets: EvidencePacketIndex['packets'],
-  assessments: ToolCallAssessment[],
-): TurnSummary | null {
+  assessments: EvaluationResult[],
+): EvaluationResult | null {
   if (turnPackets.length !== 1 || assessments.length !== 1) {
     return null
   }
@@ -345,29 +299,14 @@ function buildDeterministicTurnSummary(
     return null
   }
 
-  const isCleanSuccess = assessment.expectation_match === 'match'
-    && assessment.most_direct_cause === null
-    && assessment.parameter_or_call_issues.length === 0
-
-  if (!isCleanSuccess) {
-    return null
-  }
-
   return {
-    turn_id: assessment.turn_id,
-    total_tool_calls_assessed: 1,
-    turn_outcome: 'successful',
-    turn_outcome_rationale: assessment.post_call_assessment
-      ? 'The single tool call matched expectations and its result was used correctly.'
-      : 'The single tool call matched expectations.',
-    per_tool_findings: [
-      {
-        tool_call_part_id: assessment.tool_call_part_id,
-        tool_name: assessment.tool_name,
-        brief_finding: firstSentence(assessment.tool_call_assessment),
-      },
-    ],
-    cross_attempt_reconciliation: null,
+    subject_scope: 'turn',
+    subject_id: currentTurnId,
+    evaluation_focus: 'Summarize the overall quality of this turn’s tool usage.',
+    reasoning: firstSentence(assessment.reasoning),
+    verdict: assessment.verdict,
+    score: assessment.score,
+    evidence_part_id: assessment.evidence_part_id ?? null,
   }
 }
 
@@ -417,9 +356,9 @@ export async function runTurnSummaryTurn(
   )
   const assessmentsForTurn = assessmentArtifacts
     .filter(artifact => (artifact.metadata.turn_id as string | undefined) === currentTurnId)
-    .map(artifact => artifact.content as ToolCallAssessment)
+    .map(artifact => artifact.content as EvaluationResult)
   const deterministicSummary = repeatedTools.length === 0
-    ? buildDeterministicTurnSummary(turnPackets, assessmentsForTurn)
+    ? buildDeterministicTurnSummary(currentTurnId, turnPackets, assessmentsForTurn)
     : null
 
   if (deterministicSummary) {
@@ -434,6 +373,8 @@ export async function runTurnSummaryTurn(
         turn_id: currentTurnId,
         total_assessed: turnPackets.length,
         synthesis_mode: 'deterministic_single_success',
+        subject_scope: deterministicSummary.subject_scope,
+        subject_id: deterministicSummary.subject_id,
       },
       createdAt: now(),
     })
@@ -453,12 +394,12 @@ export async function runTurnSummaryTurn(
   // ── Build summary question ────────────────────────────────────────────────
   // The accumulated context already contains the turn context inject and all
   // assessment result parts for this turn.
-  const summaryQuestion = renderPromptResource('full.turn-summary.txt', {
-    analysis_focus_instructions: buildAnalysisFocusInstructions(analysisTarget),
-    current_turn_id: currentTurnId,
-    turn_packet_count: turnPackets.length,
-    repeated_tools: repeatedTools.length > 0 ? repeatedTools.join(', ') : 'none',
-    repeated_attempt_guidance_block: repeatedAttemptGuidance ? `\n${repeatedAttemptGuidance}` : ' none',
+  const summaryQuestion = buildTurnSummaryEvaluationPrompt({
+    analysisTarget,
+    subjectId: currentTurnId,
+    repeatedTools,
+    repeatedAttemptGuidance,
+    turnPacketCount: turnPackets.length,
   })
 
   // ── Run context-aware LLM turn ────────────────────────────────────────────
@@ -499,7 +440,7 @@ export async function runTurnSummaryTurn(
     }
   }
 
-  const parsed = turnSummarySchema.safeParse(parsedJson)
+  const parsed = evaluationResultSchema.safeParse(parsedJson)
   if (!parsed.success) {
     const diagnosticId = uuid()
     insertJsonArtifact(database.connection, {
@@ -509,7 +450,7 @@ export async function runTurnSummaryTurn(
       content: {
         step_type: 'turn_summary',
         error_kind: 'schema_validation_error',
-        message: 'Turn summary response did not match turn_summary schema',
+        message: 'Turn summary response did not match evaluation_result schema',
         detail: {
           raw_response: turnResult.responseText,
           errors: (parsed.error as ZodError).issues,
@@ -526,7 +467,7 @@ export async function runTurnSummaryTurn(
     }
   }
 
-  const identityFailures = validateTurnSummaryIdentity(currentTurnId, turnPackets, parsed.data)
+  const identityFailures = validateTurnSummaryIdentity(currentTurnId, parsed.data)
   if (identityFailures.length > 0) {
     const diagnosticId = uuid()
     insertJsonArtifact(database.connection, {
@@ -536,18 +477,11 @@ export async function runTurnSummaryTurn(
       content: {
         step_type: 'turn_summary',
         error_kind: 'identity_mismatch',
-        message: 'Turn summary matched the schema but not the expected turn packet identities',
+        message: 'Turn summary matched the schema but not the expected turn identity',
         detail: {
           raw_response: turnResult.responseText,
-          turn_id: currentTurnId,
-          expected_packets: turnPackets.map(packet => ({
-            tool_call_part_id: packet.tool_call_part_id,
-            tool_name: packet.tool_name,
-          })),
-          actual_findings: parsed.data.per_tool_findings.map(finding => ({
-            tool_call_part_id: finding.tool_call_part_id,
-            tool_name: finding.tool_name,
-          })),
+          expected_subject_id: currentTurnId,
+          actual_subject_id: parsed.data.subject_id,
           failures: identityFailures,
         },
       },
@@ -572,6 +506,8 @@ export async function runTurnSummaryTurn(
       schema_key: SCHEMA_KEY.TURN_SUMMARY,
       turn_id: currentTurnId,
       total_assessed: turnPackets.length,
+      subject_scope: parsed.data.subject_scope,
+      subject_id: parsed.data.subject_id,
     },
     createdAt: ts,
   })
