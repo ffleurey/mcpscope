@@ -88,6 +88,8 @@ export default [
       'frontend/src/lib/components/JsonDialog.svelte',
       'frontend/src/lib/components/MarkdownPreviewDialog.svelte',
       'frontend/src/lib/components/NewSessionPanel.svelte',
+      'frontend/src/lib/components/CompactRoundContent.svelte',
+      'frontend/src/lib/components/PrimarySessionLaunchModal.svelte',
       'frontend/src/lib/components/SessionTurnBlock.svelte',
     ],
     rules: {

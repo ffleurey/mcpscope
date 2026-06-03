@@ -319,7 +319,9 @@ export class ExecutionScheduler {
   // ── Execution dispatch ────────────────────────────────────────────────────
 
   private async executeJob(job: ActiveExecutionJob, opCtx: SchedulerContext): Promise<void> {
-    const emitExecutionEvent = (event: SchedulerEvent['type'] extends never ? never : any) => {
+    const emitExecutionEvent = (
+      event: Extract<SchedulerEvent, { type: 'scheduler-execution-event' }>['event'],
+    ) => {
       this.emit({
         type: 'scheduler-execution-event',
         sessionId: job.target.sessionId,

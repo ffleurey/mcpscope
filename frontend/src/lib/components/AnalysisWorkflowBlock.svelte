@@ -3,7 +3,6 @@
     ContextEntry,
     PartRecord,
     RoundRecord,
-    StepRecord,
     WorkflowStepTrace,
   } from '../backendTypes'
   import type { StreamingRoundState } from '../traceStreaming'

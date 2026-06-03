@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { OperationError } from '../operations/errors.js'
-import { operationList, operationCatalog } from '../operations/index.js'
+import { operationList } from '../operations/index.js'
+import type { operationCatalog } from '../operations/index.js'
 import type { OperationContext } from '../operations/index.js'
 
 type Operation = (typeof operationCatalog)[keyof typeof operationCatalog]
