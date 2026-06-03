@@ -2,8 +2,11 @@ This folder is the lightweight product and implementation board for mcpscope.
 
 ## IMPORTANT:
 
-- None of the content of this folder should considered as a template to follow. Tasks have been modeleds and updated with different levels of correctness and ideas are a broad collection of notes, notthing more.
-- None of the content should be considered up to date with the project goals or documentation
+- None of the content in this folder should be treated as a template to follow.
+- None of the content should be considered up to date with the project goals or documentation.
+- Only use a backlog file when the task instructions explicitly point to that file.
+
+This folder contains ideas, history, and task records with mixed levels of completeness and correctness.
 
 When roadmap direction is still uncertain, or when planning is intentionally paused, keep work in `candidates/` until it is deliberately selected for active specification.
 
@@ -14,7 +17,7 @@ When roadmap direction is still uncertain, or when planning is intentionally pau
 - `implementation/` — coding-agent-ready tasks or active branches for non-trivial feature work.
 - `fixme/` — small, mostly ready bug fixes and hardening tasks that should not require the full heavier specification loop.
 - `completed/` — merged historical task records kept for traceability and future reference.
-- `research/` — broader research topics releated to the project.
+- `research/` — broader research topics related to the project.
 
 One file per task or increment remains the rule.
 
