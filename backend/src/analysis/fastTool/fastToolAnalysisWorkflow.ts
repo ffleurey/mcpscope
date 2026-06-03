@@ -1,24 +1,24 @@
-import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
-import type { McpGateway } from '../runtime/toolTurns.js'
+import type { BackendDatabase } from '../../persistence/db.js'
+import type { LmStudioGateway } from '../../runtime/modelTurns.js'
+import type { McpGateway } from '../../runtime/toolTurns.js'
 import {
   insertStepRecord,
   updateStepRecord,
   getNextStepOrdinal,
-} from '../persistence/repositoryV2.js'
-import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
-import { stepTypeKey as mkStepTypeKey } from '../domain/executionModel.js'
-import { formatStepId } from '../domain/hierarchicalIds.js'
-import { getLatestArtifactBySchemaKey } from './artifactRepository.js'
+} from '../../persistence/repositoryV2.js'
+import type { StepPersistenceRecord } from '../../domain/persistenceContract.js'
+import { stepTypeKey as mkStepTypeKey } from '../../domain/executionModel.js'
+import { formatStepId } from '../../domain/hierarchicalIds.js'
+import { getLatestArtifactBySchemaKey } from '../artifactRepository.js'
 import {
   SCHEMA_KEY,
   type AnalysisSessionState,
   type AnalysisTarget,
   type FastToolWorkIndex,
-} from './schemas.js'
-import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
-import { ANALYSIS_WORKFLOW_KIND } from './workflowKinds.js'
-import type { FullSessionAnalysisWorkflowInput } from './fullSessionAnalysisWorkflow.js'
+} from '../schemas.js'
+import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
+import { ANALYSIS_WORKFLOW_KIND } from '../workflowKinds.js'
+import type { AnalysisWorkflowInput } from '../analysisWorkflowInput.js'
 import { runFastToolPlanningStep } from './fastToolPlanningStep.js'
 import { runFastToolGroupedAssessmentTurn } from './fastToolGroupedAssessmentTurn.js'
 import { runFastToolFinalAggregationTurn } from './fastToolFinalAggregationTurn.js'
@@ -27,7 +27,7 @@ function now(): number {
   return Date.now()
 }
 
-export type FastToolAnalysisWorkflowInput = FullSessionAnalysisWorkflowInput
+export type FastToolAnalysisWorkflowInput = AnalysisWorkflowInput
 
 export interface FastToolAnalysisWorkflowDeps {
   database: BackendDatabase

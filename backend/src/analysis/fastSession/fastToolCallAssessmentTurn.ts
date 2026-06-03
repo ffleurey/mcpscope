@@ -1,13 +1,13 @@
 import crypto from 'node:crypto'
-import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
-import { getSessionRecord } from '../persistence/repository.js'
-import { insertJsonArtifact } from './artifactRepository.js'
+import type { BackendDatabase } from '../../persistence/db.js'
+import type { LmStudioGateway } from '../../runtime/modelTurns.js'
+import { getSessionRecord } from '../../persistence/repository.js'
+import { insertJsonArtifact } from '../artifactRepository.js'
 import {
   runDeterministicMcpToolCallsInSingleTurn,
   type McpGateway,
-} from '../runtime/toolTurns.js'
-import { runAnalysisTurn } from './boundedTurn.js'
+} from '../../runtime/toolTurns.js'
+import { runAnalysisTurn } from '../boundedTurn.js'
 import {
   SCHEMA_KEY,
   evaluationResultSchema,
@@ -15,11 +15,11 @@ import {
   type AnalysisTarget,
   type EvidencePacket,
   type EvaluationResult,
-} from './schemas.js'
+} from '../schemas.js'
 import type { ZodError } from 'zod'
-import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
-import { runFastToolContextMutationStep } from './fastToolContextMutationStep.js'
-import { buildFastSessionToolCallAssessmentPrompt } from './evaluationPromptFactory.js'
+import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
+import { runFastToolContextMutationStep } from '../fastToolContextMutationStep.js'
+import { buildFastSessionToolCallAssessmentPrompt } from './evaluationPrompts.js'
 
 function uuid(): string {
   return crypto.randomUUID()

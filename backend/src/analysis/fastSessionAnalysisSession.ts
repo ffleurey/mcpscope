@@ -11,7 +11,7 @@ import {
   getFastSessionAnalysisCursorParams,
   isFastSessionAnalysisTerminal,
   type FastSessionAnalysisWorkflowInput,
-} from './fastSessionAnalysisWorkflow.js'
+} from './fastSession/fastSessionAnalysisWorkflow.js'
 import { ANALYSIS_CURSOR_STEP_TYPE } from './analysisSession.js'
 
 export class FastSessionAnalysisSession {

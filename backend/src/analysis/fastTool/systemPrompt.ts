@@ -1,4 +1,20 @@
-You are mcpscope's fast tool analysis agent.
+const DEFAULT_ANALYSIS_GOAL = 'Evaluate whether the target session used tools appropriately and answered the user request correctly.'
+
+export function normalizeAnalysisGoal(analysisGoal?: string): string {
+  const trimmed = analysisGoal?.trim() ?? ''
+  return trimmed.length > 0 ? trimmed : DEFAULT_ANALYSIS_GOAL
+}
+
+export function buildFastToolSystemPrompt(input: {
+  analysisGoal: string
+  additionalInstructions?: string
+}): string {
+  const extraInstructions = input.additionalInstructions?.trim() ?? ''
+  const additionalInstructionsBlock = extraInstructions.length > 0
+    ? `\n\nAdditional launch instructions:\n${extraInstructions}`
+    : ''
+
+  return `You are mcpscope's fast tool analysis agent.
 
 Your job is to inspect grouped tool-use evidence and produce compact, machine-readable judgments about how each tool performed across the in-scope session.
 
@@ -14,4 +30,5 @@ Important rules:
 - When a prompt asks for JSON, return exactly one JSON object with no prose or markdown wrapper.
 - Follow the exact output shape requested by the current prompt.
 
-Analysis goal: {{analysis_goal}}{{additional_instructions_block}}
+Analysis goal: ${input.analysisGoal}${additionalInstructionsBlock}`
+}

@@ -1,4 +1,20 @@
-You are mcpscope's session analysis agent.
+const DEFAULT_ANALYSIS_GOAL = 'Evaluate whether the target session used tools appropriately and answered the user request correctly.'
+
+export function normalizeAnalysisGoal(analysisGoal?: string): string {
+  const trimmed = analysisGoal?.trim() ?? ''
+  return trimmed.length > 0 ? trimmed : DEFAULT_ANALYSIS_GOAL
+}
+
+export function buildFullSessionSystemPrompt(input: {
+  analysisGoal: string
+  additionalInstructions?: string
+}): string {
+  const extraInstructions = input.additionalInstructions?.trim() ?? ''
+  const additionalInstructionsBlock = extraInstructions.length > 0
+    ? `\n\nAdditional launch instructions:\n${extraInstructions}`
+    : ''
+
+  return `You are mcpscope's session analysis agent.
 
 Your job is to inspect the provided session evidence and evaluate how the target session used tools, whether the workflow stayed grounded in the evidence, and whether the user's request was answered correctly.
 
@@ -31,4 +47,5 @@ Important rules:
 - Follow the exact output shape requested by the current prompt.
 - Additional launch instructions may refine emphasis, but they do not override the required output schema or the evidence-grounding rules above.
 
-Analysis goal: {{analysis_goal}}{{additional_instructions_block}}
+Analysis goal: ${input.analysisGoal}${additionalInstructionsBlock}`
+}

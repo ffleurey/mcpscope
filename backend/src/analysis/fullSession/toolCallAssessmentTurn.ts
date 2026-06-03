@@ -7,19 +7,19 @@
  */
 
 import crypto from 'node:crypto'
-import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { BackendDatabase } from '../../persistence/db.js'
+import type { LmStudioGateway } from '../../runtime/modelTurns.js'
 import {
   getSessionRecord,
-} from '../persistence/repository.js'
+} from '../../persistence/repository.js'
 import {
   insertJsonArtifact,
-} from './artifactRepository.js'
+} from '../artifactRepository.js'
 import {
   runDeterministicMcpToolCallsInSingleTurn,
   type McpGateway,
-} from '../runtime/toolTurns.js'
-import { runAnalysisTurn } from './boundedTurn.js'
+} from '../../runtime/toolTurns.js'
+import { runAnalysisTurn } from '../boundedTurn.js'
 import {
   SCHEMA_KEY,
   evaluationResultSchema,
@@ -27,11 +27,11 @@ import {
   type EvidencePacket,
   type AnalysisTarget,
   type EvaluationResult,
-} from './schemas.js'
+} from '../schemas.js'
 import type { ZodError } from 'zod'
-import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
+import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
 import { runContextMutationStep } from './contextMutationStep.js'
-import { buildToolCallEvaluationPrompt } from  './evaluationPromptFactory.js'
+import { buildToolCallEvaluationPrompt } from './evaluationPrompts.js'
 
 function uuid(): string {
   return crypto.randomUUID()

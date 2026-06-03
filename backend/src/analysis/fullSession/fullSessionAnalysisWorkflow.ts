@@ -1,41 +1,32 @@
-import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
-import type { McpGateway } from '../runtime/toolTurns.js'
+import type { BackendDatabase } from '../../persistence/db.js'
+import type { LmStudioGateway } from '../../runtime/modelTurns.js'
+import type { McpGateway } from '../../runtime/toolTurns.js'
 import {
   insertStepRecord,
   updateStepRecord,
   getNextStepOrdinal,
-} from '../persistence/repositoryV2.js'
-import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
-import { stepTypeKey as mkStepTypeKey } from '../domain/executionModel.js'
-import { formatStepId } from '../domain/hierarchicalIds.js'
-import { getLatestArtifactBySchemaKey } from './artifactRepository.js'
-import { runBootstrapStep } from './bootstrapStep.js'
+} from '../../persistence/repositoryV2.js'
+import type { StepPersistenceRecord } from '../../domain/persistenceContract.js'
+import { stepTypeKey as mkStepTypeKey } from '../../domain/executionModel.js'
+import { formatStepId } from '../../domain/hierarchicalIds.js'
+import { getLatestArtifactBySchemaKey } from '../artifactRepository.js'
+import { runBootstrapStep } from '../bootstrapStep.js'
 import { runToolCallAssessmentTurn } from './toolCallAssessmentTurn.js'
-import { runCoverageValidationStep } from './coverageValidationStep.js'
+import { runCoverageValidationStep } from '../coverageValidationStep.js'
 import { runTurnSummaryTurn } from './turnSummaryTurn.js'
 import { runFinalAggregationTurn } from './finalAggregationTurn.js'
+import type { AnalysisWorkflowInput } from '../analysisWorkflowInput.js'
 import {
   SCHEMA_KEY,
   type AnalysisSessionState,
   type AnalysisTarget,
   type EvidencePacketIndex,
-} from './schemas.js'
-import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
-import { ANALYSIS_WORKFLOW_KIND } from './workflowKinds.js'
+} from '../schemas.js'
+import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
+import { ANALYSIS_WORKFLOW_KIND } from '../workflowKinds.js'
 
 function now(): number {
   return Date.now()
-}
-
-export interface FullSessionAnalysisWorkflowInput {
-  analysisSessionId: string
-  targetSessionId: string
-  targetTurnId: string
-  analysisGoal: string
-  selectedToolNames: string[]
-  onlyFailedToolCalls: boolean
-  evaluationCriteria: string[]
 }
 
 export interface FullSessionAnalysisWorkflowDeps {
@@ -45,7 +36,7 @@ export interface FullSessionAnalysisWorkflowDeps {
 }
 
 export function createFullSessionAnalysisState(
-  input: FullSessionAnalysisWorkflowInput,
+  input: AnalysisWorkflowInput,
 ): AnalysisSessionState {
   return {
     phase: 'bootstrap',

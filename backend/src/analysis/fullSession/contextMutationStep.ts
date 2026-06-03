@@ -11,19 +11,19 @@
  *  4. Determine the next phase from packet index state.
  */
 
-import type { BackendDatabase } from '../persistence/db.js'
+import type { BackendDatabase } from '../../persistence/db.js'
 import {
   updatePartRecord,
   getPartRecord,
   listPartRecordsBySession,
-} from '../persistence/repository.js'
+} from '../../persistence/repository.js'
 import {
   getLatestArtifactBySchemaKey,
-} from './artifactRepository.js'
+} from '../artifactRepository.js'
 import {
   SCHEMA_KEY,
   type EvidencePacketIndex,
-} from './schemas.js'
+} from '../schemas.js'
 
 export interface ContextMutationInput {
   analysisSessionId: string
