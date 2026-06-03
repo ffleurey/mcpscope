@@ -249,6 +249,7 @@ function buildFastAssessmentQuestion(packet: EvidencePacket, analysisTarget: Ana
     analysis_focus_instructions: buildAnalysisFocusInstructions(analysisTarget),
     tool_call_part_id: packet.tool_call_part_id,
     tool_name: packet.tool_name,
+    tool_call_parameters: packet.tool_call_parameters,
     pre_reasoning_part_id: packet.reasoning_before_part_id,
     post_reasoning_part_id: packet.reasoning_after_part_id,
   })

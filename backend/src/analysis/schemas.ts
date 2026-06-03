@@ -98,6 +98,7 @@ export const evidencePacketSchema = z.object({
   round_id: z.string(),
   tool_call_part_id: z.string(),
   tool_name: z.string(),
+  tool_call_parameters: z.string(),
   reasoning_before_part_id: z.string().nullable(),
   tool_result_part_id: z.string().nullable(),
   reasoning_after_part_id: z.string().nullable(),

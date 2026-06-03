@@ -33,6 +33,7 @@ If an error has occured, check the tool call against the documentated parameters
 Make a compact assessment of this tool call. Return exactly one JSON object with this shape:
 {
   "tool_name": "{{tool_name}}",
+  "tool_call_parameters": "{{tool_call_parameters}}",
   "tool_call_part_id": "{{tool_call_part_id}}",
   "tool_call_reasoning": "<Explain why this tool was selected. If this is a retry of a previously failed approach in the same turn, state what the model learned and what parameters or strategy changed. If multiple tools were considered, name them.>",
   "tool_call_result": "successful" | "partially_successful" | "unsuccessful" | "parameter_error" | "response_error" | "unclear",
