@@ -21,6 +21,7 @@ export const SCHEMA_KEY = {
   TOOL_CALL_ASSESSMENT: 'analysis.tool_call_assessment.v1',
   TURN_SUMMARY: 'analysis.turn_summary.v1',
   FINAL_ANALYSIS_REPORT: 'analysis.final_analysis_report.v1',
+  EVALUATION_RESULT: 'analysis.evaluation_result.v1',
   FAST_TOOL_CALL_ASSESSMENT: 'analysis.fast_session_tool_call_assessment.v1',
   FAST_TURN_SUMMARY: 'analysis.fast_session_turn_summary.v1',
   FAST_FINAL_ANALYSIS_REPORT: 'analysis.fast_session_final_analysis_report.v1',
@@ -137,6 +138,21 @@ export function buildAnalysisFocusInstructions(target: AnalysisTarget): string {
 
   return lines.join('\n')
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// analysis.evaluation_result.v1
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const evaluationResultSchema = z.object({
+  subject_scope: z.string().min(1),
+  subject_id: z.string().min(1),
+  evaluation_focus: z.string().min(1),
+  reasoning: z.string().min(1),
+  verdict: z.enum(['pass', 'partial', 'fail', 'unclear']),
+  score: z.number().int().min(0).max(5),
+  evidence_part_id: z.string().nullable().optional(),
+})
+export type EvaluationResult = z.infer<typeof evaluationResultSchema>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // analysis.evidence_packet_index.v1
