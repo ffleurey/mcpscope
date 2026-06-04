@@ -534,7 +534,7 @@ describe('session metadata API', () => {
     })
 
     insertStepRecord(app.backendDb.connection, makeStepRecord({
-      id: 'ANLZ.wf0',
+      id: 'ANLZ.0W',
       sessionId: 'ANLZ',
       stepTypeKey: stepTypeKey('analysis_v2_cursor'),
       ordinal: 0,
@@ -545,7 +545,7 @@ describe('session metadata API', () => {
       completedAt: ts + 1,
     }))
     insertStepRecord(app.backendDb.connection, makeStepRecord({
-      id: 'ANLZ.wf3',
+      id: 'ANLZ.3W',
       sessionId: 'ANLZ',
       stepTypeKey: stepTypeKey('analysis_tool_call_assessment'),
       ordinal: 3,
@@ -556,7 +556,7 @@ describe('session metadata API', () => {
     insertJsonArtifact(app.backendDb.connection, {
       id: 'artifact-1',
       sessionId: 'ANLZ',
-      stepId: 'ANLZ.wf3',
+      stepId: 'ANLZ.3W',
       content: {
         step_type: 'fast_tool_call_assessment',
         error_kind: 'schema_validation_error',
@@ -584,7 +584,7 @@ describe('session metadata API', () => {
       status: 'error',
       workflow_kind: 'fast_session_analysis',
       latest_error: {
-        step_id: 'ANLZ.wf3',
+        step_id: 'ANLZ.3W',
         error_kind: 'schema_validation_error',
         message: 'Fast assessment response did not match fast schema',
       },
@@ -598,7 +598,7 @@ describe('session metadata API', () => {
         state: 'error',
         workflow_kind: 'fast_session_analysis',
         latest_error: {
-          step_id: 'ANLZ.wf3',
+          step_id: 'ANLZ.3W',
           error_kind: 'schema_validation_error',
           message: 'Fast assessment response did not match fast schema',
         },
@@ -785,7 +785,7 @@ describe('session metadata API', () => {
     })
 
     insertStepRecord(app.backendDb.connection, makeStepRecord({
-      id: 'ANLZ.wf0',
+      id: 'ANLZ.0W',
       sessionId: 'ANLZ',
       stepTypeKey: stepTypeKey('analysis_v2_cursor'),
       ordinal: 0,
@@ -796,7 +796,7 @@ describe('session metadata API', () => {
       completedAt: ts + 2,
     }))
     insertStepRecord(app.backendDb.connection, makeStepRecord({
-      id: 'ANLZ.wf3',
+      id: 'ANLZ.3W',
       sessionId: 'ANLZ',
       stepTypeKey: stepTypeKey('analysis_tool_call_assessment'),
       ordinal: 3,
@@ -807,7 +807,7 @@ describe('session metadata API', () => {
     insertJsonArtifact(app.backendDb.connection, {
       id: 'artifact-2',
       sessionId: 'ANLZ',
-      stepId: 'ANLZ.wf3',
+      stepId: 'ANLZ.3W',
       content: {
         step_type: 'fast_tool_call_assessment',
         error_kind: 'schema_validation_error',
@@ -822,7 +822,7 @@ describe('session metadata API', () => {
     insertTurnRecord(app.backendDb.connection, {
       id: 'ANLZ.1',
       sessionId: 'ANLZ',
-      ownerStepId: 'ANLZ.wf3',
+      ownerStepId: 'ANLZ.3W',
       sequenceNumber: 1,
       status: 'complete',
       createdAt: ts + 5,
@@ -855,7 +855,7 @@ describe('session metadata API', () => {
         workflow_kind: 'fast_session_analysis',
         workflow_label: 'Fast Session Analysis',
         latest_error: {
-          step_id: 'ANLZ.wf3',
+          step_id: 'ANLZ.3W',
           error_kind: 'schema_validation_error',
           message: 'Fast assessment response did not match fast schema',
         },
@@ -866,22 +866,22 @@ describe('session metadata API', () => {
     expect(retryRes.statusCode).toBe(200)
     expect(retryRes.json()).toMatchObject({
       session_id: 'ANLZ',
-      failed_step_id: 'ANLZ.wf3',
+      failed_step_id: 'ANLZ.3W',
       retry_phase: 'assessing',
       latest_error: {
-        step_id: 'ANLZ.wf3',
+        step_id: 'ANLZ.3W',
         error_kind: 'schema_validation_error',
         message: 'Fast assessment response did not match fast schema',
       },
     })
 
     const steps = listStepRecordsBySession(app.backendDb.connection, 'ANLZ')
-    const cursorStep = steps.find(step => step.id === 'ANLZ.wf0')
+    const cursorStep = steps.find(step => step.id === 'ANLZ.0W')
     expect(cursorStep).toMatchObject({
       status: 'running',
       state: expect.objectContaining({
         phase: 'assessing',
-        retry_failed_step_id: 'ANLZ.wf3',
+        retry_failed_step_id: 'ANLZ.3W',
       }),
       completedAt: null,
     })

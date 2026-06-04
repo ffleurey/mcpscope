@@ -307,16 +307,23 @@ function buildStepNode(
     return buildTurnNode(turn, turnRounds, allParts, mode, isDirectLookup)
   }
 
+  const ownedTurns = turns
+    .filter(candidate => candidate.ownerStepId === step.id)
+    .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
+  const ownedTurnNodes = ownedTurns.map((turn) => {
+    const turnRounds = rounds
+      .filter(round => round.turnId === turn.id)
+      .sort((left, right) => left.roundIndex - right.roundIndex)
+    return buildTurnNode(turn, turnRounds, allParts, mode, isDirectLookup)
+  })
+
   const stepParts = allParts
     .filter(part => part.turnId === step.id && part.roundId === null && isPublicPartType(part.partType))
     .sort((left, right) => left.ordinal - right.ordinal)
     .map(part => buildPartNode(part, [], mode, true))
     .filter((node): node is object => node !== null)
 
-  const ownedTurnIds = turns
-    .filter(candidate => candidate.ownerStepId === step.id)
-    .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
-    .map(candidate => candidate.id)
+  const ownedTurnIds = ownedTurns.map(candidate => candidate.id)
   const postambleStepIds = ownedTurnIds.flatMap((turnId) => steps
     .filter(candidate => candidate.stepTypeKey === 'compaction' && candidate.params.sourceTurnId === turnId)
     .sort((left, right) => left.ordinal - right.ordinal)
@@ -347,6 +354,7 @@ function buildStepNode(
     context_tokens_after: typeof step.state.contextTokensAfterCompaction === 'number' ? step.state.contextTokensAfterCompaction : null,
     tokens_removed: typeof step.state.compactionTokensRemoved === 'number' ? step.state.compactionTokensRemoved : null,
     owned_turn_ids: ownedTurnIds,
+    turns: ownedTurnNodes,
     postamble_step_ids: postambleStepIds,
     ...compactionEvidence,
     parts: stepParts,

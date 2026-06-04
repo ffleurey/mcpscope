@@ -29,6 +29,7 @@ export const traceArtifactSchema = z.object({
 export const workflowStepTraceSchema = z.object({
   step: stepRecordSchema,
   ownedTurns: z.array(turnRecordSchema).default([]),
+  turns: z.array(turnRecordSchema).default([]),
   postambleSteps: z.array(stepRecordSchema).default([]),
   artifacts: z.array(traceArtifactSchema).default([]),
 })
@@ -58,6 +59,7 @@ export interface TraceArtifactRecord {
 export interface WorkflowStepTrace {
   step: StepRecord
   ownedTurns: TurnRecord[]
+  turns: TurnRecord[]
   postambleSteps: StepRecord[]
   artifacts: TraceArtifactRecord[]
 }
@@ -115,6 +117,7 @@ function deriveWorkflowSteps(
       return {
         step,
         ownedTurns,
+        turns: ownedTurns,
         postambleSteps,
         artifacts: stepArtifacts,
       }

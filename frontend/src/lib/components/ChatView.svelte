@@ -95,6 +95,7 @@
         return {
           step,
           ownedTurns,
+          turns: ownedTurns,
           postambleSteps,
           artifacts: artifactsByStep.get(step.id) ?? [],
         }

@@ -109,9 +109,13 @@ Inspects any object by hierarchical ID. Calls `GET /api/lookup/:id`.
 |-----------------|---------|----------------|
 | `SSS`           | session | `QGWA`         |
 | `SSS.S`         | setup   | `QGWA.S`       |
-| `SSS.N`         | turn    | `QGWA.1`       |
-| `SSS.N.N`       | round   | `QGWA.1.2`     |
-| `SSS.N.N.N-X`  | part    | `QGWA.1.2.3-U` |
+| `SSS.W`         | step    | `QGWA.4W`      |
+| `SSS.NT`        | turn    | `QGWA.1T`      |
+| `SSS.W.NT`      | turn    | `QGWA.4W.1T`   |
+| `SSS.NT.N`      | round   | `QGWA.1T.2`    |
+| `SSS.W.NT.N`    | round   | `QGWA.4W.1T.2` |
+| `SSS.NT.N.N-X`  | part    | `QGWA.1T.2.3-U` |
+| `SSS.W.NT.N.N-X`| part    | `QGWA.4W.1T.2.3-R` |
 
 `--short` omits part content (token counts only). Parts always return full content regardless of `--short`.
 
@@ -125,13 +129,13 @@ QGWA.S.2-MI  mcp_instructions  (371 tokens)
 QGWA.S.3-TD  tool_definitions  (4169 tokens)
   ha_history_list_entities, ha_history_get, ha_forecast_get
 
-QGWA.1.1.1-U  user_prompt  (33 tokens)
+QGWA.1T.1.1-U  user_prompt  (33 tokens)
   Hello! what is the current temp outside?
 
-QGWA.1.1.2-A  assistant_answer  (112 tokens)
+QGWA.1T.1.2-A  assistant_answer  (112 tokens)
   The current outdoor temperature is 14°C.
 
-QGWA.1.1.3-T  tool_call  ha_history_list_entities  (824 tokens)
+QGWA.1T.1.3-T  tool_call  ha_history_list_entities  (824 tokens)
 ```
 
 Token counts are dimmed on TTY. `user_prompt` / `assistant_answer` content is bold.  
@@ -155,13 +159,13 @@ mcpscope status ABCD   # repeat until state = ready
 
 # 3. Send a prompt
 mcpscope send ABCD "What is the current temperature outside?"
-# → prints turn ID, e.g. ABCD.1
+# → prints turn ID, e.g. ABCD.1T
 
 # 4. Poll until the turn is done
 mcpscope status ABCD   # repeat until state = ready (or error)
 
 # 5. Inspect the result
-mcpscope inspect ABCD.1
+mcpscope inspect ABCD.1T
 ```
 
 ## Flags

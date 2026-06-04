@@ -3,6 +3,8 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createSession, createModelOnlyTurn } from './modelTurns.js'
 import { openBackendDatabase } from '../persistence/db.js'
+import { insertStepRecord } from '../persistence/repositoryV2.js'
+import { stepTypeKey } from '../domain/executionModel.js'
 import type { LmStudioGateway } from './modelTurns.js'
 
 describe('model-only turn runtime', () => {
@@ -112,6 +114,18 @@ describe('model-only turn runtime', () => {
       },
     })
 
+    insertStepRecord(db.connection, {
+      id: `${session.id}.4W`,
+      sessionId: session.id,
+      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
+      ordinal: 3,
+      status: 'complete',
+      params: {},
+      state: {},
+      createdAt: 1,
+      completedAt: 1,
+    })
+
     const result = await createModelOnlyTurn(db, gateway, {
       sessionId: session.id,
       userContent: 'Say OK.',
@@ -172,6 +186,85 @@ describe('model-only turn runtime', () => {
       source: 'delta-derived',
       confidence: 'exact',
     })
+
+    db.connection.close()
+  })
+
+  it('nests ids under an owning workflow step', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+
+    const gateway: LmStudioGateway = {
+      async probePromptTokens(_baseUrl, _apiKey, body) {
+        const messages = body.messages as Array<{ role: string }>
+        if (messages.length === 1 && messages[0]?.role === 'system') return 4
+        if (messages.length === 3) return 9
+        throw new Error(`Unexpected probe shape: ${JSON.stringify(body)}`)
+      },
+      async createChatCompletion() {
+        return {
+          id: 'cmpl-owner-step',
+          model: 'model-key',
+          created: 125,
+          choices: [
+            {
+              index: 0,
+              finish_reason: 'stop',
+              message: {
+                role: 'assistant',
+                reasoning_content: 'Done.',
+                content: 'OK',
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 7,
+            total_tokens: 19,
+            completion_tokens_details: {
+              reasoning_tokens: 5,
+            },
+          },
+        }
+      },
+    }
+
+    const session = createSession(db, {
+      modelProfileSnapshot: {
+        id: 'model-1',
+        name: 'Model',
+        connectionBaseUrl: 'https://example.com/v1',
+        apiKey: 'secret',
+        modelKey: 'model-key',
+        modelDisplayName: 'Model Key',
+        systemPrompt: 'Reply exactly.',
+        temperature: 0,
+        reasoning: 'on',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    })
+
+    insertStepRecord(db.connection, {
+      id: `${session.id}.4W`,
+      sessionId: session.id,
+      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
+      ordinal: 3,
+      status: 'complete',
+      params: {},
+      state: {},
+      createdAt: 1,
+      completedAt: 1,
+    })
+
+    const result = await createModelOnlyTurn(db, gateway, {
+      sessionId: session.id,
+      userContent: 'Say OK.',
+      ownerStepId: `${session.id}.4W`,
+    })
+
+    expect(result.turn.id).toBe(`${session.id}.4W.1T`)
+    expect(result.round.id).toBe(`${session.id}.4W.1T.1`)
+    expect(result.parts[0]?.id).toBe(`${session.id}.4W.1T.1.1-U`)
 
     db.connection.close()
   })

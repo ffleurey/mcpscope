@@ -8,7 +8,7 @@ import type { OperationContext } from './context.js'
 export const inspectInputSchema = z.object({
   id: z.string().describe(
     'Hierarchical ID to inspect. Formats: SSS (session), SSS.S (setup), '
-    + 'SSS.N (turn), SSS.wfN or SSS.CN (deterministic step), SSS.N.N (round), SSS.N.N.N-X or SSS.wfN.N-X or SSS.CN.N-X (part). Example: QGWA.1.2 or QGWA.wf7. '
+    + 'SSS.NT (turn), SSS.NW or SSS.CN (deterministic step), SSS.W.NT.N (round), SSS.W.NT.N.N-X (part). Example: QGWA.4W.1T, QGWA.4W.1T.2, or QGWA.4W.1T.2.3-R. '
     + 'Inspecting a session, setup, turn, step, or round is useful for finding child IDs; '
     + 'inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content.',
   ),

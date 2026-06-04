@@ -5,7 +5,7 @@ This document defines the compact canonical runtime tree used by mcpscope.
 It is intentionally small. It is the **canonical mcpscope model** used by persistence, API, UI inspect workflows, and future CLI work.
 
 mcpscope is centered on LLM sessions. Different session types may steer those sessions with
-deterministic steps, but they still use the same session tree and persistence model.
+deterministic workflow steps, but they still use the same session tree and persistence model.
 
 For the backing SQLite storage layout, foreign keys, and singleton defaults tables, see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
 
@@ -15,11 +15,12 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 
 - `SessionContainer` — the domain-level ownership abstraction for sessions
 - `Session` — the execution container (also a `SessionContainer`); runs its loop via `execute()` / `advance()` / `canContinue()`
-- `Step` — the abstract execution unit; concrete units of work include `Turn` for LLM interaction plus shipped deterministic analysis workflow steps
-- `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records, and may optionally belong to one non-turn step for workflow grouping
+- `Step` — the abstract execution unit; concrete units of work include `WorkflowStep` for deterministic orchestration plus `Turn` for LLM interaction
+- `WorkflowStep` — the abstract deterministic step subtype; owns zero or more `Turn` children
+- `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records, and may optionally belong to one `WorkflowStep`
 - the runtime tree described below for persisted sessions (unchanged from user perspective)
 - one session contains one setup and zero or more turns
-- hierarchical IDs for session/setup/turn/round/part runtime nodes
+- hierarchical IDs for session/setup/step/turn/round/part runtime nodes, with `W` for workflow steps and `T` for turns
 - session ownership modeled through `SessionContainer`; a session may belong to another session or to a `Benchmark` container
 - `Benchmark` — a minimal `SessionContainer` for grouping sessions; full benchmark domain design is future work
 - generic persistence for containers, sessions, and steps (`session_containers`, `v2_sessions`, `v2_steps`, `v2_turns`)
@@ -36,20 +37,21 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 - session parent rules remain intentionally limited to `session` and `benchmark`
 - the current classification rules still follow the existing session-focused parent model rather than a broader container graph
 
-The canonical vocabulary is now `SessionContainer`, `Session`, `Step`, and `Turn`.
+The canonical vocabulary is now `SessionContainer`, `Session`, `Step`, `WorkflowStep`, and `Turn`.
 
 The key distinction is:
 
 - `Session` is still the canonical LLM session container
 - `Step` is the execution unit inside that session
+- `WorkflowStep` is the deterministic step subtype that can own turns
 - `Turn` is the LLM-interaction step subtype
-- deterministic steps can steer the session without moving the workflow outside the session model
+- deterministic workflow steps can steer the session without moving the workflow outside the session model
 
 Current ownership rule:
 
-- non-turn steps may own zero or more turns
-- a turn may belong to at most one non-turn step
-- containment is intentionally limited to one level
+- workflow steps may own zero or more turns
+- a turn may belong to at most one workflow step
+- containment is intentionally limited to one level beneath workflow steps
 
 ## Canonical tree
 
@@ -58,9 +60,14 @@ The runtime is a tree:
 - `Session`
   - one `Setup`
     - setup `Part[]`
-  - `Turn[]` (each Turn is a `Step`)
-    - `Round[]`
-      - round `Part[]`
+  - `Step[]`
+    - `WorkflowStep`
+      - `Turn[]`
+        - `Round[]`
+          - round `Part[]`
+    - `Turn`
+      - `Round[]`
+        - round `Part[]`
 
 This is the main mental model for mcpscope.
 
@@ -74,6 +81,7 @@ Sessions may be nested: a session may belong to a parent `Session` (e.g. analysi
 - **Benchmark** — a minimal SessionContainer that is not itself a Session (groups related sessions)
 - **Session** — one persisted execution container; runs its execution loop via `execute()` / `advance()` / `canContinue()`
 - **Setup** — session-level prelude shared by the whole session
+- **WorkflowStep** — deterministic step container; owns turns
 - **Turn** — one full user request lifecycle; the LLM-specific Step subtype
 - **Round** — one model iteration inside a turn
 - **Part** — one committed semantic content node inside setup or a round

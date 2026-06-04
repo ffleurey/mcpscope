@@ -59,7 +59,7 @@ No inputs.
 
 | Field  | Type    | Required | Description |
 |--------|---------|----------|-------------|
-| `id`   | string  | ✓        | Hierarchical ID (e.g. `ABCD`, `ABCD.1`, `ABCD.1.2`, `ABCD.1.2.3-U`). Inspecting a session, setup, turn, or round is useful for finding child IDs; inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content. |
+| `id`   | string  | ✓        | Hierarchical ID (e.g. `ABCD`, `ABCD.S`, `ABCD.1T`, `ABCD.4W.1T.2`, `ABCD.4W.1T.2.3-R`). Inspecting a session, setup, step, turn, or round is useful for finding child IDs; inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content. |
 | `short`| boolean |          | Token counts only, no part content |
 
 ## Tool results

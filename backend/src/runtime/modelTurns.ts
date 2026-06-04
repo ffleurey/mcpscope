@@ -223,8 +223,8 @@ export async function createModelOnlyTurn(
   const turnSequenceNumber = input.reservedTurn?.sequenceNumber
     ?? getNextTurnSequenceNumber(database.connection, session.id)
   const turnId = input.reservedTurn?.id
-    ?? formatTurnId(session.id, turnSequenceNumber)
-  const roundId = formatRoundId(session.id, turnSequenceNumber, 1)
+    ?? formatTurnId(session.id, turnSequenceNumber, input.ownerStepId ?? null)
+  const roundId = formatRoundId(session.id, turnSequenceNumber, 1, input.ownerStepId ?? null)
   const turn: TurnRecord = input.reservedTurn
     ? { ...input.reservedTurn }
     : {
@@ -279,7 +279,7 @@ export async function createModelOnlyTurn(
   const initialOrdinal = getNextPartOrdinal(database.connection, session.id)
   const initialPartNumber = getNextRoundPartSequence(database.connection, roundId)
   const userPart: PartRecord = {
-    id: formatPartId(session.id, turnSequenceNumber, 1, initialPartNumber, 'user-message'),
+    id: formatPartId(session.id, turnSequenceNumber, 1, initialPartNumber, 'user-message', input.ownerStepId ?? null),
     sessionId: session.id,
     turnId,
     roundId,
@@ -474,7 +474,7 @@ export async function createModelOnlyTurn(
       }
       const tokenMetadata = reasoningTokenMetadata.shift()
       assistantParts.push({
-        id: formatPartId(session.id, turnSequenceNumber, 1, nextPartNumber++, 'assistant-reasoning'),
+        id: formatPartId(session.id, turnSequenceNumber, 1, nextPartNumber++, 'assistant-reasoning', input.ownerStepId ?? null),
         sessionId: session.id,
         turnId,
         roundId,
@@ -517,7 +517,7 @@ export async function createModelOnlyTurn(
       }
       const tokenMetadata = assistantContentTokenMetadata.shift()
       assistantParts.push({
-        id: formatPartId(session.id, turnSequenceNumber, 1, nextPartNumber++, 'assistant-content'),
+        id: formatPartId(session.id, turnSequenceNumber, 1, nextPartNumber++, 'assistant-content', input.ownerStepId ?? null),
         sessionId: session.id,
         turnId,
         roundId,

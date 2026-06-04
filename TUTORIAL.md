@@ -148,16 +148,16 @@ mcpscope status ABCD
 When the session returns to `ready`, inspect the result:
 
 ```bash
-mcpscope inspect ABCD.1
+mcpscope inspect ABCD.1T
 ```
 
 Useful IDs:
 
 - `ABCD` - session
 - `ABCD.S` - setup used for the session
-- `ABCD.1` - first turn
-- `ABCD.1.1` - first round
-- `ABCD.1.1.3-T` - specific tool call
+- `ABCD.1T` - first turn
+- `ABCD.1T.1` - first round
+- `ABCD.1T.1.3-T` - specific tool call
 
 ## 5. Use mcpscope the simple way
 
@@ -183,7 +183,7 @@ For normal use, prefer the default text output:
 ```bash
 mcpscope list
 mcpscope status ABCD
-mcpscope inspect ABCD.1
+mcpscope inspect ABCD.1T
 ```
 
 It is:
@@ -229,5 +229,5 @@ mcpscope create "temperature-eval"
 mcpscope status ABCD
 mcpscope send ABCD "How did indoor temperature change over the last 7 days?"
 mcpscope status ABCD
-mcpscope inspect ABCD.1
+mcpscope inspect ABCD.1T
 ```

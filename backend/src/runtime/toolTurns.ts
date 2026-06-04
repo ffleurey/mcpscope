@@ -935,14 +935,14 @@ export async function runDeterministicMcpToolCall(
   const turnSequenceNumber = reservedTurnId
     ? parseInt(reservedTurnId.split('.')[1] ?? '1', 10) || 1
     : getNextTurnSequenceNumber(database.connection, session.id)
-  const turnId = reservedTurnId ?? formatTurnId(session.id, turnSequenceNumber)
+  const turnId = reservedTurnId ?? formatTurnId(session.id, turnSequenceNumber, ownerStepId ?? null)
   const roundNumber = (roundIndexOverride ?? 0) + 1
-  const roundId = formatRoundId(session.id, turnSequenceNumber, roundNumber)
+  const roundId = formatRoundId(session.id, turnSequenceNumber, roundNumber, ownerStepId ?? null)
 
   const userPartOrdinal = getNextPartOrdinal(database.connection, session.id)
   const nextRoundPartSequence = getNextRoundPartSequence(database.connection, roundId)
   const userPartId = userContextMessage
-    ? formatPartId(session.id, turnSequenceNumber, roundNumber, nextRoundPartSequence, 'user-message')
+    ? formatPartId(session.id, turnSequenceNumber, roundNumber, nextRoundPartSequence, 'user-message', ownerStepId ?? null)
     : null
   const toolCallPartId = formatPartId(
     session.id,
@@ -950,6 +950,7 @@ export async function runDeterministicMcpToolCall(
     roundNumber,
     nextRoundPartSequence + (userContextMessage ? 1 : 0),
     'tool-call',
+    ownerStepId ?? null,
   )
   const toolResultPartId = formatPartId(
     session.id,
@@ -957,6 +958,7 @@ export async function runDeterministicMcpToolCall(
     roundNumber,
     nextRoundPartSequence + (userContextMessage ? 2 : 1),
     'tool-result',
+    ownerStepId ?? null,
   )
 
   const toolCallId = createUuid()
@@ -1189,8 +1191,8 @@ export async function createToolEnabledTurn(
   const turnSequenceNumber = input.reservedTurn?.sequenceNumber
     ?? getNextTurnSequenceNumber(database.connection, session.id)
   const turnId = input.reservedTurn?.id
-    ?? formatTurnId(session.id, turnSequenceNumber)
-  const userRoundId = formatRoundId(session.id, turnSequenceNumber, 1)
+    ?? formatTurnId(session.id, turnSequenceNumber, input.ownerStepId ?? null)
+  const userRoundId = formatRoundId(session.id, turnSequenceNumber, 1, input.ownerStepId ?? null)
   const turn: TurnRecord = input.reservedTurn
     ? { ...input.reservedTurn }
     : {
@@ -1233,7 +1235,7 @@ export async function createToolEnabledTurn(
 
   const userPart = createUserPart(
     session,
-    formatPartId(session.id, turnSequenceNumber, 1, getNextRoundPartSequence(database.connection, userRoundId), 'user-message'),
+    formatPartId(session.id, turnSequenceNumber, 1, getNextRoundPartSequence(database.connection, userRoundId), 'user-message', input.ownerStepId ?? null),
     turnId,
     userRoundId,
     getNextPartOrdinal(database.connection, session.id),
@@ -1391,7 +1393,7 @@ export async function createToolEnabledTurn(
           if (!part) {
             continue
           }
-          part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-reasoning')
+          part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-reasoning', input.ownerStepId ?? null)
           part.ordinal = ordinal++
           assistantMessageParts.push(part)
           continue
@@ -1402,7 +1404,7 @@ export async function createToolEnabledTurn(
           if (!part) {
             continue
           }
-          part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-content')
+          part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-content', input.ownerStepId ?? null)
           part.ordinal = ordinal++
           assistantMessageParts.push(part)
           continue
@@ -1415,7 +1417,7 @@ export async function createToolEnabledTurn(
 
         const toolCallPart = createToolCallPart(
           session,
-          formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'tool-call'),
+          formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'tool-call', input.ownerStepId ?? null),
           turnId,
           currentRound.id,
           ordinal++,
@@ -1447,7 +1449,7 @@ export async function createToolEnabledTurn(
         )
         const toolResultPart = createToolResultPart(
           session,
-          formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'tool-result'),
+          formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'tool-result', input.ownerStepId ?? null),
           turnId,
           currentRound.id,
           toolResultOrdinal++,
@@ -1513,7 +1515,7 @@ export async function createToolEnabledTurn(
       }
 
       currentRound = {
-        id: formatRoundId(session.id, turnSequenceNumber, currentRound.roundIndex + 2),
+        id: formatRoundId(session.id, turnSequenceNumber, currentRound.roundIndex + 2, input.ownerStepId ?? null),
         turnId,
         roundIndex: currentRound.roundIndex + 1,
         status: 'streaming',
@@ -1577,7 +1579,7 @@ export async function createToolEnabledTurn(
         if (!part) {
           continue
         }
-        part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-reasoning')
+        part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-reasoning', input.ownerStepId ?? null)
         part.ordinal = ordinal++
         assistantParts.push(part)
         continue
@@ -1588,7 +1590,7 @@ export async function createToolEnabledTurn(
         if (!part) {
           continue
         }
-        part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-content')
+        part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-content', input.ownerStepId ?? null)
         part.ordinal = ordinal++
         assistantParts.push(part)
       }

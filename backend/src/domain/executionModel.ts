@@ -217,6 +217,13 @@ export interface Step {
   execute(context: StepExecutionContext): Promise<StepResult>
 }
 
+/**
+ * WorkflowStep is the abstract step subtype that owns Turn children.
+ */
+export interface WorkflowStep extends Step {
+  readonly turns: ReadonlyArray<Turn>
+}
+
 /** Known step type keys. */
 export const STEP_TYPE = {
   TURN: stepTypeKey('turn'),
