@@ -933,7 +933,7 @@ export async function runDeterministicMcpToolCall(
   }
   const ts = now()
   const turnNumber = reservedTurnId
-    ? parseInt(reservedTurnId.split('.')[1] ?? '1', 10) || 1
+    ? parseInt((reservedTurnId.split('.').at(-1) ?? '1').replace('T', ''), 10) || 1
     : getNextTurnNumber(database.connection, session.id, ownerStepId ?? null)
   const turnId = reservedTurnId ?? formatTurnId(session.id, turnNumber, ownerStepId ?? null)
   const roundNumber = (roundIndexOverride ?? 0) + 1
