@@ -1,5 +1,13 @@
 # Task to refactor the Steps to be a proper containement structure
 
+This task also includes the follow-up of moving the analysis workflow "cursor" from a
+pseudo-step (stored as `analysis_v2_cursor` in `v2_steps`) to a first-class session
+state column (`analysis_state_json` on `v2_sessions`). The cursor was execution
+state masquerading as a step — it was filtered out at 7 display sites, special-cased
+in the scheduler, and occupied `ordinal: 0` (a position it had no business occupying).
+Moving it to session state eliminated all filter sites, removed the ordinal-0 hack,
+and made the cursor self-documenting.
+
 ## Goal
 
 Make `Step` a first-class part of the canonical session containment tree, not a side-car concept. The session tree and the ID tree should match, so every node can be reached through its full hierarchical ID and the node type can be inferred from the ID alone.
@@ -155,3 +163,115 @@ Open items already settled:
 - Step 8 gate: the new and existing tests that cover containment, IDs, inspect, trace, and analysis UI pass.
 - Step 9 gate: documentation is updated only where the changed model is described, and it matches the implemented tree and IDs.
 - Final gate: the end-to-end refactor is coherent, and no compatibility scaffolding is left behind in the touched slice.
+
+---
+
+# Schema alignment for containment model
+
+## Current schema problems
+
+1. **Turn stored in TWO tables** (`v2_steps` + `v2_turns`). `v2_turns.step_id` is the PK _and_ references `v2_steps.id`. Owned turns have no business occupying a slot in the session-wide step ordinal space.
+2. **Session-wide `ordinal` and `sequence_number`** conflict with per-parent containment numbering.
+3. **Inconsistent parent references**: `v2_rounds.step_id` points to `v2_steps`, `v2_parts.turn_id` points to `v2_turns`. Same concept, different columns.
+4. **Redundant `session_containers` table** — sessions are containers themselves.
+5. **Legacy runtime tables** (`sessions`, `turns`, `rounds`, `parts`, `raw_exchanges`) still exist in code paths.
+
+## Target outcome
+
+| Current | Target |
+|---------|--------|
+| `v2_steps` holds turn records + workflow records | `v2_steps` holds only workflow / compaction records; **no turn entries** |
+| `v2_turns.step_id` PK = FK to v2_steps | `v2_turns.id` PK (no FK to steps for owned turns) |
+| `v2_steps.ordinal` (session-wide) | `v2_steps.child_index` (position within session, no gaps from owned turns) |
+| `v2_turns.sequence_number` (session-wide) | `v2_turns.turn_number` (position within parent: owner_step or session) |
+| `v2_rounds.step_id` → v2_steps | `v2_rounds.turn_id` → v2_turns |
+| `getNextStepDisplayNumber` + `getNextStepOrdinal` (two counters) | `getNextStepOrdinal` only (no more owned turns to filter out) |
+| `number` field in inspect derived from ordinal+1 or ID parsing | removed — the ID `22W.1T` **is** the position |
+| `session_containers` table | dropped |
+| Legacy runtime tables | dropped |
+
+## Implementation steps
+
+### Step 1: Schema migration
+Update `schemaV2.ts` table definitions:
+
+- `v2_steps`: rename `ordinal` → `child_index`, add `parent_step_id TEXT` (nullable, future use)
+- `v2_turns`: rename `step_id` → `id`, remove FK to v2_steps, rename `sequence_number` → `turn_number`, remove `session_id` UNIQUE constraint on (session_id, turn_number) — use per-parent counting instead
+- `v2_rounds`: rename `step_id` → `turn_id`, FK to v2_turns
+- Add migration ALTER TABLE statements for existing DBs (optional since fresh DB is fine)
+- Drop `session_containers` table
+- Drop legacy tables
+
+**Gate**: `initializeBackendSchema()` creates tables successfully. `validateNewSchema()` passes.
+
+### Step 2: Domain model update
+Update TypeScript interfaces:
+
+- `StepPersistenceRecord`: rename `ordinal` → `childIndex`
+- `TurnRecord`: rename `sequenceNumber` → `turnNumber`
+- `RoundRecord`: rename `stepId` → `turnId`
+- Remove `StepRecord` type if no longer in use after step changes
+
+**Gate**: Backend types compile.
+
+### Step 3: Persistence layer refactor
+Rewrite `repositoryV2.ts` and `repositoryRuntime.ts`:
+
+- `insertStepRecord`: use `childIndex` instead of `ordinal`, add optional `parentStepId`
+- `insertTurnRecord`: when `ownerStepId` is set, **skip** `insertStepRecord`. Only insert into `v2_turns`. Compute `turnNumber` as `COUNT(*) + 1 WHERE owner_step_id = ?`.
+- `getNextStepOrdinal` → `getNextChildIndex(sessionId)`: count steps where `parent_step_id IS NULL` only
+- Remove `getNextStepDisplayNumber` (no longer needed)
+- Remove `getNextOwnedTurnSequenceNumber` (per-parent counting is done inline)
+- `getNextTurnSequenceNumber` → use per-parent counting for owned turns
+- Update all row mapping functions for renamed columns
+
+**Gate**: Repository functions compile and write the correct data shapes.
+
+### Step 4: Stop creating step records for owned turns
+In every code path that creates turns with `ownerStepId`:
+
+- Analysis workflow turn creation (`boundedTurn.ts` → `toolTurns.ts`, `modelTurns.ts`) — already uses `turnDisplayNumber`, now the underlying `insertTurnRecord` handles per-parent counting
+- Top-level turns (primary sessions) still create `v2_steps` records
+- Remove the `stepRecordSchema` for turn-type steps where unnecessary
+
+**Gate**: All turn-creation paths compile. Owned turns only exist in `v2_turns`.
+
+### Step 5: Update hierarchical IDs and inspect
+- `formatStepId(sessionId, childIndex)` — uses `childIndex` directly, no extra counter
+- `formatTurnId` — turn number comes from per-parent count
+- `parseHierarchicalId` — validate against new ID format
+- `hierarchicalLookup.ts` — no longer looks for turn step records; reads turns directly from `v2_turns`. Remove `number` field from inspect output (the ID is the position).
+- `buildStepNode` — only handles non-turn steps
+
+**Gate**: Inspect output reflects containment position in IDs. No `number` field.
+
+### Step 6: Update trace and API routes
+- `trace.ts` — remove turn-type step handling from `buildStepNode`, update `deriveWorkflowSteps`
+- `sessionRoutes.ts` — remove cursor step references (already done), update turn listing
+- `schedulerRoutes.ts`, `schedulerAdmission.ts`, `schedulerDispatch.ts` — already updated to use session state
+- `operations/status.ts`, `operations/list.ts` — update if needed
+
+**Gate**: Trace output and API responses match new schema. All route tests pass.
+
+### Step 7: Frontend and CLI update
+- `frontend/src/lib/backendTypes.ts` — update schema types
+- `frontend/src/lib/components/ChatView.svelte` — no `number` field in turn display
+- `frontend/src/lib/sessionStore.ts` — update stream event handling for renamed fields
+- CLI: update type schemas and display code
+
+**Gate**: Frontend and CLI typecheck pass.
+
+### Step 8: Clean up and remove dead code
+- Remove `session_containers` table, `SessionContainerRecord`, and all related code
+- Remove legacy runtime tables (`sessions`, `turns`, `rounds`, `parts`, `raw_exchanges`) and all old-schema paths
+- Remove `getNextStepDisplayNumber` (already unused)
+- Remove `number` field from inspect/trace types
+- Update all tests for renamed columns and removed concepts
+
+**Gate**: All tests pass. No dead code references remain.
+
+### Step 9: Update documentation
+- Update `DATA-MODEL.md` — remove `number` from Turn/Round/Part property tables, note that the ID IS the position
+- Update `DATABASE-SCHEMA.md` — reflect new table shapes
+
+**Gate**: Docs match implemented schema.

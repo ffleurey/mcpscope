@@ -10,6 +10,7 @@ import {
   listStepRecordsBySession,
   listTurnRecordsBySession,
   updatePartRecord,
+  updateSessionAnalysisState,
   updateSessionRecord,
 } from '../persistence/repository.js'
 import {
@@ -25,7 +26,6 @@ import {
 } from '../operations/internal.js'
 import { buildAnalysisSystemPrompt, normalizeAnalysisGoal } from '../analysis/systemPrompt.js'
 import type { RouteDeps } from './types.js'
-import { updateStepRecord } from '../persistence/repositoryV2.js'
 import {
   getAnalysisWorkflowKindFromSteps,
   getLatestAnalysisDiagnosticSummaryForSession,
@@ -53,14 +53,13 @@ function buildSessionSummaryPayload(
 ) {
   const steps = listStepRecordsBySession(deps.database.connection, summary.id)
   const workflowKind = summary.sessionType === 'session_analysis'
-    ? getAnalysisWorkflowKindFromSteps(steps)
+    ? getAnalysisWorkflowKindFromSteps(steps, deps.database.connection, summary.id)
     : null
   const workflowPhase = summary.sessionType === 'session_analysis'
     ? (() => {
-        const cursorStep = steps
-          .find(step => step.stepTypeKey === 'analysis_v2_cursor')
-        const phase = typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : null
-        return phase
+        const sessionAnalysis = getSessionRecord(deps.database.connection, summary.id)
+        const analysisState = sessionAnalysis?.analysisState as { phase?: string } | null
+        return analysisState?.phase ?? null
       })()
     : null
   const latestError = deps.toLifecycleState(summary) === 'error' && summary.sessionType === 'session_analysis'
@@ -94,20 +93,15 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
     throw new Error('Session not found')
   }
 
-  const steps = listStepRecordsBySession(database.connection, sessionId)
-  const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-  if (!cursorStep) {
-    throw new Error('Analysis session has no cursor step')
-  }
-
-  const phase = typeof cursorStep.state.phase === 'string' ? cursorStep.state.phase : null
-  if (cursorStep.status !== 'error' && phase !== 'error') {
+  const analysisState = session.analysisState as Record<string, unknown> | null
+  if (!analysisState || analysisState.phase !== 'error') {
     throw new Error('Analysis session is not in a failed state')
   }
 
+  const steps = listStepRecordsBySession(database.connection, sessionId)
   const failedStep = [...steps]
     .reverse()
-    .find(step => step.stepTypeKey !== 'analysis_v2_cursor' && step.status === 'error')
+    .find(step => step.status === 'error')
   if (!failedStep) {
     throw new Error('Analysis session has no failed step to retry')
   }
@@ -125,16 +119,11 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
   const retryParts = listPartRecordsBySession(database.connection, sessionId)
     .filter(part => part.turnId && ownedTurnIds.has(part.turnId))
 
-  const updatedCursorStep: ReturnType<typeof listStepRecordsBySession>[number] = {
-    ...cursorStep,
-    status: 'running',
-    state: {
-      ...cursorStep.state,
-      phase: retryPhase,
-      retry_failed_step_id: failedStep.id,
-      retry_requested_at: Date.now(),
-    },
-    completedAt: null,
+  const updatedAnalysisState = {
+    ...analysisState,
+    phase: retryPhase,
+    retry_failed_step_id: failedStep.id,
+    retry_requested_at: Date.now(),
   }
 
   const updatedSession = {
@@ -144,7 +133,7 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
   }
 
   const tx = database.connection.transaction(() => {
-    updateStepRecord(database.connection, updatedCursorStep as Parameters<typeof updateStepRecord>[1])
+    updateSessionAnalysisState(database.connection, sessionId, updatedAnalysisState)
     updateSessionRecord(database.connection, updatedSession)
     for (const part of retryParts) {
       updatePartRecord(database.connection, {
@@ -349,13 +338,12 @@ export function registerSessionRoutes(deps: RouteDeps): void {
     let job: Awaited<ReturnType<typeof scheduler.enqueueSession | typeof scheduler.enqueueStep>>
     try {
       if (isSingleStep) {
-        const cursorStep = listStepRecordsBySession(database.connection, sessionId)
-          .find(s => s.stepTypeKey === 'analysis_v2_cursor')
-        if (!cursorStep) {
+        const analysisState = session.analysisState as { phase?: string } | null
+        if (analysisState?.phase === 'complete' || analysisState?.phase === 'error') {
           reply.code(422)
-          return apiError('validation', 'Analysis session has no cursor step — it may not have been initialized correctly.')
+          return apiError('validation', `Analysis session is in terminal phase '${analysisState?.phase}'.`)
         }
-        job = scheduler.enqueueStep(opCtx, sessionId, cursorStep.id)
+        job = scheduler.enqueueStep(opCtx, sessionId, sessionId)
       } else {
         job = scheduler.enqueueSession(opCtx, sessionId)
       }

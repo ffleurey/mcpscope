@@ -205,6 +205,6 @@ export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
   return { raw: trimmed, type: 'part', sessionId, stepNumber: null, turnNumber, roundNumber, partNumber, isSetupPart: false }
 }
 
-export function formatStepId(sessionId: string, ordinal: number): string {
-  return `${sessionId}.${ordinal}W`
+export function formatStepId(sessionId: string, childIndex: number): string {
+  return `${sessionId}.${childIndex}W`
 }

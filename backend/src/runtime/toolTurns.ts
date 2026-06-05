@@ -12,7 +12,7 @@ import {
   getNextPartOrdinal,
   getNextRoundPartSequence,
   listStepRecordsBySession,
-  getNextTurnSequenceNumber,
+  getNextTurnNumber,
   getSessionRecord,
   insertPartRecord,
   insertRawExchangeRecord,
@@ -932,21 +932,21 @@ export async function runDeterministicMcpToolCall(
     throw new Error('MCP profile is required for deterministic tool calls')
   }
   const ts = now()
-  const turnSequenceNumber = reservedTurnId
+  const turnNumber = reservedTurnId
     ? parseInt(reservedTurnId.split('.')[1] ?? '1', 10) || 1
-    : getNextTurnSequenceNumber(database.connection, session.id)
-  const turnId = reservedTurnId ?? formatTurnId(session.id, turnSequenceNumber, ownerStepId ?? null)
+    : getNextTurnNumber(database.connection, session.id, ownerStepId ?? null)
+  const turnId = reservedTurnId ?? formatTurnId(session.id, turnNumber, ownerStepId ?? null)
   const roundNumber = (roundIndexOverride ?? 0) + 1
-  const roundId = formatRoundId(session.id, turnSequenceNumber, roundNumber, ownerStepId ?? null)
+  const roundId = formatRoundId(session.id, turnNumber, roundNumber, ownerStepId ?? null)
 
   const userPartOrdinal = getNextPartOrdinal(database.connection, session.id)
   const nextRoundPartSequence = getNextRoundPartSequence(database.connection, roundId)
   const userPartId = userContextMessage
-    ? formatPartId(session.id, turnSequenceNumber, roundNumber, nextRoundPartSequence, 'user-message', ownerStepId ?? null)
+    ? formatPartId(session.id, turnNumber, roundNumber, nextRoundPartSequence, 'user-message', ownerStepId ?? null)
     : null
   const toolCallPartId = formatPartId(
     session.id,
-    turnSequenceNumber,
+    turnNumber,
     roundNumber,
     nextRoundPartSequence + (userContextMessage ? 1 : 0),
     'tool-call',
@@ -954,7 +954,7 @@ export async function runDeterministicMcpToolCall(
   )
   const toolResultPartId = formatPartId(
     session.id,
-    turnSequenceNumber,
+    turnNumber,
     roundNumber,
     nextRoundPartSequence + (userContextMessage ? 2 : 1),
     'tool-result',
@@ -974,7 +974,7 @@ export async function runDeterministicMcpToolCall(
           id: turnId,
           sessionId: session.id,
           ownerStepId: ownerStepId ?? null,
-          sequenceNumber: turnSequenceNumber,
+          turnNumber,
           status: 'streaming',
           outcome: null,
           usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -990,7 +990,7 @@ export async function runDeterministicMcpToolCall(
         id: turnId,
         sessionId: session.id,
       ownerStepId: ownerStepId ?? null,
-        sequenceNumber: turnSequenceNumber,
+        turnNumber,
         status: 'streaming',
         outcome: null,
         usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -1188,18 +1188,18 @@ export async function createToolEnabledTurn(
   const lmTools = buildLmToolDefinitions(sessionParts)
 
   const startedAt = input.reservedTurn?.createdAt ?? now()
-  const turnSequenceNumber = input.reservedTurn?.sequenceNumber
-    ?? getNextTurnSequenceNumber(database.connection, session.id)
+  const turnNumber = input.reservedTurn?.turnNumber
+    ?? getNextTurnNumber(database.connection, session.id, input.ownerStepId ?? null)
   const turnId = input.reservedTurn?.id
-    ?? formatTurnId(session.id, turnSequenceNumber, input.ownerStepId ?? null)
-  const userRoundId = formatRoundId(session.id, turnSequenceNumber, 1, input.ownerStepId ?? null)
+    ?? formatTurnId(session.id, turnNumber, input.ownerStepId ?? null)
+  const userRoundId = formatRoundId(session.id, turnNumber, 1, input.ownerStepId ?? null)
   const turn: TurnRecord = input.reservedTurn
     ? { ...input.reservedTurn }
     : {
         id: turnId,
         sessionId: session.id,
       ownerStepId: input.ownerStepId ?? null,
-        sequenceNumber: turnSequenceNumber,
+        turnNumber,
         status: 'streaming',
         createdAt: startedAt,
         completedAt: null,
@@ -1235,7 +1235,7 @@ export async function createToolEnabledTurn(
 
   const userPart = createUserPart(
     session,
-    formatPartId(session.id, turnSequenceNumber, 1, getNextRoundPartSequence(database.connection, userRoundId), 'user-message', input.ownerStepId ?? null),
+    formatPartId(session.id, turnNumber, 1, getNextRoundPartSequence(database.connection, userRoundId), 'user-message', input.ownerStepId ?? null),
     turnId,
     userRoundId,
     getNextPartOrdinal(database.connection, session.id),
@@ -1393,7 +1393,7 @@ export async function createToolEnabledTurn(
           if (!part) {
             continue
           }
-          part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-reasoning', input.ownerStepId ?? null)
+          part.id = formatPartId(session.id, turnNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-reasoning', input.ownerStepId ?? null)
           part.ordinal = ordinal++
           assistantMessageParts.push(part)
           continue
@@ -1404,7 +1404,7 @@ export async function createToolEnabledTurn(
           if (!part) {
             continue
           }
-          part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-content', input.ownerStepId ?? null)
+          part.id = formatPartId(session.id, turnNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-content', input.ownerStepId ?? null)
           part.ordinal = ordinal++
           assistantMessageParts.push(part)
           continue
@@ -1417,7 +1417,7 @@ export async function createToolEnabledTurn(
 
         const toolCallPart = createToolCallPart(
           session,
-          formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'tool-call', input.ownerStepId ?? null),
+          formatPartId(session.id, turnNumber, currentRound.roundIndex + 1, partNumber++, 'tool-call', input.ownerStepId ?? null),
           turnId,
           currentRound.id,
           ordinal++,
@@ -1449,7 +1449,7 @@ export async function createToolEnabledTurn(
         )
         const toolResultPart = createToolResultPart(
           session,
-          formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'tool-result', input.ownerStepId ?? null),
+          formatPartId(session.id, turnNumber, currentRound.roundIndex + 1, partNumber++, 'tool-result', input.ownerStepId ?? null),
           turnId,
           currentRound.id,
           toolResultOrdinal++,
@@ -1515,7 +1515,7 @@ export async function createToolEnabledTurn(
       }
 
       currentRound = {
-        id: formatRoundId(session.id, turnSequenceNumber, currentRound.roundIndex + 2, input.ownerStepId ?? null),
+        id: formatRoundId(session.id, turnNumber, currentRound.roundIndex + 2, input.ownerStepId ?? null),
         turnId,
         roundIndex: currentRound.roundIndex + 1,
         status: 'streaming',
@@ -1579,7 +1579,7 @@ export async function createToolEnabledTurn(
         if (!part) {
           continue
         }
-        part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-reasoning', input.ownerStepId ?? null)
+        part.id = formatPartId(session.id, turnNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-reasoning', input.ownerStepId ?? null)
         part.ordinal = ordinal++
         assistantParts.push(part)
         continue
@@ -1590,7 +1590,7 @@ export async function createToolEnabledTurn(
         if (!part) {
           continue
         }
-        part.id = formatPartId(session.id, turnSequenceNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-content', input.ownerStepId ?? null)
+        part.id = formatPartId(session.id, turnNumber, currentRound.roundIndex + 1, partNumber++, 'assistant-content', input.ownerStepId ?? null)
         part.ordinal = ordinal++
         assistantParts.push(part)
       }
@@ -1603,7 +1603,7 @@ export async function createToolEnabledTurn(
 
     session.status = 'active'
     session.updatedAt = completedAt
-    maybeApplyAutomaticSessionTitle(session, turn.sequenceNumber, input.userContent)
+    maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent)
 
     const finalizeTx = database.connection.transaction(() => {
       updateRoundRecord(database.connection, currentRound)
@@ -1673,7 +1673,7 @@ export async function createToolEnabledTurn(
   const diagnosticNote: PartRecord = {
     id: formatPartId(
       session.id,
-      turnSequenceNumber,
+      turnNumber,
       currentRound.roundIndex + 1,
       getNextRoundPartSequence(database.connection, currentRound.id),
       'diagnostic-note',

@@ -2,8 +2,7 @@
  * Domain vocabulary for the session-backed execution model.
  *
  * This module defines the canonical domain abstractions:
- *   - SessionContainer  — domain-level ownership container
- *   - Session           — execution container (also a SessionContainer)
+ *   - Session           — execution container
  *   - Step              — abstract execution unit
  *   - Turn              — LLM-specific Step subtype
  *   - VisibleContext    — the model-visible slice of session state
@@ -20,7 +19,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * A ContainerTypeKey identifies a concrete SessionContainer class.
+ * A ContainerTypeKey identifies a concrete container class.
  * Generic persistence stores these keys alongside parameter/state payloads so
  * that new container types can be added without schema changes by default.
  */
@@ -74,25 +73,6 @@ export type GenericParams = Record<string, unknown>
  * Stored in persistence as JSON alongside the type key.
  */
 export type GenericState = Record<string, unknown>
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SessionContainer
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * The domain-level ownership abstraction for sessions.
- *
- * Sessions belong to a SessionContainer.  A Session is itself a
- * SessionContainer, enabling parent-session ownership.  Benchmark is the other
- * concrete container type introduced in this increment.
- *
- * This keeps container ownership as a domain concept while leaving foreign-key
- * details to persistence mapping.
- */
-export interface SessionContainer {
-  readonly containerId: string
-  readonly containerTypeKey: ContainerTypeKey
-}
 
 /** Known container type keys (as const for exhaustiveness checks). */
 export const CONTAINER_TYPE = {
@@ -265,7 +245,6 @@ export type SessionLifecycleStatus =
 /**
  * Session is the execution container.
  *
- * A Session is itself a SessionContainer, enabling parent-session ownership.
  * Session types own orchestration semantics.
  *
  * Method contract:
@@ -278,14 +257,16 @@ export type SessionLifecycleStatus =
  * Generic persistence stores type keys plus parameter/state payloads.
  * New concrete session types do not require schema changes by default.
  */
-export interface Session extends SessionContainer {
+export interface Session {
   /** Stable session identifier. */
   readonly sessionId: string
+  readonly containerId: string
+  readonly containerTypeKey: ContainerTypeKey
   /** Identifies the concrete session class for generic persistence. */
   readonly sessionTypeKey: SessionTypeKey
   readonly status: SessionLifecycleStatus
   /** Owning container (another Session, or a Benchmark), or null for top-level. */
-  readonly parent: SessionContainer | null
+  readonly parent: { readonly containerId: string; readonly containerTypeKey: ContainerTypeKey } | null
   /** Ordered execution trace (steps executed so far). */
   readonly steps: ReadonlyArray<Step>
   readonly params: GenericParams
@@ -318,13 +299,14 @@ export const SESSION_TYPE = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Benchmark is a minimal SessionContainer that is not itself a Session.
+ * Benchmark is a minimal container that is not itself a Session.
  *
  * Sessions may belong to a Benchmark as their parent container.
  * Benchmark support in this increment validates the container model only;
  * full benchmark-domain design is future work.
  */
-export interface Benchmark extends SessionContainer {
+export interface Benchmark {
+  readonly containerId: string
   readonly containerTypeKey: typeof CONTAINER_TYPE.BENCHMARK
   /** Stable benchmark identifier. */
   readonly benchmarkId: string

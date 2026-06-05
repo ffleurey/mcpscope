@@ -31,31 +31,6 @@ import type {
 } from './executionModel.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Container persistence record
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Persisted representation of a SessionContainer (other than Session itself,
- * which is stored in the sessions table).
- *
- * Used for Benchmark and future container types.
- * Maps to the `session_containers` table in the new schema.
- */
-export interface ContainerPersistenceRecord {
-  /** Stable container identifier. */
-  readonly id: string
-  /** Identifies the concrete container class. */
-  readonly containerTypeKey: ContainerTypeKey
-  readonly title: string
-  /** Generic parameter bag serialized as JSON. */
-  readonly params: GenericParams
-  /** Generic resumable state serialized as JSON. */
-  readonly state: GenericState
-  readonly createdAt: number
-  readonly updatedAt: number
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Session persistence record
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -119,8 +94,10 @@ export interface StepPersistenceRecord {
   readonly sessionId: string
   /** Identifies the concrete step class. */
   readonly stepTypeKey: StepTypeKey
+  /** Parent step within the same session, or null for top-level steps. */
+  readonly parentStepId: string | null
   /** Position in session execution trace (0-based). */
-  readonly ordinal: number
+  readonly childIndex: number
   readonly status: string
   /** Generic parameter bag serialized as JSON (step inputs). */
   readonly params: GenericParams
@@ -166,18 +143,6 @@ export interface TurnPersistenceRecord {
 // ─────────────────────────────────────────────────────────────────────────────
 // Repository interfaces (backend-owned, adapter-agnostic)
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Repository interface for container persistence.
- * Implemented against the new schema in Step 3.
- */
-export interface ContainerRepository {
-  insert(record: ContainerPersistenceRecord): void
-  getById(id: string): ContainerPersistenceRecord | null
-  update(record: ContainerPersistenceRecord): void
-  delete(id: string): void
-  list(): ContainerPersistenceRecord[]
-}
 
 /**
  * Repository interface for session persistence.

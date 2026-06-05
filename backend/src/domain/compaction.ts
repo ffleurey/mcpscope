@@ -30,7 +30,7 @@ export function applyContextCompaction(
     .prepare<[string], { total: number | null }>(`
       SELECT SUM(token_count) AS total
       FROM v2_parts
-      WHERE session_id = (SELECT session_id FROM v2_turns WHERE step_id = ?)
+      WHERE session_id = (SELECT session_id FROM v2_turns WHERE id = ?)
         AND context_state IN ('included', 'round-only')
     `)
     .get(completedTurn.id) as { total: number | null }
@@ -55,7 +55,7 @@ export function applyContextCompaction(
       .prepare<[string], { id: string; token_count: number | null }>(`
         SELECT id, token_count
         FROM v2_parts
-        WHERE step_id = ?
+        WHERE turn_id = ?
           AND part_type = 'assistant-reasoning'
           AND context_state = 'included'
       `)
@@ -106,7 +106,7 @@ export function applyContextCompaction(
           context_tokens_after_compaction = @contextTokensAfterCompaction,
           compaction_applied = @compactionApplied,
           compaction_tokens_removed = @compactionTokensRemoved
-      WHERE step_id = @id
+      WHERE id = @id
     `)
     .run({
       id: completedTurn.id,
@@ -117,23 +117,24 @@ export function applyContextCompaction(
     })
 
   const stepOrdinalRow = connection
-    .prepare< [string], { max_ordinal: number }>(`
-      SELECT COALESCE(MAX(ordinal), -1) AS max_ordinal
+    .prepare< [string], { max_child_index: number }>(`
+      SELECT COALESCE(MAX(child_index), -1) AS max_child_index
       FROM v2_steps
       WHERE session_id = ?
     `)
-    .get(completedTurn.sessionId) as { max_ordinal: number }
+    .get(completedTurn.sessionId) as { max_child_index: number }
 
   const step: StepRecord = {
-    id: formatCompactionStepId(completedTurn.sessionId, completedTurn.sequenceNumber),
+    id: formatCompactionStepId(completedTurn.sessionId, completedTurn.turnNumber),
     sessionId: completedTurn.sessionId,
     stepTypeKey: STEP_TYPE.COMPACTION,
-    ordinal: stepOrdinalRow.max_ordinal + 1,
+    parentStepId: null,
+    childIndex: stepOrdinalRow.max_child_index + 1,
     status: 'complete',
     params: {
       strategy,
       sourceTurnId: completedTurn.id,
-      sourceTurnSequenceNumber: completedTurn.sequenceNumber,
+      sourceTurnSequenceNumber: completedTurn.turnNumber,
     },
     state: {
       strippedPartIds,
@@ -148,17 +149,17 @@ export function applyContextCompaction(
 
   connection.prepare(`
     INSERT INTO v2_steps (
-      id, session_id, step_type_key, ordinal, status,
+      id, session_id, step_type_key, child_index, status,
       params_json, state_json, created_at, completed_at
     ) VALUES (
-      @id, @sessionId, @stepTypeKey, @ordinal, @status,
+      @id, @sessionId, @stepTypeKey, @childIndex, @status,
       @paramsJson, @stateJson, @createdAt, @completedAt
     )
   `).run({
     id: step.id,
     sessionId: step.sessionId,
     stepTypeKey: step.stepTypeKey,
-    ordinal: step.ordinal,
+    childIndex: step.childIndex,
     status: step.status,
     paramsJson: JSON.stringify(step.params),
     stateJson: JSON.stringify(step.state),

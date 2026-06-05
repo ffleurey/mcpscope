@@ -14,9 +14,13 @@ import { validateSessionParent } from './domain/sessionValidation.js'
 import {
   createSessionRecord,
   deleteSessionRecord,
+  getPartRecord,
   getSessionRecord,
+  insertPartRecord,
+  insertTurnRecord,
   listChildSessionSummaries,
   listSessionSummaries,
+  updateSessionAnalysisState,
   updateSessionRecord,
 } from './persistence/repository.js'
 import { insertStepRecord, listStepRecordsBySession } from './persistence/repositoryV2.js'
@@ -26,7 +30,6 @@ import { importTraceBundle } from './runtime/traceImport.js'
 import { insertJsonArtifact } from './analysis/artifactRepository.js'
 import { SCHEMA_KEY } from './analysis/schemas.js'
 import { stepTypeKey } from './domain/executionModel.js'
-import { getPartRecord, insertPartRecord, insertTurnRecord } from './persistence/repository.js'
 import type { PartRecord } from './domain/model.js'
 import type { StepPersistenceRecord } from './domain/persistenceContract.js'
 
@@ -85,13 +88,14 @@ function makeSessionRecord(overrides: Partial<Parameters<typeof createSessionRec
 }
 
 function makeStepRecord(
-  overrides: Partial<StepPersistenceRecord> & Pick<StepPersistenceRecord, 'id' | 'sessionId' | 'stepTypeKey' | 'ordinal'>,
+  overrides: Partial<StepPersistenceRecord> & Pick<StepPersistenceRecord, 'id' | 'sessionId' | 'stepTypeKey' | 'childIndex'>,
 ): StepPersistenceRecord {
   return {
     id: overrides.id,
     sessionId: overrides.sessionId,
     stepTypeKey: overrides.stepTypeKey,
-    ordinal: overrides.ordinal,
+    parentStepId: null,
+    childIndex: overrides.childIndex,
     status: overrides.status ?? 'complete',
     params: overrides.params ?? {},
     state: overrides.state ?? {},
@@ -532,23 +536,29 @@ describe('session metadata API', () => {
       isContextExhausted: false,
       compactionStrategy: 'strip-reasoning',
     })
+    updateSessionAnalysisState(app.backendDb.connection, 'ANLZ', {
+      phase: 'error',
+      bootstrapComplete: false,
+      nextPacketIndex: 0,
+      packetCount: 0,
+      currentTurnId: null,
+      coverageValidated: false,
+      finalAggregationComplete: false,
+      analysisSessionId: 'ANLZ',
+      targetSessionId: 'PRNT',
+      targetTurnId: '',
+      analysisGoal: '',
+      selectedToolNames: [],
+      onlyFailedToolCalls: false,
+      evaluationCriteria: [],
+      workflow_kind: 'fast_session_analysis',
+    })
 
-    insertStepRecord(app.backendDb.connection, makeStepRecord({
-      id: 'ANLZ.0W',
-      sessionId: 'ANLZ',
-      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
-      ordinal: 0,
-      status: 'error',
-      params: { workflow_kind: 'fast_session_analysis' },
-      state: { phase: 'error' },
-      createdAt: ts + 1,
-      completedAt: ts + 1,
-    }))
     insertStepRecord(app.backendDb.connection, makeStepRecord({
       id: 'ANLZ.3W',
       sessionId: 'ANLZ',
       stepTypeKey: stepTypeKey('analysis_tool_call_assessment'),
-      ordinal: 3,
+      childIndex: 3,
       status: 'error',
       createdAt: ts + 2,
       completedAt: ts + 2,
@@ -783,23 +793,29 @@ describe('session metadata API', () => {
       isContextExhausted: false,
       compactionStrategy: 'strip-reasoning',
     })
+    updateSessionAnalysisState(app.backendDb.connection, 'ANLZ', {
+      phase: 'error',
+      bootstrapComplete: false,
+      nextPacketIndex: 0,
+      packetCount: 0,
+      currentTurnId: null,
+      coverageValidated: false,
+      finalAggregationComplete: false,
+      analysisSessionId: 'ANLZ',
+      targetSessionId: 'PRNT',
+      targetTurnId: '',
+      analysisGoal: '',
+      selectedToolNames: [],
+      onlyFailedToolCalls: false,
+      evaluationCriteria: [],
+      workflow_kind: 'fast_session_analysis',
+    })
 
-    insertStepRecord(app.backendDb.connection, makeStepRecord({
-      id: 'ANLZ.0W',
-      sessionId: 'ANLZ',
-      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
-      ordinal: 0,
-      status: 'error',
-      params: { workflow_kind: 'fast_session_analysis' },
-      state: { phase: 'error' },
-      createdAt: ts + 2,
-      completedAt: ts + 2,
-    }))
     insertStepRecord(app.backendDb.connection, makeStepRecord({
       id: 'ANLZ.3W',
       sessionId: 'ANLZ',
       stepTypeKey: stepTypeKey('analysis_tool_call_assessment'),
-      ordinal: 3,
+      childIndex: 3,
       status: 'error',
       createdAt: ts + 3,
       completedAt: ts + 3,
@@ -823,7 +839,7 @@ describe('session metadata API', () => {
       id: 'ANLZ.1',
       sessionId: 'ANLZ',
       ownerStepId: 'ANLZ.3W',
-      sequenceNumber: 1,
+      turnNumber: 1,
       status: 'complete',
       createdAt: ts + 5,
       completedAt: ts + 5,
@@ -875,16 +891,10 @@ describe('session metadata API', () => {
       },
     })
 
-    const steps = listStepRecordsBySession(app.backendDb.connection, 'ANLZ')
-    const cursorStep = steps.find(step => step.id === 'ANLZ.0W')
-    expect(cursorStep).toMatchObject({
-      status: 'running',
-      state: expect.objectContaining({
-        phase: 'assessing',
-        retry_failed_step_id: 'ANLZ.3W',
-      }),
-      completedAt: null,
-    })
+    const retriedSession = getSessionRecord(app.backendDb.connection, 'ANLZ')
+    const retriedState = retriedSession?.analysisState as Record<string, unknown> | undefined
+    expect(retriedState?.phase).toBe('assessing')
+    expect(retriedState?.retry_failed_step_id).toBe('ANLZ.3W')
 
     const retriedPart = getPartRecord(app.backendDb.connection, 'ANLZ.1.1.1-A')
     expect(retriedPart?.context.state).toBe('excluded')

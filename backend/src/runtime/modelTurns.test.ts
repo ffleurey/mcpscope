@@ -118,7 +118,8 @@ describe('model-only turn runtime', () => {
       id: `${session.id}.4W`,
       sessionId: session.id,
       stepTypeKey: stepTypeKey('analysis_v2_cursor'),
-      ordinal: 3,
+      parentStepId: null,
+      childIndex: 3,
       status: 'complete',
       params: {},
       state: {},
@@ -169,7 +170,7 @@ describe('model-only turn runtime', () => {
       userContent: 'And now say Done.',
     })
 
-    expect(secondTurn.turn.sequenceNumber).toBe(2)
+    expect(secondTurn.turn.turnNumber).toBe(2)
     expect(secondTurn.turn.usage).toEqual({
       promptTokens: 15,
       completionTokens: 6,
@@ -248,7 +249,8 @@ describe('model-only turn runtime', () => {
       id: `${session.id}.4W`,
       sessionId: session.id,
       stepTypeKey: stepTypeKey('analysis_v2_cursor'),
-      ordinal: 3,
+      parentStepId: null,
+      childIndex: 3,
       status: 'complete',
       params: {},
       state: {},

@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3'
-import { listStepRecordsBySession } from '../persistence/repository.js'
+import { getSessionRecord } from '../persistence/repository.js'
 import { listArtifactsBySession, type ArtifactRecord } from './artifactRepository.js'
-import { SCHEMA_KEY, type AnalysisPhase } from './schemas.js'
+import { SCHEMA_KEY, type AnalysisPhase, type AnalysisSessionState } from './schemas.js'
 import { ANALYSIS_WORKFLOW_KIND, type AnalysisWorkflowKind } from './workflowKinds.js'
 import type { StepRecord } from '../domain/model.js'
 
@@ -33,9 +33,19 @@ export function getAnalysisWorkflowLabel(workflowKind: AnalysisWorkflowKind | nu
   return workflowKind ? WORKFLOW_LABELS[workflowKind] : null
 }
 
-export function getAnalysisWorkflowKindFromSteps(steps: Array<Pick<StepRecord, 'stepTypeKey' | 'params'>>): AnalysisWorkflowKind | null {
+export function getAnalysisWorkflowKindFromSteps(
+  steps: Array<Pick<StepRecord, 'stepTypeKey' | 'params'>>,
+  connection?: Database.Database,
+  sessionId?: string,
+): AnalysisWorkflowKind | null {
   const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-  return getAnalysisWorkflowKindFromStep(cursorStep)
+  if (cursorStep) return getAnalysisWorkflowKindFromStep(cursorStep)
+  if (connection && sessionId) {
+    const session = getSessionRecord(connection, sessionId)
+    const analysisState = session?.analysisState as unknown as AnalysisSessionState | null
+    if (analysisState?.workflow_kind) return analysisState.workflow_kind as AnalysisWorkflowKind
+  }
+  return null
 }
 
 export function getAnalysisTitlePrefix(workflowKind: AnalysisWorkflowKind): string {
@@ -53,10 +63,9 @@ export function isAnalysisSessionTerminalError(
     return false
   }
 
-  const steps = listStepRecordsBySession(connection, summary.id)
-  const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-  const phase = typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : null
-  return cursorStep?.status === 'error' || phase === 'error'
+  const session = getSessionRecord(connection, summary.id)
+  const analysisState = session?.analysisState as unknown as AnalysisSessionState | null
+  return (analysisState?.phase === 'error') === true
 }
 
 export function getLatestAnalysisDiagnosticSummary(artifacts: ArtifactRecord[]): AnalysisDiagnosticSummary | null {

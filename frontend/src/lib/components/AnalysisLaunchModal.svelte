@@ -42,7 +42,7 @@
 
     const turnIdsInScope = new Set(
       trace.turns
-        .filter((turn) => turn.status === 'complete' && turn.sequenceNumber <= selectedTurn.sequenceNumber)
+        .filter((turn) => turn.status === 'complete' && turn.turnNumber <= selectedTurn.turnNumber)
         .map((turn) => turn.id),
     )
 

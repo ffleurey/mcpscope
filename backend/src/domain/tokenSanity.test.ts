@@ -123,10 +123,10 @@ function assertPartTokenSanity(parts: PartRecord[]): void {
  * To reconstruct the pre-compaction sum we must add those back in.
  */
 function assertTurnContextTokenConsistency(turns: TurnRecord[], parts: PartRecord[]): void {
-  const sortedTurns = [...turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+  const sortedTurns = [...turns].sort((a, b) => a.turnNumber - b.turnNumber)
 
-  // Map turnId → sequenceNumber so we can filter parts by "existed at turn N".
-  const seqByTurnId = new Map(turns.map(t => [t.id, t.sequenceNumber]))
+  // Map turnId → turnNumber so we can filter parts by "existed at turn N".
+  const seqByTurnId = new Map(turns.map(t => [t.id, t.turnNumber]))
 
   for (const turn of sortedTurns) {
     if (turn.status !== 'complete') continue
@@ -137,7 +137,7 @@ function assertTurnContextTokenConsistency(turns: TurnRecord[], parts: PartRecor
     const existedAtTurnN = (p: PartRecord) => {
       if (p.turnId === null) return true
       const partTurnSeq = seqByTurnId.get(p.turnId)
-      return partTurnSeq !== undefined && partTurnSeq <= turn.sequenceNumber
+      return partTurnSeq !== undefined && partTurnSeq <= turn.turnNumber
     }
 
     // Parts in context AFTER this turn's compaction (included or round-only).
@@ -161,7 +161,7 @@ function assertTurnContextTokenConsistency(turns: TurnRecord[], parts: PartRecor
     // contextTokensAtTurnEnd must equal the pre-compaction sum.
     expect(
       turn.contextTokensAtTurnEnd,
-      `Turn ${turn.sequenceNumber} contextTokensAtTurnEnd mismatch: ` +
+      `Turn ${turn.turnNumber} contextTokensAtTurnEnd mismatch: ` +
       `stored=${turn.contextTokensAtTurnEnd}, ` +
       `computed(post=${postCompactionSum} + stripped=${strippedSum})=${preCompactionSum}`,
     ).toBe(preCompactionSum)
@@ -170,7 +170,7 @@ function assertTurnContextTokenConsistency(turns: TurnRecord[], parts: PartRecor
     if (turn.contextTokensAfterCompaction !== null) {
       expect(
         turn.contextTokensAfterCompaction,
-        `Turn ${turn.sequenceNumber} contextTokensAfterCompaction mismatch: ` +
+        `Turn ${turn.turnNumber} contextTokensAfterCompaction mismatch: ` +
         `stored=${turn.contextTokensAfterCompaction}, computed=${postCompactionSum}`,
       ).toBe(postCompactionSum)
     }
@@ -186,7 +186,7 @@ function assertTurnContextTokenConsistency(turns: TurnRecord[], parts: PartRecor
 function assertMonotonicContextGrowth(turns: TurnRecord[]): void {
   const completed = [...turns]
     .filter(t => t.status === 'complete' && t.contextTokensAtTurnEnd !== null)
-    .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+    .sort((a, b) => a.turnNumber - b.turnNumber)
 
   for (let i = 0; i < completed.length - 1; i++) {
     const current = completed[i]!
@@ -195,9 +195,9 @@ function assertMonotonicContextGrowth(turns: TurnRecord[]): void {
 
     expect(
       next.contextTokensAtTurnEnd!,
-      `Context shrank between turn ${current.sequenceNumber} and ${next.sequenceNumber}: ` +
-      `afterCompaction[${current.sequenceNumber}]=${afterCompaction}, ` +
-      `atTurnEnd[${next.sequenceNumber}]=${next.contextTokensAtTurnEnd}`,
+      `Context shrank between turn ${current.turnNumber} and ${next.turnNumber}: ` +
+      `afterCompaction[${current.turnNumber}]=${afterCompaction}, ` +
+      `atTurnEnd[${next.turnNumber}]=${next.contextTokensAtTurnEnd}`,
     ).toBeGreaterThanOrEqual(afterCompaction)
   }
 }
@@ -617,7 +617,7 @@ describe('token count sanity', () => {
 
   it('stripped reasoning parts account for the compaction token reduction', async () => {
     const trace = await captureModelOnlyTrace(['Say OK.'])
-    const [turn] = trace.turns.sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+    const [turn] = trace.turns.sort((a, b) => a.turnNumber - b.turnNumber)
     if (!turn || turn.contextTokensAtTurnEnd === null) return
 
     const strippedByThisTurn = trace.parts.filter(
@@ -648,7 +648,7 @@ describe('token count sanity — tool-enabled multi-round scenario', () => {
 
   it('reasoning from both rounds of the tool turn is stripped by a single compaction', async () => {
     const trace = await captureToolEnabledTrace()
-    const sortedTurns = [...trace.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+    const sortedTurns = [...trace.turns].sort((a, b) => a.turnNumber - b.turnNumber)
     const turn1 = sortedTurns[0]!
 
     const reasoningStrippedByTurn1 = trace.parts.filter(
@@ -666,7 +666,7 @@ describe('token count sanity — tool-enabled multi-round scenario', () => {
 
   it('tool-call and tool-result parts are included in contextTokensAtTurnEnd', async () => {
     const trace = await captureToolEnabledTrace()
-    const sortedTurns = [...trace.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+    const sortedTurns = [...trace.turns].sort((a, b) => a.turnNumber - b.turnNumber)
     const turn1 = sortedTurns[0]!
 
     // Tool-call and tool-result parts are always 'included' (never stripped by reasoning compaction).

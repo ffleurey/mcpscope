@@ -107,7 +107,7 @@ export const listOperation = {
       api_version: 1,
       sessions: rows.map(s => {
         const workflowKind = s.sessionType === 'session_analysis'
-          ? getAnalysisWorkflowKindFromSteps(listStepRecordsBySession(ctx.db.connection, s.id))
+          ? getAnalysisWorkflowKindFromSteps(listStepRecordsBySession(ctx.db.connection, s.id), ctx.db.connection, s.id)
           : null
         const latestError = toLifecycleState(ctx, s) === 'error' && s.sessionType === 'session_analysis'
           ? getLatestAnalysisDiagnosticSummaryForSession(ctx.db.connection, s.id) ?? undefined

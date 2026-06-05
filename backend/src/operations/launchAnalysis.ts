@@ -14,6 +14,7 @@ import {
   getTurnRecord,
   listLmConnections,
   listModelConfigs,
+  updateSessionAnalysisState,
 } from '../persistence/repository.js'
 import {
   createSession,
@@ -23,13 +24,11 @@ import {
 } from '../runtime/modelTurns.js'
 import { sessionRecordSchema, type McpProfileSnapshot, type ModelProfileSnapshot, type SessionRecord } from '../domain/model.js'
 import type { OperationContext } from './context.js'
-import { AnalysisSession } from '../analysis/analysisSession.js'
-import { FastToolAnalysisSession } from '../analysis/fastToolAnalysisSession.js'
 import { buildAnalysisSystemPrompt, normalizeAnalysisGoal } from '../analysis/systemPrompt.js'
 import { runSessionInitialization } from '../runtime/sessionInit.js'
 import { ANALYSIS_WORKFLOW_KIND } from '../analysis/workflowKinds.js'
-import { FastSessionAnalysisSession } from '../analysis/fastSessionAnalysisSession.js'
 import { getAnalysisTitlePrefix } from '../analysis/analysisSessionPresentation.js'
+import type { AnalysisSessionState } from '../analysis/schemas.js'
 
 // ─── Input schema ─────────────────────────────────────────────────────────────
 
@@ -216,9 +215,19 @@ export async function executeAnalysisLaunch(
         parentId: targetSessionId,
       })
 
-      // Pre-create the cursor step so the execute endpoint can always use rehydrateFromDb.
-      // This persists targetTurnId and analysisGoal into the cursor step params.
-      const analysisInput = {
+      const wk = workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_SESSION
+        ? ANALYSIS_WORKFLOW_KIND.FAST_SESSION
+        : workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_TOOL
+          ? ANALYSIS_WORKFLOW_KIND.FAST_TOOL
+          : ANALYSIS_WORKFLOW_KIND.FULL_SESSION
+      const initialAnalysisState: AnalysisSessionState = {
+        phase: 'bootstrap',
+        bootstrapComplete: false,
+        nextPacketIndex: 0,
+        packetCount: 0,
+        currentTurnId: null,
+        coverageValidated: false,
+        finalAggregationComplete: false,
         analysisSessionId: session.id,
         targetSessionId,
         targetTurnId: input.target_turn_id,
@@ -226,13 +235,9 @@ export async function executeAnalysisLaunch(
         selectedToolNames,
         onlyFailedToolCalls,
         evaluationCriteria,
+        workflow_kind: wk,
       }
-      const analysisInstance = workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_SESSION
-        ? new FastSessionAnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, analysisInput)
-        : workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_TOOL
-          ? new FastToolAnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, analysisInput)
-        : new AnalysisSession(db, ctx.lmStudioGateway, ctx.mcpGateway, analysisInput)
-      analysisInstance.initializeCursorStep()
+      updateSessionAnalysisState(db.connection, session.id, initialAnalysisState as unknown as Record<string, unknown>)
 
       // Leave initStatus as 'pending' — runSessionInitialization (called below, outside
       // the transaction) will initialize the MCP context (writing mcp-instructions +

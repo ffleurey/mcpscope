@@ -105,15 +105,16 @@ export function importTraceBundle(
   ) ?? createUuid()
   const normalizedAt = Date.now()
 
-  const sortedSourceTurns = [...trace.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
-  const turnIdBySource = new Map(sortedSourceTurns.map(turn => [turn.id, formatTurnId(sessionId, turn.sequenceNumber, turn.ownerStepId)]))
+  const sortedSourceTurns = [...trace.turns].sort((a, b) => a.turnNumber - b.turnNumber)
+  const turnIdBySource = new Map(sortedSourceTurns.map(turn => [turn.id, formatTurnId(sessionId, turn.turnNumber, turn.ownerStepId)]))
   const sourceSteps = trace.steps.length > 0
-    ? [...trace.steps].sort((a, b) => a.ordinal - b.ordinal)
+    ? [...trace.steps].sort((a, b) => a.childIndex - b.childIndex)
     : sortedSourceTurns.map<StepRecord>(turn => ({
       id: turn.id,
       sessionId: turn.sessionId,
       stepTypeKey: 'turn',
-      ordinal: turn.sequenceNumber - 1,
+      parentStepId: null,
+      childIndex: turn.turnNumber - 1,
       status: turn.status,
       params: {},
       state: {},
@@ -126,7 +127,7 @@ export function importTraceBundle(
   const compactionStepNumberBySource = new Map<string, number>()
   for (const step of sourceSteps) {
     if (step.stepTypeKey === 'turn') {
-      stepIdBySource.set(step.id, turnIdBySource.get(step.id) ?? formatTurnId(sessionId, step.ordinal + 1))
+      stepIdBySource.set(step.id, turnIdBySource.get(step.id) ?? formatTurnId(sessionId, step.childIndex + 1))
       continue
     }
 
@@ -136,7 +137,7 @@ export function importTraceBundle(
         ? step.params.sourceTurnSequenceNumber
         : parsed?.type === 'step' && parsed.stepNumber != null
           ? parsed.stepNumber
-          : step.ordinal + 1
+          : step.childIndex + 1
       compactionStepNumberBySource.set(step.id, stepNumber)
       stepIdBySource.set(step.id, formatCompactionStepId(sessionId, stepNumber))
       continue
@@ -146,7 +147,7 @@ export function importTraceBundle(
   }
   const roundIdBySource = new Map(trace.rounds.map(round => {
     const mappedTurn = trace.turns.find(turn => turn.id === round.turnId)
-    const turnSequence = mappedTurn?.sequenceNumber ?? 0
+    const turnSequence = mappedTurn?.turnNumber ?? 0
     return [round.id, formatRoundId(sessionId, turnSequence, round.roundIndex + 1, mappedTurn?.ownerStepId ?? null)] as const
   }))
 
@@ -167,7 +168,7 @@ export function importTraceBundle(
     const mappedRoundId = roundIdBySource.get(sourceRoundId)
     const mappedTurnId = trace.rounds.find(round => round.id === sourceRoundId)?.turnId ?? null
     const mappedTurn = trace.turns.find(turn => turn.id === mappedTurnId) ?? null
-    const turnSequence = mappedTurn?.sequenceNumber ?? 0
+    const turnSequence = mappedTurn?.turnNumber ?? 0
     const roundIndex = trace.rounds.find(round => round.id === sourceRoundId)?.roundIndex ?? 0
     if (!mappedRoundId) continue
     parts
@@ -187,7 +188,7 @@ export function importTraceBundle(
   for (const [sourceStepId, parts] of stepPartsBySource.entries()) {
     const sourceStep = sourceStepById.get(sourceStepId)
     if (!sourceStep || sourceStep.stepTypeKey !== 'compaction') continue
-    const stepNumber = compactionStepNumberBySource.get(sourceStepId) ?? sourceStep.ordinal + 1
+    const stepNumber = compactionStepNumberBySource.get(sourceStepId) ?? sourceStep.childIndex + 1
     parts
       .sort((a, b) => a.ordinal - b.ordinal)
       .forEach((part, index) => {
@@ -202,7 +203,7 @@ export function importTraceBundle(
 
   const turns: TurnRecord[] = trace.turns.map(turn => normalizeImportedTurn({
     ...turn,
-    id: turnIdBySource.get(turn.id) ?? formatTurnId(sessionId, turn.sequenceNumber, turn.ownerStepId),
+    id: turnIdBySource.get(turn.id) ?? formatTurnId(sessionId, turn.turnNumber, turn.ownerStepId),
     sessionId,
   }, normalizedAt))
   const turnsBySource = new Map(trace.turns.map((turn, index) => [turn.id, turns[index]!]))

@@ -16,7 +16,6 @@
 
 import type Database from 'better-sqlite3'
 import type {
-  ContainerPersistenceRecord,
   ContainerRef,
   SessionPersistenceRecord,
   StepPersistenceRecord,
@@ -33,119 +32,6 @@ function parseJson<T>(value: string | null): T {
 
 function stringifyJson(value: unknown): string {
   return JSON.stringify(value ?? {})
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Container repository  (session_containers table)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function insertContainerRecord(
-  connection: Database.Database,
-  record: ContainerPersistenceRecord,
-): void {
-  connection.prepare(`
-    INSERT INTO session_containers (
-      id, container_type_key, title, params_json, state_json, created_at, updated_at
-    ) VALUES (
-      @id, @containerTypeKey, @title, @paramsJson, @stateJson, @createdAt, @updatedAt
-    )
-  `).run({
-    id: record.id,
-    containerTypeKey: record.containerTypeKey,
-    title: record.title,
-    paramsJson: stringifyJson(record.params),
-    stateJson: stringifyJson(record.state),
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  })
-}
-
-export function getContainerRecord(
-  connection: Database.Database,
-  id: string,
-): ContainerPersistenceRecord | null {
-  const row = connection.prepare(`
-    SELECT * FROM session_containers WHERE id = ?
-  `).get(id) as {
-    id: string
-    container_type_key: string
-    title: string
-    params_json: string
-    state_json: string
-    created_at: number
-    updated_at: number
-  } | undefined
-
-  if (!row) return null
-
-  return {
-    id: row.id,
-    containerTypeKey: row.container_type_key as ContainerPersistenceRecord['containerTypeKey'],
-    title: row.title,
-    params: parseJson(row.params_json),
-    state: parseJson(row.state_json),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }
-}
-
-export function updateContainerRecord(
-  connection: Database.Database,
-  record: ContainerPersistenceRecord,
-): void {
-  connection.prepare(`
-    UPDATE session_containers
-    SET container_type_key = @containerTypeKey,
-        title = @title,
-        params_json = @paramsJson,
-        state_json = @stateJson,
-        updated_at = @updatedAt
-    WHERE id = @id
-  `).run({
-    id: record.id,
-    containerTypeKey: record.containerTypeKey,
-    title: record.title,
-    paramsJson: stringifyJson(record.params),
-    stateJson: stringifyJson(record.state),
-    updatedAt: record.updatedAt,
-  })
-}
-
-export function deleteContainerRecord(
-  connection: Database.Database,
-  id: string,
-): boolean {
-  const result = connection.prepare(`
-    DELETE FROM session_containers WHERE id = ?
-  `).run(id)
-  return result.changes > 0
-}
-
-export function listContainerRecords(
-  connection: Database.Database,
-): ContainerPersistenceRecord[] {
-  const rows = connection.prepare(`
-    SELECT * FROM session_containers
-    ORDER BY created_at DESC
-  `).all() as Array<{
-    id: string
-    container_type_key: string
-    title: string
-    params_json: string
-    state_json: string
-    created_at: number
-    updated_at: number
-  }>
-
-  return rows.map(row => ({
-    id: row.id,
-    containerTypeKey: row.container_type_key as ContainerPersistenceRecord['containerTypeKey'],
-    title: row.title,
-    params: parseJson(row.params_json),
-    state: parseJson(row.state_json),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -347,17 +233,18 @@ export function insertStepRecord(
 ): void {
   connection.prepare(`
     INSERT INTO v2_steps (
-      id, session_id, step_type_key, ordinal, status,
+      id, session_id, step_type_key, parent_step_id, child_index, status,
       params_json, state_json, created_at, completed_at
     ) VALUES (
-      @id, @sessionId, @stepTypeKey, @ordinal, @status,
+      @id, @sessionId, @stepTypeKey, @parentStepId, @childIndex, @status,
       @paramsJson, @stateJson, @createdAt, @completedAt
     )
   `).run({
     id: record.id,
     sessionId: record.sessionId,
     stepTypeKey: record.stepTypeKey,
-    ordinal: record.ordinal,
+    parentStepId: record.parentStepId,
+    childIndex: record.childIndex,
     status: record.status,
     paramsJson: stringifyJson(record.params),
     stateJson: stringifyJson(record.state),
@@ -376,7 +263,8 @@ export function getStepRecord(
     id: string
     session_id: string
     step_type_key: string
-    ordinal: number
+    parent_step_id: string | null
+    child_index: number
     status: string
     params_json: string
     state_json: string
@@ -416,12 +304,13 @@ export function listStepRecordsBySession(
   const rows = connection.prepare(`
     SELECT * FROM v2_steps
     WHERE session_id = ?
-    ORDER BY ordinal ASC
+    ORDER BY child_index ASC
   `).all(sessionId) as Array<{
     id: string
     session_id: string
     step_type_key: string
-    ordinal: number
+    parent_step_id: string | null
+    child_index: number
     status: string
     params_json: string
     state_json: string
@@ -432,36 +321,39 @@ export function listStepRecordsBySession(
   return rows.map(mapStepRow)
 }
 
-export function getNextStepOrdinal(
+export function getNextStepDisplayNumber(
   connection: Database.Database,
   sessionId: string,
 ): number {
   const row = connection.prepare(`
-    SELECT COALESCE(MAX(ordinal), -1) AS max_ordinal
-    FROM v2_steps
-    WHERE session_id = ?
-  `).get(sessionId) as { max_ordinal: number }
-  return row.max_ordinal + 1
+    SELECT COUNT(*) AS cnt
+    FROM v2_steps s
+    LEFT JOIN v2_turns t ON t.id = s.id
+    WHERE s.session_id = ?
+      AND s.step_type_key != 'compaction'
+      AND (t.id IS NULL OR t.owner_step_id IS NULL)
+  `).get(sessionId) as { cnt: number }
+  return row.cnt
 }
 
-export function getNextWorkflowStepOrdinal(
+export function getNextChildIndex(
   connection: Database.Database,
   sessionId: string,
 ): number {
   const row = connection.prepare(`
-    SELECT COALESCE(MAX(ordinal), 0) AS max_ordinal
+    SELECT COALESCE(MAX(child_index), 0) AS max_child_index
     FROM v2_steps
     WHERE session_id = ?
-      AND step_type_key NOT IN ('turn', 'compaction', 'analysis_v2_cursor')
-  `).get(sessionId) as { max_ordinal: number }
-  return row.max_ordinal + 1
+  `).get(sessionId) as { max_child_index: number }
+  return row.max_child_index + 1
 }
 
 function mapStepRow(row: {
   id: string
   session_id: string
   step_type_key: string
-  ordinal: number
+  parent_step_id: string | null
+  child_index: number
   status: string
   params_json: string
   state_json: string
@@ -472,7 +364,8 @@ function mapStepRow(row: {
     id: row.id,
     sessionId: row.session_id,
     stepTypeKey: row.step_type_key as StepPersistenceRecord['stepTypeKey'],
-    ordinal: row.ordinal,
+    parentStepId: row.parent_step_id,
+    childIndex: row.child_index,
     status: row.status,
     params: parseJson(row.params_json),
     state: parseJson(row.state_json),

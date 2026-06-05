@@ -1,0 +1,10 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "mcp": {
+    "mcpserver": {
+      "type": "remote",
+      "url": "http://localhost:3030/mcp",
+      "enabled": true
+    }
+  }
+}

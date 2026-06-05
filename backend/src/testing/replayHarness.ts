@@ -179,7 +179,7 @@ function normalizedSession(session: SessionRecord) {
 }
 
 function normalizeTraceBundle(trace: SessionTraceBundle) {
-  const turnRefById = new Map(trace.turns.map(turn => [turn.id, `turn-${turn.sequenceNumber}`]))
+  const turnRefById = new Map(trace.turns.map(turn => [turn.id, `turn-${turn.turnNumber}`]))
   const roundRefById = new Map(
     trace.rounds.map(round => [round.id, `${turnRefById.get(round.turnId) ?? 'turn-unknown'}-round-${round.roundIndex}`]),
   )
@@ -188,7 +188,7 @@ function normalizeTraceBundle(trace: SessionTraceBundle) {
   return {
     session: normalizedSession(trace.session),
     turns: trace.turns.map(turn => ({
-      sequenceNumber: turn.sequenceNumber,
+      turnNumber: turn.turnNumber,
       status: turn.status,
       outcome: turn.outcome,
       usage: turn.usage,
@@ -520,13 +520,13 @@ export async function replayTrace(trace: SessionTraceBundle): Promise<ReplayResu
     const sessionId = createSessionResponse.json().session.id as string
     const userTurns = trace.turns
       .slice()
-      .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+      .sort((a, b) => a.turnNumber - b.turnNumber)
       .map(turn => {
         const userPart = trace.parts
           .filter(part => part.turnId === turn.id && part.partType === 'user-message')
           .sort((a, b) => a.ordinal - b.ordinal)[0]
         if (!userPart?.payload.text) {
-          throw new Error(`Trace turn ${turn.sequenceNumber} is missing its user-message payload`)
+          throw new Error(`Trace turn ${turn.turnNumber} is missing its user-message payload`)
         }
         return userPart.payload.text
       })

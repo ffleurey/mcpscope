@@ -122,21 +122,21 @@ describe('backend foundation', () => {
     const body = response.json()
     expect(body).toMatchObject({
       version: 2,
-      entities: ['session-container', 'session', 'step', 'turn', 'round', 'part', 'raw-exchange', 'benchmark'],
+      entities: ['session', 'step', 'turn', 'round', 'part', 'raw-exchange'],
     })
     expect(body.schema.tables).toEqual(
       expect.arrayContaining([
         // Shared config/default tables
         'session_creation_defaults',
         // Canonical execution-model tables
-        'session_containers', 'v2_sessions', 'v2_steps', 'v2_turns',
+        'v2_sessions', 'v2_steps', 'v2_turns',
         'v2_rounds', 'v2_parts', 'v2_raw_exchanges', 'artifacts',
       ])
     )
     expect(body.schema.meta).toMatchObject({
       domain_model_version: '2',
       sqlite_schema_version: '8',
-      new_schema_version: '1',
+      new_schema_version: '2',
     })
   })
 
@@ -390,7 +390,7 @@ describe('backend foundation', () => {
           id: capturedReasoningThreeBatchRounds[0]!.turnId,
           sessionId: capturedReasoningThreeBatchSession.id,
           ownerStepId: null,
-          sequenceNumber: 1,
+          turnNumber: 1,
           status: 'complete',
           createdAt: 1,
           completedAt: 8,
@@ -455,7 +455,7 @@ describe('backend foundation', () => {
           id: 'captured-reasoning-turn',
           sessionId: capturedReasoningThreeBatchSession.id,
           ownerStepId: null,
-          sequenceNumber: 1,
+          turnNumber: 1,
           status: 'streaming',
           createdAt: 1,
           completedAt: null,
@@ -545,7 +545,8 @@ describe('backend foundation', () => {
           id: sourceTurnId,
           sessionId: sourceSessionId,
           stepTypeKey: 'turn',
-          ordinal: 0,
+          parentStepId: null,
+          childIndex: 0,
           status: 'complete',
           params: {},
           state: {},
@@ -556,7 +557,8 @@ describe('backend foundation', () => {
           id: sourceStepId,
           sessionId: sourceSessionId,
           stepTypeKey: 'compaction',
-          ordinal: 1,
+          parentStepId: null,
+          childIndex: 1,
           status: 'complete',
           params: {
             strategy: 'strip-reasoning',
@@ -579,7 +581,7 @@ describe('backend foundation', () => {
           id: sourceTurnId,
           sessionId: sourceSessionId,
           ownerStepId: null,
-          sequenceNumber: 1,
+          turnNumber: 1,
           status: 'complete',
           createdAt: 1,
           completedAt: 2,
@@ -693,8 +695,8 @@ describe('backend foundation', () => {
     expect(traceResponse.statusCode).toBe(200)
     expect(traceResponse.json()).toMatchObject({
       steps: expect.arrayContaining([
-        expect.objectContaining({ id: `${importedSessionId}.1T`, stepTypeKey: 'turn', ordinal: 0 }),
-        expect.objectContaining({ id: `${importedSessionId}.C1`, stepTypeKey: 'compaction', ordinal: 1 }),
+        expect.objectContaining({ id: `${importedSessionId}.1T`, stepTypeKey: 'turn', childIndex: 0 }),
+        expect.objectContaining({ id: `${importedSessionId}.C1`, stepTypeKey: 'compaction', childIndex: 1 }),
       ]),
     })
     expect(traceResponse.json().parts.some((part: { id: string }) => part.id === `${importedSessionId}.C1.1-DN`)).toBe(false)
@@ -705,8 +707,10 @@ describe('backend foundation', () => {
       id: importedSessionId,
       type: 'session',
       data: {
-        steps: expect.arrayContaining([
+        turns: expect.arrayContaining([
           expect.objectContaining({ id: `${importedSessionId}.1T`, type: 'turn' }),
+        ]),
+        steps: expect.arrayContaining([
           expect.objectContaining({
             id: `${importedSessionId}.C1`,
             type: 'compaction',
@@ -789,7 +793,7 @@ describe('backend foundation', () => {
     })
       expect(traceResponse.statusCode).toBe(200)
       const traceBody = traceResponse.json()
-      const turns = [...traceBody.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+      const turns = [...traceBody.turns].sort((a, b) => a.turnNumber - b.turnNumber)
       const firstTurnId = turns[0].id as string
       const secondTurnId = turns[1].id as string
       const targetTurnId = turns[2]?.id as string
@@ -2881,7 +2885,7 @@ describe('CLI session lifecycle endpoints', () => {
         id: `${sessionId}.1`,
         sessionId,
         ownerStepId: null,
-        sequenceNumber: 1,
+        turnNumber: 1,
         status: 'streaming',
         outcome: null,
         usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -3371,7 +3375,7 @@ describe('analysis launch', () => {
       id: turnId,
       sessionId,
       ownerStepId: null,
-      sequenceNumber: 1,
+      turnNumber: 1,
       status: 'complete',
       outcome: 'model-response',
       usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -3502,7 +3506,7 @@ describe('analysis launch', () => {
       id: turnId,
       sessionId,
       ownerStepId: null,
-      sequenceNumber: 1,
+      turnNumber: 1,
       status: 'complete',
       outcome: 'model-response',
       usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -3757,9 +3761,9 @@ describe('analysis launch', () => {
     expect(stored?.modelProfileSnapshot.systemPrompt).toContain('You are an evaluation agent.')
     expect(stored?.modelProfileSnapshot.temperature).toBe(0.5)
 
-    const steps = listStepRecordsBySession(app.backendDb.connection, body.session.id)
-    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    expect(cursorStep?.params.analysisGoal).toBe('Evaluate this session carefully.')
+    const storedSession = getSessionRecord(app.backendDb.connection, body.session.id)
+    const analysisState = storedSession?.analysisState as { analysisGoal?: string } | undefined
+    expect(analysisState?.analysisGoal).toBe('Evaluate this session carefully.')
   })
 
   it('POST /api/session-constructors/session-analysis launches an analysis child session', async () => {
@@ -3943,9 +3947,9 @@ describe('analysis launch', () => {
       'Evaluate whether the target session used tools appropriately and answered the user request correctly.',
     )
 
-    const steps = listStepRecordsBySession(appInst.backendDb.connection, sessionId)
-    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    expect(cursorStep?.params.analysisGoal).toBe(
+    const storedSession = getSessionRecord(appInst.backendDb.connection, sessionId)
+    const analysisState = storedSession?.analysisState as { analysisGoal?: string } | undefined
+    expect(analysisState?.analysisGoal).toBe(
       'Evaluate whether the target session used tools appropriately and answered the user request correctly.',
     )
   })
@@ -4002,7 +4006,7 @@ describe('analysis launch', () => {
       id: `${blockerId}.1`,
       sessionId: blockerId,
       ownerStepId: null,
-      sequenceNumber: 1,
+      turnNumber: 1,
       status: 'streaming',
       outcome: null,
       usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -4111,7 +4115,7 @@ describe('analysis launch', () => {
       id: turnId,
       sessionId: targetId,
       ownerStepId: null,
-      sequenceNumber: 1,
+      turnNumber: 1,
       status: 'streaming',
       outcome: null,
       usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -4302,7 +4306,7 @@ describe('analysis launch', () => {
     // Evidence is loaded through deterministic inspect turns (user prompt + tool-call +
     // tool-result parts committed as proper turns, not synthetic inject parts).
     const deterministicTurns = app.backendDb.connection
-      .prepare(`SELECT v2_steps.id, v2_turns.outcome FROM v2_turns JOIN v2_steps ON v2_steps.id = v2_turns.step_id WHERE v2_steps.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call'`)
+      .prepare(`SELECT id, outcome FROM v2_turns WHERE session_id = ? AND outcome = 'deterministic-tool-call'`)
       .all(childId) as Array<{ id: string; outcome: string }>
     expect(deterministicTurns).toHaveLength(2)
 
@@ -4314,17 +4318,17 @@ describe('analysis launch', () => {
     ])
 
     const deterministicRounds = app.backendDb.connection
-      .prepare(`SELECT v2_turns.sequence_number AS turn_number, v2_rounds.round_index AS round_index FROM v2_rounds JOIN v2_turns ON v2_turns.step_id = v2_rounds.step_id JOIN v2_steps ON v2_steps.id = v2_turns.step_id WHERE v2_steps.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call' ORDER BY v2_turns.sequence_number, v2_rounds.round_index`)
+      .prepare(`SELECT v2_turns.turn_number, v2_rounds.round_index FROM v2_rounds JOIN v2_turns ON v2_turns.id = v2_rounds.turn_id WHERE v2_turns.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call' ORDER BY v2_turns.turn_number, v2_rounds.round_index`)
       .all(childId) as Array<{ turn_number: number; round_index: number }>
     expect(deterministicRounds).toEqual([
       { turn_number: 1, round_index: 0 },
-      { turn_number: 2, round_index: 0 },
-      { turn_number: 2, round_index: 1 },
-      { turn_number: 2, round_index: 2 },
+      { turn_number: 1, round_index: 0 },
+      { turn_number: 1, round_index: 1 },
+      { turn_number: 1, round_index: 2 },
     ])
 
     const deterministicParts = app.backendDb.connection
-      .prepare(`SELECT token_count FROM v2_parts WHERE session_id = ? AND step_id IN (SELECT step_id FROM v2_turns WHERE session_id = ? AND outcome = 'deterministic-tool-call')`)
+      .prepare(`SELECT token_count FROM v2_parts WHERE session_id = ? AND turn_id IN (SELECT id FROM v2_turns WHERE session_id = ? AND outcome = 'deterministic-tool-call')`)
       .all(childId, childId) as Array<{ token_count: number | null }>
     expect(deterministicParts.length).toBeGreaterThan(0)
     expect(deterministicParts.every(part => part.token_count !== null)).toBe(true)
@@ -4339,7 +4343,7 @@ describe('analysis launch', () => {
     // Packet-local deterministic evidence should be excluded after the corresponding
     // assessment completes so it does not accumulate in active context.
     const lingeringPacketInspectParts = app.backendDb.connection
-      .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND step_id = ? AND context_state = 'included'`)
+      .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND turn_id = ? AND context_state = 'included'`)
       .all(childId, deterministicTurns[1]?.id) as Array<{ id: string }>
     expect(lingeringPacketInspectParts).toHaveLength(0)
 
@@ -4580,9 +4584,9 @@ describe('analysis launch', () => {
     expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
     expect(schemaKeys).not.toContain('analysis.fast_session_final_analysis_report.v1')
 
-    const steps = listStepRecordsBySession(app.backendDb.connection, childId)
-    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    expect((cursorStep?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+    const sessionRec = getSessionRecord(app.backendDb.connection, childId)!
+    const phase = (sessionRec.analysisState as { phase?: string } | null)?.phase
+    expect(phase).not.toBe('complete')
   })
 
   it('v2 fast tool flow with tool calls: produces grouped tool assessment and fast tool final report artifacts', async () => {
@@ -4806,9 +4810,9 @@ describe('analysis launch', () => {
     expect(schemaKeys).toContain('analysis.fast_tool_group_assessment.v1')
     expect(schemaKeys).not.toContain('analysis.fast_tool_final_report.v1')
 
-    const steps = listStepRecordsBySession(app.backendDb.connection, childId)
-    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    expect((cursorStep?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+    const sessionRec = getSessionRecord(app.backendDb.connection, childId)!
+    const phase = (sessionRec.analysisState as { phase?: string } | null)?.phase
+    expect(phase).not.toBe('complete')
   })
 
   it('analysis execute rejects an assessment response whose identity does not match the expected packet', async () => {
@@ -5032,10 +5036,10 @@ describe('analysis launch', () => {
     expect(execRes.headers['content-type']).toContain('text/event-stream')
 
     const steps = listStepRecordsBySession(app.backendDb.connection, childId)
-    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    const executedSteps = steps.filter(step => step.stepTypeKey !== 'analysis_v2_cursor')
-  expect(executedSteps.length).toBeGreaterThan(0)
-  expect((cursorStep?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+    const sessionRec = getSessionRecord(app.backendDb.connection, childId)!
+    const phase = (sessionRec.analysisState as { phase?: string } | null)?.phase
+    expect(phase).not.toBe('complete')
+    expect(steps.length).toBeGreaterThan(0)
 
     const artifacts = app.backendDb.connection
       .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)
@@ -5181,9 +5185,9 @@ describe('analysis launch', () => {
     expect(schemaKeysAfterPause).not.toContain('analysis.turn_summary.v1')
     expect(schemaKeysAfterPause).not.toContain('analysis.final_analysis_report.v1')
 
-    const stepsAfterPause = listStepRecordsBySession(app.backendDb.connection, childId)
-    const cursorStepAfterPause = stepsAfterPause.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    expect((cursorStepAfterPause?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+    const sessionRec = getSessionRecord(app.backendDb.connection, childId)!
+    const phase = (sessionRec.analysisState as { phase?: string } | null)?.phase
+    expect(phase).not.toBe('complete')
 
     const resumeRes = await app.inject({
       method: 'POST',

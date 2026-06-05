@@ -191,7 +191,8 @@ export const stepRecordSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
   stepTypeKey: z.string(),
-  ordinal: z.number().int().nonnegative(),
+  parentStepId: z.string().nullable(),
+  childIndex: z.number().int().nonnegative(),
   status: z.string(),
   params: z.record(z.string(), z.unknown()),
   state: z.record(z.string(), z.unknown()),
@@ -203,7 +204,7 @@ export const turnRecordSchema = z.object({
   id: z.string(),
   sessionId: z.string(),
   ownerStepId: z.string().nullable(),
-  sequenceNumber: z.number().int().nonnegative(),
+  turnNumber: z.number().int().nonnegative(),
   status: turnStatusSchema,
   createdAt: z.number().int().nonnegative(),
   completedAt: z.number().int().nonnegative().nullable(),
@@ -274,7 +275,6 @@ export const traceArtifactSchema = z.object({
 export const workflowStepTraceSchema = z.object({
   step: stepRecordSchema,
   ownedTurns: z.array(turnRecordSchema).default([]),
-  turns: z.array(turnRecordSchema).default([]),
   postambleSteps: z.array(stepRecordSchema).default([]),
   artifacts: z.array(traceArtifactSchema).default([]),
 })

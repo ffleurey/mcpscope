@@ -88,6 +88,8 @@ export interface AnalysisSessionState {
   onlyFailedToolCalls: boolean
   /** Optional extra evaluation criteria supplied by the user. */
   evaluationCriteria: string[]
+  /** The analysis workflow kind, used for rehydration. */
+  workflow_kind?: string
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

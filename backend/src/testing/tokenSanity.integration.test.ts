@@ -76,15 +76,15 @@ function assertPartTokenSanity(parts: PartRecord[]): void {
 }
 
 function assertTurnContextTokenConsistency(turns: TurnRecord[], parts: PartRecord[]): void {
-  const seqByTurnId = new Map(turns.map(t => [t.id, t.sequenceNumber]))
+  const seqByTurnId = new Map(turns.map(t => [t.id, t.turnNumber]))
 
-  for (const turn of [...turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)) {
+  for (const turn of [...turns].sort((a, b) => a.turnNumber - b.turnNumber)) {
     if (turn.status !== 'complete' || turn.contextTokensAtTurnEnd === null) continue
 
     const existedAtTurnN = (p: PartRecord) => {
       if (p.turnId === null) return true
       const seq = seqByTurnId.get(p.turnId)
-      return seq !== undefined && seq <= turn.sequenceNumber
+      return seq !== undefined && seq <= turn.turnNumber
     }
 
     const postCompactionParts = parts.filter(
@@ -98,14 +98,14 @@ function assertTurnContextTokenConsistency(turns: TurnRecord[], parts: PartRecor
 
     expect(
       turn.contextTokensAtTurnEnd,
-      `Turn ${turn.sequenceNumber} contextTokensAtTurnEnd: stored=${turn.contextTokensAtTurnEnd}, ` +
+      `Turn ${turn.turnNumber} contextTokensAtTurnEnd: stored=${turn.contextTokensAtTurnEnd}, ` +
       `computed(post=${postSum}+stripped=${strippedSum})=${preSum}`,
     ).toBe(preSum)
 
     if (turn.contextTokensAfterCompaction !== null) {
       expect(
         turn.contextTokensAfterCompaction,
-        `Turn ${turn.sequenceNumber} contextTokensAfterCompaction: stored=${turn.contextTokensAfterCompaction}, computed=${postSum}`,
+        `Turn ${turn.turnNumber} contextTokensAfterCompaction: stored=${turn.contextTokensAfterCompaction}, computed=${postSum}`,
       ).toBe(postSum)
     }
   }
@@ -114,7 +114,7 @@ function assertTurnContextTokenConsistency(turns: TurnRecord[], parts: PartRecor
 function assertMonotonicContextGrowth(turns: TurnRecord[]): void {
   const completed = [...turns]
     .filter(t => t.status === 'complete' && t.contextTokensAtTurnEnd !== null)
-    .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+    .sort((a, b) => a.turnNumber - b.turnNumber)
 
   for (let i = 0; i < completed.length - 1; i++) {
     const cur = completed[i]!
@@ -122,8 +122,8 @@ function assertMonotonicContextGrowth(turns: TurnRecord[]): void {
     const afterCompaction = cur.contextTokensAfterCompaction ?? cur.contextTokensAtTurnEnd!
     expect(
       next.contextTokensAtTurnEnd!,
-      `Context shrank: afterCompaction[turn ${cur.sequenceNumber}]=${afterCompaction}, ` +
-      `atTurnEnd[turn ${next.sequenceNumber}]=${next.contextTokensAtTurnEnd}`,
+      `Context shrank: afterCompaction[turn ${cur.turnNumber}]=${afterCompaction}, ` +
+      `atTurnEnd[turn ${next.turnNumber}]=${next.contextTokensAtTurnEnd}`,
     ).toBeGreaterThanOrEqual(afterCompaction)
   }
 }
@@ -225,7 +225,7 @@ describe('token count sanity — live LM Studio integration', () => {
     assertMonotonicContextGrowth(trace.turns)
 
     // Reasoning parts from turn 1 must be stripped; turn 2 context must not include them.
-    const [turn1] = [...trace.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+    const [turn1] = [...trace.turns].sort((a, b) => a.turnNumber - b.turnNumber)
     if (turn1) {
       const stripped = trace.parts.filter(p => p.context.strippedByCompactionAtTurnId === turn1.id)
       expect(stripped.every(p => p.partType === 'assistant-reasoning')).toBe(true)

@@ -715,7 +715,6 @@ export function applyAnalysisStreamEvent(
     // Upsert the step record into the active trace
     activeTrace.update((trace) => {
       if (!trace) return trace
-      if (event.step.stepTypeKey === 'analysis_v2_cursor') return trace
       const existing = trace.steps.findIndex((s) => s.id === event.step.id)
       const steps = existing >= 0
         ? trace.steps.map((s, i) => (i === existing ? event.step : s))

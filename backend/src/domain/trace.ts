@@ -29,7 +29,6 @@ export const traceArtifactSchema = z.object({
 export const workflowStepTraceSchema = z.object({
   step: stepRecordSchema,
   ownedTurns: z.array(turnRecordSchema).default([]),
-  turns: z.array(turnRecordSchema).default([]),
   postambleSteps: z.array(stepRecordSchema).default([]),
   artifacts: z.array(traceArtifactSchema).default([]),
 })
@@ -59,7 +58,6 @@ export interface TraceArtifactRecord {
 export interface WorkflowStepTrace {
   step: StepRecord
   ownedTurns: TurnRecord[]
-  turns: TurnRecord[]
   postambleSteps: StepRecord[]
   artifacts: TraceArtifactRecord[]
 }
@@ -77,8 +75,8 @@ export interface SessionTraceBundle {
   context: ReturnType<typeof deriveContextEntries>
 }
 
-function isVisibleTraceStep(step: StepRecord): boolean {
-  return step.stepTypeKey !== 'analysis_v2_cursor'
+function isVisibleTraceStep(_step: StepRecord): boolean {
+  return true
 }
 
 function deriveWorkflowSteps(
@@ -107,21 +105,20 @@ function deriveWorkflowSteps(
   }
 
   return [...steps]
-    .filter(step => step.stepTypeKey !== 'turn' && step.stepTypeKey !== 'analysis_v2_cursor' && step.stepTypeKey !== 'compaction')
-    .sort((left, right) => left.ordinal - right.ordinal)
+    .filter(step => step.stepTypeKey !== 'turn' && step.stepTypeKey !== 'compaction')
+    .sort((left, right) => left.childIndex - right.childIndex)
     .map((step) => {
       const ownedTurns = [...(ownedTurnsByStepId.get(step.id) ?? [])]
-        .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
+        .sort((left, right) => left.turnNumber - right.turnNumber)
       const postambleSteps = ownedTurns
         .flatMap(turn => postambleStepsByTurnId.get(turn.id) ?? [])
-        .sort((left, right) => left.ordinal - right.ordinal)
+        .sort((left, right) => left.childIndex - right.childIndex)
       const stepArtifacts = [...(artifactsByStepId.get(step.id) ?? [])]
         .sort((left, right) => left.createdAt - right.createdAt)
 
       return {
         step,
         ownedTurns,
-        turns: ownedTurns,
         postambleSteps,
         artifacts: stepArtifacts,
       }

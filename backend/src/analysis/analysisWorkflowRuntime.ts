@@ -1,25 +1,11 @@
-import {
-  insertStepRecord,
-  updateStepRecord,
-} from '../persistence/repositoryV2.js'
-import { stepTypeKey as mkStepTypeKey } from '../domain/executionModel.js'
+import { updateSessionAnalysisState } from '../persistence/repository.js'
 import type { BackendDatabase } from '../persistence/db.js'
-import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
-import { randomUUID } from 'node:crypto'
-
-function now(): number {
-  return Date.now()
-}
 
 interface AnalysisWorkflowRuntimeOptions<State extends { analysisSessionId: string }> {
-  cursorStepType: string
   getState: () => State
   setState: (state: State) => void
-  getCursorStepId: () => string
-  setCursorStepId: (cursorStepId: string) => void
-  getCursorParams: (state: State) => Record<string, unknown>
-  getCursorStatus: (state: State) => StepPersistenceRecord['status']
+  getCursorStatus: (state: State) => string
   isTerminal: (state: State) => boolean
   advance: (emitEvent?: AnalysisStreamEventSink) => Promise<void>
 }
@@ -36,26 +22,7 @@ export class AnalysisWorkflowRuntime<State extends { analysisSessionId: string }
     this.options = options
   }
 
-  initializeCursorStep(): void {
-    const state = this.options.getState()
-    const cursorStepId = randomUUID()
-    this.options.setCursorStepId(cursorStepId)
-
-    insertStepRecord(this.database.connection, {
-      id: cursorStepId,
-      sessionId: state.analysisSessionId,
-      stepTypeKey: mkStepTypeKey(this.options.cursorStepType),
-      ordinal: 0,
-      status: 'running',
-      params: this.options.getCursorParams(state),
-      state: state as unknown as Record<string, unknown>,
-      createdAt: now(),
-      completedAt: null,
-    })
-  }
-
-  restore(cursorStepId: string, state: State): void {
-    this.options.setCursorStepId(cursorStepId)
+  restore(state: State): void {
     this.options.setState(state)
   }
 
@@ -64,9 +31,7 @@ export class AnalysisWorkflowRuntime<State extends { analysisSessionId: string }
   }
 
   async execute(emitEvent?: AnalysisStreamEventSink): Promise<void> {
-    if (!this.options.getCursorStepId()) {
-      this.initializeCursorStep()
-    }
+    this.persistState()
     await this.runLoop(emitEvent)
   }
 
@@ -102,21 +67,10 @@ export class AnalysisWorkflowRuntime<State extends { analysisSessionId: string }
 
   private persistState(): void {
     const state = this.options.getState()
-    const cursorStepId = this.options.getCursorStepId()
-    if (!cursorStepId) {
-      throw new Error('Cannot persist analysis workflow state without a cursor step id')
-    }
-
-    updateStepRecord(this.database.connection, {
-      id: cursorStepId,
-      sessionId: state.analysisSessionId,
-      stepTypeKey: mkStepTypeKey(this.options.cursorStepType),
-      ordinal: 0,
-      status: this.options.getCursorStatus(state),
-      params: this.options.getCursorParams(state),
-      state: state as unknown as Record<string, unknown>,
-      createdAt: now(),
-      completedAt: this.options.isTerminal(state) ? now() : null,
-    })
+    updateSessionAnalysisState(
+      this.database.connection,
+      state.analysisSessionId,
+      state as unknown as Record<string, unknown>,
+    )
   }
 }
