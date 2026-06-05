@@ -60,6 +60,50 @@ export function applyContextCompaction(
   const childIndex = stepOrdinalRow.max_child_index + 1
   const stepId = formatCompactionStepId(completedTurn.sessionId, childIndex)
 
+  // Create and insert the compaction step first so the FK on v2_parts is satisfied.
+  const step: StepRecord = {
+    id: stepId,
+    sessionId: completedTurn.sessionId,
+    stepTypeKey: STEP_TYPE.COMPACTION,
+    parentStepId: null,
+    childIndex,
+    status: 'complete',
+    params: {
+      strategy,
+      sourceTurnId: completedTurn.id,
+      sourceTurnSequenceNumber: completedTurn.turnNumber,
+    },
+    state: {
+      strippedPartIds: [],
+      strippedPartCount: 0,
+      contextTokensAtTurnEnd,
+      contextTokensAfterCompaction,
+      compactionTokensRemoved,
+    },
+    createdAt: now,
+    completedAt: now,
+  }
+
+  connection.prepare(`
+    INSERT INTO v2_steps (
+      id, session_id, step_type_key, child_index, status,
+      params_json, state_json, created_at, completed_at
+    ) VALUES (
+      @id, @sessionId, @stepTypeKey, @childIndex, @status,
+      @paramsJson, @stateJson, @createdAt, @completedAt
+    )
+  `).run({
+    id: step.id,
+    sessionId: step.sessionId,
+    stepTypeKey: step.stepTypeKey,
+    childIndex: step.childIndex,
+    status: step.status,
+    paramsJson: JSON.stringify(step.params),
+    stateJson: JSON.stringify(step.state),
+    createdAt: step.createdAt,
+    completedAt: step.completedAt,
+  })
+
   if (strategy === 'strip-reasoning') {
     const reasoningParts = connection
       .prepare<[string], { id: string; token_count: number | null }>(`
@@ -94,51 +138,24 @@ export function applyContextCompaction(
         }
       })
       updateAll()
+
+      // Update the step state with actual compaction results.
+      connection.prepare(`
+        UPDATE v2_steps
+        SET state_json = @stateJson
+        WHERE id = @id
+      `).run({
+        id: step.id,
+        stateJson: JSON.stringify({
+          strippedPartIds,
+          strippedPartCount: strippedPartIds.length,
+          contextTokensAtTurnEnd,
+          contextTokensAfterCompaction,
+          compactionTokensRemoved,
+        }),
+      })
     }
   }
-
-  const step: StepRecord = {
-    id: stepId,
-    sessionId: completedTurn.sessionId,
-    stepTypeKey: STEP_TYPE.COMPACTION,
-    parentStepId: null,
-    childIndex,
-    status: 'complete',
-    params: {
-      strategy,
-      sourceTurnId: completedTurn.id,
-      sourceTurnSequenceNumber: completedTurn.turnNumber,
-    },
-    state: {
-      strippedPartIds,
-      strippedPartCount: strippedPartIds.length,
-      contextTokensAtTurnEnd,
-      contextTokensAfterCompaction,
-      compactionTokensRemoved,
-    },
-    createdAt: now,
-    completedAt: now,
-  }
-
-  connection.prepare(`
-    INSERT INTO v2_steps (
-      id, session_id, step_type_key, child_index, status,
-      params_json, state_json, created_at, completed_at
-    ) VALUES (
-      @id, @sessionId, @stepTypeKey, @childIndex, @status,
-      @paramsJson, @stateJson, @createdAt, @completedAt
-    )
-  `).run({
-    id: step.id,
-    sessionId: step.sessionId,
-    stepTypeKey: step.stepTypeKey,
-    childIndex: step.childIndex,
-    status: step.status,
-    paramsJson: JSON.stringify(step.params),
-    stateJson: JSON.stringify(step.state),
-    createdAt: step.createdAt,
-    completedAt: step.completedAt,
-  })
 
   const updatedTurn: TurnRecord = {
     ...completedTurn,
