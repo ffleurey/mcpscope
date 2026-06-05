@@ -118,18 +118,19 @@ export function applyContextCompaction(
 
   const stepOrdinalRow = connection
     .prepare< [string], { max_child_index: number }>(`
-      SELECT COALESCE(MAX(child_index), -1) AS max_child_index
+      SELECT COALESCE(MAX(child_index), 0) AS max_child_index
       FROM v2_steps
       WHERE session_id = ?
     `)
     .get(completedTurn.sessionId) as { max_child_index: number }
 
+  const childIndex = stepOrdinalRow.max_child_index + 1
   const step: StepRecord = {
-    id: formatCompactionStepId(completedTurn.sessionId, completedTurn.turnNumber),
+    id: formatCompactionStepId(completedTurn.sessionId, childIndex),
     sessionId: completedTurn.sessionId,
     stepTypeKey: STEP_TYPE.COMPACTION,
     parentStepId: null,
-    childIndex: stepOrdinalRow.max_child_index + 1,
+    childIndex,
     status: 'complete',
     params: {
       strategy,
