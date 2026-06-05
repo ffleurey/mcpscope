@@ -321,21 +321,6 @@ export function listStepRecordsBySession(
   return rows.map(mapStepRow)
 }
 
-export function getNextStepDisplayNumber(
-  connection: Database.Database,
-  sessionId: string,
-): number {
-  const row = connection.prepare(`
-    SELECT COUNT(*) AS cnt
-    FROM v2_steps s
-    LEFT JOIN v2_turns t ON t.id = s.id
-    WHERE s.session_id = ?
-      AND s.step_type_key != 'compaction'
-      AND (t.id IS NULL OR t.owner_step_id IS NULL)
-  `).get(sessionId) as { cnt: number }
-  return row.cnt + 1
-}
-
 export function getNextChildIndex(
   connection: Database.Database,
   sessionId: string,

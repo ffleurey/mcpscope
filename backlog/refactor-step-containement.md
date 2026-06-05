@@ -275,3 +275,68 @@ In every code path that creates turns with `ownerStepId`:
 - Update `DATABASE-SCHEMA.md` — reflect new table shapes
 
 **Gate**: Docs match implemented schema.
+
+---
+
+# Compaction step unification
+
+## Current problem
+
+Compaction steps live in a **separate number space** from workflow steps:
+
+- Workflow steps use `getNextStepDisplayNumber` (which **excludes** compaction via `step_type_key != 'compaction'`)
+- Compaction steps use `getNextChildIndex` (which **includes** all steps)
+- Two counting functions (`getNextStepDisplayNumber` + `getNextChildIndex`) that should be one
+
+This creates:
+- Workflow IDs like `1W`, `2W`, `3W`... (consecutive, skipping compaction)
+- Compaction IDs like `C6`, `C10`, `C14`... (childIndex-based, with gaps)
+- A persistent source of bugs: the collision fix, the reserved-turn-number parsing bug, and the conceptual confusion all trace back to this dual-counter design
+
+## Desired state
+
+All steps share **one** number space. The number is the step's zero-indexed position in the session's flat step list:
+
+```
+1W  (bootstrap)
+2W  (assessment)
+3W  (assessment)
+4W  (turn_summary)
+5C  (compaction)         ← same numbering, C suffix
+6W  (next assessment)
+7W  (next assessment)
+8W  (turn_summary)
+9C  (compaction)
+10W (final_aggregation)
+```
+
+`childIndex` IS the display number. No separate counting, no exclusions.
+
+## Changes needed
+
+1. **Remove `getNextStepDisplayNumber`** from `repositoryV2.ts` — the function is no longer needed
+2. **Replace all its call sites** with `getNextChildIndex` across 6 workflow files
+3. **Update `formatCompactionStepId`** — already takes a number parameter, just confirm it produces `{id}.{N}C`
+4. **Verify `compaction.ts`** already uses `getNextChildIndex` correctly (it does — `childIndex` is computed at line 121 and used for both the ID and the DB column)
+5. **Update tests** — step numbering now includes compaction in the count; test expectations that assert specific step IDs will need adjustment
+
+## Impact
+
+| What | Count |
+|------|-------|
+| Files changed | ~10-12 (6 workflow + 2 persistence + 2-4 tests) |
+| Functions removed | 1 (`getNextStepDisplayNumber`) |
+| Functions simplified | `getNextChildIndex` becomes THE step counter |
+| New concepts | None — this is removal of accidental complexity |
+| Test impact | Numbering expectations shift; artifacts referencing step IDs |
+
+## Assessment
+
+This is a **simplification that removes accidental complexity**. The dual-counter design was a workaround for compaction steps being treated as second-class citizens. Making compaction participate in the shared numbering eliminates:
+
+- The compaction ID collision bug (already fixed with a targeted patch)
+- The reserved-turn-number parsing bug (already fixed with a targeted patch)
+- The mental overhead of tracking two parallel number spaces
+- The need for `getNextStepDisplayNumber` entirely
+
+The change itself is mechanical (search-and-replace + delete). The risk is test assertion drift on step numbering — but since we already allow fresh databases and the current tests mostly use pattern matching rather than exact ID assertions, the impact is small.
