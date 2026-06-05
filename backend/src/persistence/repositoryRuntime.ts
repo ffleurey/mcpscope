@@ -476,8 +476,8 @@ export function recoverInterruptedState(connection: Database.Database): void {
 export function insertTurnRecord(
   connection: Database.Database,
   turn: TurnRecord,
-  ownerStepId?: string | null,
 ): void {
+  const ownerStepId = turn.ownerStepId
   if (!ownerStepId) {
     const childIndex = getNextChildIndex(connection, turn.sessionId)
 
@@ -535,16 +535,18 @@ export function insertTurnRecord(
 }
 
 export function updateTurnRecord(connection: Database.Database, turn: TurnRecord): void {
-  connection.prepare(`
-    UPDATE v2_steps
-    SET status = @status,
-        completed_at = @completedAt
-    WHERE id = @id
-  `).run({
-    id: turn.id,
-    status: turn.status,
-    completedAt: turn.completedAt,
-  })
+  if (!turn.ownerStepId) {
+    connection.prepare(`
+      UPDATE v2_steps
+      SET status = @status,
+          completed_at = @completedAt
+      WHERE id = @id
+    `).run({
+      id: turn.id,
+      status: turn.status,
+      completedAt: turn.completedAt,
+    })
+  }
 
   connection.prepare(`
     UPDATE v2_turns

@@ -71,7 +71,7 @@ export function formatTurnId(sessionId: string, turnNumber: number, ownerStepId?
 }
 
 export function formatCompactionStepId(sessionId: string, stepNumber: number): string {
-  return `${sessionId}.C${stepNumber}`
+  return `${sessionId}.${stepNumber}C`
 }
 
 export function formatCompactionPartId(
@@ -81,7 +81,7 @@ export function formatCompactionPartId(
   partType?: string,
 ): string {
   const suffix = partType ? PART_TYPE_SUFFIX[partType] : undefined
-  const base = `${sessionId}.C${stepNumber}.${partNumber}`
+  const base = `${sessionId}.${stepNumber}C.${partNumber}`
   return suffix ? `${base}-${suffix}` : base
 }
 
@@ -151,10 +151,10 @@ export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
     return null
   }
 
-  const stepMatch = /^(?:C|wf)(\d+)$/.exec(segments[1] ?? '') || /^(\d+)W$/.exec(segments[1] ?? '')
+  const stepMatch = /^(\d+)C$/.exec(segments[1] ?? '') || /^(\d+)W$/.exec(segments[1] ?? '') || /^(?:wf)(\d+)$/.exec(segments[1] ?? '')
   if (stepMatch) {
     const stepNumber = parseNumber(stepMatch[1] ?? '')
-    const isWorkflowStep = (segments[1] ?? '').startsWith('wf') || (segments[1] ?? '').endsWith('W')
+    const isWorkflowStep = (segments[1] ?? '').startsWith('wf') || (segments[1] ?? '').endsWith('W') || (segments[1] ?? '').endsWith('C')
     if (stepNumber == null || (isWorkflowStep ? stepNumber < 0 : stepNumber < 1)) return null
     if (segments.length === 2) {
       return { raw: trimmed, type: 'step', sessionId, stepNumber, turnNumber: null, roundNumber: null, partNumber: null, isSetupPart: false }

@@ -1,21 +1,26 @@
-import type Database from 'better-sqlite3'
-import type { CompactionStrategy, PartRecord, StepRecord, TurnRecord } from './model.js'
 import { formatCompactionStepId } from './hierarchicalIds.js'
-import { STEP_TYPE } from './executionModel.js'
+import {
+  STEP_TYPE,
+} from './executionModel.js'
+import type Database from 'better-sqlite3'
+import type {
+  CompactionStrategy,
+  PartRecord,
+  StepRecord,
+  TurnRecord,
+} from './model.js'
 
 export interface CompactionStepResult {
   turn: TurnRecord
   step: StepRecord
   parts: PartRecord[]
+  strippedPartIds: string[]
+  strippedPartCount: number
+  contextTokensAtTurnEnd: number | null
+  contextTokensAfterCompaction: number | null
+  compactionTokensRemoved: number | null
 }
 
-/**
- * Applies the configured compaction strategy to the parts produced by a completed turn,
- * then updates the turn record with token counts before and after compaction.
- *
- * Context compaction is applied once per turn — after the turn completes and before
- * the next turn starts. It never runs between rounds within a turn.
- */
 export function applyContextCompaction(
   connection: Database.Database,
   completedTurn: TurnRecord,
@@ -23,9 +28,6 @@ export function applyContextCompaction(
 ): CompactionStepResult {
   const now = Date.now()
 
-  // Compute context tokens at turn end (before any compaction).
-  // Includes all 'included' and 'round-only' parts across the whole session
-  // (the full model-visible context after this turn).
   const tokenSumRow = connection
     .prepare<[string], { total: number | null }>(`
       SELECT SUM(token_count) AS total
@@ -35,9 +37,6 @@ export function applyContextCompaction(
     `)
     .get(completedTurn.id) as { total: number | null }
 
-  // Prefer the LLM-reported promptTokens when it's larger than the part-sum.
-  // The part-sum undercounts whenever parts lack token attribution (e.g. inject
-  // parts, deterministic tool-call parts). promptTokens from the LLM is exact.
   const tokenSum = tokenSumRow.total ?? null
   const promptTokens = completedTurn.usage.promptTokens ?? null
   const contextTokensAtTurnEnd =
@@ -49,8 +48,19 @@ export function applyContextCompaction(
   let compactionTokensRemoved: number | null = 0
   let strippedPartIds: string[] = []
 
+  // Create compaction step first so parts can reference it via FK.
+  const stepOrdinalRow = connection
+    .prepare<[string], { max_child_index: number }>(`
+      SELECT COALESCE(MAX(child_index), 0) AS max_child_index
+      FROM v2_steps
+      WHERE session_id = ?
+    `)
+    .get(completedTurn.sessionId) as { max_child_index: number }
+
+  const childIndex = stepOrdinalRow.max_child_index + 1
+  const stepId = formatCompactionStepId(completedTurn.sessionId, childIndex)
+
   if (strategy === 'strip-reasoning') {
-    // Find all assistant-reasoning parts from the completed turn that are currently 'included'.
     const reasoningParts = connection
       .prepare<[string], { id: string; token_count: number | null }>(`
         SELECT id, token_count
@@ -62,12 +72,14 @@ export function applyContextCompaction(
       .all(completedTurn.id) as Array<{ id: string; token_count: number | null }>
 
     if (reasoningParts.length > 0) {
+      strippedPartIds = reasoningParts.map(part => part.id)
       const strippedTokens = reasoningParts.reduce(
-        (sum, p) => sum + (p.token_count ?? 0),
-        0,
+        (sum, p) => sum + (p.token_count ?? 0), 0,
       )
+      compactionTokensRemoved = strippedTokens
+      contextTokensAfterCompaction =
+        contextTokensAtTurnEnd !== null ? contextTokensAtTurnEnd - strippedTokens : null
 
-      // Update each reasoning part: mark as stripped, record which turn's compaction did it.
       const updatePart = connection.prepare(`
         UPDATE v2_parts
         SET context_state = 'stripped',
@@ -77,56 +89,16 @@ export function applyContextCompaction(
       `)
 
       const updateAll = connection.transaction(() => {
-        for (const part of reasoningParts) {
-          updatePart.run(completedTurn.id, now, part.id)
+        for (const partId of strippedPartIds) {
+          updatePart.run(stepId, now, partId)
         }
       })
       updateAll()
-
-      strippedPartIds = reasoningParts.map(part => part.id)
-      compactionTokensRemoved = strippedTokens
-      contextTokensAfterCompaction =
-        contextTokensAtTurnEnd !== null ? contextTokensAtTurnEnd - strippedTokens : null
     }
   }
 
-  // Update the turn record with compaction results.
-  const updatedTurn: TurnRecord = {
-    ...completedTurn,
-    contextTokensAtTurnEnd,
-    contextTokensAfterCompaction,
-    compactionApplied: strategy,
-    compactionTokensRemoved,
-  }
-
-  connection
-    .prepare(`
-      UPDATE v2_turns
-      SET context_tokens_at_turn_end = @contextTokensAtTurnEnd,
-          context_tokens_after_compaction = @contextTokensAfterCompaction,
-          compaction_applied = @compactionApplied,
-          compaction_tokens_removed = @compactionTokensRemoved
-      WHERE id = @id
-    `)
-    .run({
-      id: completedTurn.id,
-      contextTokensAtTurnEnd,
-      contextTokensAfterCompaction,
-      compactionApplied: strategy,
-      compactionTokensRemoved,
-    })
-
-  const stepOrdinalRow = connection
-    .prepare< [string], { max_child_index: number }>(`
-      SELECT COALESCE(MAX(child_index), 0) AS max_child_index
-      FROM v2_steps
-      WHERE session_id = ?
-    `)
-    .get(completedTurn.sessionId) as { max_child_index: number }
-
-  const childIndex = stepOrdinalRow.max_child_index + 1
   const step: StepRecord = {
-    id: formatCompactionStepId(completedTurn.sessionId, childIndex),
+    id: stepId,
     sessionId: completedTurn.sessionId,
     stepTypeKey: STEP_TYPE.COMPACTION,
     parentStepId: null,
@@ -168,9 +140,37 @@ export function applyContextCompaction(
     completedAt: step.completedAt,
   })
 
+  const updatedTurn: TurnRecord = {
+    ...completedTurn,
+    contextTokensAtTurnEnd,
+    contextTokensAfterCompaction,
+    compactionApplied: strategy,
+    compactionTokensRemoved,
+  }
+
+  connection.prepare(`
+    UPDATE v2_turns
+    SET context_tokens_at_turn_end = @contextTokensAtTurnEnd,
+        context_tokens_after_compaction = @contextTokensAfterCompaction,
+        compaction_applied = @compactionApplied,
+        compaction_tokens_removed = @compactionTokensRemoved
+    WHERE id = @id
+  `).run({
+    id: completedTurn.id,
+    contextTokensAtTurnEnd,
+    contextTokensAfterCompaction,
+    compactionApplied: strategy,
+    compactionTokensRemoved,
+  })
+
   return {
     turn: updatedTurn,
     step,
     parts: [],
+    strippedPartIds,
+    strippedPartCount: strippedPartIds.length,
+    contextTokensAtTurnEnd,
+    contextTokensAfterCompaction,
+    compactionTokensRemoved,
   }
 }
