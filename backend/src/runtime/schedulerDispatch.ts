@@ -118,7 +118,7 @@ async function executeAnalysisJob(
   try {
     const instance = rehydrateAnalysisWorkflow(opCtx.db, opCtx.lmStudioGateway, opCtx.mcpGateway, job.target.sessionId)
     if (!instance) {
-      throw new Error('Failed to rehydrate analysis session from cursor step')
+      throw new Error('Failed to rehydrate analysis session')
     }
 
     while (instance.canContinue()) {
@@ -136,10 +136,11 @@ async function executeAnalysisJob(
     }
   }
 
-  const trace = buildAnalysisTrace(opCtx, job.target.sessionId)
-  const cursorStep = trace.steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-  const phase = typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : null
+  const finalSession = getSessionRecord(opCtx.db.connection, job.target.sessionId)
+  const analysisState = finalSession?.analysisState as { phase?: string } | null
+  const phase = analysisState?.phase ?? null
   if (phase === 'complete' || phase === 'error') {
+    const trace = buildAnalysisTrace(opCtx, job.target.sessionId)
     options.emitExecutionEvent({ type: 'analysis-complete', trace })
   }
 }
@@ -159,7 +160,7 @@ async function executeAnalysisOneStepJob(
   try {
     const instance = rehydrateAnalysisWorkflow(opCtx.db, opCtx.lmStudioGateway, opCtx.mcpGateway, job.target.sessionId)
     if (!instance) {
-      throw new Error('Failed to rehydrate analysis session from cursor step')
+      throw new Error('Failed to rehydrate analysis session')
     }
     await instance.resumeOneStep(emitExecutionEvent)
   } finally {
@@ -171,10 +172,11 @@ async function executeAnalysisOneStepJob(
     }
   }
 
-  const trace = buildAnalysisTrace(opCtx, job.target.sessionId)
-  const cursorStep = trace.steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-  const phase = typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : null
+  const finalSession = getSessionRecord(opCtx.db.connection, job.target.sessionId)
+  const analysisState = finalSession?.analysisState as { phase?: string } | null
+  const phase = analysisState?.phase ?? null
   if (phase === 'complete' || phase === 'error') {
+    const trace = buildAnalysisTrace(opCtx, job.target.sessionId)
     emitExecutionEvent({ type: 'analysis-complete', trace })
   }
 }

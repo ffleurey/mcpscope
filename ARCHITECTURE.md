@@ -128,8 +128,8 @@ The shipped product implements:
 - `SessionContainer` ownership: sessions may belong to a parent session or a `Benchmark` container
 - `Benchmark` as a minimal `SessionContainer` for grouping sessions (full benchmark domain design is future work)
 - generic container/session/step persistence without table-per-subtype growth
-- constrained one-level step-owned-turn grouping for workflow-oriented traces
-- the current runtime tree (setup / turn / round / part) unchanged from user perspective
+- constrained one-level workflow-step-owned-turn grouping for workflow-oriented traces
+- the primary-session runtime tree (setup / turn / round / part) remains unchanged from user perspective; analysis workflow steps are layered into the same session model
 - `session_analysis` child sessions used by the analysis workflow
 - deterministic non-LLM workflow steps used by the shipped analysis-session orchestration
 - compaction and context bookkeeping
@@ -605,7 +605,7 @@ The frontend is a thin client over backend state. Its responsibilities are to:
 UI work around session types and parent links should preserve the same principle:
 
 - normal primary-session workflows stay simple
-- internal workflow sessions remain inspectable through the same backend-owned IDs and lookup model
+- internal workflow sessions remain inspectable through the same backend-owned IDs and lookup model, including nested workflow-step/turn/round/part paths
 - session-type-specific UI should not create a parallel runtime model in the frontend
 
 The frontend must not maintain its own parallel runtime model or re-implement runtime logic.

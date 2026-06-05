@@ -2,6 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openBackendDatabase } from '../persistence/db.js'
+import { insertStepRecord } from '../persistence/repositoryV2.js'
+import { stepTypeKey } from '../domain/executionModel.js'
 import { createSession } from './modelTurns.js'
 import { createToolEnabledTurn } from './toolTurns.js'
 import type { LmStudioGateway } from './modelTurns.js'
@@ -195,6 +197,19 @@ describe('tool-enabled turn runtime', () => {
       },
     })
 
+    insertStepRecord(db.connection, {
+      id: `${session.id}.4W`,
+      sessionId: session.id,
+      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
+      parentStepId: null,
+      childIndex: 3,
+      status: 'complete',
+      params: {},
+      state: {},
+      createdAt: 1,
+      completedAt: 1,
+    })
+
     const result = await createToolEnabledTurn(db, lmStudioGateway, mcpGateway, {
       sessionId: session.id,
       userContent: 'Tell me the current time with tools.',
@@ -239,6 +254,179 @@ describe('tool-enabled turn runtime', () => {
       expect.objectContaining({ type: 'mcp-instructions', tokens: expect.objectContaining({ count: 5 }) }),
       expect.objectContaining({ type: 'tool-definitions', tokens: expect.objectContaining({ count: 7 }) }),
     ])
+
+    db.connection.close()
+  })
+
+  it('nests ids under an owning workflow step', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+
+    const lmStudioGateway: LmStudioGateway = {
+      async probePromptTokens() {
+        return 5
+      },
+      async createChatCompletion(_baseUrl, _apiKey, body) {
+        const messages = body.messages as Array<{ role: string }>
+        const hasToolResult = messages.some(message => message.role === 'tool')
+
+        if (!hasToolResult) {
+          return {
+            id: 'cmpl-1',
+            model: 'model-key',
+            created: 100,
+            choices: [
+              {
+                index: 0,
+                finish_reason: 'tool_calls',
+                message: {
+                  role: 'assistant',
+                  content: null,
+                  reasoning_content: 'Call tool.',
+                  tool_calls: [
+                    {
+                      id: 'call-1',
+                      type: 'function',
+                      function: {
+                        name: 'ha_history_get_current_time',
+                        arguments: '{}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: {
+              prompt_tokens: 20,
+              completion_tokens: 10,
+              reasoning_tokens: 4,
+              total_tokens: 30,
+            },
+          }
+        }
+
+        return {
+          id: 'cmpl-2',
+          model: 'model-key',
+          created: 101,
+          choices: [
+            {
+              index: 0,
+              finish_reason: 'stop',
+              message: {
+                role: 'assistant',
+                content: 'The current time is 12:34.',
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 30,
+            completion_tokens: 8,
+            reasoning_tokens: 0,
+            total_tokens: 38,
+          },
+        }
+      },
+    }
+
+    const mcpGateway: McpGateway = {
+      async initializeSession() {
+        return {
+          sessionId: 'mcp-session-1',
+          instructions: 'Use the time tool.',
+          rawExchange: {
+            requestUrl: 'http://localhost:3001/mcp',
+            requestMethod: 'POST',
+            requestBodyText: '{}',
+            responseStatus: 200,
+            responseBody: {},
+          },
+        }
+      },
+      async listTools() {
+        return {
+          tools: [
+            {
+              name: 'ha_history_get_current_time',
+              description: 'Current time',
+              inputSchema: { type: 'object', properties: {} },
+            },
+          ],
+          rawResult: {},
+          rawExchange: {
+            requestUrl: 'http://localhost:3001/mcp',
+            requestMethod: 'POST',
+            requestBodyText: '{}',
+            responseStatus: 200,
+            responseBody: {},
+          },
+        }
+      },
+      async callTool() {
+        return {
+          content: '2026-05-10T12:34:56+02:00',
+          structuredContent: null,
+          isError: false,
+          rawResult: {},
+          rawExchange: {
+            requestUrl: 'http://localhost:3001/mcp',
+            requestMethod: 'POST',
+            requestBodyText: '{}',
+            responseStatus: 200,
+            responseBody: {},
+          },
+        }
+      },
+    }
+
+    const session = createSession(db, {
+      modelProfileSnapshot: {
+        id: 'model-1',
+        name: 'Model',
+        connectionBaseUrl: 'https://example.com/v1',
+        apiKey: null,
+        modelKey: 'model-key',
+        modelDisplayName: 'Model Key',
+        systemPrompt: 'Use tools when required.',
+        temperature: 0,
+        reasoning: 'on',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      mcpProfileSnapshot: {
+        id: 'mcp-1',
+        name: 'Local MCP',
+        url: 'http://localhost:3001/mcp',
+        transport: 'streamable-http',
+        authType: null,
+        authValue: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    })
+
+    insertStepRecord(db.connection, {
+      id: `${session.id}.4W`,
+      sessionId: session.id,
+      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
+      parentStepId: null,
+      childIndex: 3,
+      status: 'complete',
+      params: {},
+      state: {},
+      createdAt: 1,
+      completedAt: 1,
+    })
+
+    const result = await createToolEnabledTurn(db, lmStudioGateway, mcpGateway, {
+      sessionId: session.id,
+      userContent: 'Tell me the current time with tools.',
+      maxToolRounds: 5,
+      ownerStepId: `${session.id}.4W`,
+    })
+
+    expect(result.turn.id).toBe(`${session.id}.4W.1T`)
+    expect(result.rounds[0]?.id).toBe(`${session.id}.4W.1T.1`)
+    expect(result.parts[0]?.id).toBe(`${session.id}.4W.1T.1.1-U`)
 
     db.connection.close()
   })

@@ -14,19 +14,22 @@ import { validateSessionParent } from './domain/sessionValidation.js'
 import {
   createSessionRecord,
   deleteSessionRecord,
+  getPartRecord,
   getSessionRecord,
+  insertPartRecord,
+  insertTurnRecord,
   listChildSessionSummaries,
   listSessionSummaries,
+  updateSessionAnalysisState,
   updateSessionRecord,
 } from './persistence/repository.js'
-import { insertStepRecord, listStepRecordsBySession } from './persistence/repositoryV2.js'
+import { insertStepRecord } from './persistence/repositoryV2.js'
 import { openBackendDatabase } from './persistence/db.js'
 import { initializeBackendSchema, validateBackendSchema } from './persistence/schema.js'
 import { importTraceBundle } from './runtime/traceImport.js'
 import { insertJsonArtifact } from './analysis/artifactRepository.js'
 import { SCHEMA_KEY } from './analysis/schemas.js'
 import { stepTypeKey } from './domain/executionModel.js'
-import { getPartRecord, insertPartRecord, insertTurnRecord } from './persistence/repository.js'
 import type { PartRecord } from './domain/model.js'
 import type { StepPersistenceRecord } from './domain/persistenceContract.js'
 
@@ -85,13 +88,14 @@ function makeSessionRecord(overrides: Partial<Parameters<typeof createSessionRec
 }
 
 function makeStepRecord(
-  overrides: Partial<StepPersistenceRecord> & Pick<StepPersistenceRecord, 'id' | 'sessionId' | 'stepTypeKey' | 'ordinal'>,
+  overrides: Partial<StepPersistenceRecord> & Pick<StepPersistenceRecord, 'id' | 'sessionId' | 'stepTypeKey' | 'childIndex'>,
 ): StepPersistenceRecord {
   return {
     id: overrides.id,
     sessionId: overrides.sessionId,
     stepTypeKey: overrides.stepTypeKey,
-    ordinal: overrides.ordinal,
+    parentStepId: null,
+    childIndex: overrides.childIndex,
     status: overrides.status ?? 'complete',
     params: overrides.params ?? {},
     state: overrides.state ?? {},
@@ -532,23 +536,29 @@ describe('session metadata API', () => {
       isContextExhausted: false,
       compactionStrategy: 'strip-reasoning',
     })
+    updateSessionAnalysisState(app.backendDb.connection, 'ANLZ', {
+      phase: 'error',
+      bootstrapComplete: false,
+      nextPacketIndex: 0,
+      packetCount: 0,
+      currentTurnId: null,
+      coverageValidated: false,
+      finalAggregationComplete: false,
+      analysisSessionId: 'ANLZ',
+      targetSessionId: 'PRNT',
+      targetTurnId: '',
+      analysisGoal: '',
+      selectedToolNames: [],
+      onlyFailedToolCalls: false,
+      evaluationCriteria: [],
+      workflow_kind: 'fast_session_analysis',
+    })
 
     insertStepRecord(app.backendDb.connection, makeStepRecord({
-      id: 'ANLZ.wf0',
-      sessionId: 'ANLZ',
-      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
-      ordinal: 0,
-      status: 'error',
-      params: { workflow_kind: 'fast_session_analysis' },
-      state: { phase: 'error' },
-      createdAt: ts + 1,
-      completedAt: ts + 1,
-    }))
-    insertStepRecord(app.backendDb.connection, makeStepRecord({
-      id: 'ANLZ.wf3',
+      id: 'ANLZ.3W',
       sessionId: 'ANLZ',
       stepTypeKey: stepTypeKey('analysis_tool_call_assessment'),
-      ordinal: 3,
+      childIndex: 3,
       status: 'error',
       createdAt: ts + 2,
       completedAt: ts + 2,
@@ -556,7 +566,7 @@ describe('session metadata API', () => {
     insertJsonArtifact(app.backendDb.connection, {
       id: 'artifact-1',
       sessionId: 'ANLZ',
-      stepId: 'ANLZ.wf3',
+      stepId: 'ANLZ.3W',
       content: {
         step_type: 'fast_tool_call_assessment',
         error_kind: 'schema_validation_error',
@@ -584,7 +594,7 @@ describe('session metadata API', () => {
       status: 'error',
       workflow_kind: 'fast_session_analysis',
       latest_error: {
-        step_id: 'ANLZ.wf3',
+        step_id: 'ANLZ.3W',
         error_kind: 'schema_validation_error',
         message: 'Fast assessment response did not match fast schema',
       },
@@ -598,7 +608,7 @@ describe('session metadata API', () => {
         state: 'error',
         workflow_kind: 'fast_session_analysis',
         latest_error: {
-          step_id: 'ANLZ.wf3',
+          step_id: 'ANLZ.3W',
           error_kind: 'schema_validation_error',
           message: 'Fast assessment response did not match fast schema',
         },
@@ -783,23 +793,29 @@ describe('session metadata API', () => {
       isContextExhausted: false,
       compactionStrategy: 'strip-reasoning',
     })
+    updateSessionAnalysisState(app.backendDb.connection, 'ANLZ', {
+      phase: 'error',
+      bootstrapComplete: false,
+      nextPacketIndex: 0,
+      packetCount: 0,
+      currentTurnId: null,
+      coverageValidated: false,
+      finalAggregationComplete: false,
+      analysisSessionId: 'ANLZ',
+      targetSessionId: 'PRNT',
+      targetTurnId: '',
+      analysisGoal: '',
+      selectedToolNames: [],
+      onlyFailedToolCalls: false,
+      evaluationCriteria: [],
+      workflow_kind: 'fast_session_analysis',
+    })
 
     insertStepRecord(app.backendDb.connection, makeStepRecord({
-      id: 'ANLZ.wf0',
-      sessionId: 'ANLZ',
-      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
-      ordinal: 0,
-      status: 'error',
-      params: { workflow_kind: 'fast_session_analysis' },
-      state: { phase: 'error' },
-      createdAt: ts + 2,
-      completedAt: ts + 2,
-    }))
-    insertStepRecord(app.backendDb.connection, makeStepRecord({
-      id: 'ANLZ.wf3',
+      id: 'ANLZ.3W',
       sessionId: 'ANLZ',
       stepTypeKey: stepTypeKey('analysis_tool_call_assessment'),
-      ordinal: 3,
+      childIndex: 3,
       status: 'error',
       createdAt: ts + 3,
       completedAt: ts + 3,
@@ -807,7 +823,7 @@ describe('session metadata API', () => {
     insertJsonArtifact(app.backendDb.connection, {
       id: 'artifact-2',
       sessionId: 'ANLZ',
-      stepId: 'ANLZ.wf3',
+      stepId: 'ANLZ.3W',
       content: {
         step_type: 'fast_tool_call_assessment',
         error_kind: 'schema_validation_error',
@@ -822,8 +838,8 @@ describe('session metadata API', () => {
     insertTurnRecord(app.backendDb.connection, {
       id: 'ANLZ.1',
       sessionId: 'ANLZ',
-      ownerStepId: 'ANLZ.wf3',
-      sequenceNumber: 1,
+      ownerStepId: 'ANLZ.3W',
+      turnNumber: 1,
       status: 'complete',
       createdAt: ts + 5,
       completedAt: ts + 5,
@@ -855,7 +871,7 @@ describe('session metadata API', () => {
         workflow_kind: 'fast_session_analysis',
         workflow_label: 'Fast Session Analysis',
         latest_error: {
-          step_id: 'ANLZ.wf3',
+          step_id: 'ANLZ.3W',
           error_kind: 'schema_validation_error',
           message: 'Fast assessment response did not match fast schema',
         },
@@ -866,25 +882,19 @@ describe('session metadata API', () => {
     expect(retryRes.statusCode).toBe(200)
     expect(retryRes.json()).toMatchObject({
       session_id: 'ANLZ',
-      failed_step_id: 'ANLZ.wf3',
+      failed_step_id: 'ANLZ.3W',
       retry_phase: 'assessing',
       latest_error: {
-        step_id: 'ANLZ.wf3',
+        step_id: 'ANLZ.3W',
         error_kind: 'schema_validation_error',
         message: 'Fast assessment response did not match fast schema',
       },
     })
 
-    const steps = listStepRecordsBySession(app.backendDb.connection, 'ANLZ')
-    const cursorStep = steps.find(step => step.id === 'ANLZ.wf0')
-    expect(cursorStep).toMatchObject({
-      status: 'running',
-      state: expect.objectContaining({
-        phase: 'assessing',
-        retry_failed_step_id: 'ANLZ.wf3',
-      }),
-      completedAt: null,
-    })
+    const retriedSession = getSessionRecord(app.backendDb.connection, 'ANLZ')
+    const retriedState = retriedSession?.analysisState as Record<string, unknown> | undefined
+    expect(retriedState?.phase).toBe('assessing')
+    expect(retriedState?.retry_failed_step_id).toBe('ANLZ.3W')
 
     const retriedPart = getPartRecord(app.backendDb.connection, 'ANLZ.1.1.1-A')
     expect(retriedPart?.context.state).toBe('excluded')

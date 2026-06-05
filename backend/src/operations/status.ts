@@ -87,7 +87,7 @@ export const statusOperation = {
         ? latestTurn
         : null
 
-    const workflowKind = getAnalysisWorkflowKindFromSteps(workflowSteps)
+    const workflowKind = getAnalysisWorkflowKindFromSteps(workflowSteps, db.connection, input.session_id)
     const latestError = state === 'error' && session.sessionType === 'session_analysis'
       ? getLatestAnalysisDiagnosticSummaryForSession(db.connection, session.id) ?? undefined
       : undefined

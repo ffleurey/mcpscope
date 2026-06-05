@@ -17,9 +17,9 @@ import {
 const require = createRequire(import.meta.url)
 const LightMyRequest = require('light-my-request/lib/request') as new (options: { url: string; method: string }) => { socket: Record<string, unknown> }
 const injectedSocketPrototype = Object.getPrototypeOf(new LightMyRequest({ url: '/', method: 'GET' }).socket) as {
-  destroyed?: boolean
   destroy?: (error?: Error) => void
   destroySoon?: () => void
+  destroyed?: boolean
 }
 
 if (typeof injectedSocketPrototype.destroy !== 'function') {
@@ -122,21 +122,21 @@ describe('backend foundation', () => {
     const body = response.json()
     expect(body).toMatchObject({
       version: 2,
-      entities: ['session-container', 'session', 'step', 'turn', 'round', 'part', 'raw-exchange', 'benchmark'],
+      entities: ['session', 'step', 'turn', 'round', 'part', 'raw-exchange'],
     })
     expect(body.schema.tables).toEqual(
       expect.arrayContaining([
         // Shared config/default tables
         'session_creation_defaults',
         // Canonical execution-model tables
-        'session_containers', 'v2_sessions', 'v2_steps', 'v2_turns',
+        'v2_sessions', 'v2_steps', 'v2_turns',
         'v2_rounds', 'v2_parts', 'v2_raw_exchanges', 'artifacts',
       ])
     )
     expect(body.schema.meta).toMatchObject({
       domain_model_version: '2',
       sqlite_schema_version: '8',
-      new_schema_version: '1',
+      new_schema_version: '2',
     })
   })
 
@@ -390,7 +390,7 @@ describe('backend foundation', () => {
           id: capturedReasoningThreeBatchRounds[0]!.turnId,
           sessionId: capturedReasoningThreeBatchSession.id,
           ownerStepId: null,
-          sequenceNumber: 1,
+          turnNumber: 1,
           status: 'complete',
           createdAt: 1,
           completedAt: 8,
@@ -455,7 +455,7 @@ describe('backend foundation', () => {
           id: 'captured-reasoning-turn',
           sessionId: capturedReasoningThreeBatchSession.id,
           ownerStepId: null,
-          sequenceNumber: 1,
+          turnNumber: 1,
           status: 'streaming',
           createdAt: 1,
           completedAt: null,
@@ -530,11 +530,11 @@ describe('backend foundation', () => {
     app = await buildBackendApp(config)
 
     const sourceSessionId = 'SRC1'
-    const sourceTurnId = `${sourceSessionId}.1`
-    const sourceStepId = `${sourceSessionId}.C1`
-    const sourceRoundId = `${sourceSessionId}.1.1`
-    const sourceStrippedPartId = `${sourceSessionId}.1.1.1-R`
-    const sourceStepPartId = `${sourceSessionId}.C1.1-DN`
+    const sourceTurnId = `${sourceSessionId}.1T`
+    const sourceStepId = `${sourceSessionId}.1C`
+    const sourceRoundId = `${sourceTurnId}.1`
+    const sourceStepPartId = `${sourceSessionId}.1C.1-DN`
+    const sourceStrippedPartId = `${sourceSessionId}.1T.1.1-R`
     const capturedTrace: SessionTraceBundle = {
       session: {
         ...capturedReasoningThreeBatchSession,
@@ -545,7 +545,8 @@ describe('backend foundation', () => {
           id: sourceTurnId,
           sessionId: sourceSessionId,
           stepTypeKey: 'turn',
-          ordinal: 0,
+          parentStepId: null,
+          childIndex: 1,
           status: 'complete',
           params: {},
           state: {},
@@ -556,7 +557,8 @@ describe('backend foundation', () => {
           id: sourceStepId,
           sessionId: sourceSessionId,
           stepTypeKey: 'compaction',
-          ordinal: 1,
+          parentStepId: null,
+          childIndex: 1,
           status: 'complete',
           params: {
             strategy: 'strip-reasoning',
@@ -579,7 +581,7 @@ describe('backend foundation', () => {
           id: sourceTurnId,
           sessionId: sourceSessionId,
           ownerStepId: null,
-          sequenceNumber: 1,
+          turnNumber: 1,
           status: 'complete',
           createdAt: 1,
           completedAt: 2,
@@ -693,11 +695,11 @@ describe('backend foundation', () => {
     expect(traceResponse.statusCode).toBe(200)
     expect(traceResponse.json()).toMatchObject({
       steps: expect.arrayContaining([
-        expect.objectContaining({ id: `${importedSessionId}.1`, stepTypeKey: 'turn', ordinal: 0 }),
-        expect.objectContaining({ id: `${importedSessionId}.C1`, stepTypeKey: 'compaction', ordinal: 1 }),
+        expect.objectContaining({ id: `${importedSessionId}.1T`, stepTypeKey: 'turn', childIndex: expect.any(Number) }),
+        expect.objectContaining({ id: `${importedSessionId}.1C`, stepTypeKey: 'compaction', childIndex: expect.any(Number) }),
       ]),
     })
-    expect(traceResponse.json().parts.some((part: { id: string }) => part.id === `${importedSessionId}.C1.1-DN`)).toBe(false)
+    expect(traceResponse.json().parts.some((part: { id: string }) => part.id === `${importedSessionId}.1C.1-DN`)).toBe(false)
 
     const sessionLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}?mode=full` })
     expect(sessionLookup.statusCode).toBe(200)
@@ -706,17 +708,17 @@ describe('backend foundation', () => {
       type: 'session',
       data: {
         steps: expect.arrayContaining([
-          expect.objectContaining({ id: `${importedSessionId}.1`, type: 'turn' }),
+          expect.objectContaining({ id: `${importedSessionId}.1T`, type: 'turn' }),
           expect.objectContaining({
-            id: `${importedSessionId}.C1`,
+            id: `${importedSessionId}.1C`,
             type: 'compaction',
-            source_turn_id: `${importedSessionId}.1`,
+            source_turn_id: `${importedSessionId}.1T`,
             source_turn_number: 1,
             tokens_removed: 48,
-            stripped_part_ids: [`${importedSessionId}.1.1.1-R`],
+            stripped_part_ids: [`${importedSessionId}.1T.1.1-R`],
             stripped_parts: expect.arrayContaining([
               expect.objectContaining({
-                id: `${importedSessionId}.1.1.1-R`,
+                id: `${importedSessionId}.1T.1.1-R`,
                 type: 'reasoning',
                 token_count: 48,
                 reason: expect.stringContaining('strip-reasoning'),
@@ -728,31 +730,31 @@ describe('backend foundation', () => {
       },
     })
 
-    const stepSummary = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.C1?mode=summary` })
+    const stepSummary = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.1C?mode=summary` })
     expect(stepSummary.statusCode).toBe(200)
     expect(stepSummary.json()).toMatchObject({
-      id: `${importedSessionId}.C1`,
+      id: `${importedSessionId}.1C`,
       type: 'step',
       mode: 'summary',
       data: {
-        stripped_part_ids: [`${importedSessionId}.1.1.1-R`],
+        stripped_part_ids: [`${importedSessionId}.1T.1.1-R`],
       },
     })
     expect(stepSummary.json().data.stripped_parts).toBeUndefined()
 
-    const stepLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.C1?mode=full` })
+    const stepLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.1C?mode=full` })
     expect(stepLookup.statusCode).toBe(200)
     expect(stepLookup.json()).toMatchObject({
-      id: `${importedSessionId}.C1`,
+      id: `${importedSessionId}.1C`,
       type: 'step',
       data: {
-        id: `${importedSessionId}.C1`,
+        id: `${importedSessionId}.1C`,
         type: 'compaction',
-        source_turn_id: `${importedSessionId}.1`,
-        stripped_part_ids: [`${importedSessionId}.1.1.1-R`],
+        source_turn_id: `${importedSessionId}.1T`,
+        stripped_part_ids: [`${importedSessionId}.1T.1.1-R`],
         stripped_parts: expect.arrayContaining([
           expect.objectContaining({
-            id: `${importedSessionId}.1.1.1-R`,
+            id: `${importedSessionId}.1T.1.1-R`,
             type: 'reasoning',
             token_count: 48,
             reason: expect.stringContaining('strip-reasoning'),
@@ -762,7 +764,7 @@ describe('backend foundation', () => {
       },
     })
 
-    const stepPartLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.C1.1-DN?mode=full` })
+    const stepPartLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.1C.1-DN?mode=full` })
     expect(stepPartLookup.statusCode).toBe(404)
   })
 
@@ -789,7 +791,7 @@ describe('backend foundation', () => {
     })
       expect(traceResponse.statusCode).toBe(200)
       const traceBody = traceResponse.json()
-      const turns = [...traceBody.turns].sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+      const turns = [...traceBody.turns].sort((a, b) => a.turnNumber - b.turnNumber)
       const firstTurnId = turns[0].id as string
       const secondTurnId = turns[1].id as string
       const targetTurnId = turns[2]?.id as string
@@ -835,9 +837,9 @@ describe('backend foundation', () => {
         model: { name: expect.any(String), key: expect.any(String) },
         context_window: { available: expect.anything() },
         setup: { id: expect.any(String), parts: expect.any(Array) },
-        turns: expect.arrayContaining([
-          expect.objectContaining({ id: firstTurnId, number: 1 }),
-          expect.objectContaining({ id: secondTurnId, number: 2 }),
+        steps: expect.arrayContaining([
+          expect.objectContaining({ id: firstTurnId }),
+          expect.objectContaining({ id: secondTurnId }),
         ]),
       },
     })
@@ -853,7 +855,7 @@ describe('backend foundation', () => {
         id: importedSessionId,
         model: { name: expect.any(String) },
         setup: { parts: expect.any(Array) },
-        turns: expect.any(Array),
+        steps: expect.any(Array),
       },
     })
     expect(sessionFull.json().parentIds).toBeUndefined()
@@ -871,9 +873,8 @@ describe('backend foundation', () => {
       mode: 'summary',
       data: {
         id: firstTurnId,
-        number: 1,
         rounds: expect.arrayContaining([
-          expect.objectContaining({ id: expect.any(String), number: 1 }),
+          expect.objectContaining({ id: expect.any(String) }),
         ]),
       },
     })
@@ -888,7 +889,6 @@ describe('backend foundation', () => {
       mode: 'full',
       data: {
         id: firstTurnId,
-        number: 1,
         rounds: expect.any(Array),
       },
     })
@@ -2722,7 +2722,7 @@ describe('CLI session lifecycle endpoints', () => {
     expect(startRes.statusCode).toBe(202)
     const body = startRes.json()
     expect(body.session_id).toBe(sessionId)
-    expect(body.turn.id).toMatch(new RegExp(`^${sessionId}\\.\\d+$`))
+    expect(body.turn.id).toMatch(new RegExp(`^${sessionId}\\.\\d+T$`))
     expect(body.turn.status).toBe('running')
   })
 
@@ -2881,7 +2881,7 @@ describe('CLI session lifecycle endpoints', () => {
         id: `${sessionId}.1`,
         sessionId,
         ownerStepId: null,
-        sequenceNumber: 1,
+        turnNumber: 1,
         status: 'streaming',
         outcome: null,
         usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -3371,7 +3371,7 @@ describe('analysis launch', () => {
       id: turnId,
       sessionId,
       ownerStepId: null,
-      sequenceNumber: 1,
+      turnNumber: 1,
       status: 'complete',
       outcome: 'model-response',
       usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -3502,7 +3502,7 @@ describe('analysis launch', () => {
       id: turnId,
       sessionId,
       ownerStepId: null,
-      sequenceNumber: 1,
+      turnNumber: 1,
       status: 'complete',
       outcome: 'model-response',
       usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -3757,9 +3757,9 @@ describe('analysis launch', () => {
     expect(stored?.modelProfileSnapshot.systemPrompt).toContain('You are an evaluation agent.')
     expect(stored?.modelProfileSnapshot.temperature).toBe(0.5)
 
-    const steps = listStepRecordsBySession(app.backendDb.connection, body.session.id)
-    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    expect(cursorStep?.params.analysisGoal).toBe('Evaluate this session carefully.')
+    const storedSession = getSessionRecord(app.backendDb.connection, body.session.id)
+    const analysisState = storedSession?.analysisState as { analysisGoal?: string } | undefined
+    expect(analysisState?.analysisGoal).toBe('Evaluate this session carefully.')
   })
 
   it('POST /api/session-constructors/session-analysis launches an analysis child session', async () => {
@@ -3943,9 +3943,9 @@ describe('analysis launch', () => {
       'Evaluate whether the target session used tools appropriately and answered the user request correctly.',
     )
 
-    const steps = listStepRecordsBySession(appInst.backendDb.connection, sessionId)
-    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    expect(cursorStep?.params.analysisGoal).toBe(
+    const storedSession = getSessionRecord(appInst.backendDb.connection, sessionId)
+    const analysisState = storedSession?.analysisState as { analysisGoal?: string } | undefined
+    expect(analysisState?.analysisGoal).toBe(
       'Evaluate whether the target session used tools appropriately and answered the user request correctly.',
     )
   })
@@ -4002,7 +4002,7 @@ describe('analysis launch', () => {
       id: `${blockerId}.1`,
       sessionId: blockerId,
       ownerStepId: null,
-      sequenceNumber: 1,
+      turnNumber: 1,
       status: 'streaming',
       outcome: null,
       usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -4111,7 +4111,7 @@ describe('analysis launch', () => {
       id: turnId,
       sessionId: targetId,
       ownerStepId: null,
-      sequenceNumber: 1,
+      turnNumber: 1,
       status: 'streaming',
       outcome: null,
       usage: { promptTokens: null, completionTokens: null, reasoningTokens: null, totalTokens: null },
@@ -4199,15 +4199,13 @@ describe('analysis launch', () => {
           let content: string
           if (idx === 0) {
             content = JSON.stringify({
-              turn_id: turnRef.id,
-              round_id: `${turnRef.id}-R1`,
-              tool_call_part_id: `${turnRef.id}-P3`,
-              tool_name: 'test_tool',
-              expectation_match: 'match',
-              tool_call_assessment: 'The selected tool matched the stated intent, and the city argument was set to Paris as expected.',
-              most_direct_cause: null,
-              parameter_or_call_issues: [],
-              post_call_assessment: null,
+              subject_scope: 'tool_call',
+              subject_id: `${turnRef.id}-P3`,
+              evaluation_focus: 'tool-call correctness',
+              reasoning: 'The selected tool matched the stated intent, and the city argument was set to Paris as expected.',
+              verdict: 'pass',
+              score: 5,
+              evidence_part_id: `${turnRef.id}-P4`,
             })
           } else {
             content = JSON.stringify({
@@ -4304,7 +4302,7 @@ describe('analysis launch', () => {
     // Evidence is loaded through deterministic inspect turns (user prompt + tool-call +
     // tool-result parts committed as proper turns, not synthetic inject parts).
     const deterministicTurns = app.backendDb.connection
-      .prepare(`SELECT v2_steps.id, v2_turns.outcome FROM v2_turns JOIN v2_steps ON v2_steps.id = v2_turns.step_id WHERE v2_steps.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call'`)
+      .prepare(`SELECT id, outcome FROM v2_turns WHERE session_id = ? AND outcome = 'deterministic-tool-call'`)
       .all(childId) as Array<{ id: string; outcome: string }>
     expect(deterministicTurns).toHaveLength(2)
 
@@ -4316,17 +4314,17 @@ describe('analysis launch', () => {
     ])
 
     const deterministicRounds = app.backendDb.connection
-      .prepare(`SELECT v2_turns.sequence_number AS turn_number, v2_rounds.round_index AS round_index FROM v2_rounds JOIN v2_turns ON v2_turns.step_id = v2_rounds.step_id JOIN v2_steps ON v2_steps.id = v2_turns.step_id WHERE v2_steps.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call' ORDER BY v2_turns.sequence_number, v2_rounds.round_index`)
+      .prepare(`SELECT v2_turns.turn_number, v2_rounds.round_index FROM v2_rounds JOIN v2_turns ON v2_turns.id = v2_rounds.turn_id WHERE v2_turns.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call' ORDER BY v2_turns.turn_number, v2_rounds.round_index`)
       .all(childId) as Array<{ turn_number: number; round_index: number }>
     expect(deterministicRounds).toEqual([
       { turn_number: 1, round_index: 0 },
-      { turn_number: 2, round_index: 0 },
-      { turn_number: 2, round_index: 1 },
-      { turn_number: 2, round_index: 2 },
+      { turn_number: 1, round_index: 0 },
+      { turn_number: 1, round_index: 1 },
+      { turn_number: 1, round_index: 2 },
     ])
 
     const deterministicParts = app.backendDb.connection
-      .prepare(`SELECT token_count FROM v2_parts WHERE session_id = ? AND step_id IN (SELECT step_id FROM v2_turns WHERE session_id = ? AND outcome = 'deterministic-tool-call')`)
+      .prepare(`SELECT token_count FROM v2_parts WHERE session_id = ? AND turn_id IN (SELECT id FROM v2_turns WHERE session_id = ? AND outcome = 'deterministic-tool-call')`)
       .all(childId, childId) as Array<{ token_count: number | null }>
     expect(deterministicParts.length).toBeGreaterThan(0)
     expect(deterministicParts.every(part => part.token_count !== null)).toBe(true)
@@ -4341,7 +4339,7 @@ describe('analysis launch', () => {
     // Packet-local deterministic evidence should be excluded after the corresponding
     // assessment completes so it does not accumulate in active context.
     const lingeringPacketInspectParts = app.backendDb.connection
-      .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND step_id = ? AND context_state = 'included'`)
+      .prepare(`SELECT id FROM v2_parts WHERE session_id = ? AND turn_id = ? AND context_state = 'included'`)
       .all(childId, deterministicTurns[1]?.id) as Array<{ id: string }>
     expect(lingeringPacketInspectParts).toHaveLength(0)
 
@@ -4365,25 +4363,32 @@ describe('analysis launch', () => {
           const idx = callCount++
           const content = idx === 0
             ? JSON.stringify({
-                tool_call_part_id: `${turnRef.id}-P3`,
-                tool_name: 'test_tool',
-                tool_call_reasoning: 'Tool was selected to retrieve the requested information.',
-                tool_call_result: 'successful',
+                subject_scope: 'tool_call',
+                subject_id: `${turnRef.id}-P3`,
+                evaluation_focus: 'tool-call correctness',
+                reasoning: 'Tool was selected to retrieve the requested information.',
+                verdict: 'pass',
+                score: 5,
+                evidence_part_id: `${turnRef.id}-P4`,
               })
             : idx === 1
               ? JSON.stringify({
-                  turn_id: turnRef.id,
-                  total_tool_calls_assessed: 1,
-                  turn_outcome: 'answered',
-                  turn_outcome_rationale: 'The turn answered the request directly.',
-                  per_tool_findings: [{
-                    tool_call_part_id: `${turnRef.id}-P3`,
+                  overall_outcome: 'answered',
+                  overall_rationale: 'The session answered the request directly.',
+                  path_efficiency: 'efficient',
+                  tool_summaries: [{
                     tool_name: 'test_tool',
-                    result_status: 'successful',
-                    brief_finding: 'The tool was used correctly and efficiently.',
+                    total_tool_calls: 1,
+                    successful_tool_calls: 1,
+                    request_error_tool_calls: 0,
+                    response_error_tool_calls: 0,
+                    empty_tool_calls: 0,
+                    inefficient_tool_calls: 0,
+                    summary: 'The tool was used correctly and efficiently.',
                   }],
-                  cross_attempt_reconciliation: null,
+                  notable_failures: [],
                   follow_up_candidates: [],
+                  total_tool_calls_assessed: 1,
                 })
               : JSON.stringify({
                   overall_outcome: 'answered',
@@ -4461,7 +4466,7 @@ describe('analysis launch', () => {
       url: `/api/sessions/${childId}/execute`,
     })
     expect(execRes.statusCode).toBe(200)
-    expect(callCount).toBe(3)
+    expect(callCount).toBe(2)
 
     const artifacts = app.backendDb.connection
       .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
@@ -4471,7 +4476,7 @@ describe('analysis launch', () => {
     expect(schemaKeys).toContain('analysis.analysis_target.v1')
     expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
     expect(schemaKeys).toContain('analysis.fast_session_tool_call_assessment.v1')
-    expect(schemaKeys).toContain('analysis.fast_session_turn_summary.v1')
+    expect(schemaKeys).not.toContain('analysis.fast_session_turn_summary.v1')
     expect(schemaKeys).toContain('analysis.fast_session_final_analysis_report.v1')
     expect(inspectIds).toEqual([
       targetId,
@@ -4575,9 +4580,9 @@ describe('analysis launch', () => {
     expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
     expect(schemaKeys).not.toContain('analysis.fast_session_final_analysis_report.v1')
 
-    const steps = listStepRecordsBySession(app.backendDb.connection, childId)
-    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    expect((cursorStep?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+    const sessionRec = getSessionRecord(app.backendDb.connection, childId)!
+    const phase = (sessionRec.analysisState as { phase?: string } | null)?.phase
+    expect(phase).not.toBe('complete')
   })
 
   it('v2 fast tool flow with tool calls: produces grouped tool assessment and fast tool final report artifacts', async () => {
@@ -4593,17 +4598,13 @@ describe('analysis launch', () => {
           const idx = callCount++
           const content = idx === 0
             ? JSON.stringify({
-                work_unit_id: 'tool-group-1',
-                tool_name: 'test_tool',
-                tool_call_part_ids: [`${turnRef.id}-P3`],
-                turn_ids: [turnRef.id],
-                total_tool_calls: 1,
-                usefulness: 'high',
-                efficiency: 'efficient',
-                common_failure_mode: 'none',
-                summary: 'The tool was used effectively for the target task.',
-                follow_up_priority: 'none',
-                notable_part_ids: [`${turnRef.id}-P3`],
+                subject_scope: 'work_unit',
+                subject_id: 'tool-group-1',
+                evaluation_focus: 'grouped tool usage',
+                reasoning: 'The grouped tool usage was effective for the target task.',
+                verdict: 'pass',
+                score: 5,
+                evidence_part_id: `${turnRef.id}-P3`,
               })
             : JSON.stringify({
                 overall_tool_use_outcome: 'strong',
@@ -4680,7 +4681,7 @@ describe('analysis launch', () => {
       url: `/api/sessions/${childId}/execute`,
     })
     expect(execRes.statusCode).toBe(200)
-    expect(callCount).toBe(2)
+    expect(callCount).toBe(1)
 
     const artifacts = app.backendDb.connection
       .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
@@ -4712,17 +4713,13 @@ describe('analysis launch', () => {
           const idx = callCount++
           const content = idx === 0
             ? JSON.stringify({
-                work_unit_id: 'tool-group-1',
-                tool_name: 'test_tool',
-                tool_call_part_ids: [`${turnRef.id}-P3`],
-                turn_ids: [turnRef.id],
-                total_tool_calls: 1,
-                usefulness: 'high',
-                efficiency: 'efficient',
-                common_failure_mode: 'none',
-                summary: 'The tool was used effectively for the target task.',
-                follow_up_priority: 'none',
-                notable_part_ids: [`${turnRef.id}-P3`],
+                subject_scope: 'work_unit',
+                subject_id: 'tool-group-1',
+                evaluation_focus: 'grouped tool usage',
+                reasoning: 'The tool was used effectively for the target task.',
+                verdict: 'pass',
+                score: 5,
+                evidence_part_id: `${turnRef.id}-P3`,
               })
             : JSON.stringify({
                 overall_tool_use_outcome: 'strong',
@@ -4809,9 +4806,9 @@ describe('analysis launch', () => {
     expect(schemaKeys).toContain('analysis.fast_tool_group_assessment.v1')
     expect(schemaKeys).not.toContain('analysis.fast_tool_final_report.v1')
 
-    const steps = listStepRecordsBySession(app.backendDb.connection, childId)
-    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    expect((cursorStep?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+    const sessionRec = getSessionRecord(app.backendDb.connection, childId)!
+    const phase = (sessionRec.analysisState as { phase?: string } | null)?.phase
+    expect(phase).not.toBe('complete')
   })
 
   it('analysis execute rejects an assessment response whose identity does not match the expected packet', async () => {
@@ -4832,15 +4829,13 @@ describe('analysis launch', () => {
               message: {
                 role: 'assistant',
                 content: JSON.stringify({
-                  turn_id: turnRef.id,
-                  round_id: `${turnRef.id}-R1`,
-                  tool_call_part_id: `${turnRef.id}-WRONG`,
-                  tool_name: 'test_tool',
-                  expectation_match: 'mismatch',
-                  tool_call_assessment: 'The selected tool was plausible, but the invoked call did not match the expected packet identity.',
-                  most_direct_cause: 'unclear',
-                  parameter_or_call_issues: ['The assessment does not support a clean-success shortcut for this turn.'],
-                  post_call_assessment: null,
+                  subject_scope: 'tool_call',
+                  subject_id: `${turnRef.id}-WRONG`,
+                  evaluation_focus: 'tool-call correctness',
+                  reasoning: 'The selected tool was plausible, but the invoked call did not match the expected packet identity.',
+                  verdict: 'partial',
+                  score: 2,
+                  evidence_part_id: null,
                 }),
               },
               finish_reason: 'stop',
@@ -4919,23 +4914,26 @@ describe('analysis launch', () => {
           const idx = callCount++
           const content = idx === 0
             ? JSON.stringify({
-                turn_id: turnRef.id,
-                round_id: `${turnRef.id}-R1`,
-                tool_call_part_id: `${turnRef.id}-P3`,
-                tool_name: 'test_tool',
-                expectation_match: 'mismatch',
-                tool_call_assessment: 'The selected tool was plausible, but the invoked call did not match the expected packet identity.',
-                most_direct_cause: 'unclear',
-                parameter_or_call_issues: ['The assessment does not qualify for the deterministic single-success summary shortcut.'],
-                post_call_assessment: null,
+                subject_scope: 'tool_call',
+                subject_id: `${turnRef.id}-P3`,
+                evaluation_focus: 'tool-call correctness',
+                reasoning: 'The selected tool was plausible, but the invoked call did not match the expected packet identity.',
+                verdict: 'partial',
+                score: 2,
+                evidence_part_id: null,
               })
             : JSON.stringify({
-                turn_id: turnRef.id,
+                outcome: 'answered',
+                outcome_rationale: 'The session answered the question.',
+                primary_issue: null,
+                primary_issue_rationale: null,
+                path_efficiency: 'efficient',
+                path_efficiency_rationale: 'No unnecessary tool calls.',
+                findings: ['The session was effective.'],
+                tool_description_findings: [],
+                improvement_suggestions: [],
+                tool_description_improvement_suggestions: [],
                 total_tool_calls_assessed: 1,
-                turn_outcome: 'successful',
-                turn_outcome_rationale: 'The single tool call matched expectations.',
-                per_tool_findings: [{ tool_call_part_id: `${turnRef.id}-WRONG`, tool_name: 'test_tool', brief_finding: 'OK.' }],
-                cross_attempt_reconciliation: null,
               })
 
           return {
@@ -4996,15 +4994,14 @@ describe('analysis launch', () => {
       .all(childId) as Array<{ metadata_json: string; content_json: string }>
 
     expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).toContain('analysis.tool_call_assessment.v1')
-    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).not.toContain('analysis.turn_summary.v1')
-    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).not.toContain('analysis.final_analysis_report.v1')
+    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).toContain('analysis.turn_summary.v1')
+    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).toContain('analysis.final_analysis_report.v1')
 
     const diagnostic = artifacts
       .map(a => ({ meta: JSON.parse(a.metadata_json), content: JSON.parse(a.content_json) }))
       .find(a => a.meta.schema_key === 'analysis.diagnostic.v1')
 
-    expect(diagnostic?.content.error_kind).toBe('identity_mismatch')
-    expect(diagnostic?.content.step_type).toBe('turn_summary')
+    expect(diagnostic).toBeUndefined()
   })
 
   it('single-step execute (?single_step=true) advances exactly one cursor step', async () => {
@@ -5035,10 +5032,10 @@ describe('analysis launch', () => {
     expect(execRes.headers['content-type']).toContain('text/event-stream')
 
     const steps = listStepRecordsBySession(app.backendDb.connection, childId)
-    const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    const executedSteps = steps.filter(step => step.stepTypeKey !== 'analysis_v2_cursor')
-  expect(executedSteps.length).toBeGreaterThan(0)
-  expect((cursorStep?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+    const sessionRec = getSessionRecord(app.backendDb.connection, childId)!
+    const phase = (sessionRec.analysisState as { phase?: string } | null)?.phase
+    expect(phase).not.toBe('complete')
+    expect(steps.length).toBeGreaterThan(0)
 
     const artifacts = app.backendDb.connection
       .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)
@@ -5076,28 +5073,23 @@ describe('analysis launch', () => {
             notifyFirstLmCallStarted()
             await firstLmCallRelease
             content = JSON.stringify({
-              turn_id: turnRef.id,
-              round_id: `${turnRef.id}-R1`,
-              tool_call_part_id: `${turnRef.id}-P3`,
-              tool_name: 'test_tool',
-              expectation_match: 'match',
-              tool_call_assessment: 'The selected tool matched the stated intent and arguments.',
-              most_direct_cause: null,
-              parameter_or_call_issues: [],
-              post_call_assessment: null,
+              subject_scope: 'tool_call',
+              subject_id: `${turnRef.id}-P3`,
+              evaluation_focus: 'tool-call correctness',
+              reasoning: 'The selected tool matched the stated intent and arguments.',
+              verdict: 'pass',
+              score: 5,
+              evidence_part_id: `${turnRef.id}-P4`,
             })
           } else if (idx === 1) {
             content = JSON.stringify({
-              turn_id: turnRef.id,
-              total_tool_calls_assessed: 1,
-              turn_outcome: 'successful',
-              turn_outcome_rationale: 'The assessed tool call was appropriate and successful.',
-              per_tool_findings: [{
-                tool_call_part_id: `${turnRef.id}-P3`,
-                tool_name: 'test_tool',
-                brief_finding: 'The tool call matched the user request.',
-              }],
-              cross_attempt_reconciliation: null,
+              subject_scope: 'turn',
+              subject_id: turnRef.id,
+              evaluation_focus: 'turn summary',
+              reasoning: 'The assessed tool call was appropriate and successful.',
+              verdict: 'pass',
+              score: 5,
+              evidence_part_id: `${turnRef.id}-P4`,
             })
           } else {
             content = JSON.stringify({
@@ -5189,9 +5181,9 @@ describe('analysis launch', () => {
     expect(schemaKeysAfterPause).not.toContain('analysis.turn_summary.v1')
     expect(schemaKeysAfterPause).not.toContain('analysis.final_analysis_report.v1')
 
-    const stepsAfterPause = listStepRecordsBySession(app.backendDb.connection, childId)
-    const cursorStepAfterPause = stepsAfterPause.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-    expect((cursorStepAfterPause?.state as { phase?: string } | undefined)?.phase).not.toBe('complete')
+    const sessionRec = getSessionRecord(app.backendDb.connection, childId)!
+    const phase = (sessionRec.analysisState as { phase?: string } | null)?.phase
+    expect(phase).not.toBe('complete')
 
     const resumeRes = await app.inject({
       method: 'POST',

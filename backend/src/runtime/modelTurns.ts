@@ -5,7 +5,7 @@ import {
   getNextRoundPartSequence,
   getNextPartOrdinal,
   listStepRecordsBySession,
-  getNextTurnSequenceNumber,
+  getNextTurnNumber,
   getSessionRecord,
   insertPartRecord,
   insertRawExchangeRecord,
@@ -220,18 +220,18 @@ export async function createModelOnlyTurn(
   )
   const requestMessages = buildModelMessages(session, existingParts, input.userContent)
   const startedAt = input.reservedTurn?.createdAt ?? now()
-  const turnSequenceNumber = input.reservedTurn?.sequenceNumber
-    ?? getNextTurnSequenceNumber(database.connection, session.id)
+  const turnNumber = input.reservedTurn?.turnNumber
+    ?? getNextTurnNumber(database.connection, session.id, input.ownerStepId ?? null)
   const turnId = input.reservedTurn?.id
-    ?? formatTurnId(session.id, turnSequenceNumber)
-  const roundId = formatRoundId(session.id, turnSequenceNumber, 1)
+    ?? formatTurnId(session.id, turnNumber, input.ownerStepId ?? null)
+  const roundId = formatRoundId(session.id, turnNumber, 1, input.ownerStepId ?? null)
   const turn: TurnRecord = input.reservedTurn
     ? { ...input.reservedTurn }
     : {
         id: turnId,
         sessionId: session.id,
       ownerStepId: input.ownerStepId ?? null,
-        sequenceNumber: turnSequenceNumber,
+        turnNumber,
         status: 'streaming',
         createdAt: startedAt,
         completedAt: null,
@@ -279,7 +279,7 @@ export async function createModelOnlyTurn(
   const initialOrdinal = getNextPartOrdinal(database.connection, session.id)
   const initialPartNumber = getNextRoundPartSequence(database.connection, roundId)
   const userPart: PartRecord = {
-    id: formatPartId(session.id, turnSequenceNumber, 1, initialPartNumber, 'user-message'),
+    id: formatPartId(session.id, turnNumber, 1, initialPartNumber, 'user-message', input.ownerStepId ?? null),
     sessionId: session.id,
     turnId,
     roundId,
@@ -474,7 +474,7 @@ export async function createModelOnlyTurn(
       }
       const tokenMetadata = reasoningTokenMetadata.shift()
       assistantParts.push({
-        id: formatPartId(session.id, turnSequenceNumber, 1, nextPartNumber++, 'assistant-reasoning'),
+        id: formatPartId(session.id, turnNumber, 1, nextPartNumber++, 'assistant-reasoning', input.ownerStepId ?? null),
         sessionId: session.id,
         turnId,
         roundId,
@@ -517,7 +517,7 @@ export async function createModelOnlyTurn(
       }
       const tokenMetadata = assistantContentTokenMetadata.shift()
       assistantParts.push({
-        id: formatPartId(session.id, turnSequenceNumber, 1, nextPartNumber++, 'assistant-content'),
+        id: formatPartId(session.id, turnNumber, 1, nextPartNumber++, 'assistant-content', input.ownerStepId ?? null),
         sessionId: session.id,
         turnId,
         roundId,
@@ -590,7 +590,7 @@ export async function createModelOnlyTurn(
 
   session.status = 'active'
   session.updatedAt = completedAt
-  maybeApplyAutomaticSessionTitle(session, turn.sequenceNumber, input.userContent)
+  maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent)
   const prefixMessages = requestMessages.slice(0, Math.max(0, requestMessages.length - 1))
   const prefixTokens = prefixMessages.length > 0
     ? await probeRequestPromptTokens(lmStudioGateway, session, prefixMessages, undefined, {

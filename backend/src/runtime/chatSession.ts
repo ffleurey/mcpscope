@@ -20,18 +20,20 @@ import {
   CONTAINER_TYPE,
   SESSION_TYPE,
   STEP_TYPE,
+  type Benchmark,
   type ContainerTypeKey,
+  type GenericParams,
+  type GenericState,
   type Session,
-  type SessionContainer,
   type SessionLifecycleStatus,
   type SessionTypeKey,
   type Step,
   type StepExecutionContext,
   type StepResult,
   type StepStatus,
-  type GenericParams,
-  type GenericState,
 } from '../domain/executionModel.js'
+
+type SessionContainer = Session | Benchmark
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ChatTurnStep

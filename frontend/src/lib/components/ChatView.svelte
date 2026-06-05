@@ -57,7 +57,7 @@
   let titleDraft = $state('')
   let titleInputEl = $state<HTMLInputElement | null>(null)
   let session = $derived($activeSession)
-  let traceSteps = $derived([...($activeTrace?.steps ?? [])].sort((a, b) => a.ordinal - b.ordinal))
+  let traceSteps = $derived([...($activeTrace?.steps ?? [])].sort((a, b) => a.childIndex - b.childIndex))
   let visibleParts = $derived.by(() =>
     ($activeTrace?.parts ?? [])
       .filter((p) => p.display.state !== 'hidden')
@@ -66,12 +66,10 @@
   let transcriptParts = $derived(visibleParts.filter((p) => p.display.state === 'transcript'))
   let sessionPreludeParts = $derived(visibleParts.filter((p) => p.turnId === null))
   let traceTurns = $derived(
-    [...($activeTrace?.turns ?? [])].sort((a, b) => a.sequenceNumber - b.sequenceNumber),
+    [...($activeTrace?.turns ?? [])].sort((a, b) => a.turnNumber - b.turnNumber),
   )
   let traceArtifacts = $derived($activeTrace?.artifacts ?? [])
-  let renderableSteps = $derived.by(() =>
-    traceSteps.filter((step) => step.stepTypeKey !== 'analysis_v2_cursor'),
-  )
+  let renderableSteps = $derived(traceSteps)
   let analysisWorkflowSteps = $derived.by((): WorkflowStepTrace[] => {
     const postambleStepsByTurn = new Map<string, StepRecord[]>()
     for (const step of traceSteps) {
@@ -88,7 +86,7 @@
     }
 
     return traceSteps
-      .filter((step) => step.stepTypeKey !== 'turn' && step.stepTypeKey !== 'analysis_v2_cursor' && step.stepTypeKey !== 'compaction')
+      .filter((step) => step.stepTypeKey !== 'turn' && step.stepTypeKey !== 'compaction')
       .map((step) => {
         const ownedTurns = traceTurns.filter((turn) => turn.ownerStepId === step.id)
         const postambleSteps = ownedTurns.flatMap((turn) => postambleStepsByTurn.get(turn.id) ?? [])
@@ -106,7 +104,7 @@
       : [],
   )
   let traceRounds = $derived.by(() => {
-    const turnSeq = new Map(($activeTrace?.turns ?? []).map((t) => [t.id, t.sequenceNumber]))
+    const turnSeq = new Map(($activeTrace?.turns ?? []).map((t) => [t.id, t.turnNumber]))
     return [...($activeTrace?.rounds ?? [])].sort((a, b) => {
       const tA = turnSeq.get(a.turnId) ?? 0
       const tB = turnSeq.get(b.turnId) ?? 0
@@ -167,10 +165,10 @@
         return left.kind === 'step' ? -1 : 1
       }
       if (left.kind === 'step' && right.kind === 'step') {
-        return left.step.ordinal - right.step.ordinal
+        return left.step.childIndex - right.step.childIndex
       }
       if (left.kind === 'turn' && right.kind === 'turn') {
-        return left.turn.sequenceNumber - right.turn.sequenceNumber
+        return left.turn.turnNumber - right.turn.turnNumber
       }
       return left.id.localeCompare(right.id)
     })
@@ -206,15 +204,11 @@
   let isAnalysisSession = $derived(session?.session_type === 'session_analysis')
   let analysisPhase = $derived.by(() => {
     if (!isAnalysisSession) return null
-    const cursorStep = traceSteps.find((s) => s.stepTypeKey === 'analysis_v2_cursor')
-    return typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : 'bootstrap'
+    return session?.workflow_phase ?? null
   })
   let analysisWorkflowKind = $derived.by(() => {
     if (!isAnalysisSession) return null
-    const fromSummary = session?.workflow_kind
-    if (fromSummary) return fromSummary
-    const cursorStep = traceSteps.find((s) => s.stepTypeKey === 'analysis_v2_cursor')
-    return typeof cursorStep?.params.workflow_kind === 'string' ? cursorStep.params.workflow_kind : null
+    return session?.workflow_kind ?? null
   })
   let analysisWorkflowLabel = $derived.by(() => {
     switch (analysisWorkflowKind) {

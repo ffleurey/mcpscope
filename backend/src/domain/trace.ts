@@ -75,6 +75,10 @@ export interface SessionTraceBundle {
   context: ReturnType<typeof deriveContextEntries>
 }
 
+function isVisibleTraceStep(_step: StepRecord): boolean {
+  return true
+}
+
 function deriveWorkflowSteps(
   steps: StepRecord[],
   turns: TurnRecord[],
@@ -101,14 +105,14 @@ function deriveWorkflowSteps(
   }
 
   return [...steps]
-    .filter(step => step.stepTypeKey !== 'turn' && step.stepTypeKey !== 'analysis_v2_cursor' && step.stepTypeKey !== 'compaction')
-    .sort((left, right) => left.ordinal - right.ordinal)
+    .filter(step => step.stepTypeKey !== 'turn' && step.stepTypeKey !== 'compaction')
+    .sort((left, right) => left.childIndex - right.childIndex)
     .map((step) => {
       const ownedTurns = [...(ownedTurnsByStepId.get(step.id) ?? [])]
-        .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
+        .sort((left, right) => left.turnNumber - right.turnNumber)
       const postambleSteps = ownedTurns
         .flatMap(turn => postambleStepsByTurnId.get(turn.id) ?? [])
-        .sort((left, right) => left.ordinal - right.ordinal)
+        .sort((left, right) => left.childIndex - right.childIndex)
       const stepArtifacts = [...(artifactsByStepId.get(step.id) ?? [])]
         .sort((left, right) => left.createdAt - right.createdAt)
 
@@ -132,7 +136,7 @@ export function buildSessionTraceBundle(input: {
   transcript: ReturnType<typeof deriveTranscriptEntries>
   context: ReturnType<typeof deriveContextEntries>
 }): SessionTraceBundle {
-  const steps = input.steps ?? []
+  const steps = (input.steps ?? []).filter(isVisibleTraceStep)
   const artifacts = input.artifacts ?? []
 
   return {

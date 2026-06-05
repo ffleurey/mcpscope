@@ -60,12 +60,12 @@ function makeSessionRecord(overrides: Partial<SessionRecord> & Pick<SessionRecor
   }
 }
 
-function makeTurnRecord(overrides: Partial<TurnRecord> & Pick<TurnRecord, 'id' | 'sessionId' | 'sequenceNumber'>): TurnRecord {
+function makeTurnRecord(overrides: Partial<TurnRecord> & Pick<TurnRecord, 'id' | 'sessionId' | 'turnNumber'>): TurnRecord {
   return {
     id: overrides.id,
     sessionId: overrides.sessionId,
     ownerStepId: overrides.ownerStepId ?? null,
-    sequenceNumber: overrides.sequenceNumber,
+    turnNumber: overrides.turnNumber,
     status: overrides.status ?? 'complete',
     createdAt: overrides.createdAt ?? 1,
     completedAt: overrides.completedAt ?? 2,
@@ -159,12 +159,13 @@ function makeAnalysisState(overrides: Partial<AnalysisSessionState>): AnalysisSe
   }
 }
 
-function makeStepRecord(overrides: Partial<StepPersistenceRecord> & Pick<StepPersistenceRecord, 'id' | 'sessionId' | 'stepTypeKey' | 'ordinal'>): StepPersistenceRecord {
+function makeStepRecord(overrides: Partial<StepPersistenceRecord> & Pick<StepPersistenceRecord, 'id' | 'sessionId' | 'stepTypeKey' | 'childIndex'>): StepPersistenceRecord {
   return {
     id: overrides.id,
     sessionId: overrides.sessionId,
     stepTypeKey: overrides.stepTypeKey as StepPersistenceRecord['stepTypeKey'],
-    ordinal: overrides.ordinal,
+    parentStepId: null,
+    childIndex: overrides.childIndex,
     status: overrides.status ?? 'complete',
     params: overrides.params ?? {},
     state: overrides.state ?? {},
@@ -245,7 +246,7 @@ describe('analysis workflow helpers', () => {
       id: 'ANLY.step.bootstrap',
       sessionId: 'ANLY',
       stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'],
-      ordinal: 0,
+      childIndex: 0,
     }))
 
     insertPartRecord(db.connection, makePartRecord({
@@ -263,7 +264,7 @@ describe('analysis workflow helpers', () => {
       payload: { text: null, json: { tools: ['weather_get'] }, mimeType: 'application/json', summary: null },
     }))
 
-    insertTurnRecord(db.connection, makeTurnRecord({ id: 'TARG.1', sessionId: 'TARG', sequenceNumber: 1 }))
+    insertTurnRecord(db.connection, makeTurnRecord({ id: 'TARG.1', sessionId: 'TARG', turnNumber: 1 }))
     insertRoundRecord(db.connection, makeRoundRecord({ id: 'TARG.1.1', turnId: 'TARG.1', roundIndex: 0, finishReason: 'tool_calls' }))
     insertRoundRecord(db.connection, makeRoundRecord({ id: 'TARG.1.2', turnId: 'TARG.1', roundIndex: 1 }))
 
@@ -359,10 +360,10 @@ describe('analysis workflow helpers', () => {
       id: 'ANLY.step.bootstrap',
       sessionId: 'ANLY',
       stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'],
-      ordinal: 0,
+      childIndex: 0,
     }))
 
-    insertTurnRecord(db.connection, makeTurnRecord({ id: 'TARG.1', sessionId: 'TARG', sequenceNumber: 1 }))
+    insertTurnRecord(db.connection, makeTurnRecord({ id: 'TARG.1', sessionId: 'TARG', turnNumber: 1 }))
     insertRoundRecord(db.connection, makeRoundRecord({ id: 'TARG.1.1', turnId: 'TARG.1', roundIndex: 0, finishReason: 'tool_calls' }))
 
     insertPartRecord(db.connection, makePartRecord({
@@ -453,9 +454,9 @@ describe('analysis workflow helpers', () => {
         updatedAt: 1,
       },
     }))
-    insertTurnRecord(db.connection, makeTurnRecord({ id: 'ANLY.1', sessionId: 'ANLY', sequenceNumber: 1 }))
+    insertTurnRecord(db.connection, makeTurnRecord({ id: 'ANLY.1', sessionId: 'ANLY', turnNumber: 1 }))
     insertRoundRecord(db.connection, makeRoundRecord({ id: 'ANLY.1.1', turnId: 'ANLY.1', roundIndex: 0 }))
-    insertTurnRecord(db.connection, makeTurnRecord({ id: 'ANLY.2', sessionId: 'ANLY', sequenceNumber: 2 }))
+    insertTurnRecord(db.connection, makeTurnRecord({ id: 'ANLY.2', sessionId: 'ANLY', turnNumber: 2 }))
     insertRoundRecord(db.connection, makeRoundRecord({ id: 'ANLY.2.1', turnId: 'ANLY.2', roundIndex: 0 }))
     insertPartRecord(db.connection, makePartRecord({ id: 'ANLY.2.1.1-U', sessionId: 'ANLY', turnId: 'ANLY.2', roundId: 'ANLY.2.1', ordinal: 1, partType: 'user-message' }))
     insertPartRecord(db.connection, makePartRecord({ id: 'INJECT-1', sessionId: 'ANLY', turnId: 'ANLY.1', roundId: 'ANLY.1.1', ordinal: 2, partType: 'tool-call' }))
@@ -494,9 +495,9 @@ describe('analysis workflow helpers', () => {
     db = makeTestDatabase()
 
     createSessionRecord(db.connection, makeSessionRecord({ id: 'ANLY', sessionType: 'session_analysis', parentKind: 'session', parentId: 'TARG' }))
-    insertStepRecord(db.connection, makeStepRecord({ id: 'step-1', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], ordinal: 0 }))
-    insertStepRecord(db.connection, makeStepRecord({ id: 'step-2', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], ordinal: 1 }))
-    insertStepRecord(db.connection, makeStepRecord({ id: 'step-3', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], ordinal: 2 }))
+    insertStepRecord(db.connection, makeStepRecord({ id: 'step-1', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 0 }))
+    insertStepRecord(db.connection, makeStepRecord({ id: 'step-2', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 1 }))
+    insertStepRecord(db.connection, makeStepRecord({ id: 'step-3', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 2 }))
     insertJsonArtifact(db.connection, {
       id: 'artifact-packets',
       sessionId: 'ANLY',
@@ -551,7 +552,7 @@ describe('analysis workflow helpers', () => {
       id: 'step-final',
       sessionId: 'ANLY',
       stepTypeKey: 'analysis_final_aggregation' as StepPersistenceRecord['stepTypeKey'],
-      ordinal: 0,
+      childIndex: 0,
       status: 'running',
     }))
     insertJsonArtifact(db.connection, {
@@ -745,7 +746,7 @@ describe('analysis workflow helpers', () => {
       id: 'step-final',
       sessionId: 'ANLY',
       stepTypeKey: 'analysis_final_aggregation' as StepPersistenceRecord['stepTypeKey'],
-      ordinal: 0,
+      childIndex: 0,
       status: 'running',
     }))
 
@@ -915,7 +916,7 @@ describe('analysis workflow helpers', () => {
     db = makeTestDatabase()
 
     createSessionRecord(db.connection, makeSessionRecord({ id: 'TARG' }))
-    insertTurnRecord(db.connection, makeTurnRecord({ id: 'TARG.1', sessionId: 'TARG', sequenceNumber: 1 }))
+    insertTurnRecord(db.connection, makeTurnRecord({ id: 'TARG.1', sessionId: 'TARG', turnNumber: 1 }))
     insertRoundRecord(db.connection, makeRoundRecord({ id: 'TARG.1.1', turnId: 'TARG.1', roundIndex: 0 }))
     insertRoundRecord(db.connection, makeRoundRecord({ id: 'TARG.1.2', turnId: 'TARG.1', roundIndex: 1 }))
 

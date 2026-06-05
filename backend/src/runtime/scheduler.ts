@@ -295,15 +295,14 @@ export class ExecutionScheduler {
   /**
    * Enqueue a step target.
    *
-   * Admission: the session must be a ready analysis session, the step must be
-   * the cursor step (analysis_v2_cursor) for that session, the cursor phase must
-   * not be complete or error, and the session must not already have an active
-   * or pending job.
+   * Admission: the session must be a ready analysis session, the analysis
+    * state phase must not be complete or error, and the session must not already
+    * have an active or pending job.
    *
    * Returns the new job.
    */
   enqueueStep(opCtx: SchedulerContext, sessionId: string, stepId: string): ExecutionJob {
-    assertStepJobAllowed(opCtx, sessionId, stepId, value => this.hasJobForSession(value))
+    assertStepJobAllowed(opCtx, sessionId, value => this.hasJobForSession(value))
 
     const job: ExecutionJob = {
       jobId: randomUUID(),

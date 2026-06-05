@@ -180,7 +180,7 @@
           <ContextSnapshotBar
             entries={lastSnapshot}
             contextSize={loadedContextLength}
-            label="After turn {turn.sequenceNumber}"
+            label="After turn {turn.turnNumber}"
             showLegend={false}
             turnId={turn.id}
             compact
@@ -244,7 +244,7 @@
           <ContextSnapshotBar
             entries={lastSnapshot}
             contextSize={loadedContextLength}
-            label="After turn {turn.sequenceNumber}"
+            label="After turn {turn.turnNumber}"
             showLegend={false}
             turnId={turn.id}
             compact

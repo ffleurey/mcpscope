@@ -65,12 +65,13 @@ export function formatSetupPartId(sessionId: string, partNumber: number, partTyp
   return suffix ? `${sessionId}.S.${partNumber}-${suffix}` : `${sessionId}.S.${partNumber}`
 }
 
-export function formatTurnId(sessionId: string, turnNumber: number): string {
-  return `${sessionId}.${turnNumber}`
+export function formatTurnId(sessionId: string, turnNumber: number, ownerStepId?: string | null): string {
+  const prefix = ownerStepId ?? sessionId
+  return `${prefix}.${turnNumber}T`
 }
 
 export function formatCompactionStepId(sessionId: string, stepNumber: number): string {
-  return `${sessionId}.C${stepNumber}`
+  return `${sessionId}.${stepNumber}C`
 }
 
 export function formatCompactionPartId(
@@ -80,12 +81,12 @@ export function formatCompactionPartId(
   partType?: string,
 ): string {
   const suffix = partType ? PART_TYPE_SUFFIX[partType] : undefined
-  const base = `${sessionId}.C${stepNumber}.${partNumber}`
+  const base = `${sessionId}.${stepNumber}C.${partNumber}`
   return suffix ? `${base}-${suffix}` : base
 }
 
-export function formatRoundId(sessionId: string, turnNumber: number, roundNumber: number): string {
-  return `${sessionId}.${turnNumber}.${roundNumber}`
+export function formatRoundId(sessionId: string, turnNumber: number, roundNumber: number, ownerStepId?: string | null): string {
+  return `${formatTurnId(sessionId, turnNumber, ownerStepId)}.${roundNumber}`
 }
 
 /** partType is optional; when provided, appends the canonical type suffix (e.g. -U, -T, -A). */
@@ -95,9 +96,10 @@ export function formatPartId(
   roundNumber: number,
   partNumber: number,
   partType?: string,
+  ownerStepId?: string | null,
 ): string {
   const suffix = partType ? PART_TYPE_SUFFIX[partType] : undefined
-  const base = `${sessionId}.${turnNumber}.${roundNumber}.${partNumber}`
+  const base = `${formatRoundId(sessionId, turnNumber, roundNumber, ownerStepId)}.${partNumber}`
   return suffix ? `${base}-${suffix}` : base
 }
 
@@ -119,8 +121,15 @@ export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
     return parseNumber(numStr)
   }
 
+  const parseTurnSegment = (value: string): number | null => {
+    if (/^\d+T$/.test(value)) {
+      return parseNumber(value.slice(0, -1))
+    }
+    return parseNumber(value)
+  }
+
   const segments = trimmed.split('.')
-  if (segments.length < 1 || segments.length > 4) return null
+  if (segments.length < 1 || segments.length > 5) return null
 
   const sessionId = segments[0] ?? ''
   if (!isValidSessionId(sessionId)) return null
@@ -142,23 +151,41 @@ export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
     return null
   }
 
-  const stepMatch = /^(?:C|wf)(\d+)$/.exec(segments[1] ?? '')
+  const stepMatch = /^(\d+)C$/.exec(segments[1] ?? '') || /^(\d+)W$/.exec(segments[1] ?? '') || /^(?:wf)(\d+)$/.exec(segments[1] ?? '')
   if (stepMatch) {
     const stepNumber = parseNumber(stepMatch[1] ?? '')
-    const isWorkflowStep = (segments[1] ?? '').startsWith('wf')
+    const isWorkflowStep = (segments[1] ?? '').startsWith('wf') || (segments[1] ?? '').endsWith('W') || (segments[1] ?? '').endsWith('C')
     if (stepNumber == null || (isWorkflowStep ? stepNumber < 0 : stepNumber < 1)) return null
     if (segments.length === 2) {
       return { raw: trimmed, type: 'step', sessionId, stepNumber, turnNumber: null, roundNumber: null, partNumber: null, isSetupPart: false }
     }
     if (segments.length === 3) {
+      if (/^\d+T$/.test(segments[2] ?? '')) {
+        const turnNumber = parseTurnSegment(segments[2] ?? '')
+        if (turnNumber == null || turnNumber < 0) return null
+        return { raw: trimmed, type: 'turn', sessionId, stepNumber, turnNumber, roundNumber: null, partNumber: null, isSetupPart: false }
+      }
       const partNumber = parseNumberWithSuffix(segments[2] ?? '')
       if (partNumber == null || partNumber < 1) return null
       return { raw: trimmed, type: 'part', sessionId, stepNumber, turnNumber: null, roundNumber: null, partNumber, isSetupPart: false }
     }
+    if (segments.length === 4) {
+      const turnNumber = parseTurnSegment(segments[2] ?? '')
+      const roundNumber = parseNumber(segments[3] ?? '')
+      if (turnNumber == null || turnNumber < 0 || roundNumber == null || roundNumber < 0) return null
+      return { raw: trimmed, type: 'round', sessionId, stepNumber, turnNumber, roundNumber, partNumber: null, isSetupPart: false }
+    }
+    if (segments.length === 5) {
+      const turnNumber = parseTurnSegment(segments[2] ?? '')
+      const roundNumber = parseNumber(segments[3] ?? '')
+      const partNumber = parseNumberWithSuffix(segments[4] ?? '')
+      if (turnNumber == null || turnNumber < 0 || roundNumber == null || roundNumber < 0 || partNumber == null || partNumber < 1) return null
+      return { raw: trimmed, type: 'part', sessionId, stepNumber, turnNumber, roundNumber, partNumber, isSetupPart: false }
+    }
     return null
   }
 
-  const turnNumber = parseNumber(segments[1] ?? '')
+  const turnNumber = parseTurnSegment(segments[1] ?? '')
   if (turnNumber == null || turnNumber < 0) return null
 
   if (segments.length === 2) {
@@ -178,6 +205,6 @@ export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
   return { raw: trimmed, type: 'part', sessionId, stepNumber: null, turnNumber, roundNumber, partNumber, isSetupPart: false }
 }
 
-export function formatStepId(sessionId: string, ordinal: number): string {
-  return `${sessionId}.wf${ordinal}`
+export function formatStepId(sessionId: string, childIndex: number): string {
+  return `${sessionId}.${childIndex}W`
 }

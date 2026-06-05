@@ -14,10 +14,10 @@ function removeLegacyCompactionDiagnosticParts(connection: Database.Database): v
   connection.prepare(`
     DELETE FROM v2_parts
     WHERE part_type = 'diagnostic-note'
-      AND step_id IN (
+      AND turn_id IN (
         SELECT id
-        FROM v2_steps
-        WHERE step_type_key = 'compaction'
+        FROM v2_turns
+        WHERE compaction_applied IS NOT NULL
       )
   `).run()
 }

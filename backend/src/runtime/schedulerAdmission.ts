@@ -1,8 +1,7 @@
 import {
-  getNextTurnSequenceNumber,
+  getNextTurnNumber,
   getSessionRecord,
   insertTurnRecord,
-  listStepRecordsBySession,
   listTurnRecordsBySession,
 } from '../persistence/repository.js'
 import { OperationError } from '../operations/errors.js'
@@ -94,12 +93,12 @@ export function reservePrimaryTurn(opCtx: SchedulerContext, sessionId: string): 
     if (hasPendingTurn) return { kind: 'turn_in_progress' }
 
     const createdAt = Date.now()
-    const nextSeq = getNextTurnSequenceNumber(opCtx.db.connection, sessionId)
+    const nextSeq = getNextTurnNumber(opCtx.db.connection, sessionId, null)
     const turn: TurnRecord = {
       id: formatTurnId(sessionId, nextSeq),
       sessionId,
       ownerStepId: null,
-      sequenceNumber: nextSeq,
+      turnNumber: nextSeq,
       status: 'draft',
       createdAt,
       completedAt: null,
@@ -138,7 +137,6 @@ export function assertAnalysisSessionJobAllowed(
 export function assertStepJobAllowed(
   opCtx: SchedulerContext,
   sessionId: string,
-  stepId: string,
   hasJobForSession: (sessionId: string) => boolean,
 ): void {
   const session = getSessionRecord(opCtx.db.connection, sessionId)
@@ -155,15 +153,8 @@ export function assertStepJobAllowed(
     )
   }
 
-  const steps = listStepRecordsBySession(opCtx.db.connection, sessionId)
-  const targetStep = steps.find(s => s.id === stepId)
-  if (!targetStep) {
-    throw new OperationError(`Step '${stepId}' not found in session '${sessionId}'.`, SCHEDULER_ERROR.STEP_NOT_FOUND)
-  }
-  if (targetStep.stepTypeKey !== 'analysis_v2_cursor') {
-    throw new OperationError(`Step '${stepId}' is not the cursor step for this session.`, SCHEDULER_ERROR.STEP_NOT_READY)
-  }
-  const phase = (targetStep.state as { phase?: string }).phase
+  const analysisState = session.analysisState as { phase?: string } | null
+  const phase = analysisState?.phase
   if (phase === 'complete' || phase === 'error') {
     throw new OperationError(`Analysis workflow is already in terminal phase '${phase}'.`, SCHEDULER_ERROR.STEP_NOT_READY)
   }

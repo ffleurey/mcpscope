@@ -1,18 +1,16 @@
 import type { BackendDatabase } from '../persistence/db.js'
 import type { LmStudioGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
-import { listStepRecordsBySession } from '../persistence/repositoryV2.js'
+import { getSessionRecord } from '../persistence/repository.js'
 import type { AnalysisSessionState } from './schemas.js'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
 import { AnalysisWorkflowRuntime } from './analysisWorkflowRuntime.js'
 import {
   advanceFastSessionAnalysisStep,
   createFastSessionAnalysisState,
-  getFastSessionAnalysisCursorParams,
   isFastSessionAnalysisTerminal,
   type FastSessionAnalysisWorkflowInput,
 } from './fastSession/fastSessionAnalysisWorkflow.js'
-import { ANALYSIS_CURSOR_STEP_TYPE } from './analysisSession.js'
 
 export class FastSessionAnalysisSession {
   private readonly database: BackendDatabase
@@ -20,7 +18,6 @@ export class FastSessionAnalysisSession {
   private readonly mcpGateway: McpGateway
   private readonly runtime: AnalysisWorkflowRuntime<AnalysisSessionState>
   private state: AnalysisSessionState
-  private cursorStepId: string
 
   constructor(
     database: BackendDatabase,
@@ -31,16 +28,11 @@ export class FastSessionAnalysisSession {
     this.database = database
     this.lmGateway = lmGateway
     this.mcpGateway = mcpGateway
-    this.cursorStepId = ''
     this.state = createFastSessionAnalysisState(input)
 
     this.runtime = new AnalysisWorkflowRuntime(this.database, {
-      cursorStepType: ANALYSIS_CURSOR_STEP_TYPE,
       getState: () => this.state,
       setState: (state) => { this.state = state },
-      getCursorStepId: () => this.cursorStepId,
-      setCursorStepId: (cursorStepId) => { this.cursorStepId = cursorStepId },
-      getCursorParams: getFastSessionAnalysisCursorParams,
       getCursorStatus: (state) => state.phase === 'complete'
         ? 'complete'
         : state.phase === 'error'
@@ -51,19 +43,14 @@ export class FastSessionAnalysisSession {
     })
   }
 
-  initializeCursorStep(): void {
-    this.runtime.initializeCursorStep()
-  }
-
   static rehydrateFromDb(
     database: BackendDatabase,
     lmGateway: LmStudioGateway,
     mcpGateway: McpGateway,
     analysisSessionId: string,
   ): FastSessionAnalysisSession | null {
-    const steps = listStepRecordsBySession(database.connection, analysisSessionId)
-    const cursorStep = steps.find(step => step.stepTypeKey === ANALYSIS_CURSOR_STEP_TYPE)
-    if (!cursorStep) return null
+    const session = getSessionRecord(database.connection, analysisSessionId)
+    if (!session || !session.analysisState) return null
 
     const instance = new FastSessionAnalysisSession(database, lmGateway, mcpGateway, {
       analysisSessionId,
@@ -74,7 +61,7 @@ export class FastSessionAnalysisSession {
       onlyFailedToolCalls: false,
       evaluationCriteria: [],
     })
-    instance.runtime.restore(cursorStep.id, cursorStep.state as unknown as AnalysisSessionState)
+    instance.runtime.restore(session.analysisState as unknown as AnalysisSessionState)
     return instance
   }
 

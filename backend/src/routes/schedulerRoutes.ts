@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { apiError } from '../errors.js'
-import { getSessionRecord, listStepRecordsBySession } from '../persistence/repository.js'
+import { getSessionRecord } from '../persistence/repository.js'
 import type { SchedulerEvent } from '../runtime/schedulerTypes.js'
 import type { RouteDeps } from './types.js'
 
@@ -50,14 +50,13 @@ export function registerSchedulerRoutes({ app, database, scheduler, opCtx, handl
       reply.code(400)
       return apiError('validation', 'Session is not an analysis session.')
     }
-    const cursorStep = listStepRecordsBySession(database.connection, session_id)
-      .find(s => s.stepTypeKey === 'analysis_v2_cursor')
-    if (!cursorStep) {
+    const analysisState = session.analysisState as { phase?: string } | null
+    if (analysisState?.phase === 'complete' || analysisState?.phase === 'error') {
       reply.code(422)
-      return apiError('validation', 'Analysis session has no cursor step.')
+      return apiError('validation', `Analysis session is in terminal phase '${analysisState?.phase}'.`)
     }
     try {
-      const job = scheduler.enqueueStep(opCtx, session_id, cursorStep.id)
+      const job = scheduler.enqueueStep(opCtx, session_id, session_id)
       reply.code(202)
       return { job }
     } catch (err) {

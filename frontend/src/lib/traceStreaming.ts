@@ -103,7 +103,7 @@ export function deriveContextSnapshotAtRound(
 
   const maxOrdinal = roundParts.at(-1)!.ordinal
   const roundTurnId = roundParts[0].turnId
-  const turnSeqById = new Map(allTurns.map((t) => [t.id, t.sequenceNumber]))
+  const turnSeqById = new Map(allTurns.map((t) => [t.id, t.turnNumber]))
   const roundTurnSeq = roundTurnId !== null ? (turnSeqById.get(roundTurnId) ?? -1) : -1
 
   return sorted
@@ -164,7 +164,7 @@ export function createEmptyTrace(session: SessionSummary): SessionTraceBundle {
 export function upsertTurn(trace: SessionTraceBundle, turn: TurnRecord): SessionTraceBundle {
   return {
     ...trace,
-    turns: sortByIdOrder(trace.turns, turn, (left, right) => left.sequenceNumber - right.sequenceNumber),
+    turns: sortByIdOrder(trace.turns, turn, (left, right) => left.turnNumber - right.turnNumber),
   }
 }
 

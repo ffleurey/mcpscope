@@ -4,7 +4,7 @@ import type { McpGateway } from '../runtime/toolTurns.js'
 import {
   insertStepRecord,
   updateStepRecord,
-  getNextStepOrdinal,
+  getNextChildIndex,
 } from '../persistence/repositoryV2.js'
 import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 import { stepTypeKey as mkStepTypeKey } from '../domain/executionModel.js'
@@ -101,13 +101,14 @@ async function runBootstrap(
   state: AnalysisSessionState,
   emitEvent?: AnalysisStreamEventSink,
 ): Promise<AnalysisSessionState> {
-  const ordinal = getNextStepOrdinal(deps.database.connection, state.analysisSessionId)
-  const stepId = formatStepId(state.analysisSessionId, ordinal)
+const childIndex = getNextChildIndex(deps.database.connection, state.analysisSessionId)
+const stepId = formatStepId(state.analysisSessionId, childIndex)
   const stepRecord: StepPersistenceRecord = {
     id: stepId,
     sessionId: state.analysisSessionId,
     stepTypeKey: mkStepTypeKey('analysis_bootstrap'),
-    ordinal,
+    parentStepId: null,
+    childIndex,
     status: 'running',
     params: {},
     state: {},
@@ -158,13 +159,14 @@ async function runNextAssessment(
     return { ...state, phase: 'turn_summary' }
   }
 
-  const ordinal = getNextStepOrdinal(deps.database.connection, state.analysisSessionId)
-  const stepId = formatStepId(state.analysisSessionId, ordinal)
+const childIndex = getNextChildIndex(deps.database.connection, state.analysisSessionId)
+const stepId = formatStepId(state.analysisSessionId, childIndex)
   const stepRecord: StepPersistenceRecord = {
     id: stepId,
     sessionId: state.analysisSessionId,
     stepTypeKey: mkStepTypeKey('analysis_tool_call_assessment'),
-    ordinal,
+    parentStepId: null,
+    childIndex,
     status: 'running',
     params: { tool_call_part_id: packet.tool_call_part_id },
     state: {},
@@ -204,13 +206,14 @@ async function runTurnSummary(
   state: AnalysisSessionState,
   emitEvent?: AnalysisStreamEventSink,
 ): Promise<AnalysisSessionState> {
-  const ordinal = getNextStepOrdinal(deps.database.connection, state.analysisSessionId)
-  const stepId = formatStepId(state.analysisSessionId, ordinal)
+const childIndex = getNextChildIndex(deps.database.connection, state.analysisSessionId)
+const stepId = formatStepId(state.analysisSessionId, childIndex)
   const stepRecord: StepPersistenceRecord = {
     id: stepId,
     sessionId: state.analysisSessionId,
     stepTypeKey: mkStepTypeKey('analysis_turn_summary'),
-    ordinal,
+    parentStepId: null,
+    childIndex,
     status: 'running',
     params: { turn_id: state.currentTurnId },
     state: {},
@@ -258,13 +261,14 @@ async function runFinalAggregation(
   state: AnalysisSessionState,
   emitEvent?: AnalysisStreamEventSink,
 ): Promise<AnalysisSessionState> {
-  const ordinal = getNextStepOrdinal(deps.database.connection, state.analysisSessionId)
-  const stepId = formatStepId(state.analysisSessionId, ordinal)
+const childIndex = getNextChildIndex(deps.database.connection, state.analysisSessionId)
+const stepId = formatStepId(state.analysisSessionId, childIndex)
   const stepRecord: StepPersistenceRecord = {
     id: stepId,
     sessionId: state.analysisSessionId,
     stepTypeKey: mkStepTypeKey('analysis_final_aggregation'),
-    ordinal,
+    parentStepId: null,
+    childIndex,
     status: 'running',
     params: {},
     state: {},

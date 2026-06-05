@@ -46,7 +46,9 @@
  */
 
 import type { SessionRecord, TurnRecord, RoundRecord, PartRecord, RawExchangeRecord } from './model.js'
-import type { Session, Turn, Benchmark, SessionContainer, Step } from './executionModel.js'
+import type { Session, Turn, Benchmark, Step } from './executionModel.js'
+
+type SessionContainer = Session | Benchmark
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Nominal type guards / narrowing helpers  (declared, not yet behaviorally wired)

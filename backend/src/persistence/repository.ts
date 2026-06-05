@@ -12,6 +12,7 @@ export {
   createSessionRecord,
   getSessionRecord,
   updateSessionRecord,
+  updateSessionAnalysisState,
   deleteSessionRecord,
   listSessionRecords,
   listSessionSummaries,
@@ -21,7 +22,7 @@ export {
   recoverInterruptedState,
   getStepRecord,
   listStepRecordsBySession,
-  getNextStepOrdinal,
+  getNextChildIndex,
   insertTurnRecord,
   updateTurnRecord,
   getTurnRecord,
@@ -36,15 +37,10 @@ export {
   listPartRecordsBySession,
   insertRawExchangeRecord,
   listRawExchangeRecordsBySession,
-  getNextTurnSequenceNumber,
+  getNextTurnNumber,
   getNextPartOrdinal,
   getNextRoundPartSequence,
   getNextPreludePartSequence,
-  // Benchmark container CRUD
-  createBenchmarkRecord,
-  getBenchmarkRecord,
-  listBenchmarkRecords,
-  deleteBenchmarkRecord,
 } from './repositoryRuntime.js'
 
 

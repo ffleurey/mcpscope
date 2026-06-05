@@ -14,7 +14,6 @@ import {
 } from '../persistence/repository.js'
 import { listArtifactsBySession } from '../analysis/artifactRepository.js'
 import {
-  getAnalysisWorkflowKindFromStep,
   getAnalysisWorkflowLabel,
   getLatestAnalysisDiagnosticSummary,
   getLatestAnalysisDiagnosticSummaryForStep,
@@ -199,7 +198,6 @@ function buildRoundNode(
   const parts = buildRoundPartNodes(roundParts, toolResultsByParent, mode, isDirectLookup)
   return {
     id: round.id,
-    number: round.roundIndex + 1,
     ...(round.status ? { status: round.status } : {}),
     parts,
   }
@@ -222,7 +220,6 @@ function buildTurnNode(
   return {
     id: turn.id,
     type: 'turn',
-    number: turn.sequenceNumber,
     owner_step_id: turn.ownerStepId,
     ...(turn.status ? { status: turn.status } : {}),
     rounds: roundNodes,
@@ -295,7 +292,6 @@ function buildStepNode(
       return {
         id: step.id,
         type: 'turn',
-        number: step.ordinal + 1,
         status: step.status,
         rounds: [],
       }
@@ -307,34 +303,38 @@ function buildStepNode(
     return buildTurnNode(turn, turnRounds, allParts, mode, isDirectLookup)
   }
 
+  const ownedTurns = turns
+    .filter(candidate => candidate.ownerStepId === step.id)
+    .sort((left, right) => left.turnNumber - right.turnNumber)
+  const ownedTurnNodes = ownedTurns.map((turn) => {
+    const turnRounds = rounds
+      .filter(round => round.turnId === turn.id)
+      .sort((left, right) => left.roundIndex - right.roundIndex)
+    return buildTurnNode(turn, turnRounds, allParts, mode, isDirectLookup)
+  })
+
   const stepParts = allParts
     .filter(part => part.turnId === step.id && part.roundId === null && isPublicPartType(part.partType))
     .sort((left, right) => left.ordinal - right.ordinal)
     .map(part => buildPartNode(part, [], mode, true))
     .filter((node): node is object => node !== null)
 
-  const ownedTurnIds = turns
-    .filter(candidate => candidate.ownerStepId === step.id)
-    .sort((left, right) => left.sequenceNumber - right.sequenceNumber)
-    .map(candidate => candidate.id)
+  const ownedTurnIds = ownedTurns.map(candidate => candidate.id)
   const postambleStepIds = ownedTurnIds.flatMap((turnId) => steps
     .filter(candidate => candidate.stepTypeKey === 'compaction' && candidate.params.sourceTurnId === turnId)
-    .sort((left, right) => left.ordinal - right.ordinal)
+    .sort((left, right) => left.childIndex - right.childIndex)
     .map(candidate => candidate.id))
 
   const compactionEvidence = step.stepTypeKey === 'compaction'
     ? buildCompactionStepEvidence(step, allParts, mode)
     : {}
   const diagnostic = getLatestAnalysisDiagnosticSummaryForStep(artifacts, step.id)
-  const workflowKind = step.stepTypeKey === 'analysis_v2_cursor'
-    ? getAnalysisWorkflowKindFromStep(step)
-    : null
-  const workflowLabel = getAnalysisWorkflowLabel(workflowKind)
+  const workflowKind = null
+  const workflowLabel = null
 
   return {
     id: step.id,
     type: step.stepTypeKey,
-    number: step.ordinal + 1,
     status: step.status,
     ...(workflowKind ? { workflow_kind: workflowKind } : {}),
     ...(workflowLabel ? { workflow_label: workflowLabel } : {}),
@@ -347,6 +347,7 @@ function buildStepNode(
     context_tokens_after: typeof step.state.contextTokensAfterCompaction === 'number' ? step.state.contextTokensAfterCompaction : null,
     tokens_removed: typeof step.state.compactionTokensRemoved === 'number' ? step.state.compactionTokensRemoved : null,
     owned_turn_ids: ownedTurnIds,
+    turns: ownedTurnNodes,
     postamble_step_ids: postambleStepIds,
     ...compactionEvidence,
     parts: stepParts,
@@ -354,7 +355,7 @@ function buildStepNode(
 }
 
 function deriveContextWindowUsed(turns: TurnRecord[]): number | null {
-  const completed = turns.filter(t => t.status === 'complete').sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+  const completed = turns.filter(t => t.status === 'complete').sort((a, b) => a.turnNumber - b.turnNumber)
   return completed.at(-1)?.contextTokensAtTurnEnd ?? null
 }
 
@@ -376,22 +377,36 @@ export function resolveHierarchicalId(
     if (!session) return { status: 'not_found', message: `Session not found: ${parsed.sessionId}` }
 
     const turns = listTurnRecordsBySession(connection, session.id)
-      .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
-    const steps = listStepRecordsBySession(connection, session.id)
+      .sort((a, b) => a.turnNumber - b.turnNumber)
+    const directTurns = turns.filter(t => !t.ownerStepId)
+    const allSteps = listStepRecordsBySession(connection, session.id)
+    const steps = allSteps.filter(step => step.stepTypeKey !== 'turn')
     const allParts = listPartRecordsBySession(connection, session.id)
     const artifacts = listArtifactsBySession(connection, session.id)
     const setupParts = allParts.filter(p => p.turnId === null).sort((a, b) => a.ordinal - b.ordinal)
     const allRounds = listRoundRecordsBySession(connection, session.id)
-    const workflowKind = getAnalysisWorkflowKindFromStep(steps.find(step => step.stepTypeKey === 'analysis_v2_cursor'))
+    const analysisState = session.analysisState as { workflow_kind?: string } | null
+    const workflowKind = (analysisState?.workflow_kind ?? null) as import('../analysis/workflowKinds.js').AnalysisWorkflowKind | null
     const workflowLabel = getAnalysisWorkflowLabel(workflowKind)
     const latestError = getLatestAnalysisDiagnosticSummary(artifacts)
 
-    const turnNodes = turns.map(turn => {
+    const directTurnNodes = directTurns.map(turn => {
       const turnRounds = allRounds
         .filter(r => r.turnId === turn.id)
         .sort((a, b) => a.roundIndex - b.roundIndex)
       return buildTurnNode(turn, turnRounds, allParts, mode, false)
     })
+
+    const stepNodes = steps.map(step => buildStepNode(step, steps, turns, allRounds, allParts, artifacts, mode, false))
+
+    const allChildNodes = [...directTurnNodes, ...stepNodes]
+      .sort((a, b) => {
+        const aId = (a as { id: string }).id
+        const bId = (b as { id: string }).id
+        const posA = (a as { turnNumber?: number }).turnNumber ?? Number(aId.split('.').pop()?.replace(/\D/g, '') ?? 0)
+        const posB = (b as { turnNumber?: number }).turnNumber ?? Number(bId.split('.').pop()?.replace(/\D/g, '') ?? 0)
+        return posA - posB
+      })
 
     const data: Record<string, unknown> = {
       id: session.id,
@@ -410,8 +425,7 @@ export function resolveHierarchicalId(
       ...(workflowLabel ? { workflow_label: workflowLabel } : {}),
       ...(latestError ? { latest_error: latestError } : {}),
       setup: buildSetupNode(session.id, setupParts, mode, false),
-      steps: steps.map(step => buildStepNode(step, steps, turns, allRounds, allParts, artifacts, mode, false)),
-      turns: turnNodes,
+      steps: allChildNodes,
     }
 
     if (session.parentKind !== null && session.parentId !== null) {
