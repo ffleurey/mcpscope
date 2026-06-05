@@ -20,10 +20,9 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 - `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records, and may optionally belong to one `WorkflowStep`
 - the runtime tree described below for persisted sessions (unchanged from user perspective)
 - one session contains one setup and zero or more turns
-- hierarchical IDs for session/setup/step/turn/round/part runtime nodes, with `W` for workflow steps and `T` for turns
-- session ownership modeled through `SessionContainer`; a session may belong to another session or to a `Benchmark` container
-- `Benchmark` — a minimal `SessionContainer` for grouping sessions; full benchmark domain design is future work
-- generic persistence for containers, sessions, and steps (`session_containers`, `v2_sessions`, `v2_steps`, `v2_turns`)
+ - hierarchical IDs for session/setup/step/turn/round/part runtime nodes, with `W` for workflow steps, `T` for turns, and `C` for compaction steps
+- session ownership through `parent_container_type_key` / `parent_container_id` on `v2_sessions`
+- generic persistence for sessions, steps, and turns (`v2_sessions`, `v2_steps`, `v2_turns`)
 - existing child-session behavior still works through the new model
 
 **Not implemented yet:**
@@ -33,9 +32,8 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 
 **Current deliberate limits:**
 
-- normal runtime persistence lives on `session_containers` plus the `v2_*` runtime tables
-- session parent rules remain intentionally limited to `session` and `benchmark`
-- the current classification rules still follow the existing session-focused parent model rather than a broader container graph
+- normal runtime persistence lives on the `v2_*` runtime tables
+- session parent rules remain intentionally limited to `session`
 
 The canonical vocabulary is now `SessionContainer`, `Session`, `Step`, `WorkflowStep`, and `Turn`.
 
@@ -119,8 +117,7 @@ Current implementations may also expose metadata around the session tree such as
 
 | Property | Type | Meaning |
 |---|---|---|
-| `id` | `string` | Canonical turn ID |
-| `number` | `integer` | Stable turn sequence number within the session |
+ | `id` | `string` | Canonical turn ID — the suffix (e.g. `1T`) encodes its position within the parent |
 | `owner_step_id?` | `string` | Owning non-turn step when the turn is grouped under a workflow step |
 | `status?` | `string` | Turn lifecycle status when exposed |
 | `rounds` | `Round[]` | Ordered rounds in the turn |
@@ -129,9 +126,7 @@ Current implementations may also expose metadata around the session tree such as
 
 | Property | Type | Meaning |
 |---|---|---|
-| `id` | `string` | Canonical round ID |
-| `number` | `integer` | Stable round sequence number within the turn |
-| `status?` | `string` | Round lifecycle status when exposed |
+| `id` | `string` | Canonical round ID — the suffix encodes its position within the parent turn |
 | `parts` | `Part[]` | Ordered parts in the round |
 
 ### Part
@@ -256,14 +251,19 @@ Session IDs should stay short, stable, and human-readable.
 
 ## Numbering rule
 
-Turns, rounds, and parts use simple sequence numbers within their parent.
+## Numbering
 
-The exact base still needs to be fixed once for the whole public model, but the rule is:
+All numbering is positional: the suffix of the canonical ID encodes the node's
+position within its parent container. For example:
 
-- one consistent numbering convention everywhere
-- stable
-- predictable
-- never renumbered
+- `SSS.1T` — turn at position 1 in the session's step list
+- `SSS.3W.1T` — turn at position 1 within workflow step at position 3
+- `SSS.3W.1T.2` — round 2 of that turn
+- `SSS.1C` — compaction step at position 1
+
+Numbering is shared across all step subtypes (workflow, compaction, turn) within
+a session. The number is the step's position in the session's ordered step list,
+starting at 1.
 
 ## Lookup model rules
 

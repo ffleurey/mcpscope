@@ -180,6 +180,7 @@ function normalizedSession(session: SessionRecord) {
 
 function normalizeTraceBundle(trace: SessionTraceBundle) {
   const turnRefById = new Map(trace.turns.map(turn => [turn.id, `turn-${turn.turnNumber}`]))
+  const stepRefById = new Map(trace.steps.map((step, i) => [step.id, `step-${i + 1}`]))
   const roundRefById = new Map(
     trace.rounds.map(round => [round.id, `${turnRefById.get(round.turnId) ?? 'turn-unknown'}-round-${round.roundIndex}`]),
   )
@@ -219,7 +220,8 @@ function normalizeTraceBundle(trace: SessionTraceBundle) {
         state: part.context.state,
         note: part.context.note,
         strippedByCompactionAtTurnRef: part.context.strippedByCompactionAtTurnId
-          ? (turnRefById.get(part.context.strippedByCompactionAtTurnId) ?? part.context.strippedByCompactionAtTurnId)
+          ? (stepRefById.get(part.context.strippedByCompactionAtTurnId)
+            ?? ((): string => { const parts = part.context.strippedByCompactionAtTurnId.split('.'); return parts.length >= 2 ? parts[parts.length - 1]! : part.context.strippedByCompactionAtTurnId })())
           : null,
       },
       tokens: part.tokens,
@@ -261,7 +263,7 @@ function normalizeTraceBundle(trace: SessionTraceBundle) {
               state: record.context.state ?? null,
               note: record.context.note ?? null,
               strippedByCompactionAtTurnRef: record.context.strippedByCompactionAtTurnId
-                ? (turnRefById.get(record.context.strippedByCompactionAtTurnId) ?? record.context.strippedByCompactionAtTurnId)
+                ? (stepRefById.get(record.context.strippedByCompactionAtTurnId) ?? record.context.strippedByCompactionAtTurnId.split('.').slice(-1)[0])
                 : null,
             }
           : null,

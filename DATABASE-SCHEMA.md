@@ -19,7 +19,7 @@ This is intentionally separate from [DATA-MODEL.md](DATA-MODEL.md):
 Normal startup creates:
 
 - shared tables from `schema.ts`: `schema_meta`, config catalogs, snapshot catalogs, and singleton default tables
-- canonical runtime tables from `schemaV2.ts`: `session_containers`, `v2_sessions`, `v2_steps`, `v2_turns`, `v2_rounds`, `v2_parts`, `v2_raw_exchanges`, and `artifacts`
+- canonical runtime tables from `schemaV2.ts`: `v2_sessions`, `v2_steps`, `v2_turns`, `v2_rounds`, `v2_parts`, `v2_raw_exchanges`, and `artifacts`
 
 Normal startup does **not** create the obsolete legacy runtime tables `sessions`, `turns`, `rounds`, `parts`, or `raw_exchanges`.
 Those legacy tables remain only behind the explicit `initializeBackendSchema(...)` path used for old-schema validation and related tests.
@@ -80,16 +80,6 @@ erDiagram
     INTEGER updated_at
   }
 
-  session_containers {
-    TEXT id PK
-    TEXT container_type_key
-    TEXT title
-    TEXT params_json
-    TEXT state_json
-    INTEGER created_at
-    INTEGER updated_at
-  }
-
   v2_sessions {
     TEXT id PK
     TEXT title
@@ -100,6 +90,7 @@ erDiagram
     TEXT init_status
     TEXT params_json
     TEXT state_json
+    TEXT analysis_state_json     // for analysis workflow state
     INTEGER created_at
     INTEGER updated_at
   }
@@ -108,19 +99,21 @@ erDiagram
     TEXT id PK
     TEXT session_id FK
     TEXT step_type_key
-    INTEGER ordinal
+    TEXT parent_step_id FK       // NULL for session-level children
+    INTEGER child_index          // position within parent
     TEXT status
     TEXT params_json
     TEXT state_json
     INTEGER created_at
     INTEGER completed_at
+    UNIQUE (session_id, parent_step_id, child_index)
   }
 
   v2_turns {
-    TEXT step_id PK
+    TEXT id PK                   // canonical turn ID, not a FK
     TEXT session_id FK
     TEXT owner_step_id FK
-    INTEGER sequence_number
+    INTEGER turn_number          // position within parent (or session)
     TEXT status
     TEXT outcome
     INTEGER prompt_tokens

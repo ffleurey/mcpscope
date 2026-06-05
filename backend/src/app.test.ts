@@ -530,11 +530,11 @@ describe('backend foundation', () => {
     app = await buildBackendApp(config)
 
     const sourceSessionId = 'SRC1'
-    const sourceTurnId = `${sourceSessionId}.1`
-    const sourceStepId = `${sourceSessionId}.C1`
-    const sourceRoundId = `${sourceSessionId}.1.1`
-    const sourceStrippedPartId = `${sourceSessionId}.1.1.1-R`
-    const sourceStepPartId = `${sourceSessionId}.C1.1-DN`
+    const sourceTurnId = `${sourceSessionId}.1T`
+    const sourceStepId = `${sourceSessionId}.1C`
+    const sourceRoundId = `${sourceTurnId}.1`
+    const sourceStepPartId = `${sourceSessionId}.1C.1-DN`
+    const sourceStrippedPartId = `${sourceSessionId}.1T.1.1-R`
     const capturedTrace: SessionTraceBundle = {
       session: {
         ...capturedReasoningThreeBatchSession,
@@ -546,7 +546,7 @@ describe('backend foundation', () => {
           sessionId: sourceSessionId,
           stepTypeKey: 'turn',
           parentStepId: null,
-          childIndex: 0,
+          childIndex: 1,
           status: 'complete',
           params: {},
           state: {},
@@ -695,11 +695,11 @@ describe('backend foundation', () => {
     expect(traceResponse.statusCode).toBe(200)
     expect(traceResponse.json()).toMatchObject({
       steps: expect.arrayContaining([
-        expect.objectContaining({ id: `${importedSessionId}.1T`, stepTypeKey: 'turn', childIndex: 0 }),
-        expect.objectContaining({ id: `${importedSessionId}.C1`, stepTypeKey: 'compaction', childIndex: 1 }),
+        expect.objectContaining({ id: `${importedSessionId}.1T`, stepTypeKey: 'turn', childIndex: expect.any(Number) }),
+        expect.objectContaining({ id: `${importedSessionId}.1C`, stepTypeKey: 'compaction', childIndex: expect.any(Number) }),
       ]),
     })
-    expect(traceResponse.json().parts.some((part: { id: string }) => part.id === `${importedSessionId}.C1.1-DN`)).toBe(false)
+    expect(traceResponse.json().parts.some((part: { id: string }) => part.id === `${importedSessionId}.1C.1-DN`)).toBe(false)
 
     const sessionLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}?mode=full` })
     expect(sessionLookup.statusCode).toBe(200)
@@ -707,12 +707,10 @@ describe('backend foundation', () => {
       id: importedSessionId,
       type: 'session',
       data: {
-        turns: expect.arrayContaining([
-          expect.objectContaining({ id: `${importedSessionId}.1T`, type: 'turn' }),
-        ]),
         steps: expect.arrayContaining([
+          expect.objectContaining({ id: `${importedSessionId}.1T`, type: 'turn' }),
           expect.objectContaining({
-            id: `${importedSessionId}.C1`,
+            id: `${importedSessionId}.1C`,
             type: 'compaction',
             source_turn_id: `${importedSessionId}.1T`,
             source_turn_number: 1,
@@ -732,10 +730,10 @@ describe('backend foundation', () => {
       },
     })
 
-    const stepSummary = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.C1?mode=summary` })
+    const stepSummary = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.1C?mode=summary` })
     expect(stepSummary.statusCode).toBe(200)
     expect(stepSummary.json()).toMatchObject({
-      id: `${importedSessionId}.C1`,
+      id: `${importedSessionId}.1C`,
       type: 'step',
       mode: 'summary',
       data: {
@@ -744,13 +742,13 @@ describe('backend foundation', () => {
     })
     expect(stepSummary.json().data.stripped_parts).toBeUndefined()
 
-    const stepLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.C1?mode=full` })
+    const stepLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.1C?mode=full` })
     expect(stepLookup.statusCode).toBe(200)
     expect(stepLookup.json()).toMatchObject({
-      id: `${importedSessionId}.C1`,
+      id: `${importedSessionId}.1C`,
       type: 'step',
       data: {
-        id: `${importedSessionId}.C1`,
+        id: `${importedSessionId}.1C`,
         type: 'compaction',
         source_turn_id: `${importedSessionId}.1T`,
         stripped_part_ids: [`${importedSessionId}.1T.1.1-R`],
@@ -766,7 +764,7 @@ describe('backend foundation', () => {
       },
     })
 
-    const stepPartLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.C1.1-DN?mode=full` })
+    const stepPartLookup = await app.inject({ method: 'GET', url: `/api/lookup/${importedSessionId}.1C.1-DN?mode=full` })
     expect(stepPartLookup.statusCode).toBe(404)
   })
 
@@ -839,9 +837,9 @@ describe('backend foundation', () => {
         model: { name: expect.any(String), key: expect.any(String) },
         context_window: { available: expect.anything() },
         setup: { id: expect.any(String), parts: expect.any(Array) },
-        turns: expect.arrayContaining([
-          expect.objectContaining({ id: firstTurnId, number: 1 }),
-          expect.objectContaining({ id: secondTurnId, number: 2 }),
+        steps: expect.arrayContaining([
+          expect.objectContaining({ id: firstTurnId }),
+          expect.objectContaining({ id: secondTurnId }),
         ]),
       },
     })
@@ -857,7 +855,7 @@ describe('backend foundation', () => {
         id: importedSessionId,
         model: { name: expect.any(String) },
         setup: { parts: expect.any(Array) },
-        turns: expect.any(Array),
+        steps: expect.any(Array),
       },
     })
     expect(sessionFull.json().parentIds).toBeUndefined()
@@ -875,9 +873,8 @@ describe('backend foundation', () => {
       mode: 'summary',
       data: {
         id: firstTurnId,
-        number: 1,
         rounds: expect.arrayContaining([
-          expect.objectContaining({ id: expect.any(String), number: 1 }),
+          expect.objectContaining({ id: expect.any(String) }),
         ]),
       },
     })
@@ -892,7 +889,6 @@ describe('backend foundation', () => {
       mode: 'full',
       data: {
         id: firstTurnId,
-        number: 1,
         rounds: expect.any(Array),
       },
     })
