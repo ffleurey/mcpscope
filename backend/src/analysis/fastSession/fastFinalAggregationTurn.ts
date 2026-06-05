@@ -51,7 +51,7 @@ export interface FastFinalAggregationResult {
 }
 
 function buildDeterministicReport(
-  sessionId: string,
+  _sessionId: string,
   assessments: EvaluationResult[],
   turnSummaries: EvaluationResult[],
 ): FastSessionFinalAnalysisReport | null {

@@ -22,7 +22,6 @@ import type { McpGateway } from '../../runtime/toolTurns.js'
 import { runAnalysisTurn } from '../boundedTurn.js'
 import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
 import {
-  evaluationResultSchema,
   finalAnalysisReportSchema,
   SCHEMA_KEY,
   type AnalysisSessionState,
@@ -117,7 +116,7 @@ function firstSentence(text: string): string {
 }
 
 function buildDeterministicFinalReport(
-  analysisSessionId: string,
+  _analysisSessionId: string,
   assessments: EvaluationResult[],
   turnSummaries: EvaluationResult[],
 ): FinalAnalysisReport | null {

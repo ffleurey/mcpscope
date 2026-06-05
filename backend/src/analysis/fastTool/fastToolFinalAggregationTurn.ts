@@ -52,7 +52,7 @@ export interface FastToolFinalAggregationResult {
 }
 
 function buildDeterministicReport(
-  sessionId: string,
+  _sessionId: string,
   groupedAssessments: EvaluationResult[],
 ): FastToolFinalReport | null {
   if (groupedAssessments.length !== 1) {

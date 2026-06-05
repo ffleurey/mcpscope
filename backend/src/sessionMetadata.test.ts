@@ -23,7 +23,7 @@ import {
   updateSessionAnalysisState,
   updateSessionRecord,
 } from './persistence/repository.js'
-import { insertStepRecord, listStepRecordsBySession } from './persistence/repositoryV2.js'
+import { insertStepRecord } from './persistence/repositoryV2.js'
 import { openBackendDatabase } from './persistence/db.js'
 import { initializeBackendSchema, validateBackendSchema } from './persistence/schema.js'
 import { importTraceBundle } from './runtime/traceImport.js'
