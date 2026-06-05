@@ -23,9 +23,11 @@ import { runAnalysisTurn } from '../boundedTurn.js'
 import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
 import {
   evaluationResultSchema,
+  finalAnalysisReportSchema,
   SCHEMA_KEY,
   type AnalysisSessionState,
   type AnalysisTarget,
+  type FinalAnalysisReport,
   type EvaluationResult,
 } from '../schemas.js'
 import type { ZodError } from 'zod'
@@ -118,7 +120,7 @@ function buildDeterministicFinalReport(
   analysisSessionId: string,
   assessments: EvaluationResult[],
   turnSummaries: EvaluationResult[],
-): EvaluationResult | null {
+): FinalAnalysisReport | null {
   if (turnSummaries.length !== 1 || assessments.length === 0) {
     return null
   }
@@ -134,13 +136,17 @@ function buildDeterministicFinalReport(
   }
 
   return {
-    subject_scope: 'session',
-    subject_id: analysisSessionId,
-    evaluation_focus: 'Summarize the overall quality and outcome of the analysis session.',
-    reasoning: firstSentence(summary.reasoning),
-    verdict: summary.verdict,
-    score: summary.score,
-    evidence_part_id: summary.evidence_part_id ?? assessments[0]?.evidence_part_id ?? null,
+    outcome: summary.verdict === 'pass' ? 'answered' : summary.verdict === 'partial' ? 'partial' : summary.verdict === 'fail' ? 'blocked' : 'unclear',
+    outcome_rationale: firstSentence(summary.reasoning),
+    primary_issue: null,
+    primary_issue_rationale: null,
+    path_efficiency: 'efficient',
+    path_efficiency_rationale: firstSentence(summary.reasoning),
+    findings: [summary.reasoning],
+    tool_description_findings: [],
+    improvement_suggestions: [],
+    tool_description_improvement_suggestions: [],
+    total_tool_calls_assessed: assessments.length,
   }
 }
 
@@ -264,7 +270,7 @@ export async function runFinalAggregationTurn(
 
   parsedJson = normalizeFinalReportIdentity(parsedJson)
 
-  const parsed = evaluationResultSchema.safeParse(parsedJson)
+  const parsed = finalAnalysisReportSchema.safeParse(parsedJson)
   if (!parsed.success) {
     const diagnosticId = uuid()
     insertJsonArtifact(database.connection, {
@@ -274,7 +280,7 @@ export async function runFinalAggregationTurn(
       content: {
         step_type: 'final_aggregation',
         error_kind: 'schema_validation_error',
-        message: 'Final aggregation response did not match evaluation_result schema',
+        message: 'Final aggregation response did not match final_analysis_report schema',
         detail: {
           raw_response: turnResult.responseText,
           errors: (parsed.error as ZodError).issues,
@@ -292,18 +298,22 @@ export async function runFinalAggregationTurn(
 
   // ── Write final report artifact ───────────────────────────────────────────
   const reportArtifactId = uuid()
+  const finalReport: FinalAnalysisReport = {
+    ...parsed.data,
+    total_tool_calls_assessed: parsed.data.total_tool_calls_assessed ?? assessments.length,
+  }
   insertJsonArtifact(database.connection, {
     id: reportArtifactId,
     sessionId: analysisSessionId,
     stepId,
-    content: parsed.data,
+    content: finalReport,
     metadata: {
       schema_key: SCHEMA_KEY.FINAL_ANALYSIS_REPORT,
       target_session_id: state.targetSessionId,
       target_turn_id: state.targetTurnId,
       total_packets: assessments.length,
-      subject_scope: parsed.data.subject_scope,
-      subject_id: parsed.data.subject_id,
+      subject_scope: 'session',
+      subject_id: analysisSessionId,
     },
     createdAt: ts,
   })

@@ -77,6 +77,10 @@ export interface SessionTraceBundle {
   context: ReturnType<typeof deriveContextEntries>
 }
 
+function isVisibleTraceStep(step: StepRecord): boolean {
+  return step.stepTypeKey !== 'analysis_v2_cursor'
+}
+
 function deriveWorkflowSteps(
   steps: StepRecord[],
   turns: TurnRecord[],
@@ -135,7 +139,7 @@ export function buildSessionTraceBundle(input: {
   transcript: ReturnType<typeof deriveTranscriptEntries>
   context: ReturnType<typeof deriveContextEntries>
 }): SessionTraceBundle {
-  const steps = input.steps ?? []
+  const steps = (input.steps ?? []).filter(isVisibleTraceStep)
   const artifacts = input.artifacts ?? []
 
   return {

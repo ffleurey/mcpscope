@@ -177,6 +177,7 @@ export const sessionSummarySchema = z.object({
   loaded_context_length: z.number().int().positive().nullable(),
   compaction_strategy: compactionStrategyWithFallbackSchema,
   workflow_kind: z.enum(['full_session_analysis', 'fast_session_analysis', 'fast_tool_analysis']).optional(),
+  workflow_phase: z.enum(['bootstrap', 'assessing', 'turn_summary', 'coverage_validation', 'final_aggregation', 'complete', 'error']).optional(),
   latest_error: z.object({
     step_id: z.string().nullable(),
     error_kind: z.string().nullable(),

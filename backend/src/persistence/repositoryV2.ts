@@ -444,6 +444,19 @@ export function getNextStepOrdinal(
   return row.max_ordinal + 1
 }
 
+export function getNextWorkflowStepOrdinal(
+  connection: Database.Database,
+  sessionId: string,
+): number {
+  const row = connection.prepare(`
+    SELECT COALESCE(MAX(ordinal), 0) AS max_ordinal
+    FROM v2_steps
+    WHERE session_id = ?
+      AND step_type_key NOT IN ('turn', 'compaction', 'analysis_v2_cursor')
+  `).get(sessionId) as { max_ordinal: number }
+  return row.max_ordinal + 1
+}
+
 function mapStepRow(row: {
   id: string
   session_id: string

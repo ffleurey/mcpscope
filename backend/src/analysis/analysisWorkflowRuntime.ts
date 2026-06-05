@@ -3,11 +3,10 @@ import {
   updateStepRecord,
 } from '../persistence/repositoryV2.js'
 import { stepTypeKey as mkStepTypeKey } from '../domain/executionModel.js'
-import { formatStepId } from '../domain/hierarchicalIds.js'
-import { getNextStepOrdinal } from '../persistence/repositoryV2.js'
 import type { BackendDatabase } from '../persistence/db.js'
 import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
+import { randomUUID } from 'node:crypto'
 
 function now(): number {
   return Date.now()
@@ -39,15 +38,14 @@ export class AnalysisWorkflowRuntime<State extends { analysisSessionId: string }
 
   initializeCursorStep(): void {
     const state = this.options.getState()
-    const ordinal = getNextStepOrdinal(this.database.connection, state.analysisSessionId)
-    const cursorStepId = formatStepId(state.analysisSessionId, ordinal)
+    const cursorStepId = randomUUID()
     this.options.setCursorStepId(cursorStepId)
 
     insertStepRecord(this.database.connection, {
       id: cursorStepId,
       sessionId: state.analysisSessionId,
       stepTypeKey: mkStepTypeKey(this.options.cursorStepType),
-      ordinal,
+      ordinal: 0,
       status: 'running',
       params: this.options.getCursorParams(state),
       state: state as unknown as Record<string, unknown>,

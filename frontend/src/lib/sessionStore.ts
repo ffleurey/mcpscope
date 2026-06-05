@@ -115,6 +115,7 @@ function toSessionSummary(record: SessionRecord): SessionSummary {
     loaded_context_length: record.loadedContextLength,
     compaction_strategy: record.compactionStrategy,
     workflow_kind: undefined,
+    workflow_phase: undefined,
     latest_error: undefined,
     model_profile_snapshot: { name: record.modelProfileSnapshot.name },
     mcp_profile_snapshot: record.mcpProfileSnapshot ? { name: record.mcpProfileSnapshot.name } : null,
@@ -122,7 +123,12 @@ function toSessionSummary(record: SessionRecord): SessionSummary {
 }
 
 function upsertSessionSummary(record: SessionRecord): void {
-  const summary = toSessionSummary(record)
+  const existing = get(chatSessions).find((session) => session.id === record.id)
+  const summary = {
+    ...toSessionSummary(record),
+    ...(existing?.workflow_kind ? { workflow_kind: existing.workflow_kind } : {}),
+    ...(existing?.workflow_phase ? { workflow_phase: existing.workflow_phase } : {}),
+  }
   chatSessions.update((sessions) => sortByUpdatedAtDesc([
     summary,
     ...sessions.filter((existing) => existing.id !== summary.id),
@@ -709,6 +715,7 @@ export function applyAnalysisStreamEvent(
     // Upsert the step record into the active trace
     activeTrace.update((trace) => {
       if (!trace) return trace
+      if (event.step.stepTypeKey === 'analysis_v2_cursor') return trace
       const existing = trace.steps.findIndex((s) => s.id === event.step.id)
       const steps = existing >= 0
         ? trace.steps.map((s, i) => (i === existing ? event.step : s))
@@ -719,17 +726,12 @@ export function applyAnalysisStreamEvent(
   }
 
   if (event.type === 'analysis-phase-changed') {
-    // Update the cursor step state in the trace
-    activeTrace.update((trace) => {
-      if (!trace) return trace
-      const steps = trace.steps.map((s) => {
-        if (s.stepTypeKey === 'analysis_v2_cursor') {
-          return { ...s, state: { ...(s.state as Record<string, unknown>), phase: event.phase } }
-        }
-        return s
-      })
-      return { ...trace, steps }
-    })
+    // Keep the analysis phase visible through the session summary instead of a cursor node.
+    chatSessions.update((sessions) => sessions.map((existing) => (
+      existing.id === session?.id
+        ? { ...existing, workflow_phase: event.phase as SessionSummary['workflow_phase'] }
+        : existing
+    )))
     return
   }
 

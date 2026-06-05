@@ -17,9 +17,9 @@ import {
 const require = createRequire(import.meta.url)
 const LightMyRequest = require('light-my-request/lib/request') as new (options: { url: string; method: string }) => { socket: Record<string, unknown> }
 const injectedSocketPrototype = Object.getPrototypeOf(new LightMyRequest({ url: '/', method: 'GET' }).socket) as {
-  destroyed?: boolean
   destroy?: (error?: Error) => void
   destroySoon?: () => void
+  destroyed?: boolean
 }
 
 if (typeof injectedSocketPrototype.destroy !== 'function') {
@@ -693,7 +693,7 @@ describe('backend foundation', () => {
     expect(traceResponse.statusCode).toBe(200)
     expect(traceResponse.json()).toMatchObject({
       steps: expect.arrayContaining([
-        expect.objectContaining({ id: `${importedSessionId}.1`, stepTypeKey: 'turn', ordinal: 0 }),
+        expect.objectContaining({ id: `${importedSessionId}.1T`, stepTypeKey: 'turn', ordinal: 0 }),
         expect.objectContaining({ id: `${importedSessionId}.C1`, stepTypeKey: 'compaction', ordinal: 1 }),
       ]),
     })
@@ -706,17 +706,17 @@ describe('backend foundation', () => {
       type: 'session',
       data: {
         steps: expect.arrayContaining([
-          expect.objectContaining({ id: `${importedSessionId}.1`, type: 'turn' }),
+          expect.objectContaining({ id: `${importedSessionId}.1T`, type: 'turn' }),
           expect.objectContaining({
             id: `${importedSessionId}.C1`,
             type: 'compaction',
-            source_turn_id: `${importedSessionId}.1`,
+            source_turn_id: `${importedSessionId}.1T`,
             source_turn_number: 1,
             tokens_removed: 48,
-            stripped_part_ids: [`${importedSessionId}.1.1.1-R`],
+            stripped_part_ids: [`${importedSessionId}.1T.1.1-R`],
             stripped_parts: expect.arrayContaining([
               expect.objectContaining({
-                id: `${importedSessionId}.1.1.1-R`,
+                id: `${importedSessionId}.1T.1.1-R`,
                 type: 'reasoning',
                 token_count: 48,
                 reason: expect.stringContaining('strip-reasoning'),
@@ -735,7 +735,7 @@ describe('backend foundation', () => {
       type: 'step',
       mode: 'summary',
       data: {
-        stripped_part_ids: [`${importedSessionId}.1.1.1-R`],
+        stripped_part_ids: [`${importedSessionId}.1T.1.1-R`],
       },
     })
     expect(stepSummary.json().data.stripped_parts).toBeUndefined()
@@ -748,11 +748,11 @@ describe('backend foundation', () => {
       data: {
         id: `${importedSessionId}.C1`,
         type: 'compaction',
-        source_turn_id: `${importedSessionId}.1`,
-        stripped_part_ids: [`${importedSessionId}.1.1.1-R`],
+        source_turn_id: `${importedSessionId}.1T`,
+        stripped_part_ids: [`${importedSessionId}.1T.1.1-R`],
         stripped_parts: expect.arrayContaining([
           expect.objectContaining({
-            id: `${importedSessionId}.1.1.1-R`,
+            id: `${importedSessionId}.1T.1.1-R`,
             type: 'reasoning',
             token_count: 48,
             reason: expect.stringContaining('strip-reasoning'),
@@ -2722,7 +2722,7 @@ describe('CLI session lifecycle endpoints', () => {
     expect(startRes.statusCode).toBe(202)
     const body = startRes.json()
     expect(body.session_id).toBe(sessionId)
-    expect(body.turn.id).toMatch(new RegExp(`^${sessionId}\\.\\d+$`))
+    expect(body.turn.id).toMatch(new RegExp(`^${sessionId}\\.\\d+T$`))
     expect(body.turn.status).toBe('running')
   })
 
@@ -4199,15 +4199,13 @@ describe('analysis launch', () => {
           let content: string
           if (idx === 0) {
             content = JSON.stringify({
-              turn_id: turnRef.id,
-              round_id: `${turnRef.id}-R1`,
-              tool_call_part_id: `${turnRef.id}-P3`,
-              tool_name: 'test_tool',
-              expectation_match: 'match',
-              tool_call_assessment: 'The selected tool matched the stated intent, and the city argument was set to Paris as expected.',
-              most_direct_cause: null,
-              parameter_or_call_issues: [],
-              post_call_assessment: null,
+              subject_scope: 'tool_call',
+              subject_id: `${turnRef.id}-P3`,
+              evaluation_focus: 'tool-call correctness',
+              reasoning: 'The selected tool matched the stated intent, and the city argument was set to Paris as expected.',
+              verdict: 'pass',
+              score: 5,
+              evidence_part_id: `${turnRef.id}-P4`,
             })
           } else {
             content = JSON.stringify({
@@ -4365,25 +4363,32 @@ describe('analysis launch', () => {
           const idx = callCount++
           const content = idx === 0
             ? JSON.stringify({
-                tool_call_part_id: `${turnRef.id}-P3`,
-                tool_name: 'test_tool',
-                tool_call_reasoning: 'Tool was selected to retrieve the requested information.',
-                tool_call_result: 'successful',
+                subject_scope: 'tool_call',
+                subject_id: `${turnRef.id}-P3`,
+                evaluation_focus: 'tool-call correctness',
+                reasoning: 'Tool was selected to retrieve the requested information.',
+                verdict: 'pass',
+                score: 5,
+                evidence_part_id: `${turnRef.id}-P4`,
               })
             : idx === 1
               ? JSON.stringify({
-                  turn_id: turnRef.id,
-                  total_tool_calls_assessed: 1,
-                  turn_outcome: 'answered',
-                  turn_outcome_rationale: 'The turn answered the request directly.',
-                  per_tool_findings: [{
-                    tool_call_part_id: `${turnRef.id}-P3`,
+                  overall_outcome: 'answered',
+                  overall_rationale: 'The session answered the request directly.',
+                  path_efficiency: 'efficient',
+                  tool_summaries: [{
                     tool_name: 'test_tool',
-                    result_status: 'successful',
-                    brief_finding: 'The tool was used correctly and efficiently.',
+                    total_tool_calls: 1,
+                    successful_tool_calls: 1,
+                    request_error_tool_calls: 0,
+                    response_error_tool_calls: 0,
+                    empty_tool_calls: 0,
+                    inefficient_tool_calls: 0,
+                    summary: 'The tool was used correctly and efficiently.',
                   }],
-                  cross_attempt_reconciliation: null,
+                  notable_failures: [],
                   follow_up_candidates: [],
+                  total_tool_calls_assessed: 1,
                 })
               : JSON.stringify({
                   overall_outcome: 'answered',
@@ -4461,7 +4466,7 @@ describe('analysis launch', () => {
       url: `/api/sessions/${childId}/execute`,
     })
     expect(execRes.statusCode).toBe(200)
-    expect(callCount).toBe(3)
+    expect(callCount).toBe(2)
 
     const artifacts = app.backendDb.connection
       .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
@@ -4471,7 +4476,7 @@ describe('analysis launch', () => {
     expect(schemaKeys).toContain('analysis.analysis_target.v1')
     expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
     expect(schemaKeys).toContain('analysis.fast_session_tool_call_assessment.v1')
-    expect(schemaKeys).toContain('analysis.fast_session_turn_summary.v1')
+    expect(schemaKeys).not.toContain('analysis.fast_session_turn_summary.v1')
     expect(schemaKeys).toContain('analysis.fast_session_final_analysis_report.v1')
     expect(inspectIds).toEqual([
       targetId,
@@ -4593,17 +4598,13 @@ describe('analysis launch', () => {
           const idx = callCount++
           const content = idx === 0
             ? JSON.stringify({
-                work_unit_id: 'tool-group-1',
-                tool_name: 'test_tool',
-                tool_call_part_ids: [`${turnRef.id}-P3`],
-                turn_ids: [turnRef.id],
-                total_tool_calls: 1,
-                usefulness: 'high',
-                efficiency: 'efficient',
-                common_failure_mode: 'none',
-                summary: 'The tool was used effectively for the target task.',
-                follow_up_priority: 'none',
-                notable_part_ids: [`${turnRef.id}-P3`],
+                subject_scope: 'work_unit',
+                subject_id: 'tool-group-1',
+                evaluation_focus: 'grouped tool usage',
+                reasoning: 'The grouped tool usage was effective for the target task.',
+                verdict: 'pass',
+                score: 5,
+                evidence_part_id: `${turnRef.id}-P3`,
               })
             : JSON.stringify({
                 overall_tool_use_outcome: 'strong',
@@ -4680,7 +4681,7 @@ describe('analysis launch', () => {
       url: `/api/sessions/${childId}/execute`,
     })
     expect(execRes.statusCode).toBe(200)
-    expect(callCount).toBe(2)
+    expect(callCount).toBe(1)
 
     const artifacts = app.backendDb.connection
       .prepare(`SELECT * FROM artifacts WHERE session_id = ?`)
@@ -4712,17 +4713,13 @@ describe('analysis launch', () => {
           const idx = callCount++
           const content = idx === 0
             ? JSON.stringify({
-                work_unit_id: 'tool-group-1',
-                tool_name: 'test_tool',
-                tool_call_part_ids: [`${turnRef.id}-P3`],
-                turn_ids: [turnRef.id],
-                total_tool_calls: 1,
-                usefulness: 'high',
-                efficiency: 'efficient',
-                common_failure_mode: 'none',
-                summary: 'The tool was used effectively for the target task.',
-                follow_up_priority: 'none',
-                notable_part_ids: [`${turnRef.id}-P3`],
+                subject_scope: 'work_unit',
+                subject_id: 'tool-group-1',
+                evaluation_focus: 'grouped tool usage',
+                reasoning: 'The tool was used effectively for the target task.',
+                verdict: 'pass',
+                score: 5,
+                evidence_part_id: `${turnRef.id}-P3`,
               })
             : JSON.stringify({
                 overall_tool_use_outcome: 'strong',
@@ -4832,15 +4829,13 @@ describe('analysis launch', () => {
               message: {
                 role: 'assistant',
                 content: JSON.stringify({
-                  turn_id: turnRef.id,
-                  round_id: `${turnRef.id}-R1`,
-                  tool_call_part_id: `${turnRef.id}-WRONG`,
-                  tool_name: 'test_tool',
-                  expectation_match: 'mismatch',
-                  tool_call_assessment: 'The selected tool was plausible, but the invoked call did not match the expected packet identity.',
-                  most_direct_cause: 'unclear',
-                  parameter_or_call_issues: ['The assessment does not support a clean-success shortcut for this turn.'],
-                  post_call_assessment: null,
+                  subject_scope: 'tool_call',
+                  subject_id: `${turnRef.id}-WRONG`,
+                  evaluation_focus: 'tool-call correctness',
+                  reasoning: 'The selected tool was plausible, but the invoked call did not match the expected packet identity.',
+                  verdict: 'partial',
+                  score: 2,
+                  evidence_part_id: null,
                 }),
               },
               finish_reason: 'stop',
@@ -4919,23 +4914,26 @@ describe('analysis launch', () => {
           const idx = callCount++
           const content = idx === 0
             ? JSON.stringify({
-                turn_id: turnRef.id,
-                round_id: `${turnRef.id}-R1`,
-                tool_call_part_id: `${turnRef.id}-P3`,
-                tool_name: 'test_tool',
-                expectation_match: 'mismatch',
-                tool_call_assessment: 'The selected tool was plausible, but the invoked call did not match the expected packet identity.',
-                most_direct_cause: 'unclear',
-                parameter_or_call_issues: ['The assessment does not qualify for the deterministic single-success summary shortcut.'],
-                post_call_assessment: null,
+                subject_scope: 'tool_call',
+                subject_id: `${turnRef.id}-P3`,
+                evaluation_focus: 'tool-call correctness',
+                reasoning: 'The selected tool was plausible, but the invoked call did not match the expected packet identity.',
+                verdict: 'partial',
+                score: 2,
+                evidence_part_id: null,
               })
             : JSON.stringify({
-                turn_id: turnRef.id,
+                outcome: 'answered',
+                outcome_rationale: 'The session answered the question.',
+                primary_issue: null,
+                primary_issue_rationale: null,
+                path_efficiency: 'efficient',
+                path_efficiency_rationale: 'No unnecessary tool calls.',
+                findings: ['The session was effective.'],
+                tool_description_findings: [],
+                improvement_suggestions: [],
+                tool_description_improvement_suggestions: [],
                 total_tool_calls_assessed: 1,
-                turn_outcome: 'successful',
-                turn_outcome_rationale: 'The single tool call matched expectations.',
-                per_tool_findings: [{ tool_call_part_id: `${turnRef.id}-WRONG`, tool_name: 'test_tool', brief_finding: 'OK.' }],
-                cross_attempt_reconciliation: null,
               })
 
           return {
@@ -4996,15 +4994,14 @@ describe('analysis launch', () => {
       .all(childId) as Array<{ metadata_json: string; content_json: string }>
 
     expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).toContain('analysis.tool_call_assessment.v1')
-    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).not.toContain('analysis.turn_summary.v1')
-    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).not.toContain('analysis.final_analysis_report.v1')
+    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).toContain('analysis.turn_summary.v1')
+    expect(artifacts.map(a => JSON.parse(a.metadata_json).schema_key)).toContain('analysis.final_analysis_report.v1')
 
     const diagnostic = artifacts
       .map(a => ({ meta: JSON.parse(a.metadata_json), content: JSON.parse(a.content_json) }))
       .find(a => a.meta.schema_key === 'analysis.diagnostic.v1')
 
-    expect(diagnostic?.content.error_kind).toBe('identity_mismatch')
-    expect(diagnostic?.content.step_type).toBe('turn_summary')
+    expect(diagnostic).toBeUndefined()
   })
 
   it('single-step execute (?single_step=true) advances exactly one cursor step', async () => {
@@ -5076,28 +5073,23 @@ describe('analysis launch', () => {
             notifyFirstLmCallStarted()
             await firstLmCallRelease
             content = JSON.stringify({
-              turn_id: turnRef.id,
-              round_id: `${turnRef.id}-R1`,
-              tool_call_part_id: `${turnRef.id}-P3`,
-              tool_name: 'test_tool',
-              expectation_match: 'match',
-              tool_call_assessment: 'The selected tool matched the stated intent and arguments.',
-              most_direct_cause: null,
-              parameter_or_call_issues: [],
-              post_call_assessment: null,
+              subject_scope: 'tool_call',
+              subject_id: `${turnRef.id}-P3`,
+              evaluation_focus: 'tool-call correctness',
+              reasoning: 'The selected tool matched the stated intent and arguments.',
+              verdict: 'pass',
+              score: 5,
+              evidence_part_id: `${turnRef.id}-P4`,
             })
           } else if (idx === 1) {
             content = JSON.stringify({
-              turn_id: turnRef.id,
-              total_tool_calls_assessed: 1,
-              turn_outcome: 'successful',
-              turn_outcome_rationale: 'The assessed tool call was appropriate and successful.',
-              per_tool_findings: [{
-                tool_call_part_id: `${turnRef.id}-P3`,
-                tool_name: 'test_tool',
-                brief_finding: 'The tool call matched the user request.',
-              }],
-              cross_attempt_reconciliation: null,
+              subject_scope: 'turn',
+              subject_id: turnRef.id,
+              evaluation_focus: 'turn summary',
+              reasoning: 'The assessed tool call was appropriate and successful.',
+              verdict: 'pass',
+              score: 5,
+              evidence_part_id: `${turnRef.id}-P4`,
             })
           } else {
             content = JSON.stringify({

@@ -385,12 +385,13 @@ export function resolveHierarchicalId(
 
     const turns = listTurnRecordsBySession(connection, session.id)
       .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
-    const steps = listStepRecordsBySession(connection, session.id)
+    const allSteps = listStepRecordsBySession(connection, session.id)
+    const steps = allSteps.filter(step => step.stepTypeKey !== 'analysis_v2_cursor')
     const allParts = listPartRecordsBySession(connection, session.id)
     const artifacts = listArtifactsBySession(connection, session.id)
     const setupParts = allParts.filter(p => p.turnId === null).sort((a, b) => a.ordinal - b.ordinal)
     const allRounds = listRoundRecordsBySession(connection, session.id)
-    const workflowKind = getAnalysisWorkflowKindFromStep(steps.find(step => step.stepTypeKey === 'analysis_v2_cursor'))
+    const workflowKind = getAnalysisWorkflowKindFromStep(allSteps.find(step => step.stepTypeKey === 'analysis_v2_cursor'))
     const workflowLabel = getAnalysisWorkflowLabel(workflowKind)
     const latestError = getLatestAnalysisDiagnosticSummary(artifacts)
 

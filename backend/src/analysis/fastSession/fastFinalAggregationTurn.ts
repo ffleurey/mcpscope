@@ -12,9 +12,10 @@ import { runAnalysisTurn } from '../boundedTurn.js'
 import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
 import {
   SCHEMA_KEY,
-  evaluationResultSchema,
+  fastSessionFinalAnalysisReportSchema,
   type AnalysisSessionState,
   type AnalysisTarget,
+  type FastSessionFinalAnalysisReport,
   type EvaluationResult,
 } from '../schemas.js'
 import type { ZodError } from 'zod'
@@ -49,22 +50,11 @@ export interface FastFinalAggregationResult {
   success: boolean
 }
 
-function validateIdentity(sessionId: string, parsed: Pick<EvaluationResult, 'subject_scope' | 'subject_id'>): string[] {
-  const failures: string[] = []
-  if (parsed.subject_scope !== 'session') {
-    failures.push(`subject_scope mismatch: expected session, got ${parsed.subject_scope}`)
-  }
-  if (parsed.subject_id !== sessionId) {
-    failures.push(`subject_id mismatch: expected ${sessionId}, got ${parsed.subject_id}`)
-  }
-  return failures
-}
-
 function buildDeterministicReport(
   sessionId: string,
   assessments: EvaluationResult[],
   turnSummaries: EvaluationResult[],
-): EvaluationResult | null {
+): FastSessionFinalAnalysisReport | null {
   if (turnSummaries.length !== 1 || assessments.length === 0) {
     return null
   }
@@ -80,13 +70,13 @@ function buildDeterministicReport(
   }
 
   return {
-    subject_scope: 'session',
-    subject_id: sessionId,
-    evaluation_focus: 'Summarize the overall quality and outcome of the fast-session analysis.',
-    reasoning: summary.reasoning,
-    verdict: summary.verdict,
-    score: summary.score,
-    evidence_part_id: summary.evidence_part_id ?? assessments[0]?.evidence_part_id ?? null,
+    overall_outcome: summary.verdict === 'pass' ? 'answered' : summary.verdict === 'partial' ? 'partial' : summary.verdict === 'fail' ? 'blocked' : 'unclear',
+    overall_rationale: summary.reasoning,
+    path_efficiency: 'efficient',
+    tool_summaries: [],
+    notable_failures: [],
+    follow_up_candidates: [],
+    total_tool_calls_assessed: assessments.length,
   }
 }
 
@@ -191,7 +181,7 @@ export async function runFastFinalAggregationTurn(
     return { updatedState: { ...state, phase: 'error' }, reportArtifactId: null, success: false }
   }
 
-  const parsed = evaluationResultSchema.safeParse(parsedJson)
+  const parsed = fastSessionFinalAnalysisReportSchema.safeParse(parsedJson)
   if (!parsed.success) {
     insertJsonArtifact(database.connection, {
       id: uuid(),
@@ -200,7 +190,7 @@ export async function runFastFinalAggregationTurn(
       content: {
         step_type: 'fast_final_aggregation',
         error_kind: 'schema_validation_error',
-        message: 'Fast final aggregation response did not match evaluation_result schema',
+        message: 'Fast final aggregation response did not match fast_session_final_analysis_report schema',
         detail: { raw_response: turnResult.responseText, errors: (parsed.error as ZodError).issues },
       },
       metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC },
@@ -209,37 +199,23 @@ export async function runFastFinalAggregationTurn(
     return { updatedState: { ...state, phase: 'error' }, reportArtifactId: null, success: false }
   }
 
-  const identityFailures = validateIdentity(state.analysisSessionId, parsed.data)
-  if (identityFailures.length > 0) {
-    insertJsonArtifact(database.connection, {
-      id: uuid(),
-      sessionId: state.analysisSessionId,
-      stepId,
-      content: {
-        step_type: 'fast_final_aggregation',
-        error_kind: 'identity_mismatch',
-        message: 'Fast final aggregation matched schema but not expected identity',
-        detail: { failures: identityFailures, raw_response: turnResult.responseText },
-      },
-      metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC },
-      createdAt: ts,
-    })
-    return { updatedState: { ...state, phase: 'error' }, reportArtifactId: null, success: false }
-  }
-
   const reportArtifactId = uuid()
+  const finalReport: FastSessionFinalAnalysisReport = {
+    ...parsed.data,
+    total_tool_calls_assessed: parsed.data.total_tool_calls_assessed ?? assessments.length,
+  }
   insertJsonArtifact(database.connection, {
     id: reportArtifactId,
     sessionId: state.analysisSessionId,
     stepId,
-    content: parsed.data,
+    content: finalReport,
     metadata: {
       schema_key: SCHEMA_KEY.FAST_FINAL_ANALYSIS_REPORT,
       target_session_id: state.targetSessionId,
       target_turn_id: state.targetTurnId,
       total_packets: assessments.length,
-      subject_scope: parsed.data.subject_scope,
-      subject_id: parsed.data.subject_id,
+      subject_scope: 'session',
+      subject_id: state.analysisSessionId,
     },
     createdAt: ts,
   })

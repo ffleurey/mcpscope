@@ -12,9 +12,10 @@ import { runAnalysisTurn } from '../boundedTurn.js'
 import type { AnalysisStreamEventSink } from '../../runtime/streamEvents.js'
 import {
   SCHEMA_KEY,
-  evaluationResultSchema,
+  fastToolFinalReportSchema,
   type AnalysisSessionState,
   type AnalysisTarget,
+  type FastToolFinalReport,
   type EvaluationResult,
   type FastToolWorkIndex,
 } from '../schemas.js'
@@ -50,21 +51,10 @@ export interface FastToolFinalAggregationResult {
   success: boolean
 }
 
-function validateIdentity(sessionId: string, parsed: Pick<EvaluationResult, 'subject_scope' | 'subject_id'>): string[] {
-  const failures: string[] = []
-  if (parsed.subject_scope !== 'session') {
-    failures.push(`subject_scope mismatch: expected session, got ${parsed.subject_scope}`)
-  }
-  if (parsed.subject_id !== sessionId) {
-    failures.push(`subject_id mismatch: expected ${sessionId}, got ${parsed.subject_id}`)
-  }
-  return failures
-}
-
 function buildDeterministicReport(
   sessionId: string,
   groupedAssessments: EvaluationResult[],
-): EvaluationResult | null {
+): FastToolFinalReport | null {
   if (groupedAssessments.length !== 1) {
     return null
   }
@@ -75,13 +65,13 @@ function buildDeterministicReport(
   }
 
   return {
-    subject_scope: 'session',
-    subject_id: sessionId,
-    evaluation_focus: 'Summarize the overall quality and outcome of the fast-tool analysis.',
-    reasoning: assessment.reasoning,
-    verdict: assessment.verdict,
-    score: assessment.score,
-    evidence_part_id: assessment.evidence_part_id ?? null,
+    overall_tool_use_outcome: assessment.verdict === 'pass' ? 'strong' : assessment.verdict === 'partial' ? 'mixed' : 'unclear',
+    overall_rationale: assessment.reasoning,
+    tool_summaries: [],
+    repeated_failure_patterns: [],
+    follow_up_candidates: [],
+    total_tool_groups_assessed: groupedAssessments.length,
+    total_tool_calls_assessed: groupedAssessments.length,
   }
 }
 
@@ -197,7 +187,7 @@ export async function runFastToolFinalAggregationTurn(
     return { updatedState: { ...state, phase: 'error' }, reportArtifactId: null, success: false }
   }
 
-  const parsed = evaluationResultSchema.safeParse(parsedJson)
+  const parsed = fastToolFinalReportSchema.safeParse(parsedJson)
   if (!parsed.success) {
     insertJsonArtifact(database.connection, {
       id: uuid(),
@@ -206,7 +196,7 @@ export async function runFastToolFinalAggregationTurn(
       content: {
         step_type: 'fast_tool_final_aggregation',
         error_kind: 'schema_validation_error',
-        message: 'Fast tool final aggregation response did not match evaluation_result schema',
+        message: 'Fast tool final aggregation response did not match fast_tool_final_report schema',
         detail: { raw_response: turnResult.responseText, errors: (parsed.error as ZodError).issues },
       },
       metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC },
@@ -215,38 +205,25 @@ export async function runFastToolFinalAggregationTurn(
     return { updatedState: { ...state, phase: 'error' }, reportArtifactId: null, success: false }
   }
 
-  const identityFailures = validateIdentity(state.analysisSessionId, parsed.data)
-  if (identityFailures.length > 0) {
-    insertJsonArtifact(database.connection, {
-      id: uuid(),
-      sessionId: state.analysisSessionId,
-      stepId,
-      content: {
-        step_type: 'fast_tool_final_aggregation',
-        error_kind: 'identity_mismatch',
-        message: 'Fast tool final aggregation matched schema but not expected identity',
-        detail: { failures: identityFailures, raw_response: turnResult.responseText },
-      },
-      metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC },
-      createdAt: ts,
-    })
-    return { updatedState: { ...state, phase: 'error' }, reportArtifactId: null, success: false }
-  }
-
   const reportArtifactId = uuid()
+  const finalReport: FastToolFinalReport = {
+    ...parsed.data,
+    total_tool_groups_assessed: parsed.data.total_tool_groups_assessed ?? groupedAssessments.length,
+    total_tool_calls_assessed: parsed.data.total_tool_calls_assessed ?? totalToolCallCount,
+  }
   insertJsonArtifact(database.connection, {
     id: reportArtifactId,
     sessionId: state.analysisSessionId,
     stepId,
-    content: parsed.data,
+    content: finalReport,
     metadata: {
       schema_key: SCHEMA_KEY.FAST_TOOL_FINAL_REPORT,
       target_session_id: state.targetSessionId,
       target_turn_id: state.targetTurnId,
       total_assessments: groupedAssessments.length,
       total_tool_calls: totalToolCallCount,
-      subject_scope: parsed.data.subject_scope,
-      subject_id: parsed.data.subject_id,
+      subject_scope: 'session',
+      subject_id: state.analysisSessionId,
     },
     createdAt: ts,
   })

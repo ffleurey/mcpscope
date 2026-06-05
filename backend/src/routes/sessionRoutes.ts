@@ -51,8 +51,17 @@ function buildSessionSummaryPayload(
     mcpProfileSnapshot: { name: string } | null
   },
 ) {
+  const steps = listStepRecordsBySession(deps.database.connection, summary.id)
   const workflowKind = summary.sessionType === 'session_analysis'
-    ? getAnalysisWorkflowKindFromSteps(listStepRecordsBySession(deps.database.connection, summary.id))
+    ? getAnalysisWorkflowKindFromSteps(steps)
+    : null
+  const workflowPhase = summary.sessionType === 'session_analysis'
+    ? (() => {
+        const cursorStep = steps
+          .find(step => step.stepTypeKey === 'analysis_v2_cursor')
+        const phase = typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : null
+        return phase
+      })()
     : null
   const latestError = deps.toLifecycleState(summary) === 'error' && summary.sessionType === 'session_analysis'
     ? getLatestAnalysisDiagnosticSummaryForSession(deps.database.connection, summary.id) ?? undefined
@@ -72,6 +81,7 @@ function buildSessionSummaryPayload(
     loaded_context_length: summary.loadedContextLength,
     compaction_strategy: summary.compactionStrategy,
     ...(workflowKind ? { workflow_kind: workflowKind } : {}),
+    ...(workflowPhase ? { workflow_phase: workflowPhase } : {}),
     ...(latestError ? { latest_error: latestError } : {}),
     model_profile_snapshot: { name: summary.modelProfileSnapshot.name },
     mcp_profile_snapshot: summary.mcpProfileSnapshot ? { name: summary.mcpProfileSnapshot.name } : null,

@@ -154,6 +154,43 @@ export const evaluationResultSchema = z.object({
 })
 export type EvaluationResult = z.infer<typeof evaluationResultSchema>
 
+export const finalAnalysisReportSchema = z.object({
+  outcome: z.string().min(1),
+  outcome_rationale: z.string().min(1),
+  primary_issue: z.string().nullable(),
+  primary_issue_rationale: z.string().nullable(),
+  path_efficiency: z.enum(['efficient', 'mixed', 'inefficient', 'unclear']),
+  path_efficiency_rationale: z.string().min(1),
+  findings: z.array(z.string()),
+  tool_description_findings: z.array(z.string()),
+  improvement_suggestions: z.array(z.string()),
+  tool_description_improvement_suggestions: z.array(z.string()),
+  total_tool_calls_assessed: z.number().int().nonnegative().optional(),
+}).passthrough()
+export type FinalAnalysisReport = z.infer<typeof finalAnalysisReportSchema>
+
+export const fastSessionFinalAnalysisReportSchema = z.object({
+  overall_outcome: z.string().min(1),
+  overall_rationale: z.string().min(1),
+  path_efficiency: z.enum(['efficient', 'mixed', 'inefficient', 'unclear']),
+  tool_summaries: z.array(z.record(z.string(), z.unknown())),
+  notable_failures: z.array(z.unknown()),
+  follow_up_candidates: z.array(z.unknown()),
+  total_tool_calls_assessed: z.number().int().nonnegative().optional(),
+}).passthrough()
+export type FastSessionFinalAnalysisReport = z.infer<typeof fastSessionFinalAnalysisReportSchema>
+
+export const fastToolFinalReportSchema = z.object({
+  overall_tool_use_outcome: z.string().min(1),
+  overall_rationale: z.string().min(1),
+  tool_summaries: z.array(z.record(z.string(), z.unknown())),
+  repeated_failure_patterns: z.array(z.unknown()),
+  follow_up_candidates: z.array(z.unknown()),
+  total_tool_groups_assessed: z.number().int().nonnegative().optional(),
+  total_tool_calls_assessed: z.number().int().nonnegative().optional(),
+}).passthrough()
+export type FastToolFinalReport = z.infer<typeof fastToolFinalReportSchema>
+
 // ─────────────────────────────────────────────────────────────────────────────
 // analysis.evidence_packet_index.v1
 // ─────────────────────────────────────────────────────────────────────────────

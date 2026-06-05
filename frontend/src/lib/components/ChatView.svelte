@@ -207,15 +207,11 @@
   let isAnalysisSession = $derived(session?.session_type === 'session_analysis')
   let analysisPhase = $derived.by(() => {
     if (!isAnalysisSession) return null
-    const cursorStep = traceSteps.find((s) => s.stepTypeKey === 'analysis_v2_cursor')
-    return typeof cursorStep?.state.phase === 'string' ? cursorStep.state.phase : 'bootstrap'
+    return session?.workflow_phase ?? null
   })
   let analysisWorkflowKind = $derived.by(() => {
     if (!isAnalysisSession) return null
-    const fromSummary = session?.workflow_kind
-    if (fromSummary) return fromSummary
-    const cursorStep = traceSteps.find((s) => s.stepTypeKey === 'analysis_v2_cursor')
-    return typeof cursorStep?.params.workflow_kind === 'string' ? cursorStep.params.workflow_kind : null
+    return session?.workflow_kind ?? null
   })
   let analysisWorkflowLabel = $derived.by(() => {
     switch (analysisWorkflowKind) {
