@@ -41,8 +41,13 @@ export class AnalysisWorkflowRuntime<State extends { analysisSessionId: string }
 
   async resumeOneStep(emitEvent?: AnalysisStreamEventSink): Promise<void> {
     if (!this.canContinue()) return
-    await this.options.advance(emitEvent)
-    this.persistState()
+    try {
+      await this.options.advance(emitEvent)
+      this.persistState()
+    } catch (err) {
+      console.error('AnalysisWorkflowRuntime: step execution failed', err)
+      throw err
+    }
   }
 
   private async runLoop(emitEvent?: AnalysisStreamEventSink): Promise<void> {

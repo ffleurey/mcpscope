@@ -333,7 +333,7 @@ export function getNextStepDisplayNumber(
       AND s.step_type_key != 'compaction'
       AND (t.id IS NULL OR t.owner_step_id IS NULL)
   `).get(sessionId) as { cnt: number }
-  return row.cnt
+  return row.cnt + 1
 }
 
 export function getNextChildIndex(
