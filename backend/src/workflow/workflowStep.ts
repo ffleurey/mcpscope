@@ -1,5 +1,5 @@
 import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import { insertStepRecord, getNextChildIndex, updateStepRecord } from '../persistence/repositoryV2.js'
 import { formatStepId } from '../domain/hierarchicalIds.js'
@@ -14,14 +14,14 @@ export abstract class WorkflowStep {
   status: string = 'pending'
 
   protected readonly db: BackendDatabase
-  protected readonly lm: LmStudioGateway
+  protected readonly lm: ChatCompletionGateway
   protected readonly mcp: McpGateway
 
   abstract get stepLabel(): string
 
   constructor(
     db: BackendDatabase,
-    lm: LmStudioGateway,
+    lm: ChatCompletionGateway,
     mcp: McpGateway,
   ) {
     this.db = db

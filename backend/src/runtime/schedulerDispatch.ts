@@ -61,7 +61,7 @@ async function executeInitJob(
   opCtx: SchedulerContext,
   emitExecutionEvent: (event: PreludeStreamEvent) => void,
 ): Promise<void> {
-  await runSessionInitialization(opCtx.db, opCtx.lmStudioGateway, opCtx.mcpGateway, job.target.sessionId, emitExecutionEvent)
+  await runSessionInitialization(opCtx.db, opCtx.chatCompletionGateway, opCtx.mcpGateway, job.target.sessionId, emitExecutionEvent)
 }
 
 async function executePrimaryJob(
@@ -89,7 +89,7 @@ async function executePrimaryJob(
   const chatSession = new ChatSession(
     session,
     opCtx.db,
-    opCtx.lmStudioGateway,
+    opCtx.chatCompletionGateway,
     session.mcpProfileSnapshots.length > 0 ? opCtx.mcpGateway : null,
     opCtx.maxToolRounds,
     activeTurn,
@@ -116,7 +116,7 @@ async function executeAnalysisJob(
   updateSessionRecord(opCtx.db.connection, session)
 
   try {
-    const instance = rehydrateAnalysisWorkflow(opCtx.db, opCtx.lmStudioGateway, opCtx.mcpGateway, job.target.sessionId)
+    const instance = rehydrateAnalysisWorkflow(opCtx.db, opCtx.chatCompletionGateway, opCtx.mcpGateway, job.target.sessionId)
     if (!instance) {
       throw new Error('Failed to rehydrate analysis session')
     }
@@ -158,7 +158,7 @@ async function executeAnalysisOneStepJob(
   updateSessionRecord(opCtx.db.connection, session)
 
   try {
-    const instance = rehydrateAnalysisWorkflow(opCtx.db, opCtx.lmStudioGateway, opCtx.mcpGateway, job.target.sessionId)
+    const instance = rehydrateAnalysisWorkflow(opCtx.db, opCtx.chatCompletionGateway, opCtx.mcpGateway, job.target.sessionId)
     if (!instance) {
       throw new Error('Failed to rehydrate analysis session')
     }

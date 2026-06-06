@@ -10,7 +10,7 @@ import {
   insertTurnRecord,
 } from '../persistence/repository.js'
 import type { PartRecord, RoundRecord, SessionRecord, TurnRecord } from '../domain/model.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import { BootstrapStep } from './shared/bootstrapStep.js'
 import { STEP_TYPE } from '../domain/executionModel.js'
@@ -211,7 +211,7 @@ const fakeMcpGateway: McpGateway = {
   },
 }
 
-const fakeLmGateway: LmStudioGateway = {
+const fakeLmGateway: ChatCompletionGateway = {
   async createChatCompletion() {
     throw new Error('fakeLmGateway: createChatCompletion not implemented')
   },
@@ -609,7 +609,7 @@ describe('analysis workflow helpers', () => {
     })
 
     let callCount = 0
-    const lmGateway: LmStudioGateway = {
+    const lmGateway: ChatCompletionGateway = {
       async createChatCompletion() {
         callCount += 1
         return {
@@ -811,7 +811,7 @@ describe('analysis workflow helpers', () => {
       createdAt: 5,
     })
 
-    const lmGateway: LmStudioGateway = {
+    const lmGateway: ChatCompletionGateway = {
       async createChatCompletion() {
         return {
           id: 'cmpl-final-omitted-total',

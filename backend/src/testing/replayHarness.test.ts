@@ -80,7 +80,7 @@ describe('session trace replay harness', () => {
       },
       turnInputs: ['Say OK.'],
       dependencies: {
-        lmStudioGateway: {
+        chatCompletionGateway: {
           async probePromptTokensDetailed(_baseUrl, _apiKey, body) {
             return {
               promptTokens: 3,
@@ -190,7 +190,7 @@ describe('session trace replay harness', () => {
       },
       turnInputs: ['Use the tool to tell me the current time.'],
       dependencies: {
-        lmStudioGateway: {
+        chatCompletionGateway: {
           async probePromptTokensDetailed(_baseUrl, _apiKey, body) {
             const messages = body.messages as Array<{ role: string; content?: string | null }>
             const hasTools = Array.isArray(body.tools) && body.tools.length > 0

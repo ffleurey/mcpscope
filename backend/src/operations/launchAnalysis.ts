@@ -295,7 +295,7 @@ export async function executeAnalysisLaunch(
       // mcpscope_status), probes token counts, and sets initStatus = 'ready'.
       await runSessionInitialization(
         db,
-        ctx.lmStudioGateway,
+        ctx.chatCompletionGateway,
         ctx.mcpGateway,
         session.id,
         () => { /* no streaming during launch */ },

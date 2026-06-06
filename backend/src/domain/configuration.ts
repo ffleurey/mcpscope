@@ -1,13 +1,19 @@
 import { z } from 'zod'
 
-export const lmStudioConnectionSchema = z.object({
+export const providerTypeValues = ['lmstudio', 'openrouter'] as const
+
+export const providerConnectionSchema = z.object({
   id: z.string(),
   name: z.string(),
   baseUrl: z.string().url(),
   apiKey: z.string().optional(),
+  providerType: z.enum(providerTypeValues).default('lmstudio'),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 })
+
+/** Backward-compatible alias used by persistence layer. */
+export const lmStudioConnectionSchema = providerConnectionSchema
 
 export const modelConfigSchema = z.object({
   id: z.string(),
@@ -34,6 +40,7 @@ export const mcpServerProfileSchema = z.object({
   updatedAt: z.number().int().nonnegative(),
 })
 
-export type LmStudioConnection = z.infer<typeof lmStudioConnectionSchema>
+export type ProviderConnection = z.infer<typeof providerConnectionSchema>
+export type LmStudioConnection = ProviderConnection
 export type ModelConfig = z.infer<typeof modelConfigSchema>
 export type McpServerProfile = z.infer<typeof mcpServerProfileSchema>

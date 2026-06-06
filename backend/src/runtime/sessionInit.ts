@@ -11,7 +11,7 @@ import {
 import { buildSessionTraceBundle } from '../domain/trace.js'
 import { deriveContextEntries, deriveTranscriptEntries } from '../domain/selectors.js'
 import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from './modelTurns.js'
+import type { ChatCompletionGateway } from './modelTurns.js'
 import type { McpGateway } from './toolTurns.js'
 import { ensureMcpContext } from './toolTurns.js'
 import { ensureSessionPreludeTokenMetadata } from './sessionPrelude.js'
@@ -27,7 +27,7 @@ export type PreludeStreamEvent =
 
 export async function runSessionInitialization(
   database: BackendDatabase,
-  lmStudioGateway: LmStudioGateway,
+  chatCompletionGateway: ChatCompletionGateway,
   mcpGateway: McpGateway,
   sessionId: string,
   emitEvent: (event: PreludeStreamEvent) => void,
@@ -64,44 +64,51 @@ export async function runSessionInitialization(
   session.updatedAt = now()
   updateSessionRecord(database.connection, session)
 
-  // Emit existing parts (system prompt was created during createSession)
-  let parts = listPartRecordsBySession(database.connection, sessionId)
-  for (const part of parts.filter(p => p.turnId === null)) {
-    emitEvent({ type: 'part-committed', part })
-  }
-
-  // MCP setup: initializes MCP session + creates mcp-instructions + tool-definitions parts
-  if (session.mcpProfileSnapshots.length > 0) {
-    await ensureMcpContext(database, session, mcpGateway)
-    parts = listPartRecordsBySession(database.connection, sessionId)
+  try {
+    // Emit existing parts (system prompt was created during createSession)
+    let parts = listPartRecordsBySession(database.connection, sessionId)
     for (const part of parts.filter(p => p.turnId === null)) {
       emitEvent({ type: 'part-committed', part })
     }
+
+    // MCP setup: initializes MCP session + creates mcp-instructions + tool-definitions parts
+    if (session.mcpProfileSnapshots.length > 0) {
+      await ensureMcpContext(database, session, mcpGateway)
+      parts = listPartRecordsBySession(database.connection, sessionId)
+      for (const part of parts.filter(p => p.turnId === null)) {
+        emitEvent({ type: 'part-committed', part })
+      }
+    }
+
+    // Token probing: context length + system prompt tokens + MCP/tool-definition tokens
+    const probedParts = await ensureSessionPreludeTokenMetadata(database, chatCompletionGateway, session, parts)
+    // Emit updated parts (now have token counts filled in)
+    for (const part of probedParts.filter(p => p.turnId === null)) {
+      emitEvent({ type: 'part-committed', part })
+    }
+
+    // Mark as ready
+    session.initStatus = 'ready'
+    session.updatedAt = now()
+    updateSessionRecord(database.connection, session)
+
+    // Build and emit the complete trace bundle
+    const allParts = listPartRecordsBySession(database.connection, sessionId)
+    const trace = buildSessionTraceBundle({
+      session,
+      steps: listStepRecordsBySession(database.connection, sessionId),
+      turns: listTurnRecordsBySession(database.connection, sessionId),
+      rounds: listRoundRecordsBySession(database.connection, sessionId),
+      parts: allParts,
+      rawExchanges: listRawExchangeRecordsBySession(database.connection, sessionId),
+      transcript: deriveTranscriptEntries(allParts),
+      context: deriveContextEntries(allParts),
+    })
+    emitEvent({ type: 'prelude-complete', trace })
+  } catch (err) {
+    session.initStatus = 'error'
+    session.updatedAt = now()
+    updateSessionRecord(database.connection, session)
+    emitEvent({ type: 'prelude-failed', message: err instanceof Error ? err.message : String(err) })
   }
-
-  // Token probing: context length + system prompt tokens + MCP/tool-definition tokens
-  const probedParts = await ensureSessionPreludeTokenMetadata(database, lmStudioGateway, session, parts)
-  // Emit updated parts (now have token counts filled in)
-  for (const part of probedParts.filter(p => p.turnId === null)) {
-    emitEvent({ type: 'part-committed', part })
-  }
-
-  // Mark as ready
-  session.initStatus = 'ready'
-  session.updatedAt = now()
-  updateSessionRecord(database.connection, session)
-
-  // Build and emit the complete trace bundle
-  const allParts = listPartRecordsBySession(database.connection, sessionId)
-  const trace = buildSessionTraceBundle({
-    session,
-    steps: listStepRecordsBySession(database.connection, sessionId),
-    turns: listTurnRecordsBySession(database.connection, sessionId),
-    rounds: listRoundRecordsBySession(database.connection, sessionId),
-    parts: allParts,
-    rawExchanges: listRawExchangeRecordsBySession(database.connection, sessionId),
-    transcript: deriveTranscriptEntries(allParts),
-    context: deriveContextEntries(allParts),
-  })
-  emitEvent({ type: 'prelude-complete', trace })
 }

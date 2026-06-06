@@ -6,7 +6,7 @@ import { insertStepRecord } from '../persistence/repositoryV2.js'
 import { stepTypeKey } from '../domain/executionModel.js'
 import { createSession } from './modelTurns.js'
 import { createToolEnabledTurn } from './toolTurns.js'
-import type { LmStudioGateway } from './modelTurns.js'
+import type { ChatCompletionGateway } from './modelTurns.js'
 import type { McpGateway } from './toolTurns.js'
 
 describe('tool-enabled turn runtime', () => {
@@ -26,7 +26,7 @@ describe('tool-enabled turn runtime', () => {
   it('persists a tool call round and a final assistant round', async () => {
     const db = openBackendDatabase(makeSqlitePath())
 
-    const lmStudioGateway: LmStudioGateway = {
+    const chatCompletionGateway: ChatCompletionGateway = {
       async probePromptTokens() {
         return 5
       },
@@ -93,7 +93,7 @@ describe('tool-enabled turn runtime', () => {
       },
     }
 
-    lmStudioGateway.probePromptTokens = async (_baseUrl, _apiKey, body) => {
+    chatCompletionGateway.probePromptTokens = async (_baseUrl, _apiKey, body) => {
       const messages = body.messages as Array<{ role: string; content?: string | null }>
       const hasTools = Array.isArray(body.tools) && body.tools.length > 0
       const hasToolMessage = messages.some(message => message.role === 'assistant' && message.content == null)
@@ -210,7 +210,7 @@ describe('tool-enabled turn runtime', () => {
       completedAt: 1,
     })
 
-    const result = await createToolEnabledTurn(db, lmStudioGateway, mcpGateway, {
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
       sessionId: session.id,
       userContent: 'Tell me the current time with tools.',
       maxToolRounds: 5,
@@ -261,7 +261,7 @@ describe('tool-enabled turn runtime', () => {
   it('nests ids under an owning workflow step', async () => {
     const db = openBackendDatabase(makeSqlitePath())
 
-    const lmStudioGateway: LmStudioGateway = {
+    const chatCompletionGateway: ChatCompletionGateway = {
       async probePromptTokens() {
         return 5
       },
@@ -417,7 +417,7 @@ describe('tool-enabled turn runtime', () => {
       completedAt: 1,
     })
 
-    const result = await createToolEnabledTurn(db, lmStudioGateway, mcpGateway, {
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
       sessionId: session.id,
       userContent: 'Tell me the current time with tools.',
       maxToolRounds: 5,
@@ -434,7 +434,7 @@ describe('tool-enabled turn runtime', () => {
   it('allocates grouped tool-call prompt tokens proportionally across multiple tool calls', async () => {
     const db = openBackendDatabase(makeSqlitePath())
 
-    const lmStudioGateway: LmStudioGateway = {
+    const chatCompletionGateway: ChatCompletionGateway = {
       async probePromptTokens(_baseUrl, _apiKey, body) {
         const messages = body.messages as Array<{ role: string; content?: string | null }>
         const hasTools = Array.isArray(body.tools) && body.tools.length > 0
@@ -625,7 +625,7 @@ describe('tool-enabled turn runtime', () => {
       }],
     })
 
-    const result = await createToolEnabledTurn(db, lmStudioGateway, mcpGateway, {
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
       sessionId: session.id,
       userContent: 'Tell me both the time and the office max temperature.',
       maxToolRounds: 5,
@@ -649,7 +649,7 @@ describe('tool-enabled turn runtime', () => {
   it('preserves assistant content when it shares a message with tool calls', async () => {
     const db = openBackendDatabase(makeSqlitePath())
 
-    const lmStudioGateway: LmStudioGateway = {
+    const chatCompletionGateway: ChatCompletionGateway = {
       async probePromptTokens(_baseUrl, _apiKey, body) {
         const messages = body.messages as Array<{ role: string; content?: string | null }>
         const hasTools = Array.isArray(body.tools) && body.tools.length > 0
@@ -820,7 +820,7 @@ describe('tool-enabled turn runtime', () => {
       }],
     })
 
-    const result = await createToolEnabledTurn(db, lmStudioGateway, mcpGateway, {
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
       sessionId: session.id,
       userContent: 'Tell me the time.',
       maxToolRounds: 5,
@@ -881,7 +881,7 @@ describe('tool-enabled turn runtime', () => {
       }, 40 + (toolCount * 10))
     }
 
-    const lmStudioGateway: LmStudioGateway = {
+    const chatCompletionGateway: ChatCompletionGateway = {
       async probePromptTokens(_baseUrl, _apiKey, body) {
         return estimatePromptTokens(body as { messages: Array<Record<string, unknown>>; tools?: unknown[] })
       },
@@ -1158,7 +1158,7 @@ describe('tool-enabled turn runtime', () => {
       }],
     })
 
-    const result = await createToolEnabledTurn(db, lmStudioGateway, mcpGateway, {
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
       sessionId: session.id,
       userContent: 'Work in three batches with varied tool counts before answering.',
       maxToolRounds: 6,

@@ -28,14 +28,14 @@ import {
   updateTurnRecord,
 } from '../persistence/repository.js'
 import { formatPartId, formatRoundId, formatSetupPartId, formatTurnId } from '../domain/hierarchicalIds.js'
-import type { LmStudioGateway, RuntimeTurnResult } from './modelTurns.js'
+import { sessionReasoningBody, type ChatCompletionGateway, type RuntimeTurnResult } from './modelTurns.js'
 import type { ApiMessage } from '../domain/selectors.js'
 import type { McpRawExchange, McpToolCallResult, McpToolsListResult } from '../services/mcp/httpClient.js'
 import { buildSessionTraceBundle } from '../domain/trace.js'
 import {
   allocateProportionalTokenCounts,
   deriveExactDeltaTokenMetadata,
-  normalizeLmStudioUsageFromResponse,
+  normalizeUsageFromResponse,
 } from '../domain/tokenAccounting.js'
 import {
   deriveExactToolPreludeTokens,
@@ -126,7 +126,7 @@ function makeRawExchangeRecord(
   }
 }
 
-function parseToolCalls(round: RoundRecord, response: Awaited<ReturnType<LmStudioGateway['createChatCompletion']>>): ToolCallRecord[] {
+function parseToolCalls(round: RoundRecord, response: Awaited<ReturnType<ChatCompletionGateway['createChatCompletion']>>): ToolCallRecord[] {
   const toolCalls = response.choices[0]?.message?.tool_calls ?? []
   return toolCalls.map((toolCall, index) => ({
     id: toolCall.id ?? `${round.id}-tool-${index}`,
@@ -239,7 +239,7 @@ function updatePartTokens(
 
 async function applyPendingPromptSuffixAttribution(
   database: BackendDatabase,
-  lmStudioGateway: LmStudioGateway,
+  chatCompletionGateway: ChatCompletionGateway,
   session: SessionRecord,
   requestMessages: ApiMessage[],
   lmTools: ReturnType<typeof buildLmToolDefinitions>,
@@ -256,7 +256,7 @@ async function applyPendingPromptSuffixAttribution(
   if (pending.kind === 'user-message') {
     const prefixMessages = requestMessages.slice(0, pending.baseMessageCount)
     const prefixTokens = prefixMessages.length > 0
-      ? await probeRequestPromptTokens(lmStudioGateway, session, prefixMessages, lmTools, {
+      ? await probeRequestPromptTokens(chatCompletionGateway, session, prefixMessages, lmTools, {
           database,
           sessionId: session.id,
           turnId: pending.userPart.turnId,
@@ -294,7 +294,7 @@ async function applyPendingPromptSuffixAttribution(
     turnId: pending.toolCallParts[0]?.turnId ?? pending.assistantContentParts[0]?.turnId ?? null,
     roundId: pending.toolCallParts[0]?.roundId ?? pending.assistantContentParts[0]?.roundId ?? null,
   }
-  const prefixTokens = await probeRequestPromptTokens(lmStudioGateway, session, prefixMessages, lmTools, traceContext)
+  const prefixTokens = await probeRequestPromptTokens(chatCompletionGateway, session, prefixMessages, lmTools, traceContext)
   if (prefixTokens == null) {
     return null
   }
@@ -1222,7 +1222,7 @@ export async function runDeterministicMcpToolCallsInSingleTurn(
 
 export async function createToolEnabledTurn(
   database: BackendDatabase,
-  lmStudioGateway: LmStudioGateway,
+  chatCompletionGateway: ChatCompletionGateway,
   mcpGateway: McpGateway,
   input: { sessionId: string; userContent: string; maxToolRounds: number; ownerStepId?: string | null | undefined; reservedTurn?: TurnRecord | undefined },
   emitEvent?: TurnStreamEventSink,
@@ -1242,7 +1242,7 @@ export async function createToolEnabledTurn(
   const mcpContext = await ensureMcpContext(database, session, mcpGateway)
   const sessionParts = await ensureSessionPreludeTokenMetadata(
     database,
-    lmStudioGateway,
+    chatCompletionGateway,
     session,
     listPartRecordsBySession(database.connection, session.id),
   )
@@ -1340,14 +1340,14 @@ export async function createToolEnabledTurn(
       },
       messages: requestMessages,
       tools: lmTools,
-      ...(session.modelProfileSnapshot.reasoning ? { reasoning: session.modelProfileSnapshot.reasoning } : {}),
+      ...sessionReasoningBody(session),
     }
 
     currentRound.requestPayloadJson = requestBody
     updateRoundRecord(database.connection, currentRound)
 
     const streamedCompletion = await executeChatCompletion(
-      lmStudioGateway,
+      chatCompletionGateway,
       session.modelProfileSnapshot.connectionBaseUrl,
       session.modelProfileSnapshot.apiKey ?? undefined,
       requestBody,
@@ -1366,7 +1366,7 @@ export async function createToolEnabledTurn(
 
     const completedAt = now()
     const finishReason = completion.choices[0]?.finish_reason
-    const usage = normalizeLmStudioUsageFromResponse(completion)
+    const usage = normalizeUsageFromResponse(completion)
 
     currentRound.status = 'complete'
     currentRound.finishReason = finishReason === 'tool_calls' ? 'tool_calls' : 'stop'
@@ -1386,7 +1386,7 @@ export async function createToolEnabledTurn(
     // applyPendingPromptSuffixAttribution always returns null — called for DB side-effects only
     await applyPendingPromptSuffixAttribution(
       database,
-      lmStudioGateway,
+      chatCompletionGateway,
       session,
       requestMessages,
       lmTools,

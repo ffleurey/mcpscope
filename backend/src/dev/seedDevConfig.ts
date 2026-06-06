@@ -63,6 +63,7 @@ function main(): void {
       name: 'Dev LM Studio',
       baseUrl: env.lmStudioBaseUrl,
       apiKey: env.lmStudioApiKey,
+      providerType: 'lmstudio',
       createdAt: createdAtFor(existingConnections, DEV_CONNECTION_ID, timestamp),
       updatedAt: timestamp,
     })

@@ -1,6 +1,6 @@
 import type { PartRecord, RoundRecord, StepRecord, TurnRecord } from '../domain/model.js'
 import type { SessionTraceBundle } from '../domain/trace.js'
-import type { LmStudioStreamDelta } from '../services/lmstudio/client.js'
+import type { StreamDelta } from '../services/lmstudio/client.js'
 
 export type TurnStreamEvent =
   | {
@@ -15,7 +15,7 @@ export type TurnStreamEvent =
       type: 'part-delta'
       turnId: string
       roundId: string
-      delta: LmStudioStreamDelta
+      delta: StreamDelta
     }
   | {
       type: 'part-committed'

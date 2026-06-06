@@ -3,7 +3,7 @@
   import { lmConnections } from '../connectionStore'
   import { listModels, loadModel } from '../services/lmstudio'
   import type { LmStudioModel } from '../services/lmstudio'
-  import type { ModelConfig } from '../types'
+  import type { ModelConfig, LmStudioConnection } from '../types'
 
   interface Props {
     modelConfig?: ModelConfig | null
@@ -38,6 +38,23 @@
   let modelsLoading = $state(false)
   let modelsError = $state<string | null>(null)
   let selectedModelMeta = $state<LmStudioModel | null>(null)
+  let modelSearch = $state('')
+
+  let sortedFilteredModels = $derived(
+    (modelSearch
+      ? availableModels.filter(m =>
+          m.displayName.toLowerCase().includes(modelSearch.toLowerCase()) ||
+          m.key.toLowerCase().includes(modelSearch.toLowerCase()))
+      : [...availableModels]
+    ).sort((a, b) => a.displayName.localeCompare(b.displayName))
+  )
+
+  let selectedConnection = $derived(
+    $lmConnections.find(c => c.id === connectionId) ?? null,
+  )
+  let isLmStudio = $derived(
+    selectedConnection?.providerType !== 'openrouter',
+  )
 
   let errors = $state<Record<string, string>>({})
 
@@ -64,7 +81,7 @@
     modelDisplayName = ''
     selectedModelMeta = null
     try {
-      const models = await listModels(conn.baseUrl, conn.apiKey)
+      const models = await listModels(conn.baseUrl, conn.apiKey, conn.providerType)
       availableModels = models
       if (modelConfig?.connectionId === connId && modelConfig.modelKey) {
         const existing = models.find(m => m.key === modelConfig.modelKey)
@@ -74,7 +91,7 @@
           applyModelSelection(models[0])
         }
       } else {
-        const first = models.find(m => m.isLoaded) ?? models[0]
+        const first = isLmStudio ? (models.find(m => m.isLoaded) ?? models[0]) : models[0]
         if (first) applyModelSelection(first)
       }
     } catch (e) {
@@ -188,14 +205,22 @@
       <p class="error-hint">{modelsError}</p>
     {:else if availableModels.length === 0 && connectionId}
       <p class="loading-hint">No models found on this connection.</p>
-    {:else if availableModels.length > 0}
+    {:else if modelSearch && sortedFilteredModels.length === 0}
+      <p class="loading-hint">No models match "{modelSearch}".</p>
+    {:else if sortedFilteredModels.length > 0}
+      <input
+        id="mc-model-filter"
+        type="text"
+        bind:value={modelSearch}
+        placeholder="Search models…"
+      />
       <div class="model-select-row">
         <select id="mc-model" bind:value={modelKey} onchange={handleModelChange}>
-          {#each availableModels as m (m.uid)}
-            <option value={m.key}>{m.displayName}{m.isLoaded ? ' ●' : ''}</option>
+          {#each sortedFilteredModels as m (m.uid)}
+            <option value={m.key}>{m.displayName}{isLmStudio && m.isLoaded ? ' ●' : ''}</option>
           {/each}
         </select>
-        {#if selectedModelMeta && !selectedModelMeta.isLoaded}
+        {#if isLmStudio && selectedModelMeta && !selectedModelMeta.isLoaded}
           <button type="button" class="btn btn-sm" onclick={handleLoadModel} disabled={modelLoading}>
             {modelLoading ? 'Loading…' : 'Load'}
           </button>
@@ -203,12 +228,16 @@
       </div>
       {#if selectedModelMeta}
         <span class="field-hint">
-          {#if selectedModelMeta.isLoaded && selectedModelMeta.loadedContextLength}
+          {#if isLmStudio && selectedModelMeta.isLoaded && selectedModelMeta.loadedContextLength}
             ● Loaded · Context: {selectedModelMeta.loadedContextLength.toLocaleString()} tokens (max {(selectedModelMeta.maxContextLength ?? 0).toLocaleString()})
-          {:else if selectedModelMeta.maxContextLength}
+          {:else if isLmStudio && selectedModelMeta.maxContextLength}
             ○ Not loaded · Max context: {selectedModelMeta.maxContextLength.toLocaleString()} tokens
-          {:else}
+          {:else if isLmStudio}
             ○ Not loaded
+          {:else if selectedModelMeta.maxContextLength}
+            Context: {selectedModelMeta.maxContextLength.toLocaleString()} tokens
+          {:else}
+            Model key: {selectedModelMeta.key}
           {/if}
         </span>
       {/if}

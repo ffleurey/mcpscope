@@ -52,8 +52,8 @@ export interface LmStudioModel {
   raw: LmStudioNativeModel            // full native API response for this model
 }
 
-export async function listModels(baseUrl: string, apiKey?: string): Promise<LmStudioModel[]> {
-  const response = await listLmConnectionModels(baseUrl, apiKey ?? null)
+export async function listModels(baseUrl: string, apiKey?: string, providerType?: 'lmstudio' | 'openrouter'): Promise<LmStudioModel[]> {
+  const response = await listLmConnectionModels(baseUrl, apiKey ?? null, providerType)
   return response.models.map((model: LmConnectionModel) => ({
     uid: model.uid,
     key: model.key,

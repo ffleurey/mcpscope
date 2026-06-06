@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import type { BackendDatabase } from '../../persistence/db.js'
-import type { LmStudioGateway } from '../../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
@@ -46,7 +46,7 @@ export class ToolCallAssessmentStep extends WorkflowStep {
 
   constructor(
     db: BackendDatabase,
-    lm: LmStudioGateway,
+    lm: ChatCompletionGateway,
     mcp: McpGateway,
     private readonly config: ToolCallAssessmentStepConfig,
   ) {

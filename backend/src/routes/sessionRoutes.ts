@@ -382,6 +382,26 @@ export function registerSessionRoutes(deps: RouteDeps): void {
     }
   })
 
+  app.post('/api/sessions/:sessionId/retry-init', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return apiError('not_found', 'Session not found')
+    }
+    if (session.initStatus !== 'error') {
+      reply.code(422)
+      return apiError('validation', 'Session is not in error state — nothing to retry.')
+    }
+
+    session.initStatus = 'pending'
+    session.updatedAt = Date.now()
+    updateSessionRecord(database.connection, session)
+
+    scheduler.enqueueInit(opCtx, sessionId)
+    return { ok: true }
+  })
+
   app.patch('/api/sessions/:sessionId', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     const { title } = z.object({ title: z.string().min(1).max(200) }).parse(request.body)

@@ -12,7 +12,7 @@
 
 import type { BackendDatabase } from '../persistence/db.js'
 import { listTurnRecordsBySession, updateTurnRecord } from '../persistence/repository.js'
-import { createModelOnlyTurn, type LmStudioGateway } from './modelTurns.js'
+import { createModelOnlyTurn, type ChatCompletionGateway } from './modelTurns.js'
 import { createToolEnabledTurn, type McpGateway } from './toolTurns.js'
 import type { SessionRecord, TurnRecord } from '../domain/model.js'
 import type { TurnStreamEventSink } from './streamEvents.js'
@@ -51,7 +51,7 @@ export class ChatTurnStep implements Step {
     private readonly record: TurnRecord,
     private readonly userContent: string,
     private readonly db: BackendDatabase,
-    private readonly lmGateway: LmStudioGateway,
+    private readonly lmGateway: ChatCompletionGateway,
     private readonly mcpGateway: McpGateway | null,
     private readonly maxToolRounds: number,
     private readonly emitEvent?: TurnStreamEventSink,
@@ -134,7 +134,7 @@ export class ChatSession implements Session {
   constructor(
     private readonly sessionRecord: SessionRecord,
     private readonly db: BackendDatabase,
-    private readonly lmGateway: LmStudioGateway,
+    private readonly lmGateway: ChatCompletionGateway,
     private readonly mcpGateway: McpGateway | null,
     private readonly maxToolRounds: number,
     pendingTurn: TurnRecord,

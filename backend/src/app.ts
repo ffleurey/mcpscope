@@ -20,7 +20,7 @@ import {
 } from './services/lmstudio/client.js'
 import { callMcpTool, initializeMcpSession, listMcpTools } from './services/mcp/httpClient.js'
 import { apiError } from './errors.js'
-import type { LmStudioGateway } from './runtime/modelTurns.js'
+import type { ChatCompletionGateway } from './runtime/modelTurns.js'
 import type { McpGateway } from './runtime/toolTurns.js'
 import { registerMcpTransport } from './mcp/index.js'
 import {
@@ -39,14 +39,14 @@ import { registerTraceRoutes } from './routes/traceRoutes.js'
 import { isAnalysisSessionTerminalError } from './analysis/analysisSessionPresentation.js'
 
 interface RuntimeDependencies {
-  lmStudioGateway: LmStudioGateway
+  chatCompletionGateway: ChatCompletionGateway
   mcpGateway: McpGateway
 }
 
 export async function buildBackendApp(
   config: BackendConfig,
   dependencies: RuntimeDependencies = {
-    lmStudioGateway: {
+    chatCompletionGateway: {
       createChatCompletion,
       streamChatCompletion,
       probePromptTokens,
@@ -133,7 +133,7 @@ export async function buildBackendApp(
 
   const opCtx: OperationContext = {
     db: database,
-    lmStudioGateway: dependencies.lmStudioGateway,
+    chatCompletionGateway: dependencies.chatCompletionGateway,
     mcpGateway: dependencies.mcpGateway,
     maxToolRounds: config.maxToolRounds,
     analysisMcpUrl,
@@ -238,6 +238,9 @@ export async function buildBackendApp(
       ...summary,
       sessionType: summary.sessionType === 'session_analysis' ? 'session_analysis' : 'primary',
     }) || latestTurn?.status === 'error') {
+      return 'error'
+    }
+    if (summary.initStatus === 'error') {
       return 'error'
     }
     if (summary.initStatus === 'pending' || summary.initStatus === 'initializing') {

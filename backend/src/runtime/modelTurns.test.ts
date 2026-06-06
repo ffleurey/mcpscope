@@ -5,7 +5,7 @@ import { createSession, createModelOnlyTurn } from './modelTurns.js'
 import { openBackendDatabase } from '../persistence/db.js'
 import { insertStepRecord } from '../persistence/repositoryV2.js'
 import { stepTypeKey } from '../domain/executionModel.js'
-import type { LmStudioGateway } from './modelTurns.js'
+import type { ChatCompletionGateway } from './modelTurns.js'
 
 describe('model-only turn runtime', () => {
   const cleanupDirs = new Set<string>()
@@ -25,7 +25,7 @@ describe('model-only turn runtime', () => {
     const db = openBackendDatabase(makeSqlitePath())
 
     let completionCallCount = 0
-    const gateway: LmStudioGateway = {
+    const gateway: ChatCompletionGateway = {
       async probePromptTokens(_baseUrl, _apiKey, body) {
         const messages = body.messages as Array<{ role: string }>
         if (messages.length === 1 && messages[0]?.role === 'system') {
@@ -194,7 +194,7 @@ describe('model-only turn runtime', () => {
   it('nests ids under an owning workflow step', async () => {
     const db = openBackendDatabase(makeSqlitePath())
 
-    const gateway: LmStudioGateway = {
+    const gateway: ChatCompletionGateway = {
       async probePromptTokens(_baseUrl, _apiKey, body) {
         const messages = body.messages as Array<{ role: string }>
         if (messages.length === 1 && messages[0]?.role === 'system') return 4

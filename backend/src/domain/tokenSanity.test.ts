@@ -318,7 +318,7 @@ async function captureModelOnlyTrace(userInputs: string[]): Promise<SessionTrace
       dataDir: path.dirname(sqlitePath), sqlitePath, maxToolRounds: 5,
     },
     {
-      lmStudioGateway: makeModelOnlyGateway(userInputs.length as 1 | 2),
+      chatCompletionGateway: makeModelOnlyGateway(userInputs.length as 1 | 2),
       mcpGateway: noopMcpGateway,
     },
   )
@@ -386,7 +386,7 @@ function makeToolGateway() {
   let completionCount = 0
 
   return {
-    lmStudioGateway: {
+    chatCompletionGateway: {
       async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: unknown) {
         const b = body as { messages: Array<{ role: string; content?: string | null }>; tools?: unknown[] }
         const messages = b.messages

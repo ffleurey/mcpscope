@@ -42,7 +42,7 @@
       const conn = $lmConnections.find(c => c.id === connId)
       if (!conn) return
       try {
-        const models = await listModels(conn.baseUrl, conn.apiKey)
+        const models = await listModels(conn.baseUrl, conn.apiKey, conn.providerType)
         const byKey = new Map<string, LmStudioModel>()
         for (const m of models) byKey.set(m.key, m)
         next.set(connId, byKey)
@@ -143,6 +143,11 @@
     return $lmConnections.find(c => c.id === connectionId)?.name ?? connectionId
   }
 
+  function isLmStudioConnection(connectionId: string): boolean {
+    const conn = $lmConnections.find(c => c.id === connectionId)
+    return conn?.providerType !== 'openrouter'
+  }
+
   onMount(() => { fetchAllStatuses() })
 </script>
 
@@ -190,12 +195,12 @@
             <span class="card-model">{config.modelDisplayName}</span>
           </div>
           <div class="card-actions">
-            {#if live?.isLoaded}
+            {#if isLmStudioConnection(config.connectionId) && live?.isLoaded}
               <span class="badge-loaded">● loaded</span>
               <button class="btn btn-sm" onclick={() => handleEject(config)} disabled={!!busy}>
                 {busy === 'ejecting' ? 'Ejecting…' : 'Eject'}
               </button>
-            {:else if live}
+            {:else if isLmStudioConnection(config.connectionId) && live}
               <span class="badge-unloaded">○ not loaded</span>
               <button class="btn btn-sm" onclick={() => handleLoad(config)} disabled={!!busy}>
                 {busy === 'loading' ? 'Loading…' : 'Load'}
@@ -219,9 +224,16 @@
           <div class="detail-row">
             <dt>Model Key</dt><dd><code>{config.modelKey}</code></dd>
           </div>
-          {#if live?.isLoaded && live.loadedContextLength}
+          {#if live?.maxContextLength}
             <div class="detail-row">
-              <dt>Context</dt><dd>{live.loadedContextLength.toLocaleString()} tokens loaded (max {(live.maxContextLength ?? 0).toLocaleString()})</dd>
+              <dt>Context</dt>
+              <dd>
+                {#if isLmStudioConnection(config.connectionId) && live?.isLoaded && live.loadedContextLength}
+                  {live.loadedContextLength.toLocaleString()} tokens loaded (max {live.maxContextLength.toLocaleString()})
+                {:else}
+                  {live.maxContextLength.toLocaleString()} tokens
+                {/if}
+              </dd>
             </div>
           {/if}
           <div class="detail-row">

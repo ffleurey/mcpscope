@@ -13,6 +13,7 @@
     isRetryingAnalysis,
     isSendingTurn,
     retryFailedAnalysisStep,
+    retryInit,
     sendMessage,
   } from '../sessionStore'
   import { appVersion } from '../connectionStore'
@@ -200,7 +201,8 @@
       .join('|'),
   )
 
-  let isInitializing = $derived(session != null && session.init_status !== 'ready')
+  let isInitializing = $derived(session != null && (session.init_status === 'pending' || session.init_status === 'initializing'))
+  let isInitError = $derived(session != null && session.init_status === 'error')
   let isAnalysisSession = $derived(session?.session_type === 'session_analysis')
   let analysisPhase = $derived.by(() => {
     if (!isAnalysisSession) return null
@@ -395,6 +397,12 @@
             {isInitializing}
           />
         {/if}
+        {#if isInitError}
+          <div class="init-error-banner">
+            Session initialization failed.
+            <button class="btn btn-sm" onclick={() => retryInit(session.id)}>↻ Retry initialization</button>
+          </div>
+        {/if}
         {#if isAnalysisSession}
           {#each analysisWorkflowSteps as workflowStep (workflowStep.step.id)}
             <AnalysisWorkflowBlock
@@ -449,8 +457,8 @@
       </div>
     {/if}
 
-    <!-- Composer: hidden while initializing -->
-    {#if !isInitializing}
+    <!-- Composer: hidden while initializing or after init error -->
+    {#if !isInitializing && !isInitError}
       {#if isAnalysisSession}
         <!-- ── Analysis control bar ──────────────────────────────────── -->
         <div class="analysis-bar">
@@ -534,7 +542,7 @@
     {/if}
 
     <!-- Context bar at the bottom — shown when session is active -->
-    {#if $activeTrace && !isInitializing}
+    {#if $activeTrace && !isInitializing && !isInitError}
       <ContextSnapshotBar
         entries={$activeTrace.context}
         contextSize={session.loaded_context_length ?? null}
@@ -650,6 +658,22 @@
     color: var(--text-muted);
     font-size: 0.82rem;
   }
+
+  /* ── Init error banner ────────────────────────────────────────────────── */
+  .init-error-banner {
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--color-error) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-error) 35%, transparent);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.82rem;
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .init-error-banner .btn { flex-shrink: 0; }
 
   /* ── Exhausted banner ─────────────────────────────────────────────────── */
   .exhausted-banner {

@@ -1,10 +1,13 @@
 import { z } from 'zod'
 
+export const providerTypeSchema = z.enum(['lmstudio', 'openrouter'])
+
 export const lmStudioConnectionSchema = z.object({
   id: z.string(),
   name: z.string(),
   baseUrl: z.string().url(),
   apiKey: z.string().optional(),
+  providerType: providerTypeSchema.default('lmstudio'),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 })

@@ -1,12 +1,12 @@
 import type { TurnStreamEvent, AnalysisStreamEvent } from './streamEvents.js'
 import type { PreludeStreamEvent } from './sessionInit.js'
 import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from './modelTurns.js'
+import type { ChatCompletionGateway } from './modelTurns.js'
 import type { McpGateway } from './toolTurns.js'
 
 export interface SchedulerContext {
   db: BackendDatabase
-  lmStudioGateway: LmStudioGateway
+  chatCompletionGateway: ChatCompletionGateway
   mcpGateway: McpGateway
   maxToolRounds: number
   logger?: { error: (data: Record<string, unknown>, msg: string) => void }

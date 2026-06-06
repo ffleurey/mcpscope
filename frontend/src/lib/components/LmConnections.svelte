@@ -43,7 +43,7 @@
     testDialogConn = conn
     testDialogResult = { ok: false, message: 'Testing…' }
     try {
-      const result = await testLmConnection(conn.baseUrl, conn.apiKey)
+      const result = await testLmConnection(conn.baseUrl, conn.apiKey, conn.providerType)
       testDialogResult = {
         ok: true,
         message: 'Connected',
@@ -63,7 +63,7 @@
 
 <div class="view">
   <div class="view-header">
-    <h2>LM Studio Connections</h2>
+    <h2>Connections</h2>
     {#if !showNew}
       <button class="btn btn-primary" onclick={startNew}>+ New Connection</button>
     {/if}
@@ -94,6 +94,9 @@
         </div>
         <dl class="card-details">
           <div class="detail-row">
+            <dt>Provider</dt><dd>{conn.providerType === 'openrouter' ? 'OpenRouter' : 'LM Studio'}</dd>
+          </div>
+          <div class="detail-row">
             <dt>Base URL</dt><dd><code>{conn.baseUrl}</code></dd>
           </div>
           <div class="detail-row">
@@ -107,7 +110,7 @@
 
 {#if testDialogConn && testDialogResult}
   <ConnectionTestDialog
-    title="LM Studio Connection Test"
+    title="{testDialogConn.providerType === 'openrouter' ? 'OpenRouter' : 'LM Studio'} Connection Test"
     target={testDialogConn.baseUrl}
     result={testDialogResult}
     onClose={closeTestDialog}

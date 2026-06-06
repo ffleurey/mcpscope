@@ -39,16 +39,16 @@ import type {
 } from '../domain/model.js'
 import { deriveContextEntries, deriveTranscriptEntries, buildModelMessages } from '../domain/selectors.js'
 import type {
-  LmStudioChatCompletionResponse,
-  LmStudioPromptProbeResult,
-  LmStudioStreamCallbacks,
-  LmStudioStreamedChatCompletionResult,
+  OaiChatCompletionResponse,
+  PromptProbeResult,
+  StreamCallbacks,
+  OaiStreamedChatCompletionResult,
 } from '../services/lmstudio/client.js'
 import { buildSessionTraceBundle } from '../domain/trace.js'
 import {
   allocateProportionalTokenCounts,
   deriveExactDeltaTokenMetadata,
-  normalizeLmStudioUsageFromResponse,
+  normalizeUsageFromResponse,
 } from '../domain/tokenAccounting.js'
 import { createSystemPromptPart, ensureSessionPreludeTokenMetadata } from './sessionPrelude.js'
 import { probeRequestPromptTokens } from './promptTokenProbing.js'
@@ -57,18 +57,18 @@ import type { TurnStreamEventSink } from './streamEvents.js'
 import { applyContextCompaction } from '../domain/compaction.js'
 import { DEFAULT_SESSION_TITLE, maybeApplyAutomaticSessionTitle } from './sessionTitles.js'
 
-export interface LmStudioGateway {
+export interface ChatCompletionGateway {
   createChatCompletion(
     baseUrl: string,
     apiKey: string | undefined,
     body: Record<string, unknown>,
-  ): Promise<LmStudioChatCompletionResponse>
+  ): Promise<OaiChatCompletionResponse>
   streamChatCompletion?(
     baseUrl: string,
     apiKey: string | undefined,
     body: Record<string, unknown>,
-    callbacks?: LmStudioStreamCallbacks,
-  ): Promise<LmStudioStreamedChatCompletionResult>
+    callbacks?: StreamCallbacks,
+  ): Promise<OaiStreamedChatCompletionResult>
   probePromptTokens?(
     baseUrl: string,
     apiKey: string | undefined,
@@ -78,7 +78,7 @@ export interface LmStudioGateway {
     baseUrl: string,
     apiKey: string | undefined,
     body: Record<string, unknown>,
-  ): Promise<LmStudioPromptProbeResult>
+  ): Promise<PromptProbeResult>
   getLoadedContextLength?(
     baseUrl: string,
     apiKey: string | undefined,
@@ -131,6 +131,18 @@ type SegmentTokenMetadata = {
 
 function normalizeSegmentText(text: string): string | null {
   return text.trim().length > 0 ? text : null
+}
+
+export function sessionReasoningBody(session: SessionRecord): Record<string, unknown> {
+  if (!session.modelProfileSnapshot.reasoning) return {}
+  const isOpenRouter = session.modelProfileSnapshot.connectionBaseUrl.toLowerCase().includes('openrouter')
+  if (isOpenRouter) {
+    // OpenRouter expects reasoning to be an object and uses include_reasoning
+    // to control whether reasoning_content appears in the stream.
+    return { reasoning: { }, include_reasoning: true }
+  }
+  // LM Studio uses reasoning: "on"|"off" as a string.
+  return { reasoning: session.modelProfileSnapshot.reasoning }
 }
 
 function createUuid(): string {
@@ -203,7 +215,7 @@ export function createSession(
 
 export async function createModelOnlyTurn(
   database: BackendDatabase,
-  lmStudioGateway: LmStudioGateway,
+  chatCompletionGateway: ChatCompletionGateway,
   input: CreateTurnInput,
   emitEvent?: TurnStreamEventSink,
 ): Promise<RuntimeTurnResult> {
@@ -214,7 +226,7 @@ export async function createModelOnlyTurn(
 
   const existingParts = await ensureSessionPreludeTokenMetadata(
     database,
-    lmStudioGateway,
+    chatCompletionGateway,
     session,
     listPartRecordsBySession(database.connection, session.id),
   )
@@ -273,7 +285,7 @@ export async function createModelOnlyTurn(
       include_usage: true,
     },
     messages: requestMessages,
-    ...(session.modelProfileSnapshot.reasoning ? { reasoning: session.modelProfileSnapshot.reasoning } : {}),
+    ...sessionReasoningBody(session),
   }
 
   const initialOrdinal = getNextPartOrdinal(database.connection, session.id)
@@ -331,7 +343,7 @@ export async function createModelOnlyTurn(
   })
 
   const streamedCompletion = await executeChatCompletion(
-    lmStudioGateway,
+    chatCompletionGateway,
     session.modelProfileSnapshot.connectionBaseUrl,
     session.modelProfileSnapshot.apiKey ?? undefined,
     requestBody,
@@ -354,7 +366,7 @@ export async function createModelOnlyTurn(
     throw new Error(`Unsupported finish reason for model-only pipeline: ${finishReason ?? 'unknown'}`)
   }
 
-  const usage = normalizeLmStudioUsageFromResponse(completion)
+  const usage = normalizeUsageFromResponse(completion)
 
   turn.status = 'complete'
   turn.completedAt = completedAt
@@ -593,7 +605,7 @@ export async function createModelOnlyTurn(
   maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent)
   const prefixMessages = requestMessages.slice(0, Math.max(0, requestMessages.length - 1))
   const prefixTokens = prefixMessages.length > 0
-    ? await probeRequestPromptTokens(lmStudioGateway, session, prefixMessages, undefined, {
+    ? await probeRequestPromptTokens(chatCompletionGateway, session, prefixMessages, undefined, {
         database,
         sessionId: session.id,
         turnId,
