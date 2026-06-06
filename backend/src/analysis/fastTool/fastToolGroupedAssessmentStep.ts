@@ -25,7 +25,6 @@ function now(): number { return Date.now() }
 export interface FastToolGroupedAssessmentStepConfig {
   workUnit: FastToolWorkGroup
   analysisTarget: AnalysisTarget
-  analysisSessionState: Record<string, unknown>
 }
 
 export class FastToolGroupedAssessmentStep extends WorkflowStep {
@@ -58,11 +57,11 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
     ]
     const evidenceQueries = rawEvidenceIds
       .filter((id, idx, arr) => id !== null && arr.indexOf(id) === idx)
-      .map(id => ({ toolName: 'mcpscope_inspect', toolArgs: { id } } as const))
+      .map(id => ({ toolName: 'mcpscope_inspect', toolArgs: { id } }))
 
     if (evidenceQueries.length > 0) {
       const { toolCallPartIds, toolResultPartIds } = await runDeterministicMcpToolCallsInSingleTurn(
-        this.db, this.mcp, analysisSession, evidenceQueries as any,
+        this.db, this.mcp, analysisSession, evidenceQueries,
         ctx.emitSink, this.stepId,
       )
       injectPartIds.push(...toolCallPartIds, ...toolResultPartIds)
@@ -71,13 +70,12 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
     const question = buildFastToolGroupedAssessmentPrompt({
       analysisTarget,
       subjectId: workUnit.work_unit_id,
-      toolCallPartIds: workUnit.tool_call_part_ids,
+      workUnitId: workUnit.work_unit_id,
       toolName: workUnit.tool_name,
+      toolCallPartIds: workUnit.tool_call_part_ids,
       turnIds: workUnit.turn_ids,
-      roundIds: workUnit.round_ids,
-      preReasoningPartIds: workUnit.reasoning_before_part_ids,
-      postReasoningPartIds: workUnit.reasoning_after_part_ids,
-    } as any)
+      totalToolCalls: workUnit.tool_call_part_ids.length,
+    })
 
     const turnResult = await runAnalysisTurn(this.db, this.lm, this.mcp, analysisSessionId, question, ctx.emitSink, this.stepId)
 

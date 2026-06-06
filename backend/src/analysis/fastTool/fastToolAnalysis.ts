@@ -113,7 +113,6 @@ export class FastToolAnalysis extends AnalysisSessionBase {
     await new FastToolGroupedAssessmentStep(this.db, this.lm, this.mcp, {
       workUnit,
       analysisTarget: targetArtifact.content as AnalysisTarget,
-      analysisSessionState: this.state as unknown as Record<string, unknown>,
     }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_TOOL_GROUP_ASSESSMENT))
   }
 

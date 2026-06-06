@@ -972,3 +972,28 @@ describe('analysis workflow helpers', () => {
     expect(guidance).not.toContain('"max"')
   })
 })
+
+import {
+  registerAnalysisWorkflow,
+  isKnownWorkflowKind,
+  getWorkflowLabel,
+  getWorkflowKinds,
+} from './analysisWorkflowFactory.js'
+
+describe('analysis workflow registry', () => {
+  it('allows new analysis types without touching shared files', () => {
+    const ctor = {
+      workflowKind: 'test_analysis_registry',
+      workflowLabel: 'Test Registry Analysis',
+      rehydrate: () => null as any,
+      buildSystemPrompt: () => 'test prompt',
+    }
+
+    registerAnalysisWorkflow(ctor)
+
+    expect(isKnownWorkflowKind('test_analysis_registry')).toBe(true)
+    expect(isKnownWorkflowKind('not_registered')).toBe(false)
+    expect(getWorkflowLabel('test_analysis_registry')).toBe('Test Registry Analysis')
+    expect(getWorkflowKinds()).toContain('test_analysis_registry')
+  })
+})

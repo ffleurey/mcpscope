@@ -20,6 +20,7 @@ type AnalysisSubclassCtor = {
   rehydrate(db: BackendDatabase, lm: LmStudioGateway, mcp: McpGateway, sessionId: string): AnalysisSessionBase | null
   readonly workflowKind: string
   readonly workflowLabel: string
+  buildSystemPrompt(input: { analysisGoal: string; additionalInstructions?: string }): string
 }
 
 const workflowRegistry = new Map<string, AnalysisSubclassCtor>()
@@ -69,8 +70,8 @@ export function buildAnalysisSystemPrompt(kind: string, input: {
   if (!ctor) {
     // Fallback to full session
     const fallback = workflowRegistry.get('full_session_analysis')
-    if (fallback) return (fallback as any).buildSystemPrompt(input)
+    if (fallback) return fallback.buildSystemPrompt(input)
     throw new Error(`Unsupported analysis workflow kind: ${kind}`)
   }
-  return (ctor as any).buildSystemPrompt(input)
+  return ctor.buildSystemPrompt(input)
 }
