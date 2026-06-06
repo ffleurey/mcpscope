@@ -13,13 +13,14 @@ import {
   SessionIdInputError,
 } from '../runtime/modelTurns.js'
 import { sessionRecordSchema, type McpProfileSnapshot, type ModelProfileSnapshot, type SessionRecord } from '../domain/model.js'
+import { type McpServerProfile } from '../domain/configuration.js'
 import type { OperationContext } from './context.js'
 
 export const launchPrimarySessionInputSchema = z.object({
   session_id: z.string().optional(),
   title: z.string().optional(),
   model_config_id: z.string().optional(),
-  mcp_profile_id: z.string().nullable().optional(),
+  mcp_profile_ids: z.array(z.string()).optional(),
   compaction_strategy: z.enum(['none', 'strip-reasoning']).optional(),
 })
 
@@ -45,6 +46,19 @@ export const launchPrimarySessionOperation = {
   },
 }
 
+function buildMcpSnapshot(mcpProfile: McpServerProfile): McpProfileSnapshot {
+  return {
+    id: mcpProfile.id,
+    name: mcpProfile.name,
+    url: mcpProfile.url,
+    transport: mcpProfile.transport,
+    authType: mcpProfile.authType ?? null,
+    authValue: mcpProfile.authValue ?? null,
+    createdAt: mcpProfile.createdAt,
+    updatedAt: mcpProfile.updatedAt,
+  }
+}
+
 export async function executePrimarySessionLaunch(
   ctx: OperationContext,
   rawInput: unknown,
@@ -56,7 +70,7 @@ export async function executePrimarySessionLaunch(
     | { kind: 'default_model_not_configured' }
     | { kind: 'model_config_not_found'; modelConfigId: string }
     | { kind: 'lm_connection_not_found'; connectionId: string }
-    | { kind: 'mcp_profile_not_found'; mcpProfileId: string }
+    | { kind: 'mcp_profile_not_found'; mcpProfileIds: string[] }
     | { kind: 'id_input_error'; error: SessionIdInputError }
     | { kind: 'id_conflict_error'; error: SessionIdConflictError }
     | { kind: 'id_generation_error'; error: SessionIdGenerationError }
@@ -77,27 +91,23 @@ export async function executePrimarySessionLaunch(
       return { kind: 'lm_connection_not_found', connectionId: modelConfig.connectionId }
     }
 
-    const resolvedMcpProfileId = input.mcp_profile_id === undefined
-      ? defaults.defaultMcpProfileId
-      : input.mcp_profile_id
+    // Resolve MCP profile snapshots
+    const allProfiles = listMcpServerProfiles(db.connection)
+    const resolvedMcpIds = input.mcp_profile_ids ??
+      allProfiles.filter(p => p.defaultEnabled).map(p => p.id)
 
-    let mcpProfileSnapshot: McpProfileSnapshot | null = null
-    if (resolvedMcpProfileId) {
-      const mcpProfile = listMcpServerProfiles(db.connection).find(record => record.id === resolvedMcpProfileId)
+    const mcpProfileSnapshots: McpProfileSnapshot[] = []
+    const notFoundIds: string[] = []
+    for (const profileId of resolvedMcpIds) {
+      const mcpProfile = allProfiles.find(record => record.id === profileId)
       if (!mcpProfile) {
-        return { kind: 'mcp_profile_not_found', mcpProfileId: resolvedMcpProfileId }
+        notFoundIds.push(profileId)
+      } else {
+        mcpProfileSnapshots.push(buildMcpSnapshot(mcpProfile))
       }
-
-      mcpProfileSnapshot = {
-        id: mcpProfile.id,
-        name: mcpProfile.name,
-        url: mcpProfile.url,
-        transport: mcpProfile.transport,
-        authType: mcpProfile.authType ?? null,
-        authValue: mcpProfile.authValue ?? null,
-        createdAt: mcpProfile.createdAt,
-        updatedAt: mcpProfile.updatedAt,
-      }
+    }
+    if (notFoundIds.length > 0) {
+      return { kind: 'mcp_profile_not_found', mcpProfileIds: notFoundIds }
     }
 
     const modelProfileSnapshot: ModelProfileSnapshot = {
@@ -119,7 +129,7 @@ export async function executePrimarySessionLaunch(
         sessionId: input.session_id,
         title: input.title,
         modelProfileSnapshot,
-        mcpProfileSnapshot,
+        mcpProfileSnapshots,
         compactionStrategy: input.compaction_strategy ?? 'strip-reasoning',
         sessionType: 'primary',
       })
@@ -143,7 +153,10 @@ export async function executePrimarySessionLaunch(
         'lm_connection_not_found',
       )
     case 'mcp_profile_not_found':
-      throw new OperationError(`MCP profile "${result.mcpProfileId}" not found.`, 'mcp_profile_not_found')
+      throw new OperationError(
+        `MCP profile(s) not found: ${result.mcpProfileIds.join(', ')}`,
+        'mcp_profile_not_found',
+      )
     case 'id_input_error':
       throw new OperationError(result.error.message, 'invalid_session_id')
     case 'id_conflict_error':
@@ -151,8 +164,6 @@ export async function executePrimarySessionLaunch(
     case 'id_generation_error':
       throw new OperationError(result.error.message, 'session_id_generation_failed')
     case 'created': {
-      // Auto-enqueue initialization via the scheduler so the frontend can watch
-      // the scheduler stream for prelude events instead of calling /initialize separately.
       let initJobId: string | undefined
       if (ctx.scheduler) {
         try {

@@ -26,7 +26,7 @@ function makeSession(): SessionRecord {
       createdAt: 1,
       updatedAt: 1,
     },
-    mcpProfileSnapshot: null,
+    mcpProfileSnapshots: [],
     loadedContextLength: null,
     systemPromptTokens: null,
     toolDefinitionsTokens: null,

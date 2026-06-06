@@ -105,7 +105,7 @@ describe('backend result shape contracts — snake_case throughout', () => {
     const sessionFields: Array<keyof Session> = [
       'id', 'title', 'status', 'init_status', 'created_at', 'updated_at',
       'is_context_exhausted', 'loaded_context_length', 'compaction_strategy',
-      'model_profile_snapshot', 'mcp_profile_snapshot',
+      'model_profile_snapshot', 'mcp_profile_snapshots',
     ]
     expect(sessionFields).toContain('init_status')
     expect(sessionFields).toContain('model_profile_snapshot')

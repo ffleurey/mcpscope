@@ -320,6 +320,7 @@ describe('backend foundation', () => {
       transport: 'streamable-http' as const,
       authType: 'bearer' as const,
       authValue: 'token-1',
+      defaultEnabled: false,
       createdAt: 5,
       updatedAt: 6,
     }
@@ -1461,7 +1462,7 @@ describe('backend foundation', () => {
           createdAt: 1,
           updatedAt: 1,
         },
-        mcpProfileSnapshot: {
+        mcpProfileSnapshots: [{
           id: 'mcp-1',
           name: 'Local MCP',
           url: 'http://localhost:3001/mcp',
@@ -1470,7 +1471,7 @@ describe('backend foundation', () => {
           authValue: null,
           createdAt: 1,
           updatedAt: 1,
-        },
+        }],
       },
     })
     const sessionId = sessionResponse.json().session.id as string
@@ -1903,7 +1904,7 @@ describe('backend foundation', () => {
           createdAt: 1,
           updatedAt: 1,
         },
-        mcpProfileSnapshot: {
+        mcpProfileSnapshots: [{
           id: 'mcp-1',
           name: 'Local MCP',
           url: 'http://localhost:3001/mcp',
@@ -1912,7 +1913,7 @@ describe('backend foundation', () => {
           authValue: null,
           createdAt: 1,
           updatedAt: 1,
-        },
+        }],
       },
     })
 
@@ -2026,7 +2027,7 @@ describe('error handling contract', () => {
       url: '/api/sessions/preflight',
       payload: {
         lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1', apiKey: null },
-        mcpProfileSnapshot: null,
+        mcpProfileSnapshots: [],
         selectedModel: { modelKey: 'qwen3.6-35b-a3b-apex' },
       },
     })
@@ -2087,7 +2088,7 @@ describe('error handling contract', () => {
         url: '/api/sessions/preflight',
         payload: {
           lmConnectionSnapshot: { baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: null },
-          mcpProfileSnapshot: null,
+          mcpProfileSnapshots: [],
           selectedModel: { modelKey: 'unloaded-model', modelDisplayName: 'Unloaded Model' },
         },
       })
@@ -2198,7 +2199,6 @@ describe('session-creation-defaults API', () => {
     expect(response.statusCode).toBe(200)
     expect(response.json().sessionCreationDefaults).toMatchObject({
       defaultModelConfigId: null,
-      defaultMcpProfileId: null,
     })
   })
 
@@ -2212,41 +2212,24 @@ describe('session-creation-defaults API', () => {
       modelKey: 'qwen', modelDisplayName: 'Qwen', systemPrompt: '',
       temperature: 0, createdAt: 1, updatedAt: 1,
     }
-    const mcpProfile = {
-      id: 'mcp-1', name: 'Local MCP',
-      url: 'http://localhost:3001/mcp', transport: 'streamable-http' as const,
-      authType: null, authValue: null, createdAt: 1, updatedAt: 1,
-    }
 
     await app.inject({ method: 'PUT', url: '/api/model-configs/model-config-1', payload: modelConfig })
-    await app.inject({ method: 'PUT', url: '/api/mcp-profiles/mcp-1', payload: mcpProfile })
 
     const putResponse = await app.inject({
       method: 'PUT',
       url: '/api/session-creation-defaults',
-      payload: { defaultModelConfigId: 'model-config-1', defaultMcpProfileId: 'mcp-1' },
+      payload: { defaultModelConfigId: 'model-config-1' },
     })
     expect(putResponse.statusCode).toBe(200)
     expect(putResponse.json().sessionCreationDefaults).toMatchObject({
       defaultModelConfigId: 'model-config-1',
-      defaultMcpProfileId: 'mcp-1',
     })
 
     const getResponse = await app.inject({ method: 'GET', url: '/api/session-creation-defaults' })
     expect(getResponse.statusCode).toBe(200)
     expect(getResponse.json().sessionCreationDefaults).toMatchObject({
       defaultModelConfigId: 'model-config-1',
-      defaultMcpProfileId: 'mcp-1',
     })
-
-    // Clear MCP profile default
-    const clearResponse = await app.inject({
-      method: 'PUT',
-      url: '/api/session-creation-defaults',
-      payload: { defaultModelConfigId: 'model-config-1', defaultMcpProfileId: null },
-    })
-    expect(clearResponse.statusCode).toBe(200)
-    expect(clearResponse.json().sessionCreationDefaults.defaultMcpProfileId).toBeNull()
   })
 
   it('rejects unknown model config ID', async () => {
@@ -2261,20 +2244,6 @@ describe('session-creation-defaults API', () => {
     })
     expect(response.statusCode).toBe(422)
     expect(response.json().error.code).toBe('default_model_config_not_found')
-  })
-
-  it('rejects unknown MCP profile ID', async () => {
-    const config = makeTestConfig()
-    dataDir = config.dataDir
-    app = await buildBackendApp(config)
-
-    const response = await app.inject({
-      method: 'PUT',
-      url: '/api/session-creation-defaults',
-      payload: { defaultModelConfigId: null, defaultMcpProfileId: 'nonexistent' },
-    })
-    expect(response.statusCode).toBe(422)
-    expect(response.json().error.code).toBe('default_mcp_profile_not_found')
   })
 
   it('prevents deleting a model config that is set as default', async () => {
@@ -2300,31 +2269,6 @@ describe('session-creation-defaults API', () => {
     })
     expect(deleteResponse.statusCode).toBe(409)
     expect(deleteResponse.json().error.code).toBe('default_model_config_in_use')
-  })
-
-  it('prevents deleting an MCP profile that is set as default', async () => {
-    const config = makeTestConfig()
-    dataDir = config.dataDir
-    app = await buildBackendApp(config)
-
-    const mcpProfile = {
-      id: 'mcp-1', name: 'Local MCP',
-      url: 'http://localhost:3001/mcp', transport: 'streamable-http' as const,
-      authType: null, authValue: null, createdAt: 1, updatedAt: 1,
-    }
-    await app.inject({ method: 'PUT', url: '/api/mcp-profiles/mcp-1', payload: mcpProfile })
-    await app.inject({
-      method: 'PUT',
-      url: '/api/session-creation-defaults',
-      payload: { defaultModelConfigId: null, defaultMcpProfileId: 'mcp-1' },
-    })
-
-    const deleteResponse = await app.inject({
-      method: 'DELETE',
-      url: '/api/mcp-profiles/mcp-1',
-    })
-    expect(deleteResponse.statusCode).toBe(409)
-    expect(deleteResponse.json().error.code).toBe('default_mcp_profile_in_use')
   })
 
   it('prevents deleting an LM connection that is still referenced by a model config', async () => {
@@ -2506,12 +2450,12 @@ describe('CLI session lifecycle endpoints', () => {
 
     const lmConnection = { id: 'lm-1', name: 'LM', baseUrl: 'https://example.com/v1', createdAt: 1, updatedAt: 1 }
     const modelConfig = { id: 'mc-1', name: 'Qwen Local', connectionId: 'lm-1', modelKey: 'qwen', modelDisplayName: 'Qwen', systemPrompt: 'Be helpful.', temperature: 0.7, createdAt: 1, updatedAt: 1 }
-    const mcpProfile = { id: 'mcp-1', name: 'Home Assistant', url: 'http://localhost:3001/mcp', transport: 'streamable-http' as const, authType: null, authValue: null, createdAt: 1, updatedAt: 1 }
+    const mcpProfile = { id: 'mcp-1', name: 'Home Assistant', url: 'http://localhost:3001/mcp', transport: 'streamable-http' as const, authType: null, authValue: null, defaultEnabled: true, createdAt: 1, updatedAt: 1 }
 
     await app.inject({ method: 'PUT', url: '/api/lm-connections/lm-1', payload: lmConnection })
     await app.inject({ method: 'PUT', url: '/api/model-configs/mc-1', payload: modelConfig })
     await app.inject({ method: 'PUT', url: '/api/mcp-profiles/mcp-1', payload: mcpProfile })
-    await app.inject({ method: 'PUT', url: '/api/session-creation-defaults', payload: { defaultModelConfigId: 'mc-1', defaultMcpProfileId: 'mcp-1' } })
+    await app.inject({ method: 'PUT', url: '/api/session-creation-defaults', payload: { defaultModelConfigId: 'mc-1' } })
 
     const response = await app.inject({
       method: 'POST',
@@ -2523,8 +2467,8 @@ describe('CLI session lifecycle endpoints', () => {
     expect(body.session.title).toBe('My CLI Session')
     expect(body.session.model.id).toBe('mc-1')
     expect(body.session.model.name).toBe('Qwen Local')
-    expect(body.session.mcp?.id).toBe('mcp-1')
-    expect(body.session.mcp?.name).toBe('Home Assistant')
+    expect(body.session.mcp[0]?.id).toBe('mcp-1')
+    expect(body.session.mcp[0]?.name).toBe('Home Assistant')
     expect(body.session.compaction_strategy).toBe('none')
     expect(body.session.init_status).toBe('pending')
     expect(typeof body.session.id).toBe('string')
@@ -2549,7 +2493,7 @@ describe('CLI session lifecycle endpoints', () => {
       payload: {
         session_id: 'AB23',
         model_config_id: 'mc-1',
-        mcp_profile_id: 'mcp-1',
+        mcp_profile_ids: ['mcp-1'],
         compaction_strategy: 'none',
       },
     })
@@ -2560,7 +2504,7 @@ describe('CLI session lifecycle endpoints', () => {
     expect(body.session.sessionType).toBe('primary')
     expect(body.session.compactionStrategy).toBe('none')
     expect(body.session.modelProfileSnapshot.id).toBe('mc-1')
-    expect(body.session.mcpProfileSnapshot?.id).toBe('mcp-1')
+    expect(body.session.mcpProfileSnapshots[0]?.id).toBe('mcp-1')
   })
 
   it('auto-titles an unnamed session from the first prompt only', async () => {
@@ -3199,7 +3143,7 @@ describe('CLI session lifecycle endpoints', () => {
         url: '/api/sessions/preflight',
         payload: {
           lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1', apiKey: null },
-          mcpProfileSnapshot: null,
+          mcpProfileSnapshots: [],
           selectedModel: { modelKey: 'model-key', modelDisplayName: 'Model Key' },
         },
       })
@@ -3221,7 +3165,7 @@ describe('CLI session lifecycle endpoints', () => {
         url: '/api/sessions/preflight',
         payload: {
           lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1', apiKey: null },
-          mcpProfileSnapshot: null,
+          mcpProfileSnapshots: [],
           selectedModel: { modelKey: 'model-key', modelDisplayName: 'Model Key' },
         },
       })
@@ -3744,8 +3688,8 @@ describe('analysis launch', () => {
     expect(body.session.title).toBe('Full Analysis: Target Session')
 
     // Analysis sessions now have a built-in MCP binding (analysis MCP endpoint)
-    expect(body.session.mcpProfileSnapshot).not.toBeNull()
-    expect(body.session.mcpProfileSnapshot.name).toBe('mcpscope-analysis')
+    expect(body.session.mcpProfileSnapshots.length).toBeGreaterThan(0)
+    expect(body.session.mcpProfileSnapshots[0].name).toBe('mcpscope-analysis')
 
     // Session is persisted and retrievable
     const stored = getSessionRecord(app.backendDb.connection, body.session.id)

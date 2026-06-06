@@ -27,13 +27,13 @@ export interface McpServerProfile {
   transport: 'streamable-http'
   authType?: 'none' | 'bearer' | 'basic' | null
   authValue?: string | null
+  defaultEnabled: boolean
   createdAt: number
   updatedAt: number
 }
 
 export interface SessionCreationDefaults {
   defaultModelConfigId: string | null
-  defaultMcpProfileId: string | null
   updatedAt: number
 }
 

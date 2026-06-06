@@ -90,7 +90,7 @@ async function executePrimaryJob(
     session,
     opCtx.db,
     opCtx.lmStudioGateway,
-    session.mcpProfileSnapshot ? opCtx.mcpGateway : null,
+    session.mcpProfileSnapshots.length > 0 ? opCtx.mcpGateway : null,
     opCtx.maxToolRounds,
     activeTurn,
     prompt,

@@ -169,7 +169,7 @@ function normalizedSession(session: SessionRecord) {
     status: session.status,
     initStatus: session.initStatus,
     modelProfileSnapshot: session.modelProfileSnapshot,
-    mcpProfileSnapshot: session.mcpProfileSnapshot,
+    mcpProfileSnapshots: session.mcpProfileSnapshots,
     loadedContextLength: session.loadedContextLength,
     systemPromptTokens: session.systemPromptTokens,
     toolDefinitionsTokens: session.toolDefinitionsTokens,
@@ -514,7 +514,7 @@ export async function replayTrace(trace: SessionTraceBundle): Promise<ReplayResu
       payload: {
         title: trace.session.title,
         modelProfileSnapshot: trace.session.modelProfileSnapshot,
-        ...(trace.session.mcpProfileSnapshot ? { mcpProfileSnapshot: trace.session.mcpProfileSnapshot } : {}),
+        mcpProfileSnapshots: trace.session.mcpProfileSnapshots,
       },
     })
     assert.equal(createSessionResponse.statusCode, 201)

@@ -112,7 +112,7 @@ export const sessionRecordSchema = z.object({
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   modelProfileSnapshot: modelProfileSnapshotSchema,
-  mcpProfileSnapshot: mcpProfileSnapshotSchema.nullable(),
+  mcpProfileSnapshots: z.array(mcpProfileSnapshotSchema).default([]),
   loadedContextLength: z.number().int().positive().nullable(),
   systemPromptTokens: z.number().int().nonnegative().nullable(),
   toolDefinitionsTokens: z.number().int().nonnegative().nullable(),
@@ -137,7 +137,7 @@ export const sessionSummarySchema = z.object({
   loadedContextLength: z.number().int().positive().nullable(),
   compactionStrategy: compactionStrategySchema,
   modelProfileSnapshot: z.object({ name: z.string() }),
-  mcpProfileSnapshot: z.object({ name: z.string() }).nullable(),
+  mcpProfileSnapshots: z.array(z.object({ name: z.string() })).default([]),
 })
 
 export const usageSummarySchema = z.object({
@@ -225,6 +225,8 @@ export const rawExchangeRecordSchema = z.object({
 
 export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>
+
+export type McpProfileSnapshots = McpProfileSnapshot[]
 export type TokenMetadata = z.infer<typeof tokenMetadataSchema>
 export type CompactionStrategy = z.infer<typeof compactionStrategySchema>
 export type SessionType = z.infer<typeof sessionTypeSchema>

@@ -23,7 +23,7 @@ function makeSession(): SessionSummary {
     created_at: 1,
     updated_at: 1,
     model_profile_snapshot: { name: 'Model' },
-    mcp_profile_snapshot: null,
+    mcp_profile_snapshots: [],
     loaded_context_length: null,
     is_context_exhausted: false,
     compaction_strategy: 'strip-reasoning',

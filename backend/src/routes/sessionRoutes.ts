@@ -47,7 +47,7 @@ function buildSessionSummaryPayload(
     loadedContextLength: number | null
     compactionStrategy: string
     modelProfileSnapshot: { name: string }
-    mcpProfileSnapshot: { name: string } | null
+    mcpProfileSnapshots: { name: string }[]
   },
 ) {
   const steps = listStepRecordsBySession(deps.database.connection, summary.id)
@@ -82,7 +82,7 @@ function buildSessionSummaryPayload(
     ...(workflowPhase ? { workflow_phase: workflowPhase } : {}),
     ...(latestError ? { latest_error: latestError } : {}),
     model_profile_snapshot: { name: summary.modelProfileSnapshot.name },
-    mcp_profile_snapshot: summary.mcpProfileSnapshot ? { name: summary.mcpProfileSnapshot.name } : null,
+    mcp_profile_snapshots: summary.mcpProfileSnapshots,
   }
 }
 

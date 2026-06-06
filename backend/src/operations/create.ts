@@ -30,7 +30,7 @@ export interface CreateResult {
     status: string
     init_status: string
     model: { id: string; name: string }
-    mcp: { id: string; name: string } | null
+    mcp: { id: string; name: string }[]
     compaction_strategy: string
     created_at: number
     updated_at: number
@@ -46,7 +46,7 @@ export const createOutputSchema = {
     status: z.string(),
     init_status: z.string(),
     model: z.object({ id: z.string(), name: z.string() }),
-    mcp: z.object({ id: z.string(), name: z.string() }).nullable(),
+    mcp: z.array(z.object({ id: z.string(), name: z.string() })),
     compaction_strategy: z.string(),
     created_at: z.number(),
     updated_at: z.number(),
@@ -63,7 +63,7 @@ export const createOperation = {
   outputSchema: createOutputSchema,
   async execute(ctx: OperationContext, input: CreateInput): Promise<CreateResult> {
     const { db, logger } = ctx
-    let mcpSnapshotRef: McpProfileSnapshot | null = null
+    let mcpSnapshotsRef: McpProfileSnapshot[] = []
 
     type TransactionResult =
       | { kind: 'validation_error'; message: string; code: string }
@@ -91,24 +91,20 @@ export const createOperation = {
         return { kind: 'validation_error', message: `LM connection "${modelConfig.connectionId}" referenced by the default model config no longer exists.`, code: 'default_lm_connection_not_found' }
       }
 
-      let mcpProfileSnapshot: McpProfileSnapshot | null = null
-      if (defaults.defaultMcpProfileId) {
-        const mcpProfiles = listMcpServerProfiles(db.connection)
-        const mcpProfile = mcpProfiles.find(p => p.id === defaults.defaultMcpProfileId)
-        if (!mcpProfile) {
-          return { kind: 'validation_error', message: `Default MCP profile "${defaults.defaultMcpProfileId}" no longer exists.`, code: 'default_mcp_profile_not_found' }
-        }
-        mcpProfileSnapshot = {
-          id: mcpProfile.id,
-          name: mcpProfile.name,
-          url: mcpProfile.url,
-          transport: mcpProfile.transport,
-          authType: mcpProfile.authType ?? null,
-          authValue: mcpProfile.authValue ?? null,
-          createdAt: mcpProfile.createdAt,
-          updatedAt: mcpProfile.updatedAt,
-        }
-      }
+      // Use all profiles with defaultEnabled = true
+      const mcpProfiles = listMcpServerProfiles(db.connection)
+      const mcpProfileSnapshots: McpProfileSnapshot[] = mcpProfiles
+        .filter(p => p.defaultEnabled)
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          url: p.url,
+          transport: p.transport,
+          authType: p.authType ?? null,
+          authValue: p.authValue ?? null,
+          createdAt: p.createdAt,
+          updatedAt: p.updatedAt,
+        }))
 
       const modelProfileSnapshot = {
         id: modelConfig.id,
@@ -129,10 +125,10 @@ export const createOperation = {
           sessionId: input.id,
           title: input.title,
           modelProfileSnapshot,
-          mcpProfileSnapshot,
+          mcpProfileSnapshots,
           compactionStrategy: input.compaction ?? 'strip-reasoning',
         })
-        mcpSnapshotRef = mcpProfileSnapshot
+        mcpSnapshotsRef = mcpProfileSnapshots
         return { kind: 'created', session, modelConfigId: modelConfig.id, modelConfigName: modelConfig.name }
       } catch (error) {
         if (error instanceof SessionIdInputError) return { kind: 'id_input_error', error }
@@ -157,9 +153,6 @@ export const createOperation = {
 
     const { session, modelConfigId, modelConfigName } = result
 
-    // Enqueue initialization via the scheduler so init events flow through the
-    // centralized execution stream. Non-fatal: CLI/MCP callers that don't pass
-    // a scheduler (or where admission fails) can poll /status and wait for ready.
     if (ctx.scheduler) {
       try {
         ctx.scheduler.enqueueInit(ctx, session.id)
@@ -179,7 +172,7 @@ export const createOperation = {
         status: session.status,
         init_status: session.initStatus,
         model: { id: modelConfigId, name: modelConfigName },
-        mcp: mcpSnapshotRef ? { id: (mcpSnapshotRef as McpProfileSnapshot).id, name: (mcpSnapshotRef as McpProfileSnapshot).name } : null,
+        mcp: mcpSnapshotsRef.map(s => ({ id: s.id, name: s.name })),
         compaction_strategy: session.compactionStrategy,
         created_at: session.createdAt,
         updated_at: session.updatedAt,

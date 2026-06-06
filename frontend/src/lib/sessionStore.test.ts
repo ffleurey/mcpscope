@@ -55,7 +55,7 @@ function makeSessionRecord() {
       createdAt: 1,
       updatedAt: 1,
     },
-    mcpProfileSnapshot: null,
+    mcpProfileSnapshots: [],
     loadedContextLength: null,
     systemPromptTokens: null,
     toolDefinitionsTokens: null,
@@ -94,7 +94,6 @@ describe('sessionStore.startSession', () => {
     mcpProfiles.set([])
     sessionCreationDefaults.set({
       defaultModelConfigId: 'mc-1',
-      defaultMcpProfileId: null,
       updatedAt: 1,
     })
     isPrimaryLaunchDialogOpen.set(true)
@@ -117,7 +116,7 @@ describe('sessionStore.startSession', () => {
 
     const startPromise = startSession({
       modelConfigId: 'mc-1',
-      mcpProfileId: null,
+      mcpProfileIds: [],
       compactionStrategy: 'strip-reasoning',
     })
 

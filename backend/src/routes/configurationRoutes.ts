@@ -112,13 +112,6 @@ export function registerConfigurationRoutes({ app, database }: RouteDeps): void 
 
   app.delete('/api/mcp-profiles/:mcpProfileId', async (request, reply) => {
     const { mcpProfileId } = z.object({ mcpProfileId: z.string() }).parse(request.params)
-    const defaults = getSessionCreationDefaults(database.connection)
-    if (defaults.defaultMcpProfileId === mcpProfileId) {
-      reply.code(409)
-      return apiError('validation', 'Cannot delete this MCP profile because it is currently set as the default for new sessions. Change or clear the default first.', {
-        code: 'default_mcp_profile_in_use',
-      })
-    }
     const deleted = deleteMcpServerProfile(database.connection, mcpProfileId)
     if (!deleted) {
       reply.code(404)
@@ -134,23 +127,17 @@ export function registerConfigurationRoutes({ app, database }: RouteDeps): void 
 
   const sessionCreationDefaultsInputSchema = z.object({
     defaultModelConfigId: z.string().nullable(),
-    defaultMcpProfileId: z.string().nullable(),
   })
 
   app.put('/api/session-creation-defaults', async (request, reply) => {
-    const { defaultModelConfigId, defaultMcpProfileId } = sessionCreationDefaultsInputSchema.parse(request.body)
+    const { defaultModelConfigId } = sessionCreationDefaultsInputSchema.parse(request.body)
 
     if (defaultModelConfigId !== null && !listModelConfigs(database.connection).some(c => c.id === defaultModelConfigId)) {
       reply.code(422)
       return apiError('validation', `Model config "${defaultModelConfigId}" not found.`, { code: 'default_model_config_not_found' })
     }
 
-    if (defaultMcpProfileId !== null && !listMcpServerProfiles(database.connection).some(p => p.id === defaultMcpProfileId)) {
-      reply.code(422)
-      return apiError('validation', `MCP profile "${defaultMcpProfileId}" not found.`, { code: 'default_mcp_profile_not_found' })
-    }
-
-    const updatedDefaults = { defaultModelConfigId, defaultMcpProfileId, updatedAt: Date.now() }
+    const updatedDefaults = { defaultModelConfigId, updatedAt: Date.now() }
     upsertSessionCreationDefaults(database.connection, updatedDefaults)
     return { sessionCreationDefaults: updatedDefaults }
   })
@@ -232,9 +219,9 @@ export function registerConfigurationRoutes({ app, database }: RouteDeps): void 
   })
 
   app.post('/api/sessions/preflight', async (request, reply) => {
-    const { lmConnectionSnapshot, mcpProfileSnapshot, selectedModel } = z.object({
+    const { lmConnectionSnapshot, mcpProfileSnapshots, selectedModel } = z.object({
       lmConnectionSnapshot: z.object({ baseUrl: z.string(), apiKey: z.string().nullable().optional() }),
-      mcpProfileSnapshot: z.object({ url: z.string() }).nullable().optional(),
+      mcpProfileSnapshots: z.array(z.object({ url: z.string() })).default([]),
       selectedModel: z.object({ modelKey: z.string().min(1), modelDisplayName: z.string().min(1).optional() }),
     }).parse(request.body)
 
@@ -265,15 +252,15 @@ export function registerConfigurationRoutes({ app, database }: RouteDeps): void 
       })
     }
 
-    if (mcpProfileSnapshot?.url) {
+    for (const mcpRef of mcpProfileSnapshots) {
       try {
-        await initializeMcpSession(mcpProfileSnapshot.url)
+        await initializeMcpSession(mcpRef.url)
       } catch (e) {
-        app.log.warn({ url: mcpProfileSnapshot.url, err: e instanceof Error ? e.message : String(e) }, 'Preflight: MCP server unreachable')
+        app.log.warn({ url: mcpRef.url, err: e instanceof Error ? e.message : String(e) }, 'Preflight: MCP server unreachable')
         reply.code(503)
         return apiError('upstream', 'Cannot reach MCP server. Check that it is running and accessible.', {
           code: 'mcp_unreachable',
-          details: { url: mcpProfileSnapshot.url },
+          details: { url: mcpRef.url },
         })
       }
     }

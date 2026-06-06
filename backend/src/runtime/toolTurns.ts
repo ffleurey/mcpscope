@@ -57,6 +57,17 @@ export interface McpGateway {
   callTool(serverUrl: string, sessionId: string | null, name: string, args: Record<string, unknown>): Promise<McpToolCallResult>
 }
 
+export interface McpServerContext {
+  sessionId: string | null
+  instructions: string | null
+}
+
+export interface McpContextResult {
+  serverContexts: Map<string, McpServerContext>
+  tools: McpToolsListResult['tools']
+  toolServerMap: Map<string, string>
+}
+
 interface ToolCallRecord {
   id: string
   name: string
@@ -443,12 +454,8 @@ export async function ensureMcpContext(
   database: BackendDatabase,
   session: SessionRecord,
   mcpGateway: McpGateway,
-): Promise<{
-  sessionId: string | null
-  instructions: string | null
-  tools: McpToolsListResult['tools']
-}> {
-  if (!session.mcpProfileSnapshot) {
+): Promise<McpContextResult> {
+  if (session.mcpProfileSnapshots.length === 0) {
     throw new Error('MCP profile is required for tool-enabled turns')
   }
 
@@ -456,31 +463,64 @@ export async function ensureMcpContext(
   const hasInstructions = existingParts.some(part => part.turnId === null && part.partType === 'mcp-instructions')
   const hasToolDefinitions = existingParts.some(part => part.turnId === null && part.partType === 'tool-definitions')
 
-  const initialized = await mcpGateway.initializeSession(session.mcpProfileSnapshot.url)
-  const toolsList = await mcpGateway.listTools(session.mcpProfileSnapshot.url, initialized.sessionId)
+  const serverContexts = new Map<string, McpServerContext>()
+  const combinedTools: McpToolsListResult['tools'] = []
+  const toolServerMap = new Map<string, string>()
+  const instructionsBuilder: string[] = []
 
-  const tx = database.connection.transaction(() => {
+  for (const profile of session.mcpProfileSnapshots) {
+    const initialized = await mcpGateway.initializeSession(profile.url)
+    const toolsList = await mcpGateway.listTools(profile.url, initialized.sessionId)
+
+    serverContexts.set(profile.url, {
+      sessionId: initialized.sessionId,
+      instructions: initialized.instructions ?? null,
+    })
+
+    const tx = database.connection.transaction(() => {
+      const nowTs = now()
+
+      insertRawExchangeRecord(
+        database.connection,
+        makeRawExchangeRecord(session.id, null, null, 'mcp-request', initialized.rawExchange, nowTs),
+      )
+      insertRawExchangeRecord(
+        database.connection,
+        makeRawExchangeRecord(session.id, null, null, 'mcp-response', initialized.rawExchange, nowTs),
+      )
+      insertRawExchangeRecord(
+        database.connection,
+        makeRawExchangeRecord(session.id, null, null, 'mcp-request', toolsList.rawExchange, nowTs),
+      )
+      insertRawExchangeRecord(
+        database.connection,
+        makeRawExchangeRecord(session.id, null, null, 'mcp-response', toolsList.rawExchange, nowTs),
+      )
+    })
+    tx()
+
+    if (initialized.instructions) {
+      instructionsBuilder.push(`[${profile.name}]\n${initialized.instructions}`)
+    }
+
+    for (const tool of toolsList.tools) {
+      if (toolServerMap.has(tool.name)) {
+        console.warn(
+          `Tool name collision: "${tool.name}" provided by both "${toolServerMap.get(tool.name)}" and "${profile.url}". Using first server.`,
+        )
+      } else {
+        toolServerMap.set(tool.name, profile.url)
+        combinedTools.push(tool)
+      }
+    }
+  }
+
+  if (!hasInstructions && instructionsBuilder.length > 0) {
+    const nowTs = now()
     let ordinal = getNextPartOrdinal(database.connection, session.id)
     let preludePartNumber = getNextPreludePartSequence(database.connection, session.id)
 
-    insertRawExchangeRecord(
-      database.connection,
-      makeRawExchangeRecord(session.id, null, null, 'mcp-request', initialized.rawExchange, now()),
-    )
-    insertRawExchangeRecord(
-      database.connection,
-      makeRawExchangeRecord(session.id, null, null, 'mcp-response', initialized.rawExchange, now()),
-    )
-    insertRawExchangeRecord(
-      database.connection,
-      makeRawExchangeRecord(session.id, null, null, 'mcp-request', toolsList.rawExchange, now()),
-    )
-    insertRawExchangeRecord(
-      database.connection,
-      makeRawExchangeRecord(session.id, null, null, 'mcp-response', toolsList.rawExchange, now()),
-    )
-
-    if (!hasInstructions && initialized.instructions) {
+    database.connection.transaction(() => {
       insertPartRecord(database.connection, {
         id: formatSetupPartId(session.id, preludePartNumber++, 'mcp-instructions'),
         sessionId: session.id,
@@ -491,10 +531,10 @@ export async function ensureMcpContext(
         partType: 'mcp-instructions',
         roleLabel: 'system',
         payload: {
-          text: `[MCP Server Instructions]\n${initialized.instructions}`,
+          text: instructionsBuilder.join('\n\n'),
           json: null,
           mimeType: 'text/plain',
-          summary: 'MCP instructions',
+          summary: `MCP instructions (${session.mcpProfileSnapshots.length} server(s))`,
         },
         display: {
           state: 'diagnostic',
@@ -512,12 +552,18 @@ export async function ensureMcpContext(
           note: 'Session-level instructions token count not derived yet',
         },
         provenanceJson: null,
-        createdAt: now(),
-        updatedAt: now(),
+        createdAt: nowTs,
+        updatedAt: nowTs,
       })
-    }
+    })()
+  }
 
-    if (!hasToolDefinitions) {
+  if (!hasToolDefinitions) {
+    const nowTs = now()
+    let ordinal = getNextPartOrdinal(database.connection, session.id)
+    let preludePartNumber = getNextPreludePartSequence(database.connection, session.id)
+
+    database.connection.transaction(() => {
       insertPartRecord(database.connection, {
         id: formatSetupPartId(session.id, preludePartNumber, 'tool-definitions'),
         sessionId: session.id,
@@ -529,9 +575,9 @@ export async function ensureMcpContext(
         roleLabel: 'system',
         payload: {
           text: null,
-          json: toolsList.tools,
+          json: combinedTools,
           mimeType: 'application/json',
-          summary: toolsList.tools.map(tool => tool.name).join(', '),
+          summary: combinedTools.map(tool => tool.name).join(', '),
         },
         display: {
           state: 'diagnostic',
@@ -549,17 +595,16 @@ export async function ensureMcpContext(
           note: 'Tool definition token count not derived yet',
         },
         provenanceJson: null,
-        createdAt: now(),
-        updatedAt: now(),
+        createdAt: nowTs,
+        updatedAt: nowTs,
       })
-    }
-  })
-  tx()
+    })()
+  }
 
   return {
-    sessionId: initialized.sessionId,
-    instructions: initialized.instructions ?? null,
-    tools: toolsList.tools,
+    serverContexts,
+    tools: combinedTools,
+    toolServerMap,
   }
 }
 
@@ -928,8 +973,20 @@ export async function runDeterministicMcpToolCall(
   toolResultPartId: string
   resultContent: string
 }> {
-  if (!session.mcpProfileSnapshot) {
+  if (session.mcpProfileSnapshots.length === 0) {
     throw new Error('MCP profile is required for deterministic tool calls')
+  }
+  const deterministicToolServerMap = new Map<string, string>()
+  for (const profile of session.mcpProfileSnapshots) {
+    for (const tool of (await mcpGateway.listTools(profile.url, null)).tools) {
+      if (!deterministicToolServerMap.has(tool.name)) {
+        deterministicToolServerMap.set(tool.name, profile.url)
+      }
+    }
+  }
+  const serverUrl = deterministicToolServerMap.get(toolName)
+  if (!serverUrl) {
+    throw new Error(`No MCP server found for tool "${toolName}"`)
   }
   const ts = now()
   const turnNumber = reservedTurnId
@@ -1044,9 +1101,9 @@ export async function runDeterministicMcpToolCall(
   emitEvent?.({ type: 'part-committed', part: { ...toolCallPart } })
 
   // Perform the actual MCP tool call
-  const mcpSession = await mcpGateway.initializeSession(session.mcpProfileSnapshot.url)
+  const mcpSession = await mcpGateway.initializeSession(serverUrl)
   const toolResult = await mcpGateway.callTool(
-    session.mcpProfileSnapshot.url,
+    serverUrl,
     mcpSession.sessionId,
     toolName,
     toolArgs,
@@ -1173,7 +1230,7 @@ export async function createToolEnabledTurn(
   if (!session) {
     throw new Error(`Session not found: ${input.sessionId}`)
   }
-  if (!session.mcpProfileSnapshot) {
+  if (session.mcpProfileSnapshots.length === 0) {
     throw new Error('MCP profile is required for tool-enabled turns')
   }
 
@@ -1441,9 +1498,12 @@ export async function createToolEnabledTurn(
           argumentsJson: toolJson?.arguments ?? '{}',
         }
         const parsedArgs = JSON.parse(toolCall.argumentsJson || '{}') as Record<string, unknown>
+        const serverUrl = mcpContext.toolServerMap.get(toolCall.name)
+        if (!serverUrl) throw new Error(`No MCP server found for tool "${toolCall.name}"`)
+        const serverCtx = mcpContext.serverContexts.get(serverUrl)
         const toolResult = await mcpGateway.callTool(
-          session.mcpProfileSnapshot.url,
-          mcpContext.sessionId,
+          serverUrl,
+          serverCtx?.sessionId ?? null,
           toolCall.name,
           parsedArgs,
         )

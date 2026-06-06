@@ -11,7 +11,7 @@
   import DialogShell from './DialogShell.svelte'
 
   let selectedConfigId = $state('')
-  let selectedMcpProfileId = $state('')
+  let selectedMcpProfileIds = $state<string[]>([])
   let compactionStrategy = $state<'strip-reasoning' | 'none'>('strip-reasoning')
   let sessionId = $state('')
   let hasInitializedModelSelection = $state(false)
@@ -34,18 +34,9 @@
   })
 
   $effect(() => {
-    const defaultId = $sessionCreationDefaults?.defaultMcpProfileId ?? null
-    const hasDefault = defaultId != null && $mcpProfiles.some((profile) => profile.id === defaultId)
-    const currentIsValid = selectedMcpProfileId === '' || $mcpProfiles.some((profile) => profile.id === selectedMcpProfileId)
-
     if (!hasInitializedMcpSelection) {
-      selectedMcpProfileId = hasDefault ? defaultId : ''
+      selectedMcpProfileIds = $mcpProfiles.filter(p => p.defaultEnabled).map(p => p.id)
       hasInitializedMcpSelection = true
-      return
-    }
-
-    if (!currentIsValid) {
-      selectedMcpProfileId = hasDefault ? defaultId : ''
     }
   })
 
@@ -53,9 +44,17 @@
     await startSession({
       sessionId: sessionId.trim() ? sessionId.trim().toUpperCase() : undefined,
       modelConfigId: selectedConfigId || undefined,
-      mcpProfileId: selectedMcpProfileId || null,
+      mcpProfileIds: selectedMcpProfileIds,
       compactionStrategy,
     })
+  }
+
+  function toggleMcp(id: string) {
+    if (selectedMcpProfileIds.includes(id)) {
+      selectedMcpProfileIds = selectedMcpProfileIds.filter(i => i !== id)
+    } else {
+      selectedMcpProfileIds = [...selectedMcpProfileIds, id]
+    }
   }
 </script>
 
@@ -102,13 +101,27 @@
     </div>
 
     <div class="field">
-      <label class="field-label" for="primary-mcp-select">MCP server <span class="optional">(optional)</span></label>
-      <select id="primary-mcp-select" class="field-select" bind:value={selectedMcpProfileId} disabled={$isStartingSession}>
-        <option value="">None</option>
-        {#each $mcpProfiles as profile (profile.id)}
-          <option value={profile.id}>{profile.name}{$sessionCreationDefaults?.defaultMcpProfileId === profile.id ? ' (default)' : ''}</option>
-        {/each}
-      </select>
+      <span class="field-label">MCP servers <span class="optional">(optional)</span></span>
+      {#if $mcpProfiles.length === 0}
+        <p class="field-hint">No MCP server profiles — create one in the sidebar first.</p>
+      {:else}
+        <div class="mcp-checkbox-group">
+          {#each $mcpProfiles as profile (profile.id)}
+            <label class="mcp-checkbox-option" class:checked={selectedMcpProfileIds.includes(profile.id)}>
+              <input
+                type="checkbox"
+                checked={selectedMcpProfileIds.includes(profile.id)}
+                onchange={() => toggleMcp(profile.id)}
+                disabled={$isStartingSession}
+              />
+              <span class="mcp-checkbox-label">{profile.name}</span>
+              {#if profile.defaultEnabled}
+                <span class="mcp-checkbox-hint">(default)</span>
+              {/if}
+            </label>
+          {/each}
+        </div>
+      {/if}
     </div>
 
     <div class="field">
@@ -223,6 +236,45 @@
     font-size: 0.8rem;
     color: var(--text-muted);
     margin: 0;
+  }
+
+  .mcp-checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .mcp-checkbox-option {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: var(--bg);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .mcp-checkbox-option:has(input:checked) {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 7%, var(--bg));
+  }
+
+  .mcp-checkbox-option input[type="checkbox"] {
+    margin: 0;
+    accent-color: var(--color-accent);
+  }
+
+  .mcp-checkbox-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .mcp-checkbox-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
   }
 
   .radio-group {

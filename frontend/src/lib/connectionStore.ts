@@ -84,32 +84,24 @@ export async function fetchSessionCreationDefaults(): Promise<void> {
 
 export async function updateSessionCreationDefaults(input: {
   defaultModelConfigId: string | null
-  defaultMcpProfileId: string | null
 }): Promise<void> {
   const { sessionCreationDefaults: updated } = await putSessionCreationDefaults(input)
   sessionCreationDefaults.set(updated)
 }
 
 export async function setDefaultModelConfig(defaultModelConfigId: string | null): Promise<void> {
-  const current = getStoreDefaults()
   await updateSessionCreationDefaults({
     defaultModelConfigId,
-    defaultMcpProfileId: current.defaultMcpProfileId,
   })
 }
 
-export async function setDefaultMcpProfile(defaultMcpProfileId: string | null): Promise<void> {
-  const current = getStoreDefaults()
-  await updateSessionCreationDefaults({
-    defaultModelConfigId: current.defaultModelConfigId,
-    defaultMcpProfileId,
-  })
+export async function setDefaultMcpProfile(_defaultMcpProfileId: string | null): Promise<void> {
+  // Default MCP selection is now per-profile (defaultEnabled field)
 }
 
 function getStoreDefaults(): SessionCreationDefaults {
   return get(sessionCreationDefaults) ?? {
     defaultModelConfigId: null,
-    defaultMcpProfileId: null,
     updatedAt: 0,
   }
 }

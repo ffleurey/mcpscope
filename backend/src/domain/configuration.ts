@@ -29,6 +29,7 @@ export const mcpServerProfileSchema = z.object({
   transport: z.literal('streamable-http'),
   authType: z.enum(['none', 'bearer', 'basic']).nullable().default(null),
   authValue: z.string().nullable().default(null),
+  defaultEnabled: z.boolean().default(false),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 })
