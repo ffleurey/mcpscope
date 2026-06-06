@@ -4476,7 +4476,7 @@ describe('analysis launch', () => {
     expect(schemaKeys).toContain('analysis.analysis_target.v1')
     expect(schemaKeys).toContain('analysis.evidence_packet_index.v1')
     expect(schemaKeys).toContain('analysis.fast_session_tool_call_assessment.v1')
-    expect(schemaKeys).not.toContain('analysis.fast_session_turn_summary.v1')
+    expect(schemaKeys).toContain('analysis.fast_session_turn_summary.v1')
     expect(schemaKeys).toContain('analysis.fast_session_final_analysis_report.v1')
     expect(inspectIds).toEqual([
       targetId,
@@ -4796,6 +4796,26 @@ describe('analysis launch', () => {
     })
     expect(secondExecRes.statusCode).toBe(200)
     expect(secondExecRes.body).not.toContain('analysis-complete')
+
+    const thirdExecRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute?single_step=true`,
+    })
+    expect(thirdExecRes.statusCode).toBe(200)
+
+    const fourthExecRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute?single_step=true`,
+    })
+    expect(fourthExecRes.statusCode).toBe(200)
+
+    for (let i = 0; i < 10; i++) {
+      const execRes = await app.inject({
+        method: 'POST',
+        url: `/api/sessions/${childId}/execute?single_step=true`,
+      })
+      expect(execRes.statusCode).toBe(200)
+    }
 
     const artifacts = app.backendDb.connection
       .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)

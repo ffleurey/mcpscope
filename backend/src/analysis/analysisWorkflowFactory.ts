@@ -3,9 +3,9 @@ import type { LmStudioGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import { getSessionRecord } from '../persistence/repository.js'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
-import { AnalysisSession } from './analysisSession.js'
-import { FastSessionAnalysisSession } from './fastSessionAnalysisSession.js'
-import { FastToolAnalysisSession } from './fastToolAnalysisSession.js'
+import { FullSessionAnalysis } from './fullSession/fullSessionAnalysis.js'
+import { FastSessionAnalysis } from './fastSession/fastSessionAnalysis.js'
+import { FastToolAnalysis } from './fastTool/fastToolAnalysis.js'
 import { ANALYSIS_WORKFLOW_KIND } from './workflowKinds.js'
 import type { AnalysisSessionState } from './schemas.js'
 
@@ -29,11 +29,11 @@ export function rehydrateAnalysisWorkflow(
 
   switch (workflowKind) {
     case ANALYSIS_WORKFLOW_KIND.FULL_SESSION:
-      return AnalysisSession.rehydrateFromDb(database, lmGateway, mcpGateway, analysisSessionId)
+      return FullSessionAnalysis.rehydrate(database, lmGateway, mcpGateway, analysisSessionId)
     case ANALYSIS_WORKFLOW_KIND.FAST_SESSION:
-      return FastSessionAnalysisSession.rehydrateFromDb(database, lmGateway, mcpGateway, analysisSessionId)
+      return FastSessionAnalysis.rehydrate(database, lmGateway, mcpGateway, analysisSessionId)
     case ANALYSIS_WORKFLOW_KIND.FAST_TOOL:
-      return FastToolAnalysisSession.rehydrateFromDb(database, lmGateway, mcpGateway, analysisSessionId)
+      return FastToolAnalysis.rehydrate(database, lmGateway, mcpGateway, analysisSessionId)
     default:
       throw new Error(`Unsupported analysis workflow kind: ${workflowKind}`)
   }

@@ -56,20 +56,38 @@ export function buildFastSessionTurnSummaryPrompt(params: {
 
 export function buildFastSessionFinalAggregationPrompt(params: {
   analysisTarget: AnalysisTarget
-  subjectId: string
   assessmentCount: number
   turnSummaryCount: number
 }): string {
-  return buildSharedEvaluationPrompt({
-    title: 'the overall fast-session analysis outcome',
-    subjectScope: 'session',
-    subjectId: params.subjectId,
-    evaluationFocus: buildAnalysisFocusInstructions(params.analysisTarget),
-    contextBlock: [
-      'Session aggregation context:',
-      `- assessment_count: ${params.assessmentCount}`,
-      `- turn_summary_count: ${params.turnSummaryCount}`,
-    ].join('\n'),
-    extraInstructions: 'Focus on the session-level qualitative outcome and avoid inventing counts or arrays in the response.',
-  })
+  const sections = [
+    'You are evaluating the overall fast-session analysis outcome.',
+    '',
+    'Session aggregation context:',
+    `- assessment_count: ${params.assessmentCount}`,
+    `- turn_summary_count: ${params.turnSummaryCount}`,
+    '',
+    'Use the context already present in the conversation and the evidence parts injected by the harness.',
+    '',
+    'Focus on the session-level qualitative outcome and avoid inventing counts or arrays in the response.',
+    '',
+    'Evaluation focus:',
+    buildAnalysisFocusInstructions(params.analysisTarget),
+    '',
+    'Output requirements:',
+    '- Return one JSON object only.',
+    '- Support the outcome, rationale, and summaries with evidence from the analysis.',
+    '- Array fields must not contain null values.',
+    '',
+    'Output schema:',
+    JSON.stringify({
+      overall_outcome: 'string',
+      overall_rationale: 'string',
+      path_efficiency: 'efficient|mixed|inefficient|unclear',
+      tool_summaries: [{}],
+      notable_failures: [],
+      follow_up_candidates: [],
+    }, null, 2),
+  ]
+
+  return sections.join('\n')
 }

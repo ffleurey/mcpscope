@@ -4,7 +4,6 @@ import type { BackendDatabase } from '../persistence/db.js'
 import { openBackendDatabase } from '../persistence/db.js'
 import {
   createSessionRecord,
-  getPartRecord,
   insertPartRecord,
   insertRoundRecord,
   insertStepRecord,
@@ -13,12 +12,12 @@ import {
 import type { PartRecord, RoundRecord, SessionRecord, TurnRecord } from '../domain/model.js'
 import type { LmStudioGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
-import { runBootstrapStep } from './bootstrapStep.js'
+import { BootstrapStep } from './shared/bootstrapStep.js'
+import { STEP_TYPE } from '../domain/executionModel.js'
 import { getLatestArtifactBySchemaKey, insertJsonArtifact } from './artifactRepository.js'
-import { runContextMutationStep } from './fullSession/contextMutationStep.js'
 import { runCoverageValidationStep } from './coverageValidationStep.js'
-import { runFinalAggregationTurn } from './fullSession/finalAggregationTurn.js'
-import { buildRepeatedAttemptGuidance } from './fullSession/turnSummaryTurn.js'
+import { FinalAggregationStep } from './shared/finalAggregationStep.js'
+import { buildRepeatedAttemptGuidance } from './shared/turnSummaryStep.js'
 import { SCHEMA_KEY, type AnalysisSessionState, type EvidencePacketIndex } from './schemas.js'
 import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 
@@ -210,6 +209,18 @@ const fakeMcpGateway: McpGateway = {
   },
 }
 
+const fakeLmGateway: LmStudioGateway = {
+  async createChatCompletion() {
+    throw new Error('fakeLmGateway: createChatCompletion not implemented')
+  },
+  async streamChatCompletion() {
+    throw new Error('fakeLmGateway: streamChatCompletion not implemented')
+  },
+  async probePromptTokens() {
+    return null
+  },
+}
+
 describe('analysis workflow helpers', () => {
   let db: BackendDatabase | undefined
 
@@ -319,12 +330,14 @@ describe('analysis workflow helpers', () => {
       payload: { text: 'The result answers the question.', json: null, mimeType: 'text/plain', summary: null },
     }))
 
-    const result = await runBootstrapStep(db, fakeMcpGateway, {
-      state: makeAnalysisState({ analysisSessionId: 'ANLY', targetSessionId: 'TARG', targetTurnId: 'TARG.1' }),
-      stepId: 'ANLY.step.bootstrap',
+    const state = makeAnalysisState({ analysisSessionId: 'ANLY', targetSessionId: 'TARG', targetTurnId: 'TARG.1' })
+    await new BootstrapStep(db, fakeLmGateway, fakeMcpGateway, 'session').execute({
+      sessionId: 'ANLY',
+      stepTypeKey: STEP_TYPE.ANALYSIS_BOOTSTRAP,
+      workflowState: state as unknown as Record<string, unknown>,
     })
 
-    expect(result.packetCount).toBe(1)
+    expect(state.packetCount).toBe(1)
     const packetIndexArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
     const packetIndex = packetIndexArtifact?.content as EvidencePacketIndex
     expect(packetIndex.packets).toHaveLength(1)
@@ -409,19 +422,21 @@ describe('analysis workflow helpers', () => {
       provenanceJson: { isError: true },
     }))
 
-    const result = await runBootstrapStep(db, fakeMcpGateway, {
-      state: makeAnalysisState({
+    const state2 = makeAnalysisState({
         analysisSessionId: 'ANLY',
         targetSessionId: 'TARG',
         targetTurnId: 'TARG.1',
         selectedToolNames: ['calendar_lookup'],
         onlyFailedToolCalls: true,
         evaluationCriteria: ['Focus on actual runtime failures'],
-      }),
-      stepId: 'ANLY.step.bootstrap',
+      })
+    await new BootstrapStep(db, fakeLmGateway, fakeMcpGateway, 'session').execute({
+      sessionId: 'ANLY',
+      stepTypeKey: STEP_TYPE.ANALYSIS_BOOTSTRAP,
+      workflowState: state2 as unknown as Record<string, unknown>,
     })
 
-    expect(result.packetCount).toBe(1)
+    expect(state2.packetCount).toBe(1)
     const packetIndexArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
     const packetIndex = packetIndexArtifact?.content as EvidencePacketIndex
     expect(packetIndex.packets).toHaveLength(1)
@@ -433,62 +448,6 @@ describe('analysis workflow helpers', () => {
       only_failed_tool_calls: true,
       evaluation_criteria: ['Focus on actual runtime failures'],
     })
-  })
-
-  it('context mutation excludes packet-local evidence and transitions to turn_summary at a turn boundary', () => {
-    db = makeTestDatabase()
-
-    createSessionRecord(db.connection, makeSessionRecord({
-      id: 'ANLY',
-      sessionType: 'session_analysis',
-      parentKind: 'session',
-      parentId: 'TARG',
-      mcpProfileSnapshot: {
-        id: 'analysis-mcp',
-        name: 'mcpscope-analysis',
-        url: 'http://localhost:3030/mcp/analysis',
-        transport: 'streamable-http',
-        authType: null,
-        authValue: null,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    }))
-    insertTurnRecord(db.connection, makeTurnRecord({ id: 'ANLY.1', sessionId: 'ANLY', turnNumber: 1 }))
-    insertRoundRecord(db.connection, makeRoundRecord({ id: 'ANLY.1.1', turnId: 'ANLY.1', roundIndex: 0 }))
-    insertTurnRecord(db.connection, makeTurnRecord({ id: 'ANLY.2', sessionId: 'ANLY', turnNumber: 2 }))
-    insertRoundRecord(db.connection, makeRoundRecord({ id: 'ANLY.2.1', turnId: 'ANLY.2', roundIndex: 0 }))
-    insertPartRecord(db.connection, makePartRecord({ id: 'ANLY.2.1.1-U', sessionId: 'ANLY', turnId: 'ANLY.2', roundId: 'ANLY.2.1', ordinal: 1, partType: 'user-message' }))
-    insertPartRecord(db.connection, makePartRecord({ id: 'INJECT-1', sessionId: 'ANLY', turnId: 'ANLY.1', roundId: 'ANLY.1.1', ordinal: 2, partType: 'tool-call' }))
-    insertPartRecord(db.connection, makePartRecord({ id: 'REASON-1', sessionId: 'ANLY', turnId: 'ANLY.2', roundId: 'ANLY.2.1', ordinal: 3, partType: 'assistant-reasoning' }))
-
-    insertJsonArtifact(db.connection, {
-      id: 'artifact-packets',
-      sessionId: 'ANLY',
-      stepId: 'ANLY.2',
-      content: {
-        packets: [
-          { turn_id: 'TURN-1', round_id: 'TURN-1.1', tool_call_part_id: 'TC-1', tool_name: 'test_tool', reasoning_before_part_id: null, tool_result_part_id: null, reasoning_after_part_id: null },
-          { turn_id: 'TURN-2', round_id: 'TURN-2.1', tool_call_part_id: 'TC-2', tool_name: 'test_tool', reasoning_before_part_id: null, tool_result_part_id: null, reasoning_after_part_id: null },
-        ],
-      },
-      metadata: { schema_key: SCHEMA_KEY.EVIDENCE_PACKET_INDEX },
-      createdAt: 1,
-    })
-
-    const result = runContextMutationStep(db, {
-      analysisSessionId: 'ANLY',
-      currentTurnId: 'TURN-1',
-      nextPacketIndex: 1,
-      userTurnId: 'ANLY.2',
-      injectPartIds: ['INJECT-1'],
-      reasoningPartIds: ['REASON-1'],
-    })
-
-    expect(getPartRecord(db.connection, 'INJECT-1')?.context.state).toBe('excluded')
-    expect(getPartRecord(db.connection, 'REASON-1')?.context.state).toBe('excluded')
-    expect(getPartRecord(db.connection, 'ANLY.2.1.1-U')?.context.state).toBe('historical-only')
-    expect(result.nextPhase).toBe('turn_summary')
   })
 
   it('coverage validation derives completion from tool call ids plus accepted assessments', () => {
@@ -700,17 +659,24 @@ describe('analysis workflow helpers', () => {
       },
     }
 
-    const result = await runFinalAggregationTurn(db, lmGateway, fakeMcpGateway, {
-      state: makeAnalysisState({
+    const state1 = makeAnalysisState({
         analysisSessionId: 'ANLY',
         targetSessionId: 'TARG',
         targetTurnId: 'TARG.2',
         phase: 'final_aggregation',
-      }),
-      stepId: 'step-final',
+      })
+    await new FinalAggregationStep(db, lmGateway, fakeMcpGateway, {
+      assessmentSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
+      summarySchemaKey: SCHEMA_KEY.TURN_SUMMARY,
+      reportSchemaKey: SCHEMA_KEY.FINAL_ANALYSIS_REPORT,
+      variant: 'full',
+    }).execute({
+      sessionId: 'ANLY',
+      stepTypeKey: STEP_TYPE.ANALYSIS_FINAL_AGGREGATION,
+      workflowState: state1 as unknown as Record<string, unknown>,
     })
 
-    expect(result.success).toBe(true)
+    expect(state1.phase).toBe('complete')
     expect(callCount).toBe(1)
 
     const finalArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', SCHEMA_KEY.FINAL_ANALYSIS_REPORT)
@@ -892,17 +858,24 @@ describe('analysis workflow helpers', () => {
       },
     }
 
-    const result = await runFinalAggregationTurn(db, lmGateway, fakeMcpGateway, {
-      state: makeAnalysisState({
+    const state2 = makeAnalysisState({
         analysisSessionId: 'ANLY',
         targetSessionId: 'TARG',
         targetTurnId: 'TURN-2',
         phase: 'final_aggregation',
-      }),
-      stepId: 'step-final',
+      })
+    await new FinalAggregationStep(db, lmGateway, fakeMcpGateway, {
+      assessmentSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
+      summarySchemaKey: SCHEMA_KEY.TURN_SUMMARY,
+      reportSchemaKey: SCHEMA_KEY.FINAL_ANALYSIS_REPORT,
+      variant: 'full',
+    }).execute({
+      sessionId: 'ANLY',
+      stepTypeKey: STEP_TYPE.ANALYSIS_FINAL_AGGREGATION,
+      workflowState: state2 as unknown as Record<string, unknown>,
     })
 
-    expect(result.success).toBe(true)
+    expect(state2.phase).toBe('complete')
 
     const finalArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', SCHEMA_KEY.FINAL_ANALYSIS_REPORT)
     expect(finalArtifact?.content).toMatchObject({

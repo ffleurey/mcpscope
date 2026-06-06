@@ -1,18 +1,17 @@
 /**
- * Mapping boundary between current persistence record shapes and the new
- * execution-model domain vocabulary.
+ * Mapping boundary between persistence record shapes and the execution-model
+ * domain vocabulary.
  *
  * This file declares the conceptual correspondence between:
  *   - the existing `*Record` types from `domain/model.ts`  (persistence-oriented)
- *   - the new domain interfaces from `domain/executionModel.ts`  (domain-oriented)
+ *   - the domain interfaces from `domain/executionModel.ts`  (domain-oriented)
  *
- * At this stage (Step 1 of the execution-model refactor) the mapping is
- * declared as type-level documentation only.  Behavior is NOT yet ported;
- * existing record types and repositories remain active.
+ * The schema columns, containment IDs, and runtime types are aligned with the
+ * domain model.  The mapping below documents the correspondence.
  *
- * As later steps port each slice of behavior, the corresponding runtime
- * functions will be updated to work through the new domain types, and the
- * relevant entries below will be promoted from "declared" to "active".
+ * Non-Turn Step subtypes (analysis workflow steps) use `STEP_TYPE` constants
+ * defined in `domain/executionModel.ts` and map to `StepPersistenceRecord` rows
+ * with the corresponding `stepTypeKey`.
  *
  * Mapping table:
  *
@@ -23,16 +22,16 @@
  *     .parentKind / .parentId  →    Session.parent (SessionContainer?)
  *     .status / .initStatus    →    Session.status (SessionLifecycleStatus)
  *   ─────────────────────────────────────────────────────────────────────────
- *   TurnRecord                 →  Turn  (LLM-specific Step)
- *     .sequenceNumber          →    Turn.sequenceNumber
- *     .status                  →    Turn.status  (StepStatus)
+ *   TurnRecord                 →  Turn (LLM-specific; uses TurnPersistenceRecord)
+ *     .turnNumber              →    TurnPersistenceRecord.turnNumber
+ *     .status                  →    status (StepStatus)
  *   ─────────────────────────────────────────────────────────────────────────
  *   RoundRecord                →  Turn-owned round (infrastructure subtype)
  *   PartRecord                 →  Turn-owned part  (infrastructure subtype)
  *   RawExchangeRecord          →  Turn-owned raw exchange (diagnostics layer)
  *   ─────────────────────────────────────────────────────────────────────────
  *   (no current record)        →  Benchmark  (minimal SessionContainer)
- *   (no current record)        →  non-Turn Step subtypes (future)
+ *   StepPersistenceRecord      →  non-Turn Step subtypes (workflow, compaction)
  *   ─────────────────────────────────────────────────────────────────────────
  *
  * Container ownership mapping:
@@ -45,13 +44,13 @@
  *   ──────────────────────────────────────────────────────────────────────
  */
 
-import type { SessionRecord, TurnRecord, RoundRecord, PartRecord, RawExchangeRecord } from './model.js'
-import type { Session, Turn, Benchmark, Step } from './executionModel.js'
+import type { SessionRecord, RoundRecord, PartRecord, RawExchangeRecord } from './model.js'
+import type { Session, Benchmark, Step } from './executionModel.js'
 
 type SessionContainer = Session | Benchmark
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Nominal type guards / narrowing helpers  (declared, not yet behaviorally wired)
+// Nominal type guards / narrowing helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -72,7 +71,7 @@ export function isBenchmarkContainer(container: SessionContainer): container is 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Record-to-concept correspondence  (declared for Step 1; implemented in Step 4+)
+// Record-to-concept correspondence
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -82,15 +81,6 @@ export function isBenchmarkContainer(container: SessionContainer): container is 
 export type SessionRecordMapping = {
   record: SessionRecord
   domain: Session
-}
-
-/**
- * Shape of the mapping from a TurnRecord to its domain Turn concept.
- * Implemented fully in Step 4 (port current chat-session behavior).
- */
-export type TurnRecordMapping = {
-  record: TurnRecord
-  domain: Turn
 }
 
 /**
@@ -119,4 +109,4 @@ export type RawExchangeRecordMapping = {
 
 // Re-export domain types for convenience of importing modules that only need
 // the boundary file.
-export type { Session, Turn, Step, Benchmark, SessionContainer }
+export type { Session, Step, Benchmark, SessionContainer }

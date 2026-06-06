@@ -9,6 +9,7 @@ import type {
   StepRecord,
   TurnRecord,
 } from './model.js'
+import { getNextChildIndex } from '../persistence/repositoryV2.js'
 
 export interface CompactionStepResult {
   turn: TurnRecord
@@ -48,16 +49,7 @@ export function applyContextCompaction(
   let compactionTokensRemoved: number | null = 0
   let strippedPartIds: string[] = []
 
-  // Create compaction step first so parts can reference it via FK.
-  const stepOrdinalRow = connection
-    .prepare<[string], { max_child_index: number }>(`
-      SELECT COALESCE(MAX(child_index), 0) AS max_child_index
-      FROM v2_steps
-      WHERE session_id = ?
-    `)
-    .get(completedTurn.sessionId) as { max_child_index: number }
-
-  const childIndex = stepOrdinalRow.max_child_index + 1
+  const childIndex = getNextChildIndex(connection, completedTurn.sessionId)
   const stepId = formatCompactionStepId(completedTurn.sessionId, childIndex)
 
   // Create and insert the compaction step first so the FK on v2_parts is satisfied.

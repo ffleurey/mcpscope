@@ -21,7 +21,6 @@ export const SCHEMA_KEY = {
   TOOL_CALL_ASSESSMENT: 'analysis.tool_call_assessment.v1',
   TURN_SUMMARY: 'analysis.turn_summary.v1',
   FINAL_ANALYSIS_REPORT: 'analysis.final_analysis_report.v1',
-  EVALUATION_RESULT: 'analysis.evaluation_result.v1',
   FAST_TOOL_CALL_ASSESSMENT: 'analysis.fast_session_tool_call_assessment.v1',
   FAST_TURN_SUMMARY: 'analysis.fast_session_turn_summary.v1',
   FAST_FINAL_ANALYSIS_REPORT: 'analysis.fast_session_final_analysis_report.v1',
