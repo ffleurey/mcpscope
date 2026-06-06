@@ -94,7 +94,7 @@ export class FinalAggregationStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     const parsed = reportSchema.safeParse(parsedJson)
@@ -105,7 +105,7 @@ export class FinalAggregationStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     insertJsonArtifact(this.db.connection, {

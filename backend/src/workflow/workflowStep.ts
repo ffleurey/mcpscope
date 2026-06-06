@@ -54,7 +54,7 @@ export abstract class WorkflowStep {
 
       const completed: StepPersistenceRecord = {
         ...record,
-        status: 'complete',
+        status: result.status === 'error' ? 'error' : 'complete',
         state: result.status === 'complete' ? record.state : { error: result.error },
         completedAt: now(),
       }

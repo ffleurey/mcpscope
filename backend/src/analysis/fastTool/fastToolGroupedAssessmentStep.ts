@@ -89,7 +89,7 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, work_unit_id: workUnit.work_unit_id }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     const parsed = evaluationResultSchema.safeParse(parsedJson)
@@ -100,7 +100,7 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, work_unit_id: workUnit.work_unit_id }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     insertJsonArtifact(this.db.connection, {

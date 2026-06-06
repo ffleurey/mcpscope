@@ -108,7 +108,7 @@ export class TurnSummaryStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     const parsed = evaluationResultSchema.safeParse(parsedJson)
@@ -119,7 +119,7 @@ export class TurnSummaryStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     if (parsed.data.subject_id !== currentTurnId) {
@@ -129,7 +129,7 @@ export class TurnSummaryStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, turn_id: currentTurnId }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     insertJsonArtifact(this.db.connection, {
