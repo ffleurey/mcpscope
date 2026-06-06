@@ -126,7 +126,7 @@ export function applyContextCompaction(
 
       const updateAll = connection.transaction(() => {
         for (const partId of strippedPartIds) {
-          updatePart.run(stepId, now, partId)
+          updatePart.run(completedTurn.id, now, partId)
         }
       })
       updateAll()
