@@ -102,9 +102,7 @@ These tables describe the canonical properties of each node in the runtime tree.
 
 The table above describes the currently implemented runtime-session shape.
 
-Current implementations may also expose metadata around the session tree such as session type and parent reference, but those fields are not part of the canonical setup/turn/round/part tree itself. See:
-
-- `backlog/candidates/session-types-and-parent-links.md`
+Current implementations may also expose metadata around the session tree such as session type and parent reference, but those fields are not part of the canonical setup/turn/round/part tree itself.
 
 ### Setup
 

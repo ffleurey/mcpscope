@@ -89,9 +89,9 @@ The backend persistence layer is organized around the execution model:
 
 - `SessionContainer` — the domain-level ownership abstraction (see `backend/src/domain/executionModel.ts`)
 - `Session` — the execution container; also a `SessionContainer`
-- `Step` — the abstract execution unit; `Turn` is the LLM-specific subtype
-- `Turn` — owns `Round`, `Part`, and `RawExchange` records (infrastructure-driven subtype persistence)
-- `Benchmark` — a minimal `SessionContainer` that is not itself a `Session`
+- `Step` — the abstract execution unit (see `backend/src/domain/executionModel.ts`)
+- `WorkflowStep` — the abstract deterministic step subtype implemented by concrete analysis step classes in `analysis/shared/` and `analysis/fastTool/` (see `backend/src/workflow/workflowStep.ts`); may own zero or more `Turn` children
+- `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records
 
 The persistence-layer record types remain the authoritative source for runtime behavior and replay:
 
@@ -124,15 +124,15 @@ The important distinction is architectural rather than cosmetic:
 The shipped product implements:
 
 - `Session` and `Step` / `Turn` execution model with explicit loop boundaries
+- a `WorkflowStep` abstract class with template-method lifecycle (`execute()` → `run(ctx)`) and five concrete analysis step subclasses (bootstrap, tool-call assessment, turn summary, final aggregation, grouped assessment)
 - a backend-owned sequential execution scheduler with one active slot, one in-memory queue, and one global execution event stream
 - `SessionContainer` ownership: sessions may belong to a parent session or a `Benchmark` container
 - `Benchmark` as a minimal `SessionContainer` for grouping sessions (full benchmark domain design is future work)
 - generic container/session/step persistence without table-per-subtype growth
+- a registry-based analysis workflow factory (`registerAnalysisWorkflow()` / Map lookup) replacing `switch(workflowKind)`
+- self-contained analysis subclasses (`fullSession/`, `fastSession/`, `fastTool/`) each owning its own prompt builders, schema keys, Zod schemas, and system prompt
+- zero analysis-type knowledge in shared step classes — all behavior injected via constructor functions
 - constrained one-level workflow-step-owned-turn grouping for workflow-oriented traces
-- the primary-session runtime tree (setup / turn / round / part) remains unchanged from user perspective; analysis workflow steps are layered into the same session model
-- `session_analysis` child sessions used by the analysis workflow
-- deterministic non-LLM workflow steps used by the shipped analysis-session orchestration
-- compaction and context bookkeeping
 
 What is **not** implemented yet:
 
@@ -200,6 +200,24 @@ The important rule is that mcpscope keeps one canonical model across persistence
 CLI. Provider-specific transport structures are normalized into that model at the integration
 boundary, and `RawExchangeRecord` stays in the diagnostic/replay layer rather than the canonical
 runtime tree.
+
+## Design patterns in use
+
+The analysis subsystem uses a small set of design patterns to keep shared code
+independent of concrete analysis types while allowing each subtype to customize
+behavior at the edges.
+
+| Pattern | Where | Why |
+|---|---|---|
+| **Template Method** | `WorkflowStep.execute()` calls abstract `run(ctx)` | Step-record lifecycle (create, emit started, run, complete/fail, emit done) lives in the base class once. Concrete steps write only business logic. |
+| **Command** | Each step is a self-contained object created with `new` and `config`, executed via `.execute(ctx)` | Encapsulates prompt, schema, and LLM interaction in one place. Hooks don't manage step internals. |
+| **Strategy** | Steps receive `buildPrompt`, `computeNextPhase`, `buildDeterministicReport` as constructor-injected functions | Zero branching on analysis-type identity inside shared code. Each subclass passes its own functions. |
+| **Registry** | `workflowRegistry` Map in `analysisWorkflowFactory.ts` | Replaces `switch(workflowKind)`. Adding a new analysis type calls `registerAnalysisWorkflow()` — no factory edits. |
+| **Visitor / Hook** | `AnalysisSessionBase` flattens the session tree into a list of hook positions; subclasses override `beforeSession`, `onToolCall`, `afterTurn`, `afterSession` | Decouples the traversal engine from the concrete workflow logic. |
+
+These patterns are the architectural seam: shared code (`shared/`, the base class)
+never imports from or branches on a concrete analysis type. Each subclass owns
+its own prompts, schema keys, Zod schemas, and system prompt.
 
 ## Actual runtime ownership today
 
