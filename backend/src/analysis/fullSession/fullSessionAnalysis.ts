@@ -38,6 +38,8 @@ import { getLatestArtifactBySchemaKey } from '../artifactRepository.js'
 import { finalAnalysisReportSchema } from '../schemas.js'
 
 export class FullSessionAnalysis extends AnalysisSessionBase {
+  static readonly workflowKind = ANALYSIS_WORKFLOW_KIND.FULL_SESSION
+  static readonly workflowLabel = 'Full Analysis'
   static create(
     db: BackendDatabase,
     lm: LmStudioGateway,

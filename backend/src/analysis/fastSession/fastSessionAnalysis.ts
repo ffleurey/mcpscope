@@ -31,6 +31,8 @@ import { buildFastSessionFinalAggregationPrompt } from './evaluationPrompts.js'
 import { fastSessionFinalAnalysisReportSchema } from '../schemas.js'
 
 export class FastSessionAnalysis extends AnalysisSessionBase {
+  static readonly workflowKind = ANALYSIS_WORKFLOW_KIND.FAST_SESSION
+  static readonly workflowLabel = 'Fast Session Analysis'
   static create(
     db: BackendDatabase,
     lm: LmStudioGateway,

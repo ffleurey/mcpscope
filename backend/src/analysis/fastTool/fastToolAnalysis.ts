@@ -28,6 +28,8 @@ import { buildFastToolFinalAggregationPrompt } from './evaluationPrompts.js'
 import { fastToolFinalReportSchema } from '../schemas.js'
 
 export class FastToolAnalysis extends AnalysisSessionBase {
+  static readonly workflowKind = ANALYSIS_WORKFLOW_KIND.FAST_TOOL
+  static readonly workflowLabel = 'Fast Tool Analysis'
   static create(
     db: BackendDatabase,
     lm: LmStudioGateway,

@@ -8,12 +8,29 @@ import { FastSessionAnalysis } from './fastSession/fastSessionAnalysis.js'
 import { FastToolAnalysis } from './fastTool/fastToolAnalysis.js'
 import { ANALYSIS_WORKFLOW_KIND } from './workflowKinds.js'
 import type { AnalysisSessionState } from './schemas.js'
+import type { AnalysisSessionBase } from './analysisSessionBase.js'
 
 export interface RehydratableAnalysisWorkflow {
   canContinue(): boolean
   resume(emitEvent?: AnalysisStreamEventSink): Promise<void>
   resumeOneStep(emitEvent?: AnalysisStreamEventSink): Promise<void>
 }
+
+type AnalysisSubclassCtor = {
+  rehydrate(db: BackendDatabase, lm: LmStudioGateway, mcp: McpGateway, sessionId: string): AnalysisSessionBase | null
+  readonly workflowKind: string
+  readonly workflowLabel: string
+}
+
+const workflowRegistry = new Map<string, AnalysisSubclassCtor>()
+
+export function registerAnalysisWorkflow(ctor: AnalysisSubclassCtor): void {
+  workflowRegistry.set(ctor.workflowKind, ctor)
+}
+
+registerAnalysisWorkflow(FullSessionAnalysis as unknown as AnalysisSubclassCtor)
+registerAnalysisWorkflow(FastSessionAnalysis as unknown as AnalysisSubclassCtor)
+registerAnalysisWorkflow(FastToolAnalysis as unknown as AnalysisSubclassCtor)
 
 export function rehydrateAnalysisWorkflow(
   database: BackendDatabase,
@@ -27,14 +44,19 @@ export function rehydrateAnalysisWorkflow(
   const workflowKind = (session.analysisState as unknown as AnalysisSessionState)?.workflow_kind
     ?? ANALYSIS_WORKFLOW_KIND.FULL_SESSION
 
-  switch (workflowKind) {
-    case ANALYSIS_WORKFLOW_KIND.FULL_SESSION:
-      return FullSessionAnalysis.rehydrate(database, lmGateway, mcpGateway, analysisSessionId)
-    case ANALYSIS_WORKFLOW_KIND.FAST_SESSION:
-      return FastSessionAnalysis.rehydrate(database, lmGateway, mcpGateway, analysisSessionId)
-    case ANALYSIS_WORKFLOW_KIND.FAST_TOOL:
-      return FastToolAnalysis.rehydrate(database, lmGateway, mcpGateway, analysisSessionId)
-    default:
-      throw new Error(`Unsupported analysis workflow kind: ${workflowKind}`)
-  }
+  const ctor = workflowRegistry.get(workflowKind)
+  if (!ctor) throw new Error(`Unsupported analysis workflow kind: ${workflowKind}`)
+  return ctor.rehydrate(database, lmGateway, mcpGateway, analysisSessionId)
+}
+
+export function isKnownWorkflowKind(kind: string): boolean {
+  return workflowRegistry.has(kind)
+}
+
+export function getWorkflowLabel(kind: string): string | null {
+  return workflowRegistry.get(kind)?.workflowLabel ?? null
+}
+
+export function getWorkflowKinds(): string[] {
+  return [...workflowRegistry.keys()]
 }
