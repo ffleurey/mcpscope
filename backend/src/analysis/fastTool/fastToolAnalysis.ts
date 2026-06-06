@@ -23,6 +23,9 @@ import { STEP_TYPE } from '../../domain/executionModel.js'
 import { BootstrapStep } from '../shared/bootstrapStep.js'
 import { FinalAggregationStep } from '../shared/finalAggregationStep.js'
 import { FastToolGroupedAssessmentStep } from './fastToolGroupedAssessmentStep.js'
+import { buildFastToolWorkIndex } from './fastToolPlanning.js'
+import { buildFastToolFinalAggregationPrompt } from './evaluationPrompts.js'
+import { fastToolFinalReportSchema } from '../schemas.js'
 
 export class FastToolAnalysis extends AnalysisSessionBase {
   static create(
@@ -86,7 +89,10 @@ export class FastToolAnalysis extends AnalysisSessionBase {
 
     this.emit({ type: 'analysis-phase-changed', phase: 'bootstrap' })
 
-    await new BootstrapStep(this.db, this.lm, this.mcp, 'tool')
+    await new BootstrapStep(this.db, this.lm, this.mcp, {
+      indexSchemaKey: SCHEMA_KEY.FAST_TOOL_WORK_INDEX,
+      buildIndexContent: buildFastToolWorkIndex,
+    })
       .execute(this.buildStepContext(STEP_TYPE.ANALYSIS_BOOTSTRAP))
 
     this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })
@@ -117,7 +123,25 @@ export class FastToolAnalysis extends AnalysisSessionBase {
       assessmentSchemaKey: SCHEMA_KEY.FAST_TOOL_GROUP_ASSESSMENT,
       summarySchemaKey: SCHEMA_KEY.FAST_TOOL_GROUP_ASSESSMENT,
       reportSchemaKey: SCHEMA_KEY.FAST_TOOL_FINAL_REPORT,
-      variant: 'fastTool',
+      buildPrompt: (params) => buildFastToolFinalAggregationPrompt({
+        analysisTarget: params.analysisTarget as AnalysisTarget,
+        assessmentCount: params.assessmentCount as number,
+      } as any),
+      reportSchema: fastToolFinalReportSchema,
+      buildDeterministicReport: (_sid, assessments) => {
+        if (assessments.length !== 1) return null
+        const a = assessments[0]
+        if (!a || a.verdict === 'fail' || a.score <= 2) return null
+        return {
+          overall_tool_use_outcome: a.verdict === 'pass' ? 'strong' : a.verdict === 'partial' ? 'mixed' : 'unclear',
+          overall_rationale: a.reasoning,
+          tool_summaries: [] as unknown[],
+          repeated_failure_patterns: [] as unknown[],
+          follow_up_candidates: [] as unknown[],
+          total_tool_groups_assessed: 1,
+          total_tool_calls_assessed: assessments.length,
+        }
+      },
     }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_FINAL_AGGREGATION))
 
     this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })

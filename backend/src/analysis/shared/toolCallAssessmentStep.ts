@@ -6,7 +6,7 @@ import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
 import type { StepResult } from '../../domain/executionModel.js'
 import { getSessionRecord, getPartRecord, updatePartRecord, listPartRecordsBySession } from '../../persistence/repository.js'
-import { insertJsonArtifact, getLatestArtifactBySchemaKey } from '../artifactRepository.js'
+import { insertJsonArtifact } from '../artifactRepository.js'
 import { runDeterministicMcpToolCallsInSingleTurn } from '../../runtime/toolTurns.js'
 import { runAnalysisTurn } from '../boundedTurn.js'
 import {
@@ -18,17 +18,25 @@ import {
   type EvaluationResult,
 } from '../schemas.js'
 import type { ZodError } from 'zod'
-import { buildToolCallEvaluationPrompt } from '../fullSession/evaluationPrompts.js'
-import { buildFastSessionToolCallAssessmentPrompt } from '../fastSession/evaluationPrompts.js'
 
 function uuid(): string { return crypto.randomUUID() }
 function now(): number { return Date.now() }
 
-export type AssessmentPromptVariant = 'full' | 'fast'
-
 export interface ToolCallAssessmentStepConfig {
   artifactSchemaKey: string
-  promptVariant: AssessmentPromptVariant
+  buildPrompt: (params: {
+    analysisTarget: AnalysisTarget
+    subjectId: string
+    turnId: string
+    roundId: string
+    toolCallPartId: string
+    toolName: string
+    toolCallParameters: string
+    preReasoningPartId: string | null
+    postReasoningPartId: string | null
+  }) => string
+  /** Called after a successful assessment to determine next analysis phase. */
+  computeNextPhase: (ctx: { analysisSessionId: string; currentTurnId: string; nextPacketIndex: number; packetCount: number }) => 'assessing' | 'turn_summary'
   packet: EvidencePacket
   analysisTarget: AnalysisTarget
 }
@@ -49,7 +57,7 @@ export class ToolCallAssessmentStep extends WorkflowStep {
     const state = ctx.workflowState as unknown as AnalysisSessionState | undefined
     if (!state) throw new Error('ToolCallAssessmentStep: workflowState required')
 
-    const { artifactSchemaKey, promptVariant, packet, analysisTarget } = this.config
+    const { artifactSchemaKey, buildPrompt, computeNextPhase, packet, analysisTarget } = this.config
     const { analysisSessionId } = state
 
     const analysisSession = getSessionRecord(this.db.connection, analysisSessionId)
@@ -72,27 +80,17 @@ export class ToolCallAssessmentStep extends WorkflowStep {
     )
     injectPartIds.push(...toolCallPartIds, ...toolResultPartIds)
 
-    const assessmentQuestion = promptVariant === 'fast'
-      ? buildFastSessionToolCallAssessmentPrompt({
-          analysisTarget,
-          subjectId: packet.tool_call_part_id,
-          turnId: packet.turn_id,
-          roundId: packet.round_id,
-          toolCallPartId: packet.tool_call_part_id,
-          toolName: packet.tool_name,
-          toolCallParameters: packet.tool_call_parameters,
-          preReasoningPartId: packet.reasoning_before_part_id,
-          postReasoningPartId: packet.reasoning_after_part_id,
-        })
-      : buildToolCallEvaluationPrompt({
-          analysisTarget,
-          subjectId: packet.tool_call_part_id,
-          turnId: packet.turn_id,
-          roundId: packet.round_id,
-          toolCallPartId: packet.tool_call_part_id,
-          toolName: packet.tool_name,
-          toolCallParameters: packet.tool_call_parameters,
-        })
+    const assessmentQuestion = buildPrompt({
+      analysisTarget,
+      subjectId: packet.tool_call_part_id,
+      turnId: packet.turn_id,
+      roundId: packet.round_id,
+      toolCallPartId: packet.tool_call_part_id,
+      toolName: packet.tool_name,
+      toolCallParameters: packet.tool_call_parameters,
+      preReasoningPartId: packet.reasoning_before_part_id,
+      postReasoningPartId: packet.reasoning_after_part_id,
+    })
 
     const turnResult = await runAnalysisTurn(
       this.db, this.lm, this.mcp, analysisSessionId,
@@ -132,9 +130,8 @@ export class ToolCallAssessmentStep extends WorkflowStep {
       return { status: 'complete', outputArtifacts: [] }
     }
 
-    const assessmentArtifactId = uuid()
     insertJsonArtifact(this.db.connection, {
-      id: assessmentArtifactId,
+      id: uuid(),
       sessionId: analysisSessionId,
       stepId: this.stepId,
       content: parsed.data,
@@ -154,9 +151,13 @@ export class ToolCallAssessmentStep extends WorkflowStep {
       analysisSessionId, injectPartIds,
       turnResult.assistantReasoningPartIds, turnResult.turnId,
     )
-    const nextPhase = promptVariant === 'fast'
-      ? (state.nextPacketIndex + 1 < state.packetCount ? 'assessing' : 'turn_summary')
-      : this.computeNextPhase(analysisSessionId, packet.turn_id, state.nextPacketIndex + 1)
+
+    const nextPhase = computeNextPhase({
+      analysisSessionId,
+      currentTurnId: packet.turn_id,
+      nextPacketIndex: state.nextPacketIndex + 1,
+      packetCount: state.packetCount,
+    })
 
     Object.assign(state, {
       currentTurnId: packet.turn_id,
@@ -196,7 +197,6 @@ export class ToolCallAssessmentStep extends WorkflowStep {
   ): void {
     const mutatedAt = Date.now()
     const conn = this.db.connection
-
     for (const partId of injectPartIds) {
       const part = getPartRecord(conn, partId)
       if (part) updatePartRecord(conn, { ...part, context: { ...part.context, state: 'excluded', note: 'Deterministic inspect evidence excluded after assessment completed' }, updatedAt: mutatedAt })
@@ -210,17 +210,6 @@ export class ToolCallAssessmentStep extends WorkflowStep {
       const userPart = sessionParts.find(p => p.turnId === userTurnId && p.partType === 'user-message')
       if (userPart) updatePartRecord(conn, { ...userPart, context: { ...userPart.context, state: 'historical-only', note: 'Assessment question excluded from active context after assessment completed' }, updatedAt: mutatedAt })
     }
-  }
-
-  private computeNextPhase(analysisSessionId: string, currentTurnId: string, nextIdx: number): 'assessing' | 'turn_summary' {
-    if (nextIdx >= 0) {
-      const packetIndexArtifact = getLatestArtifactBySchemaKey(this.db.connection, analysisSessionId, SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
-      const packetIndex = packetIndexArtifact?.content as { packets: Array<{ turn_id: string }> } | undefined
-      const nextPacket = packetIndex?.packets[nextIdx]
-      const isTurnComplete = !nextPacket || nextPacket.turn_id !== currentTurnId
-      return isTurnComplete ? 'turn_summary' : 'assessing'
-    }
-    return 'turn_summary'
   }
 }
 

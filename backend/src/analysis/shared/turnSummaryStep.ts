@@ -17,18 +17,14 @@ import {
   type EvaluationResult,
 } from '../schemas.js'
 import type { ZodError } from 'zod'
-import { buildTurnSummaryEvaluationPrompt } from '../fullSession/evaluationPrompts.js'
-import { buildFastSessionTurnSummaryPrompt } from '../fastSession/evaluationPrompts.js'
 
 function uuid(): string { return crypto.randomUUID() }
 function now(): number { return Date.now() }
 
-export type SummaryPromptVariant = 'full' | 'fast'
-
 export interface TurnSummaryStepConfig {
   assessmentSchemaKey: string
   summarySchemaKey: string
-  promptVariant: SummaryPromptVariant
+  buildPrompt: (params: Record<string, unknown>) => string
 }
 
 export class TurnSummaryStep extends WorkflowStep {
@@ -62,7 +58,8 @@ export class TurnSummaryStep extends WorkflowStep {
     const analysisTarget = analysisTargetArtifact.content as AnalysisTarget
 
     const repeatedTools = buildRepeatedToolSummary(turnPackets)
-    const repeatedAttemptGuidance = buildRepeatedAttemptGuidance(this.db, turnPackets)
+    const repeatedAttemptGuidance = repeatedTools.length > 0
+      ? buildRepeatedAttemptGuidance(this.db, turnPackets) : null
     const assessmentArtifacts = listArtifactsBySessionAndSchemaKey(this.db.connection, analysisSessionId, this.config.assessmentSchemaKey)
     const assessmentsForTurn = assessmentArtifacts
       .filter(a => (a.metadata.turn_id as string | undefined) === currentTurnId)
@@ -71,9 +68,8 @@ export class TurnSummaryStep extends WorkflowStep {
     if (repeatedTools.length === 0) {
       const det = buildDeterministicTurnSummary(currentTurnId, turnPackets, assessmentsForTurn)
       if (det) {
-        const summaryArtifactId = uuid()
         insertJsonArtifact(this.db.connection, {
-          id: summaryArtifactId, sessionId: analysisSessionId, stepId: this.stepId,
+          id: uuid(), sessionId: analysisSessionId, stepId: this.stepId,
           content: det,
           metadata: {
             schema_key: this.config.summarySchemaKey, turn_id: currentTurnId,
@@ -89,15 +85,14 @@ export class TurnSummaryStep extends WorkflowStep {
       }
     }
 
-    const promptFn = this.config.promptVariant === 'fast'
-      ? buildFastSessionTurnSummaryPrompt : buildTurnSummaryEvaluationPrompt
-    const summaryQuestion = promptFn({
+    const summaryQuestion = this.config.buildPrompt({
       analysisTarget,
       subjectId: currentTurnId,
+      currentTurnId,
       repeatedTools,
-      repeatedAttemptGuidance: repeatedAttemptGuidance as string | null,
+      repeatedAttemptGuidance: repeatedTools.length > 0 ? repeatedAttemptGuidance : null,
       turnPacketCount: turnPackets.length,
-    } as any)
+    })
 
     const turnResult = await runAnalysisTurn(
       this.db, this.lm, this.mcp, analysisSessionId,
@@ -137,9 +132,8 @@ export class TurnSummaryStep extends WorkflowStep {
       return { status: 'complete', outputArtifacts: [] }
     }
 
-    const summaryArtifactId = uuid()
     insertJsonArtifact(this.db.connection, {
-      id: summaryArtifactId, sessionId: analysisSessionId, stepId: this.stepId,
+      id: uuid(), sessionId: analysisSessionId, stepId: this.stepId,
       content: parsed.data,
       metadata: { schema_key: this.config.summarySchemaKey, turn_id: currentTurnId, total_assessed: turnPackets.length },
       createdAt: ts,

@@ -18,7 +18,7 @@ import { getLatestArtifactBySchemaKey, insertJsonArtifact } from './artifactRepo
 import { runCoverageValidationStep } from './coverageValidationStep.js'
 import { FinalAggregationStep } from './shared/finalAggregationStep.js'
 import { buildRepeatedAttemptGuidance } from './shared/turnSummaryStep.js'
-import { SCHEMA_KEY, type AnalysisSessionState, type EvidencePacketIndex } from './schemas.js'
+import { SCHEMA_KEY, type AnalysisSessionState, type EvidencePacketIndex, finalAnalysisReportSchema } from './schemas.js'
 import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 
 function makeTestDatabase(): BackendDatabase {
@@ -331,7 +331,9 @@ describe('analysis workflow helpers', () => {
     }))
 
     const state = makeAnalysisState({ analysisSessionId: 'ANLY', targetSessionId: 'TARG', targetTurnId: 'TARG.1' })
-    await new BootstrapStep(db, fakeLmGateway, fakeMcpGateway, 'session').execute({
+    await new BootstrapStep(db, fakeLmGateway, fakeMcpGateway, {
+      indexSchemaKey: SCHEMA_KEY.EVIDENCE_PACKET_INDEX,
+    }).execute({
       sessionId: 'ANLY',
       stepTypeKey: STEP_TYPE.ANALYSIS_BOOTSTRAP,
       workflowState: state as unknown as Record<string, unknown>,
@@ -430,7 +432,9 @@ describe('analysis workflow helpers', () => {
         onlyFailedToolCalls: true,
         evaluationCriteria: ['Focus on actual runtime failures'],
       })
-    await new BootstrapStep(db, fakeLmGateway, fakeMcpGateway, 'session').execute({
+    await new BootstrapStep(db, fakeLmGateway, fakeMcpGateway, {
+      indexSchemaKey: SCHEMA_KEY.EVIDENCE_PACKET_INDEX,
+    }).execute({
       sessionId: 'ANLY',
       stepTypeKey: STEP_TYPE.ANALYSIS_BOOTSTRAP,
       workflowState: state2 as unknown as Record<string, unknown>,
@@ -669,7 +673,8 @@ describe('analysis workflow helpers', () => {
       assessmentSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
       summarySchemaKey: SCHEMA_KEY.TURN_SUMMARY,
       reportSchemaKey: SCHEMA_KEY.FINAL_ANALYSIS_REPORT,
-      variant: 'full',
+      buildPrompt: () => `prompt`,
+      reportSchema: finalAnalysisReportSchema,
     }).execute({
       sessionId: 'ANLY',
       stepTypeKey: STEP_TYPE.ANALYSIS_FINAL_AGGREGATION,
@@ -868,7 +873,8 @@ describe('analysis workflow helpers', () => {
       assessmentSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
       summarySchemaKey: SCHEMA_KEY.TURN_SUMMARY,
       reportSchemaKey: SCHEMA_KEY.FINAL_ANALYSIS_REPORT,
-      variant: 'full',
+      buildPrompt: () => `prompt`,
+      reportSchema: finalAnalysisReportSchema,
     }).execute({
       sessionId: 'ANLY',
       stepTypeKey: STEP_TYPE.ANALYSIS_FINAL_AGGREGATION,

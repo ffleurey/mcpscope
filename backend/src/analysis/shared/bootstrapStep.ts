@@ -1,11 +1,13 @@
 /**
  * BootstrapStep — discovers analysis work from the target session.
  *
- * Reads the target session, builds the evidence packet index, and writes
- * analysis_target and evidence_packet_index artifacts.
+ * Reads the target session, builds the index artifact (evidence packets or
+ * tool work index depending on the caller), writes analysis_target and the
+ * index artifact, then runs deterministic MCP inspect calls to load evidence.
  *
- * Modes: 'session' (FullSession, FastSession) and 'tool' (FastTool).
- * Tool mode groups tool calls by tool name into FastToolWorkIndex.
+ * The caller provides `indexSchemaKey` and an optional `buildIndexContent`
+ * function to control what index artifact is produced.  Defaults to the
+ * EvidencePacketIndex shape used by session-based analysis workflows.
  */
 
 import crypto from 'node:crypto'
@@ -17,20 +19,26 @@ import type { StepContext } from '../../workflow/stepContext.js'
 import type { StepResult } from '../../domain/executionModel.js'
 import { getSessionRecord } from '../../persistence/repository.js'
 import { insertJsonArtifact } from '../artifactRepository.js'
-import {
-  runDeterministicMcpToolCallsInSingleTurn,
-} from '../../runtime/toolTurns.js'
+import { runDeterministicMcpToolCallsInSingleTurn } from '../../runtime/toolTurns.js'
 import {
   SCHEMA_KEY,
   type EvidencePacketIndex,
   type AnalysisSessionState,
+  type EvidencePacket,
 } from '../schemas.js'
-import { collectAnalysisPlanningData, buildFastToolWorkIndex } from '../analysisPlanning.js'
+import { collectAnalysisPlanningData } from '../analysisPlanning.js'
 
 function uuid(): string { return crypto.randomUUID() }
 function now(): number { return Date.now() }
 
-export type BootstrapPlanningMode = 'session' | 'tool'
+export interface BootstrapStepConfig {
+  indexSchemaKey: string
+  buildIndexContent?: (packets: EvidencePacket[]) => unknown
+}
+
+function defaultIndexContent(packets: EvidencePacket[]): EvidencePacketIndex {
+  return { packets }
+}
 
 export class BootstrapStep extends WorkflowStep {
   readonly stepLabel = 'Bootstrap'
@@ -39,7 +47,7 @@ export class BootstrapStep extends WorkflowStep {
     db: BackendDatabase,
     lm: LmStudioGateway,
     mcp: McpGateway,
-    private readonly planningMode: BootstrapPlanningMode,
+    private readonly config: BootstrapStepConfig,
   ) {
     super(db, lm, mcp)
   }
@@ -52,49 +60,27 @@ export class BootstrapStep extends WorkflowStep {
     const { analysisSessionId } = state
     const ts = now()
 
-    if (this.planningMode === 'tool') {
-      const workIndex = buildFastToolWorkIndex(packets)
+    const buildIndex = this.config.buildIndexContent ?? defaultIndexContent
+    const indexContent = buildIndex(packets)
 
-      this.db.connection.transaction(() => {
-        insertJsonArtifact(this.db.connection, {
-          id: uuid(),
-          sessionId: analysisSessionId,
-          stepId: this.stepId,
-          content: analysisTarget,
-          metadata: { schema_key: SCHEMA_KEY.ANALYSIS_TARGET },
-          createdAt: ts,
-        })
-        insertJsonArtifact(this.db.connection, {
-          id: uuid(),
-          sessionId: analysisSessionId,
-          stepId: this.stepId,
-          content: workIndex,
-          metadata: { schema_key: SCHEMA_KEY.FAST_TOOL_WORK_INDEX },
-          createdAt: ts,
-        })
-      })()
-    } else {
-      const evidencePacketIndex: EvidencePacketIndex = { packets }
-
-      this.db.connection.transaction(() => {
-        insertJsonArtifact(this.db.connection, {
-          id: uuid(),
-          sessionId: analysisSessionId,
-          stepId: this.stepId,
-          content: analysisTarget,
-          metadata: { schema_key: SCHEMA_KEY.ANALYSIS_TARGET },
-          createdAt: ts,
-        })
-        insertJsonArtifact(this.db.connection, {
-          id: uuid(),
-          sessionId: analysisSessionId,
-          stepId: this.stepId,
-          content: evidencePacketIndex,
-          metadata: { schema_key: SCHEMA_KEY.EVIDENCE_PACKET_INDEX },
-          createdAt: ts,
-        })
-      })()
-    }
+    this.db.connection.transaction(() => {
+      insertJsonArtifact(this.db.connection, {
+        id: uuid(),
+        sessionId: analysisSessionId,
+        stepId: this.stepId,
+        content: analysisTarget,
+        metadata: { schema_key: SCHEMA_KEY.ANALYSIS_TARGET },
+        createdAt: ts,
+      })
+      insertJsonArtifact(this.db.connection, {
+        id: uuid(),
+        sessionId: analysisSessionId,
+        stepId: this.stepId,
+        content: indexContent,
+        metadata: { schema_key: this.config.indexSchemaKey },
+        createdAt: ts,
+      })
+    })()
 
     const analysisSession = getSessionRecord(this.db.connection, analysisSessionId)
     if (!analysisSession) {

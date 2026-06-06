@@ -25,6 +25,10 @@ import { ToolCallAssessmentStep } from '../shared/toolCallAssessmentStep.js'
 import { TurnSummaryStep } from '../shared/turnSummaryStep.js'
 import { FinalAggregationStep } from '../shared/finalAggregationStep.js'
 import { runCoverageValidationStep } from '../coverageValidationStep.js'
+import { buildFastSessionToolCallAssessmentPrompt } from './evaluationPrompts.js'
+import { buildFastSessionTurnSummaryPrompt } from './evaluationPrompts.js'
+import { buildFastSessionFinalAggregationPrompt } from './evaluationPrompts.js'
+import { fastSessionFinalAnalysisReportSchema } from '../schemas.js'
 
 export class FastSessionAnalysis extends AnalysisSessionBase {
   static create(
@@ -88,7 +92,9 @@ export class FastSessionAnalysis extends AnalysisSessionBase {
 
     this.emit({ type: 'analysis-phase-changed', phase: 'bootstrap' })
 
-    await new BootstrapStep(this.db, this.lm, this.mcp, 'session')
+    await new BootstrapStep(this.db, this.lm, this.mcp, {
+      indexSchemaKey: SCHEMA_KEY.EVIDENCE_PACKET_INDEX,
+    })
       .execute(this.buildStepContext(STEP_TYPE.ANALYSIS_BOOTSTRAP))
 
     this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })
@@ -105,7 +111,9 @@ export class FastSessionAnalysis extends AnalysisSessionBase {
 
     await new ToolCallAssessmentStep(this.db, this.lm, this.mcp, {
       artifactSchemaKey: SCHEMA_KEY.FAST_TOOL_CALL_ASSESSMENT,
-      promptVariant: 'fast',
+      buildPrompt: buildFastSessionToolCallAssessmentPrompt,
+      computeNextPhase: ({ nextPacketIndex, packetCount }) =>
+        nextPacketIndex < packetCount ? 'assessing' : 'turn_summary',
       packet,
       analysisTarget: targetArtifact.content as AnalysisTarget,
     }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_TOOL_CALL_ASSESSMENT))
@@ -124,7 +132,14 @@ export class FastSessionAnalysis extends AnalysisSessionBase {
     await new TurnSummaryStep(this.db, this.lm, this.mcp, {
       assessmentSchemaKey: SCHEMA_KEY.FAST_TOOL_CALL_ASSESSMENT,
       summarySchemaKey: SCHEMA_KEY.FAST_TURN_SUMMARY,
-      promptVariant: 'fast',
+      buildPrompt: (params) => buildFastSessionTurnSummaryPrompt({
+        analysisTarget: params.analysisTarget as AnalysisTarget,
+        subjectId: params.subjectId as string,
+        currentTurnId: params.currentTurnId as string,
+        turnPacketCount: params.turnPacketCount as number,
+        repeatedTools: Array.isArray(params.repeatedTools)
+          ? (params.repeatedTools as string[]).join(', ') : (params.repeatedTools as string),
+      }),
     }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_TURN_SUMMARY))
 
     this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })
@@ -148,7 +163,12 @@ export class FastSessionAnalysis extends AnalysisSessionBase {
       assessmentSchemaKey: SCHEMA_KEY.FAST_TOOL_CALL_ASSESSMENT,
       summarySchemaKey: SCHEMA_KEY.FAST_TURN_SUMMARY,
       reportSchemaKey: SCHEMA_KEY.FAST_FINAL_ANALYSIS_REPORT,
-      variant: 'fast',
+      buildPrompt: (params) => buildFastSessionFinalAggregationPrompt({
+        analysisTarget: params.analysisTarget as AnalysisTarget,
+        assessmentCount: params.assessmentCount as number,
+        turnSummaryCount: params.turnSummaryCount as number,
+      }),
+      reportSchema: fastSessionFinalAnalysisReportSchema,
     }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_FINAL_AGGREGATION))
 
     this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })

@@ -31,6 +31,11 @@ import { ToolCallAssessmentStep } from '../shared/toolCallAssessmentStep.js'
 import { TurnSummaryStep } from '../shared/turnSummaryStep.js'
 import { FinalAggregationStep } from '../shared/finalAggregationStep.js'
 import { runCoverageValidationStep } from '../coverageValidationStep.js'
+import { buildToolCallEvaluationPrompt } from './evaluationPrompts.js'
+import { buildTurnSummaryEvaluationPrompt } from './evaluationPrompts.js'
+import { buildFinalAggregationEvaluationPrompt } from './evaluationPrompts.js'
+import { getLatestArtifactBySchemaKey } from '../artifactRepository.js'
+import { finalAnalysisReportSchema } from '../schemas.js'
 
 export class FullSessionAnalysis extends AnalysisSessionBase {
   static create(
@@ -95,7 +100,9 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
 
     this.emit({ type: 'analysis-phase-changed', phase: 'bootstrap' })
 
-    await new BootstrapStep(this.db, this.lm, this.mcp, 'session')
+    await new BootstrapStep(this.db, this.lm, this.mcp, {
+      indexSchemaKey: SCHEMA_KEY.EVIDENCE_PACKET_INDEX,
+    })
       .execute(this.buildStepContext(STEP_TYPE.ANALYSIS_BOOTSTRAP))
 
     this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })
@@ -112,7 +119,13 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
 
     await new ToolCallAssessmentStep(this.db, this.lm, this.mcp, {
       artifactSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
-      promptVariant: 'full',
+      buildPrompt: buildToolCallEvaluationPrompt,
+      computeNextPhase: ({ analysisSessionId, currentTurnId, nextPacketIndex }) => {
+        const artifact = getLatestArtifactBySchemaKey(this.db.connection, analysisSessionId, SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
+        const idx = artifact?.content as EvidencePacketIndex | undefined
+        const next = idx?.packets[nextPacketIndex]
+        return !next || next.turn_id !== currentTurnId ? 'turn_summary' : 'assessing'
+      },
       packet,
       analysisTarget: targetArtifact.content as AnalysisTarget,
     }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_TOOL_CALL_ASSESSMENT))
@@ -131,7 +144,13 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
     await new TurnSummaryStep(this.db, this.lm, this.mcp, {
       assessmentSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
       summarySchemaKey: SCHEMA_KEY.TURN_SUMMARY,
-      promptVariant: 'full',
+      buildPrompt: (params) => buildTurnSummaryEvaluationPrompt({
+        analysisTarget: params.analysisTarget as AnalysisTarget,
+        subjectId: params.subjectId as string,
+        repeatedTools: params.repeatedTools as string[],
+        repeatedAttemptGuidance: params.repeatedAttemptGuidance as string | null,
+        turnPacketCount: params.turnPacketCount as number,
+      }),
     }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_TURN_SUMMARY))
 
     this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })
@@ -153,7 +172,27 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
       assessmentSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
       summarySchemaKey: SCHEMA_KEY.TURN_SUMMARY,
       reportSchemaKey: SCHEMA_KEY.FINAL_ANALYSIS_REPORT,
-      variant: 'full',
+      buildPrompt: (params) => buildFinalAggregationEvaluationPrompt({
+        analysisTarget: params.analysisTarget as AnalysisTarget,
+        assessmentCount: params.assessmentCount as number,
+        turnSummaryCount: params.turnSummaryCount as number,
+      }),
+      reportSchema: finalAnalysisReportSchema,
+      buildDeterministicReport: (_sid, assessments, turnSummaries) => {
+        if (turnSummaries.length !== 1 || assessments.length === 0) return null
+        const s = turnSummaries[0]
+        if (!s || assessments.find(a => a.verdict === 'fail' || a.score <= 2)) return null
+        const outcome = s.verdict === 'pass' ? 'answered' : s.verdict === 'partial' ? 'partial' : s.verdict === 'fail' ? 'blocked' : 'unclear'
+        const first = (t: string) => { const m = t.trim().match(/^.*?[.!?](?:\s|$)/); return m?.[0]?.trim() ?? t.trim() }
+        return {
+          outcome, outcome_rationale: first(s.reasoning),
+          primary_issue: null, primary_issue_rationale: null,
+          path_efficiency: 'efficient', path_efficiency_rationale: first(s.reasoning),
+          findings: [s.reasoning], tool_description_findings: [],
+          improvement_suggestions: [], tool_description_improvement_suggestions: [],
+          total_tool_calls_assessed: assessments.length,
+        }
+      },
     }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_FINAL_AGGREGATION))
 
     this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })

@@ -10,28 +10,28 @@ import { insertJsonArtifact, getLatestArtifactBySchemaKey, listArtifactsBySessio
 import { runAnalysisTurn } from '../boundedTurn.js'
 import {
   SCHEMA_KEY,
-  finalAnalysisReportSchema,
-  fastSessionFinalAnalysisReportSchema,
-  fastToolFinalReportSchema,
   type AnalysisSessionState,
   type AnalysisTarget,
   type EvaluationResult,
 } from '../schemas.js'
-import type { ZodError } from 'zod'
-import { buildFinalAggregationEvaluationPrompt } from '../fullSession/evaluationPrompts.js'
-import { buildFastSessionFinalAggregationPrompt } from '../fastSession/evaluationPrompts.js'
-import { buildFastToolFinalAggregationPrompt } from '../fastTool/evaluationPrompts.js'
+import type { ZodError, ZodTypeAny } from 'zod'
 
 function uuid(): string { return crypto.randomUUID() }
 function now(): number { return Date.now() }
-
-export type FinalAggregationVariant = 'full' | 'fast' | 'fastTool'
 
 export interface FinalAggregationStepConfig {
   assessmentSchemaKey: string
   summarySchemaKey: string
   reportSchemaKey: string
-  variant: FinalAggregationVariant
+  buildPrompt: (params: Record<string, unknown>) => string
+  reportSchema: ZodTypeAny
+  /** Optional: if provided and returns non-null, the step short-circuits without an LLM call. */
+  buildDeterministicReport?: (
+    analysisSessionId: string,
+    assessments: EvaluationResult[],
+    summaries: EvaluationResult[],
+    assessmentCount: number,
+  ) => Record<string, unknown> | null
 }
 
 export class FinalAggregationStep extends WorkflowStep {
@@ -58,21 +58,19 @@ export class FinalAggregationStep extends WorkflowStep {
     if (!targetArtifact) throw new Error('Final aggregation: analysis_target missing')
     const analysisTarget = targetArtifact.content as AnalysisTarget
 
-    const { assessmentSchemaKey, summarySchemaKey, reportSchemaKey, variant } = this.config
+    const { assessmentSchemaKey, summarySchemaKey, reportSchemaKey, buildPrompt, reportSchema, buildDeterministicReport } = this.config
 
     const assessments = listArtifactsBySessionAndSchemaKey(this.db.connection, analysisSessionId, assessmentSchemaKey)
-    const summaries = variant !== 'fastTool'
-      ? listArtifactsBySessionAndSchemaKey(this.db.connection, analysisSessionId, summarySchemaKey)
-      : []
+    const summaries = listArtifactsBySessionAndSchemaKey(this.db.connection, analysisSessionId, summarySchemaKey)
     const typedAssessments = assessments.map(a => a.content as EvaluationResult)
     const typedSummaries = summaries.map(a => a.content as EvaluationResult)
 
-    if (variant === 'full') {
-      const det = buildDeterministicFinalReport(analysisSessionId, typedAssessments, typedSummaries)
+    if (buildDeterministicReport) {
+      const det = buildDeterministicReport(analysisSessionId, typedAssessments, typedSummaries, assessments.length)
       if (det) {
         insertJsonArtifact(this.db.connection, {
           id: uuid(), sessionId: analysisSessionId, stepId: this.stepId, content: det,
-          metadata: { schema_key: reportSchemaKey, total_packets: assessments.length, synthesis_mode: 'deterministic_success_path' },
+          metadata: { schema_key: reportSchemaKey, total_packets: assessments.length, synthesis_mode: 'deterministic' },
           createdAt: now(),
         })
         Object.assign(state, { phase: 'complete', finalAggregationComplete: true })
@@ -80,36 +78,11 @@ export class FinalAggregationStep extends WorkflowStep {
       }
     }
 
-    if (variant === 'fastTool' && typedAssessments.length === 1) {
-      const a = typedAssessments[0]
-      if (a && a.verdict !== 'fail' && a.score > 2) {
-        const det = {
-          overall_tool_use_outcome: a.verdict === 'pass' ? 'strong' : a.verdict === 'partial' ? 'mixed' : 'unclear',
-          overall_rationale: a.reasoning,
-          tool_summaries: [] as unknown[],
-          repeated_failure_patterns: [] as unknown[],
-          follow_up_candidates: [] as unknown[],
-          total_tool_groups_assessed: 1,
-          total_tool_calls_assessed: typedAssessments.length,
-        }
-        insertJsonArtifact(this.db.connection, {
-          id: uuid(), sessionId: analysisSessionId, stepId: this.stepId, content: det,
-          metadata: { schema_key: reportSchemaKey, total_assessments: assessments.length, synthesis_mode: 'deterministic' },
-          createdAt: now(),
-        })
-        Object.assign(state, { phase: 'complete', finalAggregationComplete: true })
-        return { status: 'complete', outputArtifacts: [] }
-      }
-    }
-
-    const promptFn = variant === 'fastTool' ? buildFastToolFinalAggregationPrompt
-      : variant === 'fast' ? buildFastSessionFinalAggregationPrompt
-      : buildFinalAggregationEvaluationPrompt
-    const promptArgs = variant === 'fastTool'
-      ? { analysisTarget, assessmentCount: assessments.length }
-      : { analysisTarget, assessmentCount: assessments.length, turnSummaryCount: summaries.length }
-
-    const question = promptFn(promptArgs as any)
+    const question = buildPrompt({
+      analysisTarget,
+      assessmentCount: assessments.length,
+      turnSummaryCount: typedSummaries.length,
+    })
     const turnResult = await runAnalysisTurn(this.db, this.lm, this.mcp, analysisSessionId, question, ctx.emitSink, this.stepId)
 
     const ts = now()
@@ -124,9 +97,6 @@ export class FinalAggregationStep extends WorkflowStep {
       return { status: 'complete', outputArtifacts: [] }
     }
 
-    const reportSchema = variant === 'fastTool' ? fastToolFinalReportSchema
-      : variant === 'fast' ? fastSessionFinalAnalysisReportSchema
-      : finalAnalysisReportSchema
     const parsed = reportSchema.safeParse(parsedJson)
     if (!parsed.success) {
       insertJsonArtifact(this.db.connection, {
@@ -138,9 +108,9 @@ export class FinalAggregationStep extends WorkflowStep {
       return { status: 'complete', outputArtifacts: [] }
     }
 
-    const finalReport = { ...parsed.data, total_tool_calls_assessed: (parsed.data as any).total_tool_calls_assessed ?? assessments.length }
     insertJsonArtifact(this.db.connection, {
-      id: uuid(), sessionId: analysisSessionId, stepId: this.stepId, content: finalReport,
+      id: uuid(), sessionId: analysisSessionId, stepId: this.stepId,
+      content: { ...(parsed.data as Record<string, unknown>), total_tool_calls_assessed: (parsed.data as Record<string, unknown>).total_tool_calls_assessed ?? assessments.length },
       metadata: { schema_key: reportSchemaKey, target_session_id: state.targetSessionId, target_turn_id: state.targetTurnId, total_packets: assessments.length },
       createdAt: ts,
     })
@@ -149,29 +119,6 @@ export class FinalAggregationStep extends WorkflowStep {
     Object.assign(state, { phase: 'complete', finalAggregationComplete: true })
 
     return { status: 'complete', outputArtifacts: [] }
-  }
-}
-
-function firstSentence(text: string): string {
-  const trimmed = text.trim()
-  if (trimmed.length === 0) return trimmed
-  const sentence = trimmed.match(/^.*?[.!?](?:\s|$)/)
-  return sentence?.[0]?.trim() ?? trimmed
-}
-
-function buildDeterministicFinalReport(_sid: string, assessments: EvaluationResult[], turnSummaries: EvaluationResult[]): Record<string, unknown> | null {
-  if (turnSummaries.length !== 1 || assessments.length === 0) return null
-  const s = turnSummaries[0]
-  if (!s) return null
-  if (assessments.find(a => a.verdict === 'fail' || a.score <= 2)) return null
-  return {
-    outcome: s.verdict === 'pass' ? 'answered' : s.verdict === 'partial' ? 'partial' : s.verdict === 'fail' ? 'blocked' : 'unclear',
-    outcome_rationale: firstSentence(s.reasoning),
-    primary_issue: null, primary_issue_rationale: null,
-    path_efficiency: 'efficient', path_efficiency_rationale: firstSentence(s.reasoning),
-    findings: [s.reasoning], tool_description_findings: [],
-    improvement_suggestions: [], tool_description_improvement_suggestions: [],
-    total_tool_calls_assessed: assessments.length,
   }
 }
 
