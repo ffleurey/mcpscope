@@ -532,46 +532,46 @@ is appropriate for the current state of the code.
 
 ### Phase 0 — containment cleanup
 
-- [ ] `insertTurnV2Record` has no references in `backend/src/`
-- [ ] `TurnPersistenceRecord` uses `turnNumber` and `id`, not `sequenceNumber` and `stepId`
-- [ ] `executionModelMapping.ts` contains no "Step 1" or "not yet behaviorally wired" language
-- [ ] `STEP_TYPE` has all five analysis step type constants
-- [ ] `getNextChildIndex` is the only step-position counter (no `getNextStepDisplayNumber` or `getNextStepOrdinal`)
-- [ ] No compaction exclusion logic exists in step counting
+- [x] `insertTurnV2Record` has no references in `backend/src/`
+- [x] `TurnPersistenceRecord` uses `turnNumber` and `id`, not `sequenceNumber` and `stepId`
+- [x] `executionModelMapping.ts` contains no "Step 1" or "not yet behaviorally wired" language
+- [x] `STEP_TYPE` has all five analysis step type constants
+- [x] `getNextChildIndex` is the only step-position counter (no `getNextStepDisplayNumber` or `getNextStepOrdinal`)
+- [x] No compaction exclusion logic exists in step counting
 
 ### Phase 1 — abstract framework
 
-- [ ] `workflow/workflowStep.ts` and `workflow/stepContext.ts` exist
-- [ ] Neither file imports from `analysis/`
-- [ ] The abstract class `implements WorkflowStep` from the domain model
-- [ ] The base `execute()` handles step record lifecycle (create, run, complete/fail, emit)
+- [x] `workflow/workflowStep.ts` and `workflow/stepContext.ts` exist
+- [x] Neither file imports from `analysis/`
+- [x] The abstract class `implements WorkflowStep` from the domain model
+- [x] The base `execute()` handles step record lifecycle (create, run, complete/fail, emit)
 
 ### Phase 2 — concrete step classes
 
-- [ ] Four shared steps exist in `analysis/shared/` (bootstrap, toolCallAssessment, turnSummary, finalAggregation)
-- [ ] All four extend `WorkflowStep`
-- [ ] Each imports or defines a Zod schema and a prompt builder
-- [ ] `ToolCallAssessmentStep` constructor accepts `artifactSchemaKey` and `promptVariant`
-- [ ] `fastToolGroupedAssessmentStep.ts` exists in `analysis/fastTool/` and extends `WorkflowStep`
-- [ ] It is not imported by any other workflow directory
+- [x] Four shared steps exist in `analysis/shared/` (bootstrap, toolCallAssessment, turnSummary, finalAggregation)
+- [x] All four extend `WorkflowStep`
+- [x] Each imports or defines a Zod schema and a prompt builder
+- [x] `ToolCallAssessmentStep` constructor accepts `artifactSchemaKey` and `promptVariant`
+- [x] `fastToolGroupedAssessmentStep.ts` exists in `analysis/fastTool/` and extends `WorkflowStep`
+- [x] It is not imported by any other workflow directory
 
 ### Phase 3 — hook wiring
 
-- [ ] `createStep`, `completeStep`, `failStep` are absent from `AnalysisSessionBase`
-- [ ] `buildStepContext()` exists on `AnalysisSessionBase`
-- [ ] No standalone `run*Turn()` or `run*Step()` calls remain in the three analysis subclasses
-- [ ] Each subclass instantiates step classes with `new ...Step(...)` and calls `.execute()`
-- [ ] All 12 old standalone files are deleted from disk
-- [ ] No stale import of a deleted file remains anywhere in `backend/src/`
-- [ ] The three evaluation prompts files still exist (`evaluationPrompts.ts` under each workflow dir)
+- [x] `createStep`, `completeStep`, `failStep` are absent from `AnalysisSessionBase`
+- [x] `buildStepContext()` exists on `AnalysisSessionBase`
+- [x] No standalone `run*Turn()` or `run*Step()` calls remain in the three analysis subclasses
+- [x] Each subclass instantiates step classes with `new ...Step(...)` and calls `.execute()`
+- [x] All 12 old standalone files are deleted from disk
+- [x] No stale import of a deleted file remains anywhere in `backend/src/`
+- [x] The three evaluation prompts files still exist (`evaluationPrompts.ts` under each workflow dir)
 
 ### Phase 4 — domain model and tests
 
-- [ ] The dead `Turn` interface is removed from `executionModel.ts`
-- [ ] `npm run check:backend` passes
-- [ ] `npm test` passes (168+ tests)
-- [ ] At least one test covers `WorkflowStep.execute()` lifecycle (create, complete, fail)
-- [ ] At least one test covers a concrete step's `run()` producing the expected artifact
+- [x] The dead `Turn` interface is removed from `executionModel.ts`
+- [x] `npm run check:backend` passes
+- [x] `npm test` passes (168+ tests)
+- [x] At least one test covers `WorkflowStep.execute()` lifecycle (create, complete, fail)
+- [x] At least one test covers a concrete step's `run()` producing the expected artifact
 
 ---
 
@@ -601,16 +601,16 @@ is appropriate for the current state of the code.
 
 ```
 Inc 0.1 — Dead code removal and persistence cleanup ✓
-Inc 0.2 — Update executionModelMapping.ts to active status
-Inc 0.3 — Compaction step unification
-Inc 1.1 — Create workflow/workflowStep.ts + workflow/stepContext.ts
-Inc 2.1 — Create analysis/shared/*Step.ts (4 concrete steps)
-Inc 2.2 — Create fastToolGroupedAssessmentStep.ts
-Inc 3.1 — Add buildStepContext() to AnalysisSessionBase, remove old step lifecycle
-Inc 3.2 — Update hook implementations in all three subclasses
-Inc 3.3 — Delete 12 old standalone files
-Inc 4.1 — Clean up dead domain interfaces
-Inc 4.2 — Update tests, final validation
+Inc 0.2 — Update executionModelMapping.ts to active status ✓
+Inc 0.3 — Compaction step unification ✓
+Inc 1.1 — Create workflow/workflowStep.ts + workflow/stepContext.ts ✓
+Inc 2.1 — Create analysis/shared/*Step.ts (4 concrete steps) ✓
+Inc 2.2 — Create fastToolGroupedAssessmentStep.ts ✓
+Inc 3.1 — Add buildStepContext() to AnalysisSessionBase, remove old step lifecycle ✓
+Inc 3.2 — Update hook implementations in all three subclasses ✓
+Inc 3.3 — Delete 12 old standalone files ✓
+Inc 4.1 — Clean up dead domain interfaces ✓
+Inc 4.2 — Update tests, final validation ✓
 ```
 
 ### Completed increments

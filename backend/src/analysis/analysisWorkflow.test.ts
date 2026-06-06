@@ -18,7 +18,9 @@ import { getLatestArtifactBySchemaKey, insertJsonArtifact } from './artifactRepo
 import { runCoverageValidationStep } from './coverageValidationStep.js'
 import { FinalAggregationStep } from './shared/finalAggregationStep.js'
 import { buildRepeatedAttemptGuidance } from './shared/turnSummaryStep.js'
-import { SCHEMA_KEY, type AnalysisSessionState, type EvidencePacketIndex, finalAnalysisReportSchema } from './schemas.js'
+import { SCHEMA_KEY, type AnalysisSessionState, type EvidencePacketIndex } from './schemas.js'
+import { SCHEMA_KEY as FULL_KEY } from './fullSession/schemas.js'
+import { finalAnalysisReportSchema } from './fullSession/schemas.js'
 import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 
 function makeTestDatabase(): BackendDatabase {
@@ -478,13 +480,14 @@ describe('analysis workflow helpers', () => {
       sessionId: 'ANLY',
       stepId: 'step-2',
       content: { ok: true },
-      metadata: { schema_key: SCHEMA_KEY.TOOL_CALL_ASSESSMENT, tool_call_part_id: 'TC-1' },
+      metadata: { schema_key: FULL_KEY.TOOL_CALL_ASSESSMENT, tool_call_part_id: 'TC-1' },
       createdAt: 2,
     })
 
     const result = runCoverageValidationStep(db, {
       state: makeAnalysisState({ analysisSessionId: 'ANLY', phase: 'coverage_validation' }),
       stepId: 'step-3',
+      assessmentSchemaKey: FULL_KEY.TOOL_CALL_ASSESSMENT,
     })
 
     expect(result.passed).toBe(true)
@@ -553,7 +556,7 @@ describe('analysis workflow helpers', () => {
         parameter_or_call_issues: ['aggregation changed from array to scalar before success'],
         post_call_assessment: null,
       },
-      metadata: { schema_key: SCHEMA_KEY.TOOL_CALL_ASSESSMENT, turn_id: 'TURN-1', tool_call_part_id: 'TC-1' },
+      metadata: { schema_key: FULL_KEY.TOOL_CALL_ASSESSMENT, turn_id: 'TURN-1', tool_call_part_id: 'TC-1' },
       createdAt: 2,
     })
     insertJsonArtifact(db.connection, {
@@ -571,7 +574,7 @@ describe('analysis workflow helpers', () => {
         parameter_or_call_issues: [],
         post_call_assessment: null,
       },
-      metadata: { schema_key: SCHEMA_KEY.TOOL_CALL_ASSESSMENT, turn_id: 'TURN-2', tool_call_part_id: 'TC-2' },
+      metadata: { schema_key: FULL_KEY.TOOL_CALL_ASSESSMENT, turn_id: 'TURN-2', tool_call_part_id: 'TC-2' },
       createdAt: 3,
     })
     insertJsonArtifact(db.connection, {
@@ -586,7 +589,7 @@ describe('analysis workflow helpers', () => {
         per_tool_findings: [{ tool_call_part_id: 'TC-1', tool_name: 'test_tool', brief_finding: 'The payload shape had to be corrected before success.' }],
         cross_attempt_reconciliation: 'The first turn only succeeded after correcting the payload shape from an array to a scalar value.',
       },
-      metadata: { schema_key: SCHEMA_KEY.TURN_SUMMARY, turn_id: 'TURN-1' },
+      metadata: { schema_key: FULL_KEY.TURN_SUMMARY, turn_id: 'TURN-1' },
       createdAt: 4,
     })
     insertJsonArtifact(db.connection, {
@@ -601,7 +604,7 @@ describe('analysis workflow helpers', () => {
         per_tool_findings: [{ tool_call_part_id: 'TC-2', tool_name: 'test_tool', brief_finding: 'The follow-up turn correctly requested the needed values.' }],
         cross_attempt_reconciliation: null,
       },
-      metadata: { schema_key: SCHEMA_KEY.TURN_SUMMARY, turn_id: 'TURN-2' },
+      metadata: { schema_key: FULL_KEY.TURN_SUMMARY, turn_id: 'TURN-2' },
       createdAt: 5,
     })
 
@@ -670,9 +673,9 @@ describe('analysis workflow helpers', () => {
         phase: 'final_aggregation',
       })
     await new FinalAggregationStep(db, lmGateway, fakeMcpGateway, {
-      assessmentSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
-      summarySchemaKey: SCHEMA_KEY.TURN_SUMMARY,
-      reportSchemaKey: SCHEMA_KEY.FINAL_ANALYSIS_REPORT,
+      assessmentSchemaKey: FULL_KEY.TOOL_CALL_ASSESSMENT,
+      summarySchemaKey: FULL_KEY.TURN_SUMMARY,
+      reportSchemaKey: FULL_KEY.FINAL_ANALYSIS_REPORT,
       buildPrompt: () => `prompt`,
       reportSchema: finalAnalysisReportSchema,
     }).execute({
@@ -684,7 +687,7 @@ describe('analysis workflow helpers', () => {
     expect(state1.phase).toBe('complete')
     expect(callCount).toBe(1)
 
-    const finalArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', SCHEMA_KEY.FINAL_ANALYSIS_REPORT)
+    const finalArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', FULL_KEY.FINAL_ANALYSIS_REPORT)
     expect(finalArtifact?.metadata['synthesis_mode']).toBeUndefined()
     expect(finalArtifact?.content).toMatchObject({
       outcome: 'answered',
@@ -756,7 +759,7 @@ describe('analysis workflow helpers', () => {
         parameter_or_call_issues: [],
         post_call_assessment: null,
       },
-      metadata: { schema_key: SCHEMA_KEY.TOOL_CALL_ASSESSMENT, turn_id: 'TURN-1', tool_call_part_id: 'TC-1' },
+      metadata: { schema_key: FULL_KEY.TOOL_CALL_ASSESSMENT, turn_id: 'TURN-1', tool_call_part_id: 'TC-1' },
       createdAt: 2,
     })
     insertJsonArtifact(db.connection, {
@@ -774,7 +777,7 @@ describe('analysis workflow helpers', () => {
         parameter_or_call_issues: [],
         post_call_assessment: null,
       },
-      metadata: { schema_key: SCHEMA_KEY.TOOL_CALL_ASSESSMENT, turn_id: 'TURN-2', tool_call_part_id: 'TC-2' },
+      metadata: { schema_key: FULL_KEY.TOOL_CALL_ASSESSMENT, turn_id: 'TURN-2', tool_call_part_id: 'TC-2' },
       createdAt: 3,
     })
     insertJsonArtifact(db.connection, {
@@ -789,7 +792,7 @@ describe('analysis workflow helpers', () => {
         per_tool_findings: [{ tool_call_part_id: 'TC-1', tool_name: 'test_tool', brief_finding: 'The first turn was a clean success.' }],
         cross_attempt_reconciliation: null,
       },
-      metadata: { schema_key: SCHEMA_KEY.TURN_SUMMARY, turn_id: 'TURN-1' },
+      metadata: { schema_key: FULL_KEY.TURN_SUMMARY, turn_id: 'TURN-1' },
       createdAt: 4,
     })
     insertJsonArtifact(db.connection, {
@@ -804,7 +807,7 @@ describe('analysis workflow helpers', () => {
         per_tool_findings: [{ tool_call_part_id: 'TC-2', tool_name: 'test_tool', brief_finding: 'The second turn was a clean success.' }],
         cross_attempt_reconciliation: null,
       },
-      metadata: { schema_key: SCHEMA_KEY.TURN_SUMMARY, turn_id: 'TURN-2' },
+      metadata: { schema_key: FULL_KEY.TURN_SUMMARY, turn_id: 'TURN-2' },
       createdAt: 5,
     })
 
@@ -870,9 +873,9 @@ describe('analysis workflow helpers', () => {
         phase: 'final_aggregation',
       })
     await new FinalAggregationStep(db, lmGateway, fakeMcpGateway, {
-      assessmentSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
-      summarySchemaKey: SCHEMA_KEY.TURN_SUMMARY,
-      reportSchemaKey: SCHEMA_KEY.FINAL_ANALYSIS_REPORT,
+      assessmentSchemaKey: FULL_KEY.TOOL_CALL_ASSESSMENT,
+      summarySchemaKey: FULL_KEY.TURN_SUMMARY,
+      reportSchemaKey: FULL_KEY.FINAL_ANALYSIS_REPORT,
       buildPrompt: () => `prompt`,
       reportSchema: finalAnalysisReportSchema,
     }).execute({
@@ -883,7 +886,7 @@ describe('analysis workflow helpers', () => {
 
     expect(state2.phase).toBe('complete')
 
-    const finalArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', SCHEMA_KEY.FINAL_ANALYSIS_REPORT)
+    const finalArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', FULL_KEY.FINAL_ANALYSIS_REPORT)
     expect(finalArtifact?.content).toMatchObject({
       outcome: 'answered',
       primary_issue: 'none',

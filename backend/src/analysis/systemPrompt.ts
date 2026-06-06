@@ -1,8 +1,10 @@
-import { normalizeAnalysisGoal as normalizeFullSessionAnalysisGoal } from './fullSession/systemPrompt.js'
 import { buildAnalysisSystemPrompt as buildFromFactory } from './analysisWorkflowFactory.js'
 
+const DEFAULT_ANALYSIS_GOAL = 'Evaluate whether the target session used tools appropriately and answered the user request correctly.'
+
 export function normalizeAnalysisGoal(analysisGoal?: string): string {
-  return normalizeFullSessionAnalysisGoal(analysisGoal)
+  const trimmed = analysisGoal?.trim() ?? ''
+  return trimmed.length > 0 ? trimmed : DEFAULT_ANALYSIS_GOAL
 }
 
 export function buildAnalysisSystemPrompt(input: {

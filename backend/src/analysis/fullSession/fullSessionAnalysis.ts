@@ -24,6 +24,7 @@ import {
   type AnalysisTarget,
   type EvidencePacketIndex,
 } from '../schemas.js'
+import { SCHEMA_KEY as SELF_KEY, finalAnalysisReportSchema } from './schemas.js'
 import { ANALYSIS_WORKFLOW_KIND } from '../workflowKinds.js'
 import { STEP_TYPE } from '../../domain/executionModel.js'
 import { BootstrapStep } from '../shared/bootstrapStep.js'
@@ -35,7 +36,6 @@ import { buildToolCallEvaluationPrompt } from './evaluationPrompts.js'
 import { buildTurnSummaryEvaluationPrompt } from './evaluationPrompts.js'
 import { buildFinalAggregationEvaluationPrompt } from './evaluationPrompts.js'
 import { getLatestArtifactBySchemaKey } from '../artifactRepository.js'
-import { finalAnalysisReportSchema } from '../schemas.js'
 import { buildFullSessionSystemPrompt } from './systemPrompt.js'
 
 export class FullSessionAnalysis extends AnalysisSessionBase {
@@ -121,7 +121,7 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
     if (!packet || packet.tool_call_part_id !== part.id) return
 
     await new ToolCallAssessmentStep(this.db, this.lm, this.mcp, {
-      artifactSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
+      artifactSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
       buildPrompt: buildToolCallEvaluationPrompt,
       computeNextPhase: ({ analysisSessionId, currentTurnId, nextPacketIndex }) => {
         const artifact = getLatestArtifactBySchemaKey(this.db.connection, analysisSessionId, SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
@@ -145,8 +145,8 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
     this.emit({ type: 'analysis-phase-changed', phase: 'turn_summary' })
 
     await new TurnSummaryStep(this.db, this.lm, this.mcp, {
-      assessmentSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
-      summarySchemaKey: SCHEMA_KEY.TURN_SUMMARY,
+      assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
+      summarySchemaKey: SELF_KEY.TURN_SUMMARY,
       buildPrompt: (params) => buildTurnSummaryEvaluationPrompt({
         analysisTarget: params.analysisTarget as AnalysisTarget,
         subjectId: params.subjectId as string,
@@ -165,6 +165,7 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
       const validated = runCoverageValidationStep(this.db, {
         state: this.state,
         stepId: this.state.analysisSessionId,
+        assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
       })
       this.state = { ...this.state, ...validated.updatedState }
     }
@@ -172,9 +173,9 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
     this.emit({ type: 'analysis-phase-changed', phase: 'final_aggregation' })
 
     await new FinalAggregationStep(this.db, this.lm, this.mcp, {
-      assessmentSchemaKey: SCHEMA_KEY.TOOL_CALL_ASSESSMENT,
-      summarySchemaKey: SCHEMA_KEY.TURN_SUMMARY,
-      reportSchemaKey: SCHEMA_KEY.FINAL_ANALYSIS_REPORT,
+      assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
+      summarySchemaKey: SELF_KEY.TURN_SUMMARY,
+      reportSchemaKey: SELF_KEY.FINAL_ANALYSIS_REPORT,
       buildPrompt: (params) => buildFinalAggregationEvaluationPrompt({
         analysisTarget: params.analysisTarget as AnalysisTarget,
         assessmentCount: params.assessmentCount as number,

@@ -18,9 +18,6 @@ import { z } from 'zod'
 export const SCHEMA_KEY = {
   ANALYSIS_TARGET: 'analysis.analysis_target.v1',
   EVIDENCE_PACKET_INDEX: 'analysis.evidence_packet_index.v1',
-  TOOL_CALL_ASSESSMENT: 'analysis.tool_call_assessment.v1',
-  TURN_SUMMARY: 'analysis.turn_summary.v1',
-  FINAL_ANALYSIS_REPORT: 'analysis.final_analysis_report.v1',
   DIAGNOSTIC: 'analysis.diagnostic.v1',
 } as const
 
@@ -151,24 +148,11 @@ export const evaluationResultSchema = z.object({
 })
 export type EvaluationResult = z.infer<typeof evaluationResultSchema>
 
-export const finalAnalysisReportSchema = z.object({
-  outcome: z.string().min(1),
-  outcome_rationale: z.string().min(1),
-  primary_issue: z.string().nullable(),
-  primary_issue_rationale: z.string().nullable(),
-  path_efficiency: z.enum(['efficient', 'mixed', 'inefficient', 'unclear']),
-  path_efficiency_rationale: z.string().min(1),
-  findings: z.array(z.string()),
-  tool_description_findings: z.array(z.string()),
-  improvement_suggestions: z.array(z.string()),
-  tool_description_improvement_suggestions: z.array(z.string()),
-  total_tool_calls_assessed: z.number().int().nonnegative().optional(),
-}).passthrough()
-export type FinalAnalysisReport = z.infer<typeof finalAnalysisReportSchema>
+// fullSession, fastSession, and fastTool report schemas live in their
+// respective subclass directories: {subtype}/schemas.ts
 
-// fastSession and fastTool report schemas live in their respective
-// subclass directories: fastSession/schemas.ts, fastTool/schemas.ts
-
+// ─────────────────────────────────────────────────────────────────────────────
+// analysis.evidence_packet_index.v1
 // ─────────────────────────────────────────────────────────────────────────────
 // analysis.evidence_packet_index.v1
 // ─────────────────────────────────────────────────────────────────────────────

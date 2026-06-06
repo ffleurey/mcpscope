@@ -129,7 +129,8 @@ export class FastToolAnalysis extends AnalysisSessionBase {
       buildPrompt: (params) => buildFastToolFinalAggregationPrompt({
         analysisTarget: params.analysisTarget as AnalysisTarget,
         assessmentCount: params.assessmentCount as number,
-      } as any),
+        totalToolCallCount: params.assessmentCount as number,
+      }),
       reportSchema: fastToolFinalReportSchema,
       buildDeterministicReport: (_sid, assessments) => {
         if (assessments.length !== 1) return null

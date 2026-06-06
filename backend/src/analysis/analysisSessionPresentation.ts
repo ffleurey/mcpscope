@@ -100,8 +100,6 @@ export function getRetryPhaseForFailedAnalysisStep(step: Pick<StepRecord, 'stepT
       return 'assessing'
     case 'analysis_turn_summary':
       return 'turn_summary'
-    case 'analysis_coverage_validation':
-      return 'coverage_validation'
     case 'analysis_final_aggregation':
       return 'final_aggregation'
     default:

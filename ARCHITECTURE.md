@@ -182,6 +182,16 @@ The backend structure is intentionally split so architectural seams are visible 
 - `backend/src/runtime/schedulerDispatch.ts` owns execution dispatch by job/session kind
 - `backend/src/runtime/schedulerTypes.ts` holds shared scheduler contracts and event shapes
 
+- `backend/src/workflow/` provides the reusable step abstraction:
+	- `workflowStep.ts` — abstract `WorkflowStep` class with step-record lifecycle management (`execute()` handles `createStep`/`run()`/`completeStep`/`failStep`, concrete steps override `run(ctx)` only)
+	- `stepContext.ts` — `StepContext` interface carrying execution-scoped data (`sessionId`, `stepTypeKey`, `emitSink`, `workflowState`)
+
+- `backend/src/analysis/` owns analysis-specific behavior built on top of the workflow layer:
+	- `analysisSessionBase.ts` — abstract base class with hook traversal engine and `buildStepContext()`
+	- `shared/` — reusable `WorkflowStep` subclasses (`BootstrapStep`, `ToolCallAssessmentStep`, `TurnSummaryStep`, `FinalAggregationStep`) that accept behavior via constructor-injected functions (zero knowledge of analysis types)
+	- `fullSession/`, `fastSession/`, `fastTool/` — self-contained analysis subclasses, each owning its own prompt builders, schema keys, Zod schemas, and system prompt
+	- `analysisWorkflowFactory.ts` — registry-based factory (`registerAnalysisWorkflow()`) instead of a `switch` on workflow kind. Adding a new analysis type only requires creating a new directory and calling the registration function.
+
 This split is deliberate: route modules should stay thin HTTP adapters over backend-owned operations and scheduler entrypoints, while scheduler submodules separate queue ownership from admission and execution behavior.
 
 **Benchmark support note**: benchmark orchestration can be added as a thin layer above sessions and queue jobs without new execution infrastructure. The scheduler's sequential control plane, job kinds, and event stream are already the right primitives.
