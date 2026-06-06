@@ -76,7 +76,6 @@ erDiagram
   session_creation_defaults {
     INTEGER id PK
     TEXT default_model_config_id
-    TEXT default_mcp_profile_id
     INTEGER updated_at
   }
 

@@ -95,7 +95,7 @@ These tables describe the canonical properties of each node in the runtime tree.
 | `id` | `string` | Canonical session ID |
 | `title` | `string` | Human-readable session title |
 | `model` | `object` | Model metadata needed to understand the run |
-| `mcp?` | `object` | MCP profile / strategy metadata when present |
+| `mcp?` | `object[]` | MCP server metadata when present; one entry per server |
 | `context_window` | `object` | Total available context and current usage |
 | `setup` | `Setup` | Session-level setup node |
 | `turns` | `Turn[]` | Ordered turns in the session |
@@ -148,11 +148,11 @@ Current implementations may also expose metadata around the session tree such as
 | `name` | `string` | Display name of the model profile |
 | `key` | `string` | Stable model identifier |
 
-#### `Session.mcp`
+#### `Session.mcp[]`
 
 | Property | Type | Meaning |
 |---|---|---|
-| `name` | `string` | Display name of the MCP profile |
+| `name` | `string` | Display name of the MCP server |
 | `strategy?` | `string` | MCP-related strategy or mode when exposed |
 
 #### `Session.context_window`

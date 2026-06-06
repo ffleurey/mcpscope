@@ -46,11 +46,11 @@ Creates a session using backend-owned defaults (set via the UI).
 - `--id <session-id>` — optional 4-char explicit session ID (A-Z 2-9, no O/I/0/1)
 - `--compaction <strategy>` — `strip-reasoning` (default) or `none`
 
-The backend resolves the default model config, its LM connection, and optionally the default MCP profile, then builds snapshots and starts initialization in the background.  
+The backend resolves the default model config, its LM connection, and any MCP server profiles with `defaultEnabled` set, then builds snapshots and starts initialization in the background.  
 Returns as soon as the session record exists — initialization may still be in progress.
 
 **Text output** — prints session ID and summary, then suggests the next step.  
-**JSON output** — `{ api_version: 1, session: { id, title, status, init_status, model: { id, name }, mcp: { id, name } | null, compaction_strategy, created_at, updated_at } }`.
+**JSON output** — `{ api_version: 1, session: { id, title, status, init_status, model: { id, name }, mcp: [{ id, name }], compaction_strategy, created_at, updated_at } }`.
 
 **Error codes in JSON**:
 | code | meaning |
@@ -58,7 +58,6 @@ Returns as soon as the session record exists — initialization may still be in 
 | `default_model_not_configured` | no default model has been set in the UI |
 | `default_model_config_not_found` | default model config was deleted after the default was set |
 | `default_lm_connection_not_found` | LM connection referenced by the default model config was deleted |
-| `default_mcp_profile_not_found` | default MCP profile was deleted after the default was set |
 | `invalid_session_id` | `--id` value is not a valid session ID format |
 | `duplicate_session_id` | `--id` value is already in use |
 
@@ -150,7 +149,7 @@ Legacy form of `list`. Kept for backward compatibility.
 ## Typical automation loop
 
 ```sh
-# 1. Create a session (backend resolves model/MCP from defaults)
+# 1. Create a session (backend resolves model from defaults, MCP from default-enabled profiles)
 mcpscope create "My test session"
 # → prints session ID, e.g. ABCD
 
