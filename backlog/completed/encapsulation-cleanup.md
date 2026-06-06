@@ -189,3 +189,26 @@ It never imports from a concrete analysis directory or branches on identity.
 
 - `analysis/workflowKinds.ts` (replaced by subclass static properties)
 - Dead copies of `normalizeAnalysisGoal` in `fastSession/systemPrompt.ts` and `fastTool/systemPrompt.ts`
+
+## Completion notes
+
+All 22 issues resolved.  169 tests pass.
+
+C1 (`workflowKinds.ts`) is intentionally retained — the string constants
+(`ANALYSIS_WORKFLOW_KIND.FULL_SESSION` etc.) are still used by subclass
+static properties and factory/launchAnalysis fallbacks.  Replacing them
+with magic strings scattered across files would be worse than keeping a
+shared constants module.
+
+M3/M10 (`as unknown as AnalysisSessionState`) casts are justified
+serialization boundaries (DB JSON → typed state).  The round-trip is
+guaranteed by the `saveState`/`rehydrateState` pair.
+
+**Remaining known tradeoffs (not blocking):**
+- `coverageValidationStep.ts` remains a standalone function rather than a
+  `WorkflowStep` class (it's a pure computation, no LM call, no step record)
+- `StepContext.workflowState` is `Record<string, unknown>` — works for
+  analysis types but would need generic parameterization for other workflows
+- `buildDeterministicReport` callback in `FinalAggregationStepConfig` has
+  different signatures per analysis type (full vs fastTool) — papered over
+  by extra unused args
