@@ -14,8 +14,8 @@ import {
   evaluationResultSchema,
   type AnalysisSessionState,
   type AnalysisTarget,
-  type FastToolWorkGroup,
 } from '../schemas.js'
+import type { FastToolWorkGroup } from './schemas.js'
 import type { ZodError } from 'zod'
 import { buildFastToolGroupedAssessmentPrompt } from './evaluationPrompts.js'
 

@@ -170,27 +170,8 @@ export const finalAnalysisReportSchema = z.object({
 }).passthrough()
 export type FinalAnalysisReport = z.infer<typeof finalAnalysisReportSchema>
 
-export const fastSessionFinalAnalysisReportSchema = z.object({
-  overall_outcome: z.string().min(1),
-  overall_rationale: z.string().min(1),
-  path_efficiency: z.enum(['efficient', 'mixed', 'inefficient', 'unclear']),
-  tool_summaries: z.array(z.record(z.string(), z.unknown())),
-  notable_failures: z.array(z.unknown()),
-  follow_up_candidates: z.array(z.unknown()),
-  total_tool_calls_assessed: z.number().int().nonnegative().optional(),
-}).passthrough()
-export type FastSessionFinalAnalysisReport = z.infer<typeof fastSessionFinalAnalysisReportSchema>
-
-export const fastToolFinalReportSchema = z.object({
-  overall_tool_use_outcome: z.string().min(1),
-  overall_rationale: z.string().min(1),
-  tool_summaries: z.array(z.record(z.string(), z.unknown())),
-  repeated_failure_patterns: z.array(z.unknown()),
-  follow_up_candidates: z.array(z.unknown()),
-  total_tool_groups_assessed: z.number().int().nonnegative().optional(),
-  total_tool_calls_assessed: z.number().int().nonnegative().optional(),
-}).passthrough()
-export type FastToolFinalReport = z.infer<typeof fastToolFinalReportSchema>
+// fastSession and fastTool report schemas live in their respective
+// subclass directories: fastSession/schemas.ts, fastTool/schemas.ts
 
 // ─────────────────────────────────────────────────────────────────────────────
 // analysis.evidence_packet_index.v1
@@ -200,22 +181,6 @@ export const evidencePacketIndexSchema = z.object({
   packets: z.array(evidencePacketSchema),
 })
 export type EvidencePacketIndex = z.infer<typeof evidencePacketIndexSchema>
-
-export const fastToolWorkGroupSchema = z.object({
-  work_unit_id: z.string(),
-  tool_name: z.string(),
-  tool_call_part_ids: z.array(z.string()),
-  tool_result_part_ids: z.array(z.string()),
-  reasoning_before_part_ids: z.array(z.string()),
-  reasoning_after_part_ids: z.array(z.string()),
-  turn_ids: z.array(z.string()),
-  round_ids: z.array(z.string()),
-})
-export const fastToolWorkIndexSchema = z.object({
-  tool_groups: z.array(fastToolWorkGroupSchema),
-})
-export type FastToolWorkGroup = z.infer<typeof fastToolWorkGroupSchema>
-export type FastToolWorkIndex = z.infer<typeof fastToolWorkIndexSchema>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // analysis.diagnostic.v1

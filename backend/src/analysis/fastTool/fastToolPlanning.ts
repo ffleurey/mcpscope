@@ -1,4 +1,5 @@
-import type { EvidencePacket, FastToolWorkGroup, FastToolWorkIndex } from '../schemas.js'
+import type { EvidencePacket } from '../schemas.js'
+import type { FastToolWorkGroup, FastToolWorkIndex } from './schemas.js'
 
 export function buildFastToolWorkIndex(packets: EvidencePacket[]): FastToolWorkIndex {
   const groupsByTool = new Map<string, FastToolWorkGroup>()

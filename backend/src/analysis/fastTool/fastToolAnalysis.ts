@@ -16,8 +16,8 @@ import {
   SCHEMA_KEY,
   type AnalysisSessionState,
   type AnalysisTarget,
-  type FastToolWorkIndex,
 } from '../schemas.js'
+import { type FastToolWorkIndex } from './schemas.js'
 import { ANALYSIS_WORKFLOW_KIND } from '../workflowKinds.js'
 import { STEP_TYPE } from '../../domain/executionModel.js'
 import { BootstrapStep } from '../shared/bootstrapStep.js'
@@ -25,7 +25,7 @@ import { FinalAggregationStep } from '../shared/finalAggregationStep.js'
 import { FastToolGroupedAssessmentStep } from './fastToolGroupedAssessmentStep.js'
 import { buildFastToolWorkIndex } from './fastToolPlanning.js'
 import { buildFastToolFinalAggregationPrompt } from './evaluationPrompts.js'
-import { fastToolFinalReportSchema } from '../schemas.js'
+import { fastToolFinalReportSchema } from './schemas.js'
 
 export class FastToolAnalysis extends AnalysisSessionBase {
   static readonly workflowKind = ANALYSIS_WORKFLOW_KIND.FAST_TOOL

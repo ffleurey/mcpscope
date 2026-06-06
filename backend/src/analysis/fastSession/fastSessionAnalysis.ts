@@ -28,7 +28,7 @@ import { runCoverageValidationStep } from '../coverageValidationStep.js'
 import { buildFastSessionToolCallAssessmentPrompt } from './evaluationPrompts.js'
 import { buildFastSessionTurnSummaryPrompt } from './evaluationPrompts.js'
 import { buildFastSessionFinalAggregationPrompt } from './evaluationPrompts.js'
-import { fastSessionFinalAnalysisReportSchema } from '../schemas.js'
+import { fastSessionFinalAnalysisReportSchema } from './schemas.js'
 
 export class FastSessionAnalysis extends AnalysisSessionBase {
   static readonly workflowKind = ANALYSIS_WORKFLOW_KIND.FAST_SESSION
