@@ -534,7 +534,6 @@ export type McpServerProfile = z.infer<typeof mcpServerProfileSchema>
 export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>
 
-export type McpProfileSnapshots = McpProfileSnapshot[]
 export type SessionType = z.infer<typeof sessionTypeSchema>
 export type ParentKind = z.infer<typeof parentKindSchema>
 export type SessionRecord = z.infer<typeof sessionRecordSchema>

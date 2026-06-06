@@ -125,7 +125,7 @@ function renderGenericStep(step: AnyRecord): void {
 
 function renderSessionText(data: AnyRecord): void {
   const model = data['model'] as AnyRecord | undefined
-  const mcp = data['mcp'] as AnyRecord | undefined
+  const mcp = data['mcp'] as Array<{ name: string }> | undefined
   const ctxWindow = data['context_window'] as AnyRecord | undefined
 
   out(`${String(data['id'] ?? '')}  ${data['title'] ?? ''}`)
@@ -133,7 +133,10 @@ function renderSessionText(data: AnyRecord): void {
     const key = model['key'] ? `  ${String(model['key'])}` : ''
     out(`  model       ${model['name'] ?? ''}${key}`)
   }
-  if (mcp) out(`  mcp         ${mcp['name'] ?? ''}`)
+  if (mcp && mcp.length > 0) {
+    const mcpNames = mcp.map(m => m.name).join(', ')
+    out(`  mcp         ${mcpNames}`)
+  }
   if (ctxWindow) out(`  context     ${ctxWindow['used'] ?? '?'} / ${ctxWindow['available'] ?? '?'} tokens`)
   if (data['compaction_strategy']) out(`  compaction  ${data['compaction_strategy']}`)
 

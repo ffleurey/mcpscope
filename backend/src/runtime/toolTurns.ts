@@ -454,6 +454,7 @@ export async function ensureMcpContext(
   database: BackendDatabase,
   session: SessionRecord,
   mcpGateway: McpGateway,
+  logger?: { warn: (msg: string) => void },
 ): Promise<McpContextResult> {
   if (session.mcpProfileSnapshots.length === 0) {
     throw new Error('MCP profile is required for tool-enabled turns')
@@ -467,6 +468,9 @@ export async function ensureMcpContext(
   const combinedTools: McpToolsListResult['tools'] = []
   const toolServerMap = new Map<string, string>()
   const instructionsBuilder: string[] = []
+  type PendingRawExchange = { kind: 'init' | 'tools', exchange: McpRawExchange }
+
+  const pendingRawExchanges: Array<{ init: PendingRawExchange; tools: PendingRawExchange }> = []
 
   for (const profile of session.mcpProfileSnapshots) {
     const initialized = await mcpGateway.initializeSession(profile.url)
@@ -477,27 +481,10 @@ export async function ensureMcpContext(
       instructions: initialized.instructions ?? null,
     })
 
-    const tx = database.connection.transaction(() => {
-      const nowTs = now()
-
-      insertRawExchangeRecord(
-        database.connection,
-        makeRawExchangeRecord(session.id, null, null, 'mcp-request', initialized.rawExchange, nowTs),
-      )
-      insertRawExchangeRecord(
-        database.connection,
-        makeRawExchangeRecord(session.id, null, null, 'mcp-response', initialized.rawExchange, nowTs),
-      )
-      insertRawExchangeRecord(
-        database.connection,
-        makeRawExchangeRecord(session.id, null, null, 'mcp-request', toolsList.rawExchange, nowTs),
-      )
-      insertRawExchangeRecord(
-        database.connection,
-        makeRawExchangeRecord(session.id, null, null, 'mcp-response', toolsList.rawExchange, nowTs),
-      )
+    pendingRawExchanges.push({
+      init: { kind: 'init', exchange: initialized.rawExchange },
+      tools: { kind: 'tools', exchange: toolsList.rawExchange },
     })
-    tx()
 
     if (initialized.instructions) {
       instructionsBuilder.push(`[${profile.name}]\n${initialized.instructions}`)
@@ -505,7 +492,8 @@ export async function ensureMcpContext(
 
     for (const tool of toolsList.tools) {
       if (toolServerMap.has(tool.name)) {
-        console.warn(
+        const warnFn = logger?.warn ?? console.warn
+        warnFn(
           `Tool name collision: "${tool.name}" provided by both "${toolServerMap.get(tool.name)}" and "${profile.url}". Using first server.`,
         )
       } else {
@@ -515,12 +503,32 @@ export async function ensureMcpContext(
     }
   }
 
-  if (!hasInstructions && instructionsBuilder.length > 0) {
-    const nowTs = now()
-    let ordinal = getNextPartOrdinal(database.connection, session.id)
-    let preludePartNumber = getNextPreludePartSequence(database.connection, session.id)
+  const nowTs = now()
 
-    database.connection.transaction(() => {
+  database.connection.transaction(() => {
+    for (const { init, tools } of pendingRawExchanges) {
+      insertRawExchangeRecord(
+        database.connection,
+        makeRawExchangeRecord(session.id, null, null, 'mcp-request', init.exchange, nowTs),
+      )
+      insertRawExchangeRecord(
+        database.connection,
+        makeRawExchangeRecord(session.id, null, null, 'mcp-response', init.exchange, nowTs),
+      )
+      insertRawExchangeRecord(
+        database.connection,
+        makeRawExchangeRecord(session.id, null, null, 'mcp-request', tools.exchange, nowTs),
+      )
+      insertRawExchangeRecord(
+        database.connection,
+        makeRawExchangeRecord(session.id, null, null, 'mcp-response', tools.exchange, nowTs),
+      )
+    }
+
+    if (!hasInstructions && instructionsBuilder.length > 0) {
+      let ordinal = getNextPartOrdinal(database.connection, session.id)
+      let preludePartNumber = getNextPreludePartSequence(database.connection, session.id)
+
       insertPartRecord(database.connection, {
         id: formatSetupPartId(session.id, preludePartNumber++, 'mcp-instructions'),
         sessionId: session.id,
@@ -555,15 +563,12 @@ export async function ensureMcpContext(
         createdAt: nowTs,
         updatedAt: nowTs,
       })
-    })()
-  }
+    }
 
-  if (!hasToolDefinitions) {
-    const nowTs = now()
-    let ordinal = getNextPartOrdinal(database.connection, session.id)
-    let preludePartNumber = getNextPreludePartSequence(database.connection, session.id)
+    if (!hasToolDefinitions) {
+      let ordinal = getNextPartOrdinal(database.connection, session.id)
+      let preludePartNumber = getNextPreludePartSequence(database.connection, session.id)
 
-    database.connection.transaction(() => {
       insertPartRecord(database.connection, {
         id: formatSetupPartId(session.id, preludePartNumber, 'tool-definitions'),
         sessionId: session.id,
@@ -598,8 +603,8 @@ export async function ensureMcpContext(
         createdAt: nowTs,
         updatedAt: nowTs,
       })
-    })()
-  }
+    }
+  })()
 
   return {
     serverContexts,

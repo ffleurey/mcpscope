@@ -6,6 +6,8 @@
 
 Replace the current single-MCP-server-per-session model with multi-server support. All registered MCP servers should be shown with a toggle in the session creation UI, and multiple can be enabled simultaneously.
 
+**Status: IMPLEMENTED — PR #27**
+
 ## Design Decisions
 
 ### 1. Domain model: `McpProfileSnapshot` → `McpProfileSnapshot[]`

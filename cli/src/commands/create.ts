@@ -34,8 +34,9 @@ function renderCreateText(result: CreateResult): void {
   process.stdout.write(`  status      ${session.status}\n`)
   process.stdout.write(`  init        ${session.init_status}\n`)
   process.stdout.write(`  model       ${session.model.name}  (${session.model.id})\n`)
-  if (session.mcp) {
-    process.stdout.write(`  mcp         ${session.mcp.name}  (${session.mcp.id})\n`)
+  if (session.mcp.length > 0) {
+    const mcpNames = session.mcp.map(m => `${m.name}  (${m.id})`).join(', ')
+    process.stdout.write(`  mcp         ${mcpNames}\n`)
   }
   process.stdout.write(`  compaction  ${session.compaction_strategy}\n`)
   process.stdout.write(`  created     ${formatDate(session.created_at)}\n`)

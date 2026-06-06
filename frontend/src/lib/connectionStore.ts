@@ -95,10 +95,6 @@ export async function setDefaultModelConfig(defaultModelConfigId: string | null)
   })
 }
 
-export async function setDefaultMcpProfile(_defaultMcpProfileId: string | null): Promise<void> {
-  // Default MCP selection is now per-profile (defaultEnabled field)
-}
-
 function getStoreDefaults(): SessionCreationDefaults {
   return get(sessionCreationDefaults) ?? {
     defaultModelConfigId: null,

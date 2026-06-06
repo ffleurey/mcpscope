@@ -226,7 +226,6 @@ export const rawExchangeRecordSchema = z.object({
 export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>
 
-export type McpProfileSnapshots = McpProfileSnapshot[]
 export type TokenMetadata = z.infer<typeof tokenMetadataSchema>
 export type CompactionStrategy = z.infer<typeof compactionStrategySchema>
 export type SessionType = z.infer<typeof sessionTypeSchema>
