@@ -89,6 +89,8 @@ export interface AnalysisSessionState {
   evaluationCriteria: string[]
   /** The analysis workflow kind, used for rehydration. */
   workflow_kind?: string
+  /** Internal cursor for resumable hook traversal. */
+  walkCursor?: number
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

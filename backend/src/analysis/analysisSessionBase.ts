@@ -157,9 +157,7 @@ export abstract class AnalysisSessionBase {
     this.sessionId  = input.analysisSessionId
     this.goal       = input.analysisGoal
     this.state      = initialState
-    this.walkCursor = typeof (initialState as unknown as Record<string, unknown>).walkCursor === 'number'
-      ? (initialState as unknown as Record<string, unknown>).walkCursor as number
-      : 0
+    this.walkCursor = initialState.walkCursor ?? 0
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -338,7 +336,7 @@ export abstract class AnalysisSessionBase {
       await item.fn()
 
       this.walkCursor = i + 1
-      ;(this.state as unknown as Record<string, unknown>).walkCursor = this.walkCursor
+      this.state.walkCursor = this.walkCursor
       this.saveState()
 
       advanced++
