@@ -201,13 +201,17 @@ export interface Step {
  * WorkflowStep is the abstract step subtype that owns Turn children.
  */
 export interface WorkflowStep extends Step {
-  readonly turns: ReadonlyArray<Turn>
 }
 
 /** Known step type keys. */
 export const STEP_TYPE = {
   TURN: stepTypeKey('turn'),
   COMPACTION: stepTypeKey('compaction'),
+  ANALYSIS_BOOTSTRAP: stepTypeKey('analysis_bootstrap'),
+  ANALYSIS_TOOL_CALL_ASSESSMENT: stepTypeKey('analysis_tool_call_assessment'),
+  ANALYSIS_TOOL_GROUP_ASSESSMENT: stepTypeKey('analysis_tool_group_assessment'),
+  ANALYSIS_TURN_SUMMARY: stepTypeKey('analysis_turn_summary'),
+  ANALYSIS_FINAL_AGGREGATION: stepTypeKey('analysis_final_aggregation'),
 } as const
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -215,19 +219,13 @@ export const STEP_TYPE = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Turn is the LLM-specific subtype of Step.
+ * Turn is the LLM-specific subtype of Step, represented at runtime by
+ * TurnRecord (model.ts) and TurnPersistenceRecord (persistenceContract.ts).
  *
- * Turn owns LLM-specific structures: rounds, parts, and raw exchanges.
- * Turn has dedicated persistence infrastructure because these structures
- * are infrastructure-relevant, not merely workflow-semantic.
+ * The domain Turn interface is deferred until the execution-model refactoring
+ * reaches the chat-session refactoring phase.
  */
-export interface Turn extends Step {
-  readonly stepTypeKey: typeof STEP_TYPE.TURN
-  /** The user message content that prompted this turn. */
-  readonly userMessage: string
-  /** Stable sequence number within the session. */
-  readonly sequenceNumber: number
-}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Session

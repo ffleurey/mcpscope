@@ -116,19 +116,19 @@ export interface StepPersistenceRecord {
  * Maps to the `turns` table in the new schema.
  *
  * Every step with stepTypeKey='turn' has a corresponding TurnPersistenceRecord
- * linked by stepId.  This is infrastructure-justified: rounds, parts, and
+ * linked by id.  This is infrastructure-justified: rounds, parts, and
  * raw exchanges cannot be stored generically without significant cost.
  *
  * TurnPersistenceRecord stores only the Turn-specific fields not already in
  * StepPersistenceRecord.
  */
 export interface TurnPersistenceRecord {
-  /** References StepPersistenceRecord.id. */
-  readonly stepId: string
+  /** Canonical turn ID. */
+  readonly id: string
   readonly sessionId: string
   /** Optional owning workflow step for composite-step projections. */
   readonly ownerStepId: string | null
-  readonly sequenceNumber: number
+  readonly turnNumber: number
   readonly outcome: string | null
   readonly promptTokens: number | null
   readonly completionTokens: number | null
@@ -173,7 +173,7 @@ export interface StepRepository {
  */
 export interface TurnRepository {
   insert(record: TurnPersistenceRecord): void
-  getByStepId(stepId: string): TurnPersistenceRecord | null
+  getById(id: string): TurnPersistenceRecord | null
   update(record: TurnPersistenceRecord): void
   listBySession(sessionId: string): TurnPersistenceRecord[]
 }

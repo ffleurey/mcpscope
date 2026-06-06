@@ -30,20 +30,37 @@ export function buildFastToolGroupedAssessmentPrompt(params: {
 
 export function buildFastToolFinalAggregationPrompt(params: {
   analysisTarget: AnalysisTarget
-  subjectId: string
   assessmentCount: number
   totalToolCallCount: number
 }): string {
-  return buildSharedEvaluationPrompt({
-    title: 'the overall fast-tool analysis outcome',
-    subjectScope: 'session',
-    subjectId: params.subjectId,
-    evaluationFocus: buildAnalysisFocusInstructions(params.analysisTarget),
-    contextBlock: [
-      'Fast-tool aggregation context:',
-      `- assessment_count: ${params.assessmentCount}`,
-      `- total_tool_call_count: ${params.totalToolCallCount}`,
-    ].join('\n'),
-    extraInstructions: 'Focus on the session-level qualitative outcome and avoid inventing counts or arrays in the response.',
-  })
+  const sections = [
+    'You are evaluating the overall fast-tool analysis outcome.',
+    '',
+    'Fast-tool aggregation context:',
+    `- assessment_count: ${params.assessmentCount}`,
+    `- total_tool_call_count: ${params.totalToolCallCount}`,
+    '',
+    'Use the context already present in the conversation and the evidence parts injected by the harness.',
+    '',
+    'Focus on the session-level qualitative outcome and avoid inventing counts or arrays in the response.',
+    '',
+    'Evaluation focus:',
+    buildAnalysisFocusInstructions(params.analysisTarget),
+    '',
+    'Output requirements:',
+    '- Return one JSON object only.',
+    '- Support the outcome, rationale, and summaries with evidence from the analysis.',
+    '- Array fields must not contain null values.',
+    '',
+    'Output schema:',
+    JSON.stringify({
+      overall_tool_use_outcome: 'string',
+      overall_rationale: 'string',
+      tool_summaries: [{}],
+      repeated_failure_patterns: [],
+      follow_up_candidates: [],
+    }, null, 2),
+  ]
+
+  return sections.join('\n')
 }

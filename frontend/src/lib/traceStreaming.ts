@@ -115,8 +115,13 @@ export function deriveContextSnapshotAtRound(
         const strippedAt = p.context.strippedByCompactionAtTurnId
         if (strippedAt === null) return true
         const strippedAtSeq = turnSeqById.get(strippedAt) ?? -1
-        // Part was in context during turns whose seq ≤ strippedAtSeq.
-        // Our round is in a turn with seq = roundTurnSeq.
+        if (strippedAtSeq === -1) {
+          // strippedByCompactionAtTurnId references a step ID, not a turn ID.
+          // Fall back to the part's own turn — the part was visible during its
+          // own turn and compaction always happens after the turn completes.
+          const partTurnSeq = p.turnId ? (turnSeqById.get(p.turnId) ?? -1) : -1
+          return roundTurnSeq <= partTurnSeq
+        }
         return roundTurnSeq <= strippedAtSeq
       }
       return false

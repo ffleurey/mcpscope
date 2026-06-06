@@ -2,8 +2,8 @@ import type Database from 'better-sqlite3'
 import { getSessionRecord } from '../persistence/repository.js'
 import { listArtifactsBySession, type ArtifactRecord } from './artifactRepository.js'
 import { SCHEMA_KEY, type AnalysisPhase, type AnalysisSessionState } from './schemas.js'
-import { ANALYSIS_WORKFLOW_KIND, type AnalysisWorkflowKind } from './workflowKinds.js'
 import type { StepRecord } from '../domain/model.js'
+import { isKnownWorkflowKind, getWorkflowLabel } from './analysisWorkflowFactory.js'
 
 export interface AnalysisDiagnosticSummary {
   step_id: string | null
@@ -11,45 +11,35 @@ export interface AnalysisDiagnosticSummary {
   message: string
 }
 
-const WORKFLOW_LABELS: Record<AnalysisWorkflowKind, string> = {
-  [ANALYSIS_WORKFLOW_KIND.FULL_SESSION]: 'Full Analysis',
-  [ANALYSIS_WORKFLOW_KIND.FAST_SESSION]: 'Fast Session Analysis',
-  [ANALYSIS_WORKFLOW_KIND.FAST_TOOL]: 'Fast Tool Analysis',
-}
-
-export function getAnalysisWorkflowKindFromStep(step: Pick<StepRecord, 'params'> | null | undefined): AnalysisWorkflowKind | null {
-  const workflowKind = (step?.params as { workflow_kind?: AnalysisWorkflowKind } | null)?.workflow_kind
-  if (
-    workflowKind === ANALYSIS_WORKFLOW_KIND.FULL_SESSION
-    || workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_SESSION
-    || workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_TOOL
-  ) {
+export function getAnalysisWorkflowKindFromStep(step: Pick<StepRecord, 'params'> | null | undefined): string | null {
+  const workflowKind = (step?.params as { workflow_kind?: string } | null)?.workflow_kind
+  if (workflowKind && isKnownWorkflowKind(workflowKind)) {
     return workflowKind
   }
   return null
 }
 
-export function getAnalysisWorkflowLabel(workflowKind: AnalysisWorkflowKind | null | undefined): string | null {
-  return workflowKind ? WORKFLOW_LABELS[workflowKind] : null
+export function getAnalysisWorkflowLabel(workflowKind: string | null | undefined): string | null {
+  return workflowKind ? getWorkflowLabel(workflowKind) : null
 }
 
 export function getAnalysisWorkflowKindFromSteps(
   steps: Array<Pick<StepRecord, 'stepTypeKey' | 'params'>>,
   connection?: Database.Database,
   sessionId?: string,
-): AnalysisWorkflowKind | null {
+): string | null {
   const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
   if (cursorStep) return getAnalysisWorkflowKindFromStep(cursorStep)
   if (connection && sessionId) {
     const session = getSessionRecord(connection, sessionId)
     const analysisState = session?.analysisState as unknown as AnalysisSessionState | null
-    if (analysisState?.workflow_kind) return analysisState.workflow_kind as AnalysisWorkflowKind
+    if (analysisState?.workflow_kind) return analysisState.workflow_kind as string
   }
   return null
 }
 
-export function getAnalysisTitlePrefix(workflowKind: AnalysisWorkflowKind): string {
-  return WORKFLOW_LABELS[workflowKind]
+export function getAnalysisTitlePrefix(workflowKind: string): string {
+  return getWorkflowLabel(workflowKind) ?? workflowKind
 }
 
 export function isAnalysisSessionTerminalError(
@@ -110,8 +100,6 @@ export function getRetryPhaseForFailedAnalysisStep(step: Pick<StepRecord, 'stepT
       return 'assessing'
     case 'analysis_turn_summary':
       return 'turn_summary'
-    case 'analysis_coverage_validation':
-      return 'coverage_validation'
     case 'analysis_final_aggregation':
       return 'final_aggregation'
     default:

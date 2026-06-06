@@ -30,7 +30,7 @@ function now(): number {
 export interface CoverageValidationInput {
   state: AnalysisSessionState
   stepId: string
-  assessmentSchemaKey?: string
+  assessmentSchemaKey: string
 }
 
 export interface CoverageValidationResult {
@@ -44,7 +44,7 @@ export function runCoverageValidationStep(
 ): CoverageValidationResult {
   const { state, stepId } = input
   const { analysisSessionId } = state
-  const assessmentSchemaKey = input.assessmentSchemaKey ?? SCHEMA_KEY.TOOL_CALL_ASSESSMENT
+  const assessmentSchemaKey = input.assessmentSchemaKey
 
   // ── Load artifacts ────────────────────────────────────────────────────────
   const packetIndexArtifact = getLatestArtifactBySchemaKey(
