@@ -27,7 +27,7 @@ export interface TurnSummaryStepConfig {
   buildPrompt: (params: Record<string, unknown>) => string
 }
 
-export class TurnSummaryStep extends WorkflowStep {
+export class TurnSummaryStep extends WorkflowStep<AnalysisSessionState> {
   readonly stepLabel = 'Turn Summary'
 
   constructor(
@@ -39,8 +39,8 @@ export class TurnSummaryStep extends WorkflowStep {
     super(db, lm, mcp)
   }
 
-  protected async run(ctx: StepContext): Promise<StepResult> {
-    const state = ctx.workflowState as unknown as AnalysisSessionState | undefined
+  protected async run(ctx: StepContext<AnalysisSessionState>): Promise<StepResult> {
+    const state = ctx.workflowState
     if (!state) throw new Error('TurnSummaryStep: workflowState required')
 
     const { analysisSessionId, currentTurnId } = state

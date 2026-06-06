@@ -40,7 +40,7 @@ function defaultIndexContent(packets: EvidencePacket[]): EvidencePacketIndex {
   return { packets }
 }
 
-export class BootstrapStep extends WorkflowStep {
+export class BootstrapStep extends WorkflowStep<AnalysisSessionState> {
   readonly stepLabel = 'Bootstrap'
 
   constructor(
@@ -52,8 +52,8 @@ export class BootstrapStep extends WorkflowStep {
     super(db, lm, mcp)
   }
 
-  protected async run(ctx: StepContext): Promise<StepResult> {
-    const state = ctx.workflowState as unknown as AnalysisSessionState | undefined
+  protected async run(ctx: StepContext<AnalysisSessionState>): Promise<StepResult> {
+    const state = ctx.workflowState
     if (!state) throw new Error('BootstrapStep: workflowState required')
 
     const { analysisTarget, packets, bootstrapInspectIds } = collectAnalysisPlanningData(this.db, state)

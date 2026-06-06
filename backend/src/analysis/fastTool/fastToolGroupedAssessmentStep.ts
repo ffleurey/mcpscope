@@ -28,7 +28,7 @@ export interface FastToolGroupedAssessmentStepConfig {
   analysisTarget: AnalysisTarget
 }
 
-export class FastToolGroupedAssessmentStep extends WorkflowStep {
+export class FastToolGroupedAssessmentStep extends WorkflowStep<AnalysisSessionState> {
   readonly stepLabel = 'Grouped Assessment'
 
   constructor(
@@ -40,8 +40,8 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
     super(db, lm, mcp)
   }
 
-  protected async run(ctx: StepContext): Promise<StepResult> {
-    const state = ctx.workflowState as unknown as AnalysisSessionState | undefined
+  protected async run(ctx: StepContext<AnalysisSessionState>): Promise<StepResult> {
+    const state = ctx.workflowState
     if (!state) throw new Error('FastToolGroupedAssessmentStep: workflowState required')
     const { analysisSessionId } = state
     const { workUnit, analysisTarget } = this.config

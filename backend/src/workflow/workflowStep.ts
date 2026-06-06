@@ -9,7 +9,7 @@ import type { StepResult } from '../domain/executionModel.js'
 
 function now(): number { return Date.now() }
 
-export abstract class WorkflowStep {
+export abstract class WorkflowStep<TState = Record<string, unknown>> {
   stepId: string = ''
   status: string = 'pending'
 
@@ -29,7 +29,7 @@ export abstract class WorkflowStep {
     this.mcp = mcp
   }
 
-  async execute(ctx: StepContext): Promise<StepResult> {
+  async execute(ctx: StepContext<TState>): Promise<StepResult> {
     const childIndex = getNextChildIndex(this.db.connection, ctx.sessionId)
     this.stepId = formatStepId(ctx.sessionId, childIndex)
 
@@ -79,5 +79,5 @@ export abstract class WorkflowStep {
     }
   }
 
-  protected abstract run(ctx: StepContext): Promise<StepResult>
+  protected abstract run(ctx: StepContext<TState>): Promise<StepResult>
 }

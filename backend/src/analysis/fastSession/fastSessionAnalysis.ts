@@ -85,7 +85,7 @@ export class FastSessionAnalysis extends AnalysisSessionBase {
     return ANALYSIS_WORKFLOW_KIND.FAST_SESSION
   }
 
-  static buildSystemPrompt(input: { analysisGoal: string; selectedToolNames: string[]; onlyFailedToolCalls: boolean; evaluationCriteria: string[] }): string {
+  static buildSystemPrompt(input: { analysisGoal: string; additionalInstructions?: string }): string {
     return buildFastSessionSystemPrompt(input)
   }
 

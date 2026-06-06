@@ -41,7 +41,7 @@ export interface ToolCallAssessmentStepConfig {
   analysisTarget: AnalysisTarget
 }
 
-export class ToolCallAssessmentStep extends WorkflowStep {
+export class ToolCallAssessmentStep extends WorkflowStep<AnalysisSessionState> {
   readonly stepLabel = 'Tool Call Assessment'
 
   constructor(
@@ -53,8 +53,8 @@ export class ToolCallAssessmentStep extends WorkflowStep {
     super(db, lm, mcp)
   }
 
-  protected async run(ctx: StepContext): Promise<StepResult> {
-    const state = ctx.workflowState as unknown as AnalysisSessionState | undefined
+  protected async run(ctx: StepContext<AnalysisSessionState>): Promise<StepResult> {
+    const state = ctx.workflowState
     if (!state) throw new Error('ToolCallAssessmentStep: workflowState required')
 
     const { artifactSchemaKey, buildPrompt, computeNextPhase, packet, analysisTarget } = this.config

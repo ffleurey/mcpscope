@@ -81,7 +81,7 @@ export class FastToolAnalysis extends AnalysisSessionBase {
     return ANALYSIS_WORKFLOW_KIND.FAST_TOOL
   }
 
-  static buildSystemPrompt(input: { analysisGoal: string; selectedToolNames: string[]; onlyFailedToolCalls: boolean; evaluationCriteria: string[] }): string {
+  static buildSystemPrompt(input: { analysisGoal: string; additionalInstructions?: string }): string {
     return buildFastToolSystemPrompt(input)
   }
 

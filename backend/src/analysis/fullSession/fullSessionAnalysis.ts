@@ -92,7 +92,7 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
     return ANALYSIS_WORKFLOW_KIND.FULL_SESSION
   }
 
-  static buildSystemPrompt(input: { analysisGoal: string; selectedToolNames: string[]; onlyFailedToolCalls: boolean; evaluationCriteria: string[] }): string {
+  static buildSystemPrompt(input: { analysisGoal: string; additionalInstructions?: string }): string {
     return buildFullSessionSystemPrompt(input)
   }
 

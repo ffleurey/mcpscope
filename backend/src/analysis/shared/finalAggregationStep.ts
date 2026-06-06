@@ -34,7 +34,7 @@ export interface FinalAggregationStepConfig {
   ) => Record<string, unknown> | null
 }
 
-export class FinalAggregationStep extends WorkflowStep {
+export class FinalAggregationStep extends WorkflowStep<AnalysisSessionState> {
   readonly stepLabel = 'Final Aggregation'
 
   constructor(
@@ -46,8 +46,8 @@ export class FinalAggregationStep extends WorkflowStep {
     super(db, lm, mcp)
   }
 
-  protected async run(ctx: StepContext): Promise<StepResult> {
-    const state = ctx.workflowState as unknown as AnalysisSessionState | undefined
+  protected async run(ctx: StepContext<AnalysisSessionState>): Promise<StepResult> {
+    const state = ctx.workflowState
     if (!state) throw new Error('FinalAggregationStep: workflowState required')
     const { analysisSessionId } = state
 

@@ -305,7 +305,12 @@ export abstract class AnalysisSessionBase {
           for (const round of turn.rounds) {
             list.push({ methodName: 'beforeRound', fn: () => this.beforeRound(round) })
             for (const part of round.parts) {
-              list.push({ methodName: 'onToolCall', fn: () => this.onToolCall(part, round, turn) })
+              switch (part.type) {
+                case 'user_prompt': list.push({ methodName: 'onUserPrompt', fn: () => this.onUserPrompt(part, round, turn) }); break
+                case 'reasoning':   list.push({ methodName: 'onReasoning', fn: () => this.onReasoning(part, round, turn) }); break
+                case 'tool_call':   list.push({ methodName: 'onToolCall', fn: () => this.onToolCall(part, round, turn) }); break
+                case 'assistant_answer': list.push({ methodName: 'onAssistantAnswer', fn: () => this.onAssistantAnswer(part, round, turn) }); break
+              }
             }
             list.push({ methodName: 'afterRound', fn: () => this.afterRound(round) })
           }
@@ -409,12 +414,12 @@ export abstract class AnalysisSessionBase {
   }
 
   /** Build a StepContext for a WorkflowStep execution. */
-  protected buildStepContext(stepTypeKey: StepTypeKey): StepContext {
+  protected buildStepContext(stepTypeKey: StepTypeKey): StepContext<AnalysisSessionState> {
     return {
       sessionId: this.sessionId,
       stepTypeKey,
       ...(this.emitFn ? { emitSink: this.emitFn } : {}),
-      workflowState: this.state as unknown as Record<string, unknown>,
+      workflowState: this.state,
     }
   }
 

@@ -29,9 +29,9 @@ export function registerAnalysisWorkflow(ctor: AnalysisSubclassCtor): void {
   workflowRegistry.set(ctor.workflowKind, ctor)
 }
 
-registerAnalysisWorkflow(FullSessionAnalysis as unknown as AnalysisSubclassCtor)
-registerAnalysisWorkflow(FastSessionAnalysis as unknown as AnalysisSubclassCtor)
-registerAnalysisWorkflow(FastToolAnalysis as unknown as AnalysisSubclassCtor)
+registerAnalysisWorkflow(FullSessionAnalysis)
+registerAnalysisWorkflow(FastSessionAnalysis)
+registerAnalysisWorkflow(FastToolAnalysis)
 
 export function rehydrateAnalysisWorkflow(
   database: BackendDatabase,

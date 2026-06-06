@@ -338,7 +338,7 @@ describe('analysis workflow helpers', () => {
     }).execute({
       sessionId: 'ANLY',
       stepTypeKey: STEP_TYPE.ANALYSIS_BOOTSTRAP,
-      workflowState: state as unknown as Record<string, unknown>,
+      workflowState: state,
     })
 
     expect(state.packetCount).toBe(1)
@@ -439,7 +439,7 @@ describe('analysis workflow helpers', () => {
     }).execute({
       sessionId: 'ANLY',
       stepTypeKey: STEP_TYPE.ANALYSIS_BOOTSTRAP,
-      workflowState: state2 as unknown as Record<string, unknown>,
+      workflowState: state2,
     })
 
     expect(state2.packetCount).toBe(1)
@@ -681,7 +681,7 @@ describe('analysis workflow helpers', () => {
     }).execute({
       sessionId: 'ANLY',
       stepTypeKey: STEP_TYPE.ANALYSIS_FINAL_AGGREGATION,
-      workflowState: state1 as unknown as Record<string, unknown>,
+      workflowState: state1,
     })
 
     expect(state1.phase).toBe('complete')
@@ -881,7 +881,7 @@ describe('analysis workflow helpers', () => {
     }).execute({
       sessionId: 'ANLY',
       stepTypeKey: STEP_TYPE.ANALYSIS_FINAL_AGGREGATION,
-      workflowState: state2 as unknown as Record<string, unknown>,
+      workflowState: state2,
     })
 
     expect(state2.phase).toBe('complete')
