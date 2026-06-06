@@ -29,7 +29,7 @@ export const createExplicitInputSchema = z.object({
   sessionId: z.string().optional(),
   title: z.string().optional(),
   modelProfileSnapshot: modelProfileSnapshotInputSchema,
-  mcpProfileSnapshot: mcpProfileSnapshotInputSchema.nullable().optional(),
+  mcpProfileSnapshots: z.array(mcpProfileSnapshotInputSchema).default([]),
   compactionStrategy: z.enum(['none', 'strip-reasoning']).optional(),
 })
 
@@ -76,7 +76,7 @@ export async function executeCreateExplicit(
         sessionId: input.sessionId,
         title: input.title,
         modelProfileSnapshot: input.modelProfileSnapshot,
-        mcpProfileSnapshot: input.mcpProfileSnapshot ?? null,
+        mcpProfileSnapshots: input.mcpProfileSnapshots,
         compactionStrategy: input.compactionStrategy ?? 'strip-reasoning',
       })
       return { kind: 'created', session }

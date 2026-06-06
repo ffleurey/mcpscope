@@ -185,7 +185,7 @@ describe('tool-enabled turn runtime', () => {
         createdAt: 1,
         updatedAt: 1,
       },
-      mcpProfileSnapshot: {
+      mcpProfileSnapshots: [{
         id: 'mcp-1',
         name: 'Local MCP',
         url: 'http://localhost:3001/mcp',
@@ -194,7 +194,7 @@ describe('tool-enabled turn runtime', () => {
         authValue: null,
         createdAt: 1,
         updatedAt: 1,
-      },
+      }],
     })
 
     insertStepRecord(db.connection, {
@@ -392,7 +392,7 @@ describe('tool-enabled turn runtime', () => {
         createdAt: 1,
         updatedAt: 1,
       },
-      mcpProfileSnapshot: {
+      mcpProfileSnapshots: [{
         id: 'mcp-1',
         name: 'Local MCP',
         url: 'http://localhost:3001/mcp',
@@ -401,7 +401,7 @@ describe('tool-enabled turn runtime', () => {
         authValue: null,
         createdAt: 1,
         updatedAt: 1,
-      },
+      }],
     })
 
     insertStepRecord(db.connection, {
@@ -613,7 +613,7 @@ describe('tool-enabled turn runtime', () => {
         createdAt: 1,
         updatedAt: 1,
       },
-      mcpProfileSnapshot: {
+      mcpProfileSnapshots: [{
         id: 'mcp-2',
         name: 'Local MCP',
         url: 'http://localhost:3001/mcp',
@@ -622,7 +622,7 @@ describe('tool-enabled turn runtime', () => {
         authValue: null,
         createdAt: 1,
         updatedAt: 1,
-      },
+      }],
     })
 
     const result = await createToolEnabledTurn(db, lmStudioGateway, mcpGateway, {
@@ -808,7 +808,7 @@ describe('tool-enabled turn runtime', () => {
         createdAt: 1,
         updatedAt: 1,
       },
-      mcpProfileSnapshot: {
+      mcpProfileSnapshots: [{
         id: 'mcp-3',
         name: 'Local MCP',
         url: 'http://localhost:3001/mcp',
@@ -817,7 +817,7 @@ describe('tool-enabled turn runtime', () => {
         authValue: null,
         createdAt: 1,
         updatedAt: 1,
-      },
+      }],
     })
 
     const result = await createToolEnabledTurn(db, lmStudioGateway, mcpGateway, {
@@ -1146,7 +1146,7 @@ describe('tool-enabled turn runtime', () => {
         createdAt: 1,
         updatedAt: 1,
       },
-      mcpProfileSnapshot: {
+      mcpProfileSnapshots: [{
         id: 'mcp-4',
         name: 'Local MCP',
         url: 'http://localhost:3001/mcp',
@@ -1155,7 +1155,7 @@ describe('tool-enabled turn runtime', () => {
         authValue: null,
         createdAt: 1,
         updatedAt: 1,
-      },
+      }],
     })
 
     const result = await createToolEnabledTurn(db, lmStudioGateway, mcpGateway, {

@@ -90,7 +90,7 @@ export interface CreateSessionInput {
   sessionId?: string | undefined
   title?: string | undefined
   modelProfileSnapshot: ModelProfileSnapshot
-  mcpProfileSnapshot?: McpProfileSnapshot | null | undefined
+  mcpProfileSnapshots?: McpProfileSnapshot[] | undefined
   compactionStrategy?: 'none' | 'strip-reasoning' | undefined
   /** Session type. Defaults to 'primary' when omitted. */
   sessionType?: SessionType | undefined
@@ -176,7 +176,7 @@ export function createSession(
     createdAt: timestamp,
     updatedAt: timestamp,
     modelProfileSnapshot: input.modelProfileSnapshot,
-    mcpProfileSnapshot: input.mcpProfileSnapshot ?? null,
+    mcpProfileSnapshots: input.mcpProfileSnapshots ?? [],
     loadedContextLength: null,
     systemPromptTokens: null,
     toolDefinitionsTokens: null,

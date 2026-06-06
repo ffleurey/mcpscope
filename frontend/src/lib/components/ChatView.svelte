@@ -235,7 +235,7 @@
   )
   let isExhausted = $derived(session?.is_context_exhausted === true)
   let displayModelName = $derived(session?.model_profile_snapshot?.name ?? '')
-  let displayMcpName = $derived(session?.mcp_profile_snapshot?.name ?? null)
+  let displayMcpNames = $derived(session?.mcp_profile_snapshots?.map(s => s.name) ?? [])
   let displayCompaction = $derived(session?.compaction_strategy ?? null)
 
   async function startEditTitle() {
@@ -523,7 +523,7 @@
             <div class="composer-config">
               <span class="config-label">
                 Model: {displayModelName || '—'}
-                {#if displayMcpName} · MCP: {displayMcpName}{:else} · MCP: none{/if}
+                {#if displayMcpNames.length > 0} · MCP: {displayMcpNames.join(', ')}{:else} · MCP: none{/if}
                 {#if displayCompaction && displayCompaction !== 'none'} · Compaction: {displayCompaction}{:else} · Compaction: none{/if}
               </span>
             </div>

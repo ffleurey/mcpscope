@@ -44,6 +44,7 @@
       transport: 'streamable-http',
       authType: profile?.authType ?? null,
       authValue: profile?.authValue ?? null,
+      defaultEnabled: profile?.defaultEnabled ?? false,
       createdAt: profile?.createdAt ?? now,
       updatedAt: now,
     })

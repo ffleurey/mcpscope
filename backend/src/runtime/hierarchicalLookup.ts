@@ -432,8 +432,9 @@ export function resolveHierarchicalId(
       data.parent_ref = { kind: session.parentKind, id: session.parentId }
     }
 
-    if (session.mcpProfileSnapshot) {
-      data.mcp = { name: session.mcpProfileSnapshot.name }
+    const mcpData = session.mcpProfileSnapshots.map(s => ({ name: s.name }))
+    if (mcpData.length > 0) {
+      data.mcp = mcpData
     }
 
     return { status: 'ok', payload: { id: session.id, type: 'session', mode, data } }

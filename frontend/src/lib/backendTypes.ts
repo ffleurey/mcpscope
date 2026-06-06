@@ -29,6 +29,7 @@ export const mcpServerProfileSchema = z.object({
   transport: z.literal('streamable-http'),
   authType: z.enum(['none', 'bearer', 'basic']).nullable().optional().default(null),
   authValue: z.string().nullable().optional().default(null),
+  defaultEnabled: z.boolean().optional().default(false),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 })
@@ -152,7 +153,7 @@ export const sessionRecordSchema = z.object({
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
   modelProfileSnapshot: modelProfileSnapshotSchema,
-  mcpProfileSnapshot: mcpProfileSnapshotSchema.nullable(),
+  mcpProfileSnapshots: z.array(mcpProfileSnapshotSchema).default([]),
   loadedContextLength: z.number().int().positive().nullable(),
   systemPromptTokens: z.number().int().nonnegative().nullable(),
   toolDefinitionsTokens: z.number().int().nonnegative().nullable(),
@@ -184,7 +185,7 @@ export const sessionSummarySchema = z.object({
     message: z.string(),
   }).optional(),
   model_profile_snapshot: z.object({ name: z.string() }),
-  mcp_profile_snapshot: z.object({ name: z.string() }).nullable(),
+  mcp_profile_snapshots: z.array(z.object({ name: z.string() })).default([]),
 })
 
 export const stepRecordSchema = z.object({
@@ -503,7 +504,6 @@ export const upsertMcpProfileResponseSchema = z.object({
 
 export const sessionCreationDefaultsSchema = z.object({
   defaultModelConfigId: z.string().nullable(),
-  defaultMcpProfileId: z.string().nullable(),
   updatedAt: z.number().int().nonnegative(),
 })
 
@@ -533,6 +533,7 @@ export type ModelConfig = z.infer<typeof modelConfigSchema>
 export type McpServerProfile = z.infer<typeof mcpServerProfileSchema>
 export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>
+
 export type SessionType = z.infer<typeof sessionTypeSchema>
 export type ParentKind = z.infer<typeof parentKindSchema>
 export type SessionRecord = z.infer<typeof sessionRecordSchema>

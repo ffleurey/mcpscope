@@ -17,7 +17,7 @@ export interface SessionSummary {
   loaded_context_length: number | null
   compaction_strategy: string
   model_profile_snapshot: { name: string }
-  mcp_profile_snapshot: { name: string } | null
+  mcp_profile_snapshots: { name: string }[]
 }
 
 export interface ListResult {
@@ -39,7 +39,7 @@ export interface CreateResult {
     status: string
     init_status: string
     model: { id: string; name: string }
-    mcp: { id: string; name: string } | null
+    mcp: { id: string; name: string }[]
     compaction_strategy: string
     created_at: number
     updated_at: number

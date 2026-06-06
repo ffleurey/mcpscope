@@ -61,7 +61,7 @@ export interface SessionSummary {
   workflow_kind?: string
   latest_error?: { step_id: string | null; error_kind: string | null; message: string }
   model_profile_snapshot: { name: string }
-  mcp_profile_snapshot: { name: string } | null
+  mcp_profile_snapshots: { name: string }[]
 }
 
 export interface ListResult {
@@ -92,7 +92,7 @@ export const listOutputSchema = {
       message: z.string(),
     }).optional(),
     model_profile_snapshot: z.object({ name: z.string() }),
-    mcp_profile_snapshot: z.object({ name: z.string() }).nullable(),
+    mcp_profile_snapshots: z.array(z.object({ name: z.string() })),
   })),
 }
 
@@ -129,7 +129,7 @@ export const listOperation = {
           ...(workflowKind ? { workflow_kind: workflowKind } : {}),
           ...(latestError ? { latest_error: latestError } : {}),
           model_profile_snapshot: { name: s.modelProfileSnapshot.name },
-          mcp_profile_snapshot: s.mcpProfileSnapshot ? { name: s.mcpProfileSnapshot.name } : null,
+          mcp_profile_snapshots: s.mcpProfileSnapshots.map(snap => ({ name: snap.name })),
         }
       }),
     }

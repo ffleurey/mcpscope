@@ -78,7 +78,7 @@ export const capturedReasoningThreeBatchSession: SessionRecord = {
     createdAt: 1,
     updatedAt: 1,
   },
-  mcpProfileSnapshot: {
+  mcpProfileSnapshots: [{
     id: 'captured-mcp',
     name: 'Captured MCP',
     url: 'http://localhost:3001/mcp',
@@ -87,7 +87,7 @@ export const capturedReasoningThreeBatchSession: SessionRecord = {
     authValue: null,
     createdAt: 1,
     updatedAt: 1,
-  },
+  }],
   loadedContextLength: null,
   systemPromptTokens: 37,
   toolDefinitionsTokens: 3199,

@@ -107,7 +107,7 @@ export function createPrimarySession(input: {
   session_id?: string
   title?: string
   model_config_id?: string
-  mcp_profile_id?: string | null
+  mcp_profile_ids?: string[]
   compaction_strategy?: 'none' | 'strip-reasoning'
 }) {
   return request('/api/session-constructors/primary', {
@@ -322,7 +322,7 @@ const preflightResponseSchema = z.object({ ok: z.literal(true) })
 
 export function preflightSession(input: {
   lmConnectionSnapshot: { baseUrl: string; apiKey?: string | null }
-  mcpProfileSnapshot?: { url: string } | null
+  mcpProfileSnapshots?: { url: string }[]
   selectedModel: { modelKey: string; modelDisplayName?: string }
 }) {
   return request('/api/sessions/preflight', {
@@ -340,7 +340,6 @@ export function getSessionCreationDefaults() {
 
 export function putSessionCreationDefaults(input: {
   defaultModelConfigId: string | null
-  defaultMcpProfileId: string | null
 }): Promise<{ sessionCreationDefaults: SessionCreationDefaults }> {
   return request('/api/session-creation-defaults', {
     method: 'PUT',

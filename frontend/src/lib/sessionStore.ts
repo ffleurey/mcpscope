@@ -118,7 +118,7 @@ function toSessionSummary(record: SessionRecord): SessionSummary {
     workflow_phase: undefined,
     latest_error: undefined,
     model_profile_snapshot: { name: record.modelProfileSnapshot.name },
-    mcp_profile_snapshot: record.mcpProfileSnapshot ? { name: record.mcpProfileSnapshot.name } : null,
+    mcp_profile_snapshots: record.mcpProfileSnapshots.map(s => ({ name: s.name })),
   }
 }
 
@@ -320,7 +320,7 @@ export async function deleteChat(sessionId: string): Promise<void> {
 export async function startSession(input: {
   sessionId?: string
   modelConfigId?: string
-  mcpProfileId?: string | null
+  mcpProfileIds?: string[]
   compactionStrategy: 'none' | 'strip-reasoning'
 }): Promise<void> {
   clearSessionError()
@@ -345,18 +345,17 @@ export async function startSession(input: {
       )
     }
 
-    const resolvedMcpProfileId = input.mcpProfileId === undefined
-      ? defaults?.defaultMcpProfileId ?? undefined
-      : input.mcpProfileId
-    const selectedMcpProfile = resolvedMcpProfileId
-      ? get(mcpProfiles).find((profile) => profile.id === resolvedMcpProfileId) ?? null
-      : null
-    const mcpSnapshot = selectedMcpProfile ? buildMcpProfileSnapshot(selectedMcpProfile) : null
+    const allProfiles = get(mcpProfiles)
+    const resolvedMcpIds = input.mcpProfileIds ?? allProfiles.filter(p => p.defaultEnabled).map(p => p.id)
+    const selectedMcpProfiles = resolvedMcpIds
+      .map(id => allProfiles.find(p => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => p != null)
+    const mcpSnapshots = selectedMcpProfiles.map(p => buildMcpProfileSnapshot(p))
 
     // Pre-flight: check connectivity before creating the session record
     await preflightSession({
       lmConnectionSnapshot: { baseUrl: selectedConnection.baseUrl, apiKey: selectedConnection.apiKey ?? null },
-      mcpProfileSnapshot: mcpSnapshot ? { url: mcpSnapshot.url } : null,
+      mcpProfileSnapshots: mcpSnapshots.map(s => ({ url: s.url })),
       selectedModel: {
         modelKey: selectedModelConfig.modelKey,
         modelDisplayName: selectedModelConfig.modelDisplayName,
@@ -366,7 +365,7 @@ export async function startSession(input: {
     const { session, initJobId } = await createPrimarySession({
       session_id: input.sessionId,
       model_config_id: selectedModelConfig.id,
-      mcp_profile_id: resolvedMcpProfileId ?? null,
+      mcp_profile_ids: resolvedMcpIds,
       compaction_strategy: input.compactionStrategy,
     })
     // Show the chat view immediately (composer locked until initStatus = 'ready')

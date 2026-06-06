@@ -207,7 +207,7 @@ export async function executeAnalysisLaunch(
       const session = createSession(db, {
         title,
         modelProfileSnapshot,
-        mcpProfileSnapshot: analysisMcpSnapshot,
+        mcpProfileSnapshots: analysisMcpSnapshot ? [analysisMcpSnapshot] : [],
         compactionStrategy: 'strip-reasoning',
         sessionType: 'session_analysis',
         parentKind: 'session',

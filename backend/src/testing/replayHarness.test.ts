@@ -177,7 +177,7 @@ describe('session trace replay harness', () => {
           createdAt: 1,
           updatedAt: 1,
         },
-        mcpProfileSnapshot: {
+        mcpProfileSnapshots: [{
           id: 'mcp-1',
           name: 'Local MCP',
           url: 'http://localhost:3001/mcp',
@@ -186,7 +186,7 @@ describe('session trace replay harness', () => {
           authValue: null,
           createdAt: 1,
           updatedAt: 1,
-        },
+        }],
       },
       turnInputs: ['Use the tool to tell me the current time.'],
       dependencies: {

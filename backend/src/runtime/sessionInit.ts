@@ -71,7 +71,7 @@ export async function runSessionInitialization(
   }
 
   // MCP setup: initializes MCP session + creates mcp-instructions + tool-definitions parts
-  if (session.mcpProfileSnapshot) {
+  if (session.mcpProfileSnapshots.length > 0) {
     await ensureMcpContext(database, session, mcpGateway)
     parts = listPartRecordsBySession(database.connection, sessionId)
     for (const part of parts.filter(p => p.turnId === null)) {

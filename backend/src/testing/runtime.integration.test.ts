@@ -150,7 +150,7 @@ describe('backend runtime integration', () => {
           createdAt: Date.now(),
           updatedAt: Date.now(),
         },
-        mcpProfileSnapshot: {
+        mcpProfileSnapshots: [{
           id: 'integration-mcp',
           name: 'Local MCP',
           url: env.mcpServerUrl,
@@ -159,7 +159,7 @@ describe('backend runtime integration', () => {
           authValue: null,
           createdAt: Date.now(),
           updatedAt: Date.now(),
-        },
+        }],
       },
     })
 
@@ -253,7 +253,7 @@ describe('backend runtime integration', () => {
           createdAt: Date.now(),
           updatedAt: Date.now(),
         },
-        mcpProfileSnapshot: {
+        mcpProfileSnapshots: [{
           id: 'integration-mcp-temperature',
           name: 'Local MCP Temperature',
           url: env.mcpServerUrl,
@@ -262,7 +262,7 @@ describe('backend runtime integration', () => {
           authValue: null,
           createdAt: Date.now(),
           updatedAt: Date.now(),
-        },
+        }],
       },
     })
 
@@ -396,7 +396,7 @@ describe('backend runtime integration', () => {
           createdAt: Date.now(),
           updatedAt: Date.now(),
         },
-        mcpProfileSnapshot: {
+        mcpProfileSnapshots: [{
           id: 'integration-mcp-temperature-stress',
           name: 'Local MCP Temperature Stress',
           url: env.mcpServerUrl,
@@ -405,7 +405,7 @@ describe('backend runtime integration', () => {
           authValue: null,
           createdAt: Date.now(),
           updatedAt: Date.now(),
-        },
+        }],
       },
     })
 

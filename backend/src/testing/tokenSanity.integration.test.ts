@@ -255,13 +255,13 @@ describe('token count sanity — live LM Studio integration', () => {
           temperature: 0, reasoning: 'on',
           createdAt: Date.now(), updatedAt: Date.now(),
         },
-        mcpProfileSnapshot: {
+        mcpProfileSnapshots: [{
           id: 'ts-mcp', name: 'Token Sanity MCP',
           url: env.mcpServerUrl,
           transport: 'streamable-http',
           authType: null, authValue: null,
           createdAt: Date.now(), updatedAt: Date.now(),
-        },
+        }],
       },
     })
     expect(sessionRes.statusCode).toBe(201)

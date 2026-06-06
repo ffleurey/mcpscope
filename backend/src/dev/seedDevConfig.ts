@@ -87,6 +87,7 @@ function main(): void {
       transport: 'streamable-http',
       authType: null,
       authValue: null,
+      defaultEnabled: true,
       createdAt: createdAtFor(existingMcpProfiles, DEV_MCP_PROFILE_ID, timestamp),
       updatedAt: timestamp,
     })

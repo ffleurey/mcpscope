@@ -52,7 +52,7 @@ function makeSessionRecord(overrides: Partial<SessionRecord> & Pick<SessionRecor
       createdAt: 1,
       updatedAt: 1,
     },
-    mcpProfileSnapshot: overrides.mcpProfileSnapshot ?? null,
+    mcpProfileSnapshots: overrides.mcpProfileSnapshots ?? [],
     loadedContextLength: overrides.loadedContextLength ?? null,
     systemPromptTokens: overrides.systemPromptTokens ?? null,
     toolDefinitionsTokens: overrides.toolDefinitionsTokens ?? null,
@@ -244,7 +244,7 @@ describe('analysis workflow helpers', () => {
       sessionType: 'session_analysis',
       parentKind: 'session',
       parentId: 'TARG',
-      mcpProfileSnapshot: {
+      mcpProfileSnapshots: [{
         id: 'analysis-mcp',
         name: 'mcpscope-analysis',
         url: 'http://localhost:3030/mcp/analysis',
@@ -253,7 +253,7 @@ describe('analysis workflow helpers', () => {
         authValue: null,
         createdAt: 1,
         updatedAt: 1,
-      },
+      }],
     }))
     insertStepRecord(db.connection, makeStepRecord({
       id: 'ANLY.step.bootstrap',
@@ -362,7 +362,7 @@ describe('analysis workflow helpers', () => {
       sessionType: 'session_analysis',
       parentKind: 'session',
       parentId: 'TARG',
-      mcpProfileSnapshot: {
+      mcpProfileSnapshots: [{
         id: 'analysis-mcp',
         name: 'mcpscope-analysis',
         url: 'http://localhost:3030/mcp/analysis',
@@ -371,7 +371,7 @@ describe('analysis workflow helpers', () => {
         authValue: null,
         createdAt: 1,
         updatedAt: 1,
-      },
+      }],
     }))
     insertStepRecord(db.connection, makeStepRecord({
       id: 'ANLY.step.bootstrap',
@@ -503,7 +503,7 @@ describe('analysis workflow helpers', () => {
       sessionType: 'session_analysis',
       parentKind: 'session',
       parentId: 'TARG',
-      mcpProfileSnapshot: {
+      mcpProfileSnapshots: [{
         id: 'analysis-mcp',
         name: 'mcpscope-analysis',
         url: 'http://localhost:3030/mcp/analysis',
@@ -512,7 +512,7 @@ describe('analysis workflow helpers', () => {
         authValue: null,
         createdAt: 1,
         updatedAt: 1,
-      },
+      }],
     }))
     insertStepRecord(db.connection, makeStepRecord({
       id: 'step-final',
@@ -705,7 +705,7 @@ describe('analysis workflow helpers', () => {
       sessionType: 'session_analysis',
       parentKind: 'session',
       parentId: 'TARG',
-      mcpProfileSnapshot: {
+      mcpProfileSnapshots: [{
         id: 'analysis-mcp',
         name: 'analysis-mcp',
         url: 'http://localhost:3030/mcp/analysis',
@@ -714,7 +714,7 @@ describe('analysis workflow helpers', () => {
         authValue: null,
         createdAt: 1,
         updatedAt: 1,
-      },
+      }],
     }))
     insertStepRecord(db.connection, makeStepRecord({
       id: 'step-final',

@@ -373,13 +373,13 @@ const toolSessionPayload = {
     temperature: 0, reasoning: 'on',
     createdAt: 1, updatedAt: 1,
   },
-  mcpProfileSnapshot: {
+  mcpProfileSnapshots: [{
     id: 'mcp-1', name: 'Local MCP',
     url: 'http://localhost:3001/mcp',
     transport: 'streamable-http',
     authType: null, authValue: null,
     createdAt: 1, updatedAt: 1,
-  },
+  }],
 }
 
 function makeToolGateway() {

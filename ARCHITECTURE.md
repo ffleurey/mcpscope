@@ -307,7 +307,7 @@ classDiagram
 		+status
 		+sessionType
 		+modelProfileSnapshot
-		+mcpProfileSnapshot
+		+mcpProfileSnapshots
 		+compactionStrategy
 	}
 
