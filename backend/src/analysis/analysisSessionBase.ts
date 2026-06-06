@@ -167,7 +167,6 @@ export abstract class AnalysisSessionBase {
   // ────────────────────────────────────────────────────────────────────────────
 
   protected abstract getWorkflowKind(): string
-  abstract buildSystemPrompt(): string
 
   // ────────────────────────────────────────────────────────────────────────────
   // Public execution API

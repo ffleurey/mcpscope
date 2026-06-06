@@ -60,3 +60,17 @@ export function getWorkflowLabel(kind: string): string | null {
 export function getWorkflowKinds(): string[] {
   return [...workflowRegistry.keys()]
 }
+
+export function buildAnalysisSystemPrompt(kind: string, input: {
+  analysisGoal: string
+  additionalInstructions?: string
+}): string {
+  const ctor = workflowRegistry.get(kind)
+  if (!ctor) {
+    // Fallback to full session
+    const fallback = workflowRegistry.get('full_session_analysis')
+    if (fallback) return (fallback as any).buildSystemPrompt(input)
+    throw new Error(`Unsupported analysis workflow kind: ${kind}`)
+  }
+  return (ctor as any).buildSystemPrompt(input)
+}

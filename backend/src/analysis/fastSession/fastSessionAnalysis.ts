@@ -25,6 +25,7 @@ import { ToolCallAssessmentStep } from '../shared/toolCallAssessmentStep.js'
 import { TurnSummaryStep } from '../shared/turnSummaryStep.js'
 import { FinalAggregationStep } from '../shared/finalAggregationStep.js'
 import { runCoverageValidationStep } from '../coverageValidationStep.js'
+import { buildFastSessionSystemPrompt } from './systemPrompt.js'
 import { buildFastSessionToolCallAssessmentPrompt } from './evaluationPrompts.js'
 import { buildFastSessionTurnSummaryPrompt } from './evaluationPrompts.js'
 import { buildFastSessionFinalAggregationPrompt } from './evaluationPrompts.js'
@@ -83,8 +84,8 @@ export class FastSessionAnalysis extends AnalysisSessionBase {
     return ANALYSIS_WORKFLOW_KIND.FAST_SESSION
   }
 
-  buildSystemPrompt(): string {
-    return ''
+  static buildSystemPrompt(input: { analysisGoal: string; selectedToolNames: string[]; onlyFailedToolCalls: boolean; evaluationCriteria: string[] }): string {
+    return buildFastSessionSystemPrompt(input)
   }
 
   // ── Hooks ─────────────────────────────────────────────────────────────────

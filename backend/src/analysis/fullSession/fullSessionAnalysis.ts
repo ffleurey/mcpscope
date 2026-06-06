@@ -36,6 +36,7 @@ import { buildTurnSummaryEvaluationPrompt } from './evaluationPrompts.js'
 import { buildFinalAggregationEvaluationPrompt } from './evaluationPrompts.js'
 import { getLatestArtifactBySchemaKey } from '../artifactRepository.js'
 import { finalAnalysisReportSchema } from '../schemas.js'
+import { buildFullSessionSystemPrompt } from './systemPrompt.js'
 
 export class FullSessionAnalysis extends AnalysisSessionBase {
   static readonly workflowKind = ANALYSIS_WORKFLOW_KIND.FULL_SESSION
@@ -91,8 +92,8 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
     return ANALYSIS_WORKFLOW_KIND.FULL_SESSION
   }
 
-  buildSystemPrompt(): string {
-    return ''
+  static buildSystemPrompt(input: { analysisGoal: string; selectedToolNames: string[]; onlyFailedToolCalls: boolean; evaluationCriteria: string[] }): string {
+    return buildFullSessionSystemPrompt(input)
   }
 
   // ── Hooks ─────────────────────────────────────────────────────────────────

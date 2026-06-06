@@ -26,6 +26,7 @@ import { FastToolGroupedAssessmentStep } from './fastToolGroupedAssessmentStep.j
 import { buildFastToolWorkIndex } from './fastToolPlanning.js'
 import { buildFastToolFinalAggregationPrompt } from './evaluationPrompts.js'
 import { fastToolFinalReportSchema } from './schemas.js'
+import { buildFastToolSystemPrompt } from './systemPrompt.js'
 
 export class FastToolAnalysis extends AnalysisSessionBase {
   static readonly workflowKind = ANALYSIS_WORKFLOW_KIND.FAST_TOOL
@@ -80,8 +81,8 @@ export class FastToolAnalysis extends AnalysisSessionBase {
     return ANALYSIS_WORKFLOW_KIND.FAST_TOOL
   }
 
-  buildSystemPrompt(): string {
-    return ''
+  static buildSystemPrompt(input: { analysisGoal: string; selectedToolNames: string[]; onlyFailedToolCalls: boolean; evaluationCriteria: string[] }): string {
+    return buildFastToolSystemPrompt(input)
   }
 
   // ── Hooks ─────────────────────────────────────────────────────────────────

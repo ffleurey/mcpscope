@@ -27,6 +27,7 @@ import type { OperationContext } from './context.js'
 import { buildAnalysisSystemPrompt, normalizeAnalysisGoal } from '../analysis/systemPrompt.js'
 import { runSessionInitialization } from '../runtime/sessionInit.js'
 import { ANALYSIS_WORKFLOW_KIND } from '../analysis/workflowKinds.js'
+import { isKnownWorkflowKind } from '../analysis/analysisWorkflowFactory.js'
 import { getAnalysisTitlePrefix } from '../analysis/analysisSessionPresentation.js'
 import type { AnalysisSessionState } from '../analysis/schemas.js'
 
@@ -52,11 +53,7 @@ export const launchAnalysisInputSchema = z.object({
   /** Optional additional evaluation criteria. */
   evaluation_criteria: z.array(z.string().min(1)).optional(),
   /** The analysis workflow to run. */
-  workflow_kind: z.enum([
-    ANALYSIS_WORKFLOW_KIND.FULL_SESSION,
-    ANALYSIS_WORKFLOW_KIND.FAST_SESSION,
-    ANALYSIS_WORKFLOW_KIND.FAST_TOOL,
-  ]).optional(),
+  workflow_kind: z.string().optional(),
 })
 
 export type LaunchAnalysisInput = z.infer<typeof launchAnalysisInputSchema>
@@ -103,7 +100,9 @@ export async function executeAnalysisLaunch(
   const selectedToolNames = [...new Set((input.selected_tool_names ?? []).map((name) => name.trim()).filter(Boolean))]
   const onlyFailedToolCalls = input.only_failed_tool_calls === true
   const evaluationCriteria = [...new Set((input.evaluation_criteria ?? []).map((criterion) => criterion.trim()).filter(Boolean))]
-  const workflowKind = input.workflow_kind ?? ANALYSIS_WORKFLOW_KIND.FULL_SESSION
+  const workflowKind = input.workflow_kind && isKnownWorkflowKind(input.workflow_kind)
+    ? input.workflow_kind
+    : ANALYSIS_WORKFLOW_KIND.FULL_SESSION
 
   type TxResult =
     | { kind: 'target_not_found' }
@@ -215,11 +214,7 @@ export async function executeAnalysisLaunch(
         parentId: targetSessionId,
       })
 
-      const wk = workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_SESSION
-        ? ANALYSIS_WORKFLOW_KIND.FAST_SESSION
-        : workflowKind === ANALYSIS_WORKFLOW_KIND.FAST_TOOL
-          ? ANALYSIS_WORKFLOW_KIND.FAST_TOOL
-          : ANALYSIS_WORKFLOW_KIND.FULL_SESSION
+      const wk = isKnownWorkflowKind(workflowKind) ? workflowKind : ANALYSIS_WORKFLOW_KIND.FULL_SESSION
       const initialAnalysisState: AnalysisSessionState = {
         phase: 'bootstrap',
         bootstrapComplete: false,

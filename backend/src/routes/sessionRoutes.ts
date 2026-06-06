@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { ANALYSIS_WORKFLOW_KIND } from '../analysis/workflowKinds.js'
 import { apiError } from '../errors.js'
 import {
   deleteSessionRecord,
@@ -211,11 +210,7 @@ export function registerSessionRoutes(deps: RouteDeps): void {
     const { analysis_goal, additional_instructions, workflow_kind } = z.object({
       analysis_goal: z.string().optional(),
       additional_instructions: z.string().optional(),
-      workflow_kind: z.enum([
-        ANALYSIS_WORKFLOW_KIND.FULL_SESSION,
-        ANALYSIS_WORKFLOW_KIND.FAST_SESSION,
-        ANALYSIS_WORKFLOW_KIND.FAST_TOOL,
-      ]).optional(),
+      workflow_kind: z.string().optional(),
     }).parse(request.query)
 
     return {
