@@ -17,7 +17,7 @@ import {
   type AnalysisSessionState,
   type AnalysisTarget,
 } from '../schemas.js'
-import { type FastToolWorkIndex } from './schemas.js'
+import { SCHEMA_KEY as SELF_KEY, type FastToolWorkIndex } from './schemas.js'
 import { ANALYSIS_WORKFLOW_KIND } from '../workflowKinds.js'
 import { STEP_TYPE } from '../../domain/executionModel.js'
 import { BootstrapStep } from '../shared/bootstrapStep.js'
@@ -93,7 +93,7 @@ export class FastToolAnalysis extends AnalysisSessionBase {
     this.emit({ type: 'analysis-phase-changed', phase: 'bootstrap' })
 
     await new BootstrapStep(this.db, this.lm, this.mcp, {
-      indexSchemaKey: SCHEMA_KEY.FAST_TOOL_WORK_INDEX,
+      indexSchemaKey: SELF_KEY.WORK_INDEX,
       buildIndexContent: buildFastToolWorkIndex,
     })
       .execute(this.buildStepContext(STEP_TYPE.ANALYSIS_BOOTSTRAP))
@@ -102,7 +102,7 @@ export class FastToolAnalysis extends AnalysisSessionBase {
   }
 
   protected async onToolCall(part: PartInfo, _round: RoundInfo, _turn: TurnInfo): Promise<void> {
-    const workIndexArtifact = this.readArtifact(SCHEMA_KEY.FAST_TOOL_WORK_INDEX)
+    const workIndexArtifact = this.readArtifact(SELF_KEY.WORK_INDEX)
     const targetArtifact = this.readArtifact(SCHEMA_KEY.ANALYSIS_TARGET)
     if (!workIndexArtifact || !targetArtifact) return
 
@@ -111,6 +111,7 @@ export class FastToolAnalysis extends AnalysisSessionBase {
     if (!workUnit || !workUnit.tool_call_part_ids.includes(part.id)) return
 
     await new FastToolGroupedAssessmentStep(this.db, this.lm, this.mcp, {
+      artifactSchemaKey: SELF_KEY.GROUP_ASSESSMENT,
       workUnit,
       analysisTarget: targetArtifact.content as AnalysisTarget,
     }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_TOOL_GROUP_ASSESSMENT))
@@ -122,9 +123,9 @@ export class FastToolAnalysis extends AnalysisSessionBase {
     this.emit({ type: 'analysis-phase-changed', phase: 'final_aggregation' })
 
     await new FinalAggregationStep(this.db, this.lm, this.mcp, {
-      assessmentSchemaKey: SCHEMA_KEY.FAST_TOOL_GROUP_ASSESSMENT,
-      summarySchemaKey: SCHEMA_KEY.FAST_TOOL_GROUP_ASSESSMENT,
-      reportSchemaKey: SCHEMA_KEY.FAST_TOOL_FINAL_REPORT,
+      assessmentSchemaKey: SELF_KEY.GROUP_ASSESSMENT,
+      summarySchemaKey: SELF_KEY.GROUP_ASSESSMENT,
+      reportSchemaKey: SELF_KEY.FINAL_REPORT,
       buildPrompt: (params) => buildFastToolFinalAggregationPrompt({
         analysisTarget: params.analysisTarget as AnalysisTarget,
         assessmentCount: params.assessmentCount as number,

@@ -18,6 +18,7 @@ import {
   type EvidencePacketIndex,
   type AnalysisTarget,
 } from '../schemas.js'
+import { SCHEMA_KEY as SELF_KEY } from './schemas.js'
 import { ANALYSIS_WORKFLOW_KIND } from '../workflowKinds.js'
 import { STEP_TYPE } from '../../domain/executionModel.js'
 import { BootstrapStep } from '../shared/bootstrapStep.js'
@@ -113,7 +114,7 @@ export class FastSessionAnalysis extends AnalysisSessionBase {
     if (!packet || packet.tool_call_part_id !== part.id) return
 
     await new ToolCallAssessmentStep(this.db, this.lm, this.mcp, {
-      artifactSchemaKey: SCHEMA_KEY.FAST_TOOL_CALL_ASSESSMENT,
+      artifactSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
       buildPrompt: buildFastSessionToolCallAssessmentPrompt,
       computeNextPhase: ({ nextPacketIndex, packetCount }) =>
         nextPacketIndex < packetCount ? 'assessing' : 'turn_summary',
@@ -133,8 +134,8 @@ export class FastSessionAnalysis extends AnalysisSessionBase {
     this.emit({ type: 'analysis-phase-changed', phase: 'turn_summary' })
 
     await new TurnSummaryStep(this.db, this.lm, this.mcp, {
-      assessmentSchemaKey: SCHEMA_KEY.FAST_TOOL_CALL_ASSESSMENT,
-      summarySchemaKey: SCHEMA_KEY.FAST_TURN_SUMMARY,
+      assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
+      summarySchemaKey: SELF_KEY.TURN_SUMMARY,
       buildPrompt: (params) => buildFastSessionTurnSummaryPrompt({
         analysisTarget: params.analysisTarget as AnalysisTarget,
         subjectId: params.subjectId as string,
@@ -155,7 +156,7 @@ export class FastSessionAnalysis extends AnalysisSessionBase {
       const validated = runCoverageValidationStep(this.db, {
         state: this.state,
         stepId: this.state.analysisSessionId,
-        assessmentSchemaKey: SCHEMA_KEY.FAST_TOOL_CALL_ASSESSMENT,
+        assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
       })
       this.state = { ...this.state, ...validated.updatedState }
     }
@@ -163,9 +164,9 @@ export class FastSessionAnalysis extends AnalysisSessionBase {
     this.emit({ type: 'analysis-phase-changed', phase: 'final_aggregation' })
 
     await new FinalAggregationStep(this.db, this.lm, this.mcp, {
-      assessmentSchemaKey: SCHEMA_KEY.FAST_TOOL_CALL_ASSESSMENT,
-      summarySchemaKey: SCHEMA_KEY.FAST_TURN_SUMMARY,
-      reportSchemaKey: SCHEMA_KEY.FAST_FINAL_ANALYSIS_REPORT,
+      assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
+      summarySchemaKey: SELF_KEY.TURN_SUMMARY,
+      reportSchemaKey: SELF_KEY.FINAL_ANALYSIS_REPORT,
       buildPrompt: (params) => buildFastSessionFinalAggregationPrompt({
         analysisTarget: params.analysisTarget as AnalysisTarget,
         assessmentCount: params.assessmentCount as number,

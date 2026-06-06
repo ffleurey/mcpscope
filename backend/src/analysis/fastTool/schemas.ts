@@ -1,5 +1,11 @@
 import { z } from 'zod'
 
+export const SCHEMA_KEY = {
+  WORK_INDEX: 'analysis.fast_tool_work_index.v1',
+  GROUP_ASSESSMENT: 'analysis.fast_tool_group_assessment.v1',
+  FINAL_REPORT: 'analysis.fast_tool_final_report.v1',
+} as const
+
 export const fastToolFinalReportSchema = z.object({
   overall_tool_use_outcome: z.string().min(1),
   overall_rationale: z.string().min(1),

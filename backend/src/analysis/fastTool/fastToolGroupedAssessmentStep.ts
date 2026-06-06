@@ -23,6 +23,7 @@ function uuid(): string { return crypto.randomUUID() }
 function now(): number { return Date.now() }
 
 export interface FastToolGroupedAssessmentStepConfig {
+  artifactSchemaKey: string
   workUnit: FastToolWorkGroup
   analysisTarget: AnalysisTarget
 }
@@ -106,7 +107,7 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
       id: uuid(), sessionId: analysisSessionId, stepId: this.stepId,
       content: parsed.data,
       metadata: {
-        schema_key: SCHEMA_KEY.FAST_TOOL_GROUP_ASSESSMENT,
+        schema_key: this.config.artifactSchemaKey,
         work_unit_id: workUnit.work_unit_id,
         tool_name: workUnit.tool_name,
         subject_scope: parsed.data.subject_scope,
