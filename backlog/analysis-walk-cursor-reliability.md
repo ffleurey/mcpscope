@@ -178,19 +178,16 @@ mean the bug is still present and the test correctly reproduces it.
 | 2 | Step status persisted as `'complete'` when `run()` throws | Step record has `status: 'error'` after `run()` throws | `workflowStep.test.ts` | ✅ Already worked, test passes |
 | 3 | Retry endpoint does not reset `walkCursor` | After `retry-failed-step`, `analysisState.walkCursor === 0` | `sessionMetadata.test.ts:896` | ✅ Fixed, test passes (fix: `sessionRoutes.ts:128`) |
 | 4 | Coverage validation crashes with FK when `stepId` is a session ID | `runCoverageValidationStep` with `stepId: 'ANLY'` returns `{ passed: false, phase: 'error' }` without crashing | `analysisWorkflow.test.ts` | ✅ Fixed, test passes (fix: `coverageValidationStep.ts:99-108` catches FK) |
-| 5 | New turns in target session not picked up by cursor | — | Not written yet | ❌ No test |
+| 5 | New turns in target session not picked up by cursor | `analysisSessionTree.test.ts` — after adding a turn, the hook list grows but `targetTurnId` is fixed and never re-evaluated | ❌ Test FAILS (issue not fixed) |
 
-### Tests still to write
+### Tests still failing
 
-**Issue 5 — new turns in target session**
-- Create target session with 2 turns, start analysis, partially execute
-- Add turn-3 to the target session (insert turn + rounds + parts)
-- Call `resumeOneStep()` and verify the new turn's hooks are reached
-- Expected: cursor advances past the old hook list end into the new turns
-
-This test requires constructing an `AnalysisSessionBase` subclass (e.g.
-`FastSessionAnalysis`) with a mock gateway, calling `execute()` or
-`resumeOneStep()` directly, and checking `walkCursor` position vs DB changes.
+**Issue 5 — new turns in target session** (`analysisSessionTree.test.ts`)
+- Creates target session with 1 turn, adds a second turn
+- Verifies the hook list grows (turns are detectable)
+- But fails because `targetTurnId` is fixed at bootstrap and never re-evaluated
+- The hook list IS rebuilt on each `resumeOneStep()`, so new turns are
+  technically reachable IF `targetTurnId` were to be widened dynamically.
 
 ## Proposed work items
 
