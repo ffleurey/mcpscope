@@ -57,8 +57,15 @@ function buildSessionSummaryPayload(
   const workflowPhase = summary.sessionType === 'session_analysis'
     ? (() => {
         const sessionAnalysis = getSessionRecord(deps.database.connection, summary.id)
-        const analysisState = sessionAnalysis?.analysisState as { phase?: string } | null
+        const analysisState = sessionAnalysis?.analysisState as { phase?: string; planProgress?: { total: number; completed: number; currentCommandKind: string | null; currentCommandId: string | null } } | null
         return analysisState?.phase ?? null
+      })()
+    : null
+  const planProgress = summary.sessionType === 'session_analysis'
+    ? (() => {
+        const sessionAnalysis = getSessionRecord(deps.database.connection, summary.id)
+        const analysisState = sessionAnalysis?.analysisState as { planProgress?: { total: number; completed: number; currentCommandKind: string | null; currentCommandId: string | null } } | null
+        return analysisState?.planProgress ?? null
       })()
     : null
   const latestError = deps.toLifecycleState(summary) === 'error' && summary.sessionType === 'session_analysis'
@@ -80,6 +87,7 @@ function buildSessionSummaryPayload(
     compaction_strategy: summary.compactionStrategy,
     ...(workflowKind ? { workflow_kind: workflowKind } : {}),
     ...(workflowPhase ? { workflow_phase: workflowPhase } : {}),
+    ...(planProgress ? { plan_progress: planProgress } : {}),
     ...(latestError ? { latest_error: latestError } : {}),
     model_profile_snapshot: { name: summary.modelProfileSnapshot.name },
     mcp_profile_snapshots: summary.mcpProfileSnapshots,

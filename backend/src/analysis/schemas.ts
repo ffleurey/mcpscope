@@ -50,6 +50,17 @@ export type AnalysisPhase =
   | 'complete'
   | 'error'
 
+export interface PlanProgress {
+  /** Total number of commands in the current plan. */
+  total: number
+  /** Number of commands already completed. */
+  completed: number
+  /** Kind of the command currently being executed (or null if done). */
+  currentCommandKind: string | null
+  /** Semantic ID of the command currently being executed (or null if done). */
+  currentCommandId: string | null
+}
+
 export interface AnalysisSessionState {
   phase: AnalysisPhase
   /** ID of the analysis (child) session. */
@@ -68,6 +79,8 @@ export interface AnalysisSessionState {
   evaluationCriteria: string[]
   /** The analysis workflow kind, used for rehydration. */
   workflow_kind?: string
+  /** Execution progress derived from the plan (updated after each step). */
+  planProgress?: PlanProgress
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

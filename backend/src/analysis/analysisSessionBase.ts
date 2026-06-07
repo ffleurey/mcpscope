@@ -338,14 +338,28 @@ export abstract class AnalysisSessionBase {
     const tree = this.loadTargetTree()
     const plan = this.buildPlan(tree)
     const next = this.findFirstIncomplete(plan)
+    const completedCount = next ? plan.indexOf(next) : plan.length
     this.state.phase = this.derivePhase(next)
+    this.state.planProgress = {
+      total: plan.length,
+      completed: completedCount,
+      currentCommandKind: next?.kind ?? null,
+      currentCommandId: next?.semanticId ?? null,
+    }
 
     if (!next) {
       this.saveState()
       return
     }
 
-    this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })
+    this.emit({
+      type: 'analysis-phase-changed',
+      phase: this.state.phase,
+      commandKind: next.kind,
+      commandId: next.semanticId,
+      completedCount,
+      totalCount: plan.length,
+    })
 
     const step = next.buildStep(this.db, this.lm, this.mcp)
     const result = await step.execute(this.buildStepContext(next.stepTypeKey))

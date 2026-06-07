@@ -225,6 +225,7 @@
     }
   })
   let analysisLatestError = $derived(isAnalysisSession ? (session?.latest_error ?? null) : null)
+  let analysisPlanProgress = $derived(isAnalysisSession ? (session?.plan_progress ?? null) : null)
   let analysisComplete = $derived(analysisPhase === 'complete')
   let analysisFailed = $derived(analysisPhase === 'error' || session?.status === 'error')
   let hasTraceContent = $derived(
@@ -466,6 +467,28 @@
             <span class="analysis-bar-label">{analysisWorkflowLabel}</span>
             {#if analysisPhase}
               <span class="analysis-bar-phase">Phase: <strong>{analysisPhase}</strong></span>
+            {/if}
+            {#if analysisPlanProgress && analysisPlanProgress.total > 0 && !analysisComplete && !analysisFailed}
+              <span class="analysis-bar-progress">
+                Step {analysisPlanProgress.completed + 1} / {analysisPlanProgress.total}
+                {#if analysisPlanProgress.currentCommandKind === 'assess'}
+                  <span class="analysis-bar-command">Assessing…</span>
+                {:else if analysisPlanProgress.currentCommandKind === 'turn_summary'}
+                  <span class="analysis-bar-command">Summarizing…</span>
+                {:else if analysisPlanProgress.currentCommandKind === 'bootstrap'}
+                  <span class="analysis-bar-command">Bootstrap…</span>
+                {:else if analysisPlanProgress.currentCommandKind === 'coverage'}
+                  <span class="analysis-bar-command">Coverage check…</span>
+                {:else if analysisPlanProgress.currentCommandKind === 'final_aggregation'}
+                  <span class="analysis-bar-command">Building report…</span>
+                {/if}
+              </span>
+              <div class="analysis-bar-progress-bar">
+                <div
+                  class="analysis-bar-progress-fill"
+                  style="width: {Math.round(analysisPlanProgress.completed / analysisPlanProgress.total * 100)}%"
+                ></div>
+              </div>
             {/if}
             {#if analysisLatestError}
               <span class="analysis-bar-error">
@@ -799,6 +822,30 @@
   .analysis-bar-error em {
     font-style: normal;
     color: var(--text-muted);
+  }
+
+  .analysis-bar-progress {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-left: 0.25rem;
+  }
+  .analysis-bar-command {
+    font-style: italic;
+    margin-left: 0.25rem;
+  }
+  .analysis-bar-progress-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--bg-subtle, #e0e0e0);
+    border-radius: 2px;
+    margin-top: 0.35rem;
+    overflow: hidden;
+  }
+  .analysis-bar-progress-fill {
+    height: 100%;
+    background: var(--color-primary, #5b9bd5);
+    border-radius: 2px;
+    transition: width 0.3s ease;
   }
 
   .analysis-bar-done {

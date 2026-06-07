@@ -75,6 +75,20 @@ orchestration.  These should be separate concerns.
 
 ---
 
+## Final architecture
+
+The analysis workflow now uses three cooperating patterns:
+
+| Pattern | Role | Location |
+|---|---|---|
+| **Visitor / Hook** | Tree traversal — 22 hook positions visited during `buildPlan()`. Subclasses override hooks and call `addCommand()` to define the work sequence. | `AnalysisSessionBase.buildPlan()` drives traversal; hooks in subclass |
+| **Command** | Each `AnalysisCommand` wraps a `WorkflowStep` with its config. Commands are idempotent — `isComplete()` checks artifact existence. | `AnalysisCommand` interface; concrete classes in workflow subclass files |
+| **Interpreter** | `resumeOneStep()` builds the plan (via Visitor/hooks), finds the first incomplete command (via artifact-derived position), executes it, then rebuilds. | `AnalysisSessionBase.resumeOneStep()` |
+
+The Visitor/hooks are the **sole mechanism for plan construction**. There is no competing path. The base class owns the traversal — subclasses customize by overriding hooks. Hooks do not execute work directly; they plan it by calling `addCommand()`.
+
+---
+
 ## Design decisions
 
 ### Decision 1: The workflow is a linear sequence, not a state machine
@@ -741,25 +755,26 @@ and updated as part of the implementation commit.
 All items in the "Files to modify" table have been changed.  Key changes:
 
 | Area | What changed |
-|---|---|
-| `analysisSessionBase.ts` | Removed `hookList`, `walkCursor`, `singleStepLimit`, `flatten()`, `walk()`, all 22 hook methods. Added `AnalysisCommand` interface, `buildPlan()` (abstract), `findFirstIncomplete()`, `derivePhase()`, `discoverNewPackets()`. `resumeOneStep()` now builds the plan, finds the first incomplete command, executes it, then rebuilds the plan to reflect post-step artifact state. |
+|---|---|---|
+| `analysisSessionBase.ts` | Removed `hookList`, `walkCursor`, `singleStepLimit`, `flatten()`, `walk()`. **Restored 22 hook methods** as synchronous no-ops that subclasses override to call `addCommand()`. Added `AnalysisCommand` interface, concrete `buildPlan()` (tree traversal → hooks → command accumulation), `findFirstIncomplete()`, `derivePhase()`, `discoverNewPackets()`. `resumeOneStep()` builds plan via hooks, finds first incomplete command, executes it, then rebuilds plan to reflect post-step artifact state. Added `id` field to `TurnInfo`. |
 | `schemas.ts` | `AnalysisSessionState` stripped to 8 fields — phase identity fields (`phase`, `analysisSessionId`, `targetSessionId`, `targetTurnId`, `analysisGoal`, `selectedToolNames`, `onlyFailedToolCalls`, `evaluationCriteria`, `workflow_kind`). Removed: `walkCursor`, `nextPacketIndex`, `packetCount`, `currentTurnId`, `bootstrapComplete`, `coverageValidated`, `finalAggregationComplete`. |
-| `inspectionQueries.ts` | `loadSessionTree()` no longer accepts a `targetTurnId` parameter.  Always loads the full tree. |
+| `inspectionQueries.ts` | `loadSessionTree()` no longer accepts a `targetTurnId` parameter.  Always loads the full tree. Populates `TurnInfo.id` (turn record ID). |
 | Step implementations | All `Object.assign(state, ...)` calls removed from `BootstrapStep`, `ToolCallAssessmentStep`, `TurnSummaryStep`, `FinalAggregationStep`, `FastToolGroupedAssessmentStep`. `computeNextPhase` removed from `ToolCallAssessmentStepConfig`.  `TurnSummaryStep` receives `turnId` from config instead of `state.currentTurnId`. |
 | `coverageValidationStep.ts` | Rewritten from standalone function to `WorkflowStep` subclass with step-record lifecycle. |
-| Workflow subclasses | `FullSessionAnalysis`, `FastSessionAnalysis`, `FastToolAnalysis` implement `buildPlan()` instead of hook overrides.  Each builds a command list from bootstrap artifacts.  Command classes (`BootstrapCommand`, `AssessCommand`, `TurnSummaryCommand`, `CoverageCommand`, `FinalCommand`, `GroupedAssessCommand`) inlined in each file. |
+| Workflow subclasses | `FullSessionAnalysis`, `FastSessionAnalysis`, `FastToolAnalysis` override hooks (`onBeforeSession`, `onToolCall`, `onAfterTurn`, `onAfterSession`) instead of a monolithic `buildPlan()`. Each hook calls `addCommand()` with the appropriate command class. Command classes (`BootstrapCommand`, `AssessCommand`, `TurnSummaryCommand`, `CoverageCommand`, `FinalCommand`, `GroupedAssessCommand`) inlined in each file. |
 | `launchAnalysis.ts` | Initial state no longer includes removed fields. |
 | `sessionRoutes.ts` | `resetFailedAnalysisStepForRetry` uses step `childIndex` ordering to cascade artifact removal instead of `walkCursor: 0` and phase computation. |
 | `artifactRepository.ts` | Added `deleteJsonArtifact()` for retry cleanup. |
 | Test files | `analysisSessionTree.test.ts` rewritten: tests artifact-based `findFirstIncomplete`. `analysisWorkflow.test.ts`: coverage tests use `CoverageValidationStep`, final aggregation tests check artifacts not `state.phase`. `sessionMetadata.test.ts`: retry assertions updated. `app.test.ts`: fast-tool single-step test updated for 3-command plan instead of many no-op hooks. |
-| Documentation | `ARCHITECTURE.md` updated: patterns table now has "Plan + Interpret" row instead of "Visitor / Hook". `analysisSessionBase` description updated. `computeNextPhase` removed from Strategy row. |
+| Documentation | `ARCHITECTURE.md` updated: patterns table now has "Plan + Interpret" row alongside "Visitor / Hook". `analysisSessionBase` description updated. `computeNextPhase` removed from Strategy row. |
 
 ### Known gaps vs. initial specification
 
 | Gap | Detail | Impact |
 |---|---|---|
 | **`buildPlan()` reads artifacts** | The spec says `buildPlan()` should traverse the tree to discover work.  The implementation reads the evidence_packet_index artifact instead (which was created by bootstrap).  This was a pragmatic choice — the packet index already contains the packet data needed for assess commands, and re-deriving it from tree traversal would duplicate the bootstrap's packet-discovery logic. | None.  The plan correctly reflects the work discovered by bootstrap. |
-| ~~**No tree-growth auto-detection**~~ | ~~The spec says new turns within scope are automatically included.  Since `buildPlan()` reads the packet index (a bootstrap artifact), new turns that didn't exist at bootstrap time won't appear in the plan unless bootstrap is re-run.~~ | **RESOLVED**: `buildPlan()` now calls `discoverNewPackets()` after reading the packet index.  This method scans raw `PartRecord` types from the DB for `tool-call` parts whose IDs are not in the known set, builds `EvidencePacket` objects for them using the same logic as `collectAnalysisPlanningData`, and appends `AssessCommand` entries to the plan.  Coverage check accounts for the total packet count (known + new). |
+| ~~**`buildPlan()` reads artifacts**~~ | ~~The spec says `buildPlan()` should traverse the tree to discover work.  The implementation initially read the evidence_packet_index artifact instead.~~ | **RESOLVED**: `buildPlan()` now traverses the tree via the Visitor and calls hooks.  Each hook (`onToolCall`) performs a per-part packet lookup (known index first, then `discoverNewPackets()` fallback).  Plan construction is fully Visitor-driven. |
+| ~~**No tree-growth auto-detection**~~ | ~~The spec says new turns within scope are automatically included.  Since `buildPlan()` reads the packet index (a bootstrap artifact), new turns that didn't exist at bootstrap time won't appear in the plan unless bootstrap is re-run.~~ | **RESOLVED**: `onToolCall` hook checks each tool-call part against the known packet index.  Unknown parts are passed to `discoverNewPackets()` which builds `EvidencePacket` objects from raw `PartRecord` data — same logic as `collectAnalysisPlanningData`.  Assess commands are created for newly discovered parts. |
 | **Retry does not reconstruct the plan** | The spec's Option A recommends rehydrating the workflow and calling `buildPlan()` in the retry endpoint.  The implementation takes a simpler approach: it cascades artifact removal by `childIndex` ordering without rebuilding the plan.  This avoids the complexity of rehydrating a workflow instance in an HTTP route handler. | Behavior is equivalent — downstream artifacts are removed, the next `resumeOneStep()` rebuilds the plan and finds the first incomplete command. |
 
 ### Validation
