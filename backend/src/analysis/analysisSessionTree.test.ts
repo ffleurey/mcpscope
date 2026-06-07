@@ -29,7 +29,7 @@ function createTargetSession(db: BackendDatabase, id: string, setup: boolean): v
     createdAt: 1, updatedAt: 1,
     modelProfileSnapshot: { id:'m', name:'m', modelKey:'m', modelDisplayName:'m',
       connectionBaseUrl:'https://x.com/v1', apiKey:null,
-      systemPrompt:'Reply.', temperature:0, reasoning:null, loadedContextLength:null,
+      systemPrompt:'Reply.', temperature:0, reasoning:null,
       createdAt:1, updatedAt:1 },
     mcpProfileSnapshots: [], loadedContextLength:null,
     systemPromptTokens:null, toolDefinitionsTokens:null, isContextExhausted:false,

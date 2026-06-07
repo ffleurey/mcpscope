@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { openBackendDatabase } from '../persistence/db.js'
-import { createSessionRecord, insertStepRecord } from '../persistence/repository.js'
+import { createSessionRecord } from '../persistence/repository.js'
 import { WorkflowStep } from './workflowStep.js'
-import type { StepResult } from '../domain/executionModel.js'
+import { stepTypeKey, type StepResult } from '../domain/executionModel.js'
 import type { BackendDatabase } from '../persistence/db.js'
 import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
@@ -30,7 +30,7 @@ function makeSession(db: BackendDatabase, id: string): void {
       modelKey: 'model-1', modelDisplayName: 'Model 1',
       connectionBaseUrl: 'https://example.invalid/v1', apiKey: null,
       systemPrompt: 'Reply exactly.', temperature: 0,
-      reasoning: null, loadedContextLength: null,
+      reasoning: null,
       createdAt: 1, updatedAt: 1,
     },
     mcpProfileSnapshots: [],
@@ -47,9 +47,22 @@ const fakeLmGateway: ChatCompletionGateway = {
 }
 
 const fakeMcpGateway: McpGateway = {
-  listTools: async () => [],
-  callTool: async () => ({ content: [], isError: false }),
-  closeSession: async () => undefined,
+  initializeSession: async () => ({
+    sessionId: null,
+    rawExchange: { requestUrl: '', requestMethod: 'GET', requestBodyText: '', responseStatus: 200, responseBody: null },
+  }),
+  listTools: async () => ({
+    tools: [],
+    rawResult: null,
+    rawExchange: { requestUrl: '', requestMethod: 'GET', requestBodyText: '', responseStatus: 200, responseBody: null },
+  }),
+  callTool: async () => ({
+    content: '',
+    structuredContent: null,
+    isError: false,
+    rawResult: null,
+    rawExchange: { requestUrl: '', requestMethod: 'POST', requestBodyText: '', responseStatus: 200, responseBody: null },
+  }),
 }
 
 // ── Concrete mock step returning a configurable result ──────────────────────
@@ -82,7 +95,7 @@ describe('WorkflowStep.execute() step status persistence', () => {
       outputArtifacts: [],
       error: 'Intentional failure',
     })
-    await step.execute({ sessionId: 'TEST', stepTypeKey: 'analysis_bootstrap' })
+    await step.execute({ sessionId: 'TEST', stepTypeKey: stepTypeKey('analysis_bootstrap') })
 
     const row = db.connection.prepare(
       'SELECT status, state_json FROM v2_steps WHERE id = ?',
@@ -100,7 +113,7 @@ describe('WorkflowStep.execute() step status persistence', () => {
       status: 'complete',
       outputArtifacts: [],
     })
-    await step.execute({ sessionId: 'TEST', stepTypeKey: 'analysis_bootstrap' })
+    await step.execute({ sessionId: 'TEST', stepTypeKey: stepTypeKey('analysis_bootstrap') })
 
     const row = db.connection.prepare(
       'SELECT status FROM v2_steps WHERE id = ?',
@@ -122,7 +135,7 @@ describe('WorkflowStep.execute() step status persistence', () => {
     }
 
     const step = new ThrowingStep(db, fakeLmGateway, fakeMcpGateway)
-    const result = await step.execute({ sessionId: 'TEST', stepTypeKey: 'analysis_bootstrap' })
+    const result = await step.execute({ sessionId: 'TEST', stepTypeKey: stepTypeKey('analysis_bootstrap') })
 
     expect(result.status).toBe('error')
 
