@@ -16,6 +16,11 @@ Fast deterministic coverage for:
 - token accounting
 - selectors / context reconstruction
 - LM Studio SSE parsing
+- token count sanity (proportionality, context sum consistency, compaction math, monotonic context growth)
+
+Token count sanity (`tokenSanity.test.ts`) uses mock gateways and exercises the full
+backend turn pipeline without live infrastructure. It was previously excluded from
+`npm test` and is now part of every deterministic run.
 
 These stay small and exact.
 
@@ -52,6 +57,27 @@ Use replay tests whenever the behavior under test spans:
 - persisted turns / rounds / parts
 
 Replay fixtures and most deterministic tests operate on committed **parts**, not transient streaming **deltas**.
+
+Current fixtures include:
+- model-only single-turn trace
+- tool-enabled single-turn trace
+- model-only two-turn compaction trace (exercises context sum consistency and
+  reasoning stripping across compaction boundaries)
+
+### 5. Adapter structural tests
+
+These verify adapter-surface parity with the backend operation catalog without
+exercising live infrastructure:
+
+- **MCP HTTP endpoint smoke test** (`backend/src/mcp/mcp.test.ts`): sends a
+  JSON-RPC `tools/list` to the primary `/mcp` endpoint and asserts the response
+  contains all 5 `mcpscope_*` tool names matching the backend catalog.
+- **CLI structural test** (`cli/src/commands/commandCatalog.test.ts`): verifies
+  CLI command IDs match the backend operation catalog, and that `mcpscope --help`
+  documents every command.
+
+These tests do not require a running backend, LM Studio, or MCP server and
+complete in milliseconds.
 
 ### 4. Live integration tests
 

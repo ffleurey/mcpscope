@@ -1,34 +1,28 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { operationList } from '../../../backend/src/operations/index.ts'
+
+const expectedCommandIds = ['list', 'create', 'send', 'status', 'inspect'] as const
 
 describe('CLI command catalog matches backend operations', () => {
-  const expectedCommands = ['list', 'create', 'send', 'status', 'inspect'] as const
-
-  it('CLI commands match expected set', () => {
-    const commandNames = expectedCommands.map(c => `mcpscope_${c}`)
-    expect(commandNames).toEqual([
-      'mcpscope_list',
-      'mcpscope_create',
-      'mcpscope_send',
-      'mcpscope_status',
-      'mcpscope_inspect',
-    ])
+  it('CLI command IDs match backend operation catalog', () => {
+    const backendIds = operationList.map(op => op.id).sort()
+    expect(backendIds).toEqual([...expectedCommandIds].sort())
   })
 
-  it('CLI help text references all expected command names', () => {
-    const helpText = `Usage: mcpscope <command> [options]
+  it('CLI help text references all expected command names', async () => {
+    let stdout = ''
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
+      stdout += String(chunk)
+      return true
+    })
 
-  mcpscope list [--json]
-  mcpscope create <title> [--id <session-id>] [--compaction strip-reasoning|none] [--json]
-  mcpscope send <session-id> <prompt> [--json]
-  mcpscope status <session-id> [--json]
-  mcpscope inspect <id> [--short] [--json]
+    const { main } = await import('../index.ts')
+    await main(['node', 'mcpscope', '--help'])
 
-Options:
-  --json        emit JSON instead of text
-  --url <url>   backend URL  (default: http://localhost:3030, or MCPSCOPE_URL)
-`
-    for (const cmd of expectedCommands) {
-      expect(helpText).toContain(`mcpscope ${cmd}`)
+    for (const cmd of expectedCommandIds) {
+      expect(stdout).toContain(`mcpscope ${cmd}`)
     }
+
+    vi.restoreAllMocks()
   })
 })
