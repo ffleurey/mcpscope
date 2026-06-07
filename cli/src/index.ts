@@ -22,7 +22,7 @@ Options:
 `)
 }
 
-async function main(argv: string[]): Promise<void> {
+export async function main(argv: string[]): Promise<void> {
   const args = argv.slice(2)
 
   // Extract global --url before dispatching (may be overridden per-command too)

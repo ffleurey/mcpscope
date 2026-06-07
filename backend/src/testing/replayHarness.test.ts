@@ -460,4 +460,132 @@ describe('session trace replay harness', () => {
 
     await expectTraceToReplay(trace)
   })
+
+  it('replays a deterministic model-only trace bundle with compaction across two turns', async () => {
+    let completionCallCount = 0
+    const trace = await captureTraceFixture({
+      sessionPayload: {
+        title: 'Replay compaction fixture',
+        modelProfileSnapshot: {
+          id: 'model-1',
+          name: 'Model',
+          connectionBaseUrl: 'https://example.com/v1',
+          apiKey: null,
+          modelKey: 'model-key',
+          modelDisplayName: 'Model Key',
+          systemPrompt: 'Reply exactly.',
+          temperature: 0,
+          reasoning: 'on',
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+      turnInputs: ['Say OK.', 'Say bye.'],
+      dependencies: {
+        chatCompletionGateway: {
+          async probePromptTokensDetailed(_baseUrl, _apiKey, body) {
+            const messages = body.messages as Array<{ role: string }>
+            const promptTokens = messages.length === 1 ? 3 : messages.length * 5
+            return {
+              promptTokens,
+              completion: {
+                id: `probe-${promptTokens}`,
+                model: 'model-key',
+                created: 122,
+                choices: [],
+                usage: {
+                  prompt_tokens: promptTokens,
+                  completion_tokens: 0,
+                  total_tokens: promptTokens,
+                },
+              },
+              rawExchange: {
+                requestUrl: 'https://example.com/v1/chat/completions',
+                requestMethod: 'POST',
+                requestHeadersJson: {
+                  'Content-Type': 'application/json',
+                  Accept: 'application/json',
+                },
+                requestBody: JSON.stringify(body),
+                responseStatus: 200,
+                responseHeadersJson: {
+                  'content-type': 'application/json',
+                },
+                responseBody: JSON.stringify({
+                  id: `probe-${promptTokens}`,
+                  usage: { prompt_tokens: promptTokens },
+                }),
+              },
+            }
+          },
+          async createChatCompletion() {
+            completionCallCount += 1
+            if (completionCallCount === 1) {
+              return {
+                id: 'cmpl-1',
+                model: 'model-key',
+                created: 123,
+                choices: [
+                  {
+                    index: 0,
+                    finish_reason: 'stop',
+                    message: {
+                      role: 'assistant',
+                      reasoning_content: 'Because the answer is simple.',
+                      content: 'OK',
+                    },
+                  },
+                ],
+                usage: {
+                  prompt_tokens: 10,
+                  completion_tokens: 6,
+                  total_tokens: 16,
+                  completion_tokens_details: {
+                    reasoning_tokens: 4,
+                  },
+                },
+              }
+            }
+            return {
+              id: 'cmpl-2',
+              model: 'model-key',
+              created: 124,
+              choices: [
+                {
+                  index: 0,
+                  finish_reason: 'stop',
+                  message: {
+                    role: 'assistant',
+                    reasoning_content: 'Fine.',
+                    content: 'Bye.',
+                  },
+                },
+              ],
+              usage: {
+                prompt_tokens: 18,
+                completion_tokens: 5,
+                total_tokens: 23,
+                completion_tokens_details: {
+                  reasoning_tokens: 2,
+                },
+              },
+            }
+          },
+        },
+        mcpGateway: {
+          async initializeSession() {
+            throw new Error('not used')
+          },
+          async listTools() {
+            throw new Error('not used')
+          },
+          async callTool() {
+            throw new Error('not used')
+          },
+        },
+      },
+    })
+
+    await expectTraceToReplay(trace)
+  })
 })

@@ -1,8 +1,10 @@
+import fs from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { operationCatalog, operationList } from '../operations/index.js'
 import { TOOL_PREFIX, createMcpServer } from './index.js'
 import type { OperationContext } from './index.js'
+import { buildBackendApp } from '../app.js'
 
 const EXPECTED_OPERATION_IDS = ['list', 'create', 'send', 'status', 'inspect'] as const
 
@@ -140,6 +142,63 @@ describe('MCP structured output — outputSchema defined for all operations', ()
   it('status outputSchema has active_turn (snake_case)', () => {
     expect(operationCatalog.status.outputSchema).toHaveProperty('active_turn')
     expect(operationCatalog.status.outputSchema).not.toHaveProperty('activeTurn')
+  })
+})
+
+describe('MCP HTTP endpoint execution', () => {
+  it('responds to JSON-RPC tools/list and returns all 5 mcpscope tools', async () => {
+    const dataDir = `.tmp-test-data/${crypto.randomUUID()}`
+    const app = await buildBackendApp({
+      host: '127.0.0.1',
+      port: 3030,
+      corsOrigin: true,
+      dataDir,
+      sqlitePath: `${dataDir}/test.db`,
+      maxToolRounds: 5,
+    })
+
+    try {
+      const listToolsRequest = {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/list',
+        params: {},
+      }
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/mcp',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        payload: listToolsRequest,
+      })
+
+      expect([200, 202]).toContain(res.statusCode)
+
+      const toolNames: string[] = []
+      for (const line of res.body.split('\n')) {
+        const trimmed = line.startsWith('data:') ? line.slice(5).trim() : null
+        if (!trimmed) continue
+        try {
+          const parsed = JSON.parse(trimmed) as { result?: { tools?: Array<{ name: string }> } }
+          if (Array.isArray(parsed.result?.tools)) {
+            toolNames.push(...parsed.result.tools.map((t: { name: string }) => t.name))
+          }
+        } catch {
+          // ignore non-JSON data lines
+        }
+      }
+
+      expect(toolNames).toEqual([
+        'mcpscope_list',
+        'mcpscope_create',
+        'mcpscope_send',
+        'mcpscope_status',
+        'mcpscope_inspect',
+      ])
+    } finally {
+      await app.close()
+      fs.rmSync(dataDir, { recursive: true, force: true })
+    }
   })
 })
 
