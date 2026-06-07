@@ -93,7 +93,7 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
   }
 
   const analysisState = session.analysisState as Record<string, unknown> | null
-  if (!analysisState || analysisState.phase !== 'error') {
+  if (!analysisState || (analysisState.phase !== 'error' && !analysisState.retry_failed_step_id)) {
     throw new Error('Analysis session is not in a failed state')
   }
 
