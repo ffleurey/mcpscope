@@ -8,12 +8,14 @@ import { FastSessionAnalysis } from './fastSession/fastSessionAnalysis.js'
 import { FastToolAnalysis } from './fastTool/fastToolAnalysis.js'
 import { ANALYSIS_WORKFLOW_KIND } from './workflowKinds.js'
 import type { AnalysisSessionState } from './schemas.js'
-import type { AnalysisSessionBase } from './analysisSessionBase.js'
+import type { AnalysisSessionBase, AnalysisCommand } from './analysisSessionBase.js'
 
 export interface RehydratableAnalysisWorkflow {
   canContinue(): boolean
   resume(emitEvent?: AnalysisStreamEventSink): Promise<void>
   resumeOneStep(emitEvent?: AnalysisStreamEventSink): Promise<void>
+  getPlan(): AnalysisCommand[]
+  computeRetryPhase(): string
 }
 
 type AnalysisSubclassCtor = {

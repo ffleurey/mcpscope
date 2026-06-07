@@ -30,6 +30,7 @@ import {
   getLatestAnalysisDiagnosticSummaryForSession,
 } from '../analysis/analysisSessionPresentation.js'
 import { listArtifactsBySession, deleteJsonArtifact } from '../analysis/artifactRepository.js'
+import { rehydrateAnalysisWorkflow } from '../analysis/analysisWorkflowFactory.js'
 
 function buildSessionSummaryPayload(
   deps: Pick<RouteDeps, 'database' | 'toLifecycleState'>,
@@ -126,9 +127,7 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
   const retryParts = listPartRecordsBySession(database.connection, sessionId)
     .filter(part => part.turnId && ownedTurnIds.has(part.turnId))
 
-  // Phase is derived from the plan on the next resumeOneStep().  Leave it
-  // as-is (error) so the UI shows the failure until retry resumes.
-  const updatedAnalysisState = {
+  const updatedAnalysisState: Record<string, unknown> = {
     ...analysisState,
     retry_failed_step_id: failedStep.id,
     retry_requested_at: Date.now(),
@@ -166,9 +165,25 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
   })
   tx()
 
+  // Derive phase from the plan after artifact removal.
+  // Rehydrate with null lm/mcp — plan construction only needs the database.
+  let retryPhase: string | null = null
+  try {
+    const instance = rehydrateAnalysisWorkflow(database as any, null as any, null as any, sessionId)
+    if (instance) {
+      retryPhase = instance.computeRetryPhase()
+      if (retryPhase) {
+        const currentState = getSessionRecord(database.connection, sessionId)?.analysisState as Record<string, unknown> ?? {}
+        updateSessionAnalysisState(database.connection, sessionId, { ...currentState, phase: retryPhase })
+      }
+    }
+  } catch {
+    // Plan reconstruction failed — leave phase as error.
+  }
+
   return {
     failedStepId: failedStep.id,
-    retryPhase: null,
+    retryPhase,
     latestError: getLatestAnalysisDiagnosticSummaryForSession(database.connection, sessionId),
   }
 }

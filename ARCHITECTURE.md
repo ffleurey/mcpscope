@@ -187,7 +187,7 @@ The backend structure is intentionally split so architectural seams are visible 
 	- `stepContext.ts` — `StepContext` interface carrying execution-scoped data (`sessionId`, `stepTypeKey`, `emitSink`, `workflowState`)
 
 - `backend/src/analysis/` owns analysis-specific behavior built on top of the workflow layer:
-	- `analysisSessionBase.ts` — abstract base class with plan construction (`buildPlan()` → `findFirstIncomplete()`) and step interpretation (`resumeOneStep()`), plus the `AnalysisCommand` interface
+	- `analysisSessionBase.ts` — abstract base class with tree-traversal `buildPlan()` (drives 22 hooks that call `addCommand()`), `findFirstIncomplete()` (artifact-derived position), `resumeOneStep()` (Interpreter), plus the `AnalysisCommand` interface
 	- `shared/` — reusable `WorkflowStep` subclasses (`BootstrapStep`, `ToolCallAssessmentStep`, `TurnSummaryStep`, `FinalAggregationStep`) that accept behavior via constructor-injected functions (zero knowledge of analysis types)
 	- `fullSession/`, `fastSession/`, `fastTool/` — self-contained analysis subclasses, each owning its own prompt builders, schema keys, Zod schemas, and system prompt
 	- `analysisWorkflowFactory.ts` — registry-based factory (`registerAnalysisWorkflow()`) instead of a `switch` on workflow kind. Adding a new analysis type only requires creating a new directory and calling the registration function.
@@ -208,12 +208,13 @@ independent of concrete analysis types while allowing each subtype to customize
 behavior at the edges.
 
 | Pattern | Where | Why |
-|---|---|---|
+|---|---|---|---|
 | **Template Method** | `WorkflowStep.execute()` calls abstract `run(ctx)` | Step-record lifecycle (create, emit started, run, complete/fail, emit done) lives in the base class once. Concrete steps write only business logic. |
-| **Command** | Each step is a self-contained object created with `new` and `config`, executed via `.execute(ctx)` | Encapsulates prompt, schema, and LLM interaction in one place. Hooks don't manage step internals. |
+| **Command** | `AnalysisCommand` wraps a `WorkflowStep` with its config; `isComplete()` checks artifact existence for idempotent re-execution | Encapsulates prompt, schema, and LLM interaction in one place. Each command is a self-contained work unit whose completion is derived from persisted artifacts. |
+| **Visitor / Hook** | `AnalysisSessionBase.buildPlan()` traverses the target session tree and calls 22 hook methods (e.g. `onToolCall`, `onAfterTurn`). Subclasses override hooks and call `addCommand()` to populate the plan. | Provides consistent, constrained extension points. The base class owns the traversal — subclasses customize only the hooks they need. Hooks plan work by adding commands; they do not execute work directly. |
 | **Strategy** | Steps receive `buildPrompt`, `buildDeterministicReport` as constructor-injected functions | Zero branching on analysis-type identity inside shared code. Each subclass passes its own functions. |
 | **Registry** | `workflowRegistry` Map in `analysisWorkflowFactory.ts` | Replaces `switch(workflowKind)`. Adding a new analysis type calls `registerAnalysisWorkflow()` — no factory edits. |
-| **Plan + Interpret** | `AnalysisSessionBase.buildPlan()` produces a list of `AnalysisCommand` objects; `resumeOneStep()` finds the first incomplete command (via artifact existence) and executes it. Subclasses override `buildPlan()` to define their command sequence. | Separates planning (what work to do) from execution (doing it). No walk cursor, no flattened hook list. Position is derived from the plan vs. artifact state — always consistent. |
+| **Interpreter** | `resumeOneStep()` builds the plan (via Visitor/Hooks), finds the first incomplete command (via artifact-derived position), executes it, then rebuilds. `execute()` loops on `resumeOneStep()`. | Separates planning (Visitor/Hooks build the command list) from execution (Interpreter runs one command at a time). No walk cursor, no flattened hook list. Position is derived from plan vs. artifact state — always consistent. |
 
 These patterns are the architectural seam: shared code (`shared/`, the base class)
 never imports from or branches on a concrete analysis type. Each subclass owns

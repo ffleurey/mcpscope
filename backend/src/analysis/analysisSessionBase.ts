@@ -390,11 +390,28 @@ export abstract class AnalysisSessionBase {
   // Derived position — find the first incomplete command in the plan
   // ────────────────────────────────────────────────────────────────────────────
 
-  protected findFirstIncomplete(plan: AnalysisCommand[]): AnalysisCommand | null {
+  findFirstIncomplete(plan: AnalysisCommand[]): AnalysisCommand | null {
     for (const cmd of plan) {
       if (!cmd.isComplete(this.db, this.sessionId)) return cmd
     }
     return null
+  }
+
+  /** Public entry for retry: returns the current plan derived from the target tree. */
+  getPlan(): AnalysisCommand[] {
+    return this.buildPlan(this.loadTargetTree())
+  }
+
+  /** Public entry for retry: derive the phase that will be active after artifacts are removed. */
+  computeRetryPhase(): AnalysisPhase {
+    const plan = this.getPlan()
+    const next = this.findFirstIncomplete(plan)
+    if (!next) return 'complete'
+    const phaseMap: Record<string, AnalysisPhase> = {
+      bootstrap: 'bootstrap', assess: 'assessing', turn_summary: 'turn_summary',
+      coverage: 'coverage_validation', final_aggregation: 'final_aggregation',
+    }
+    return phaseMap[next.kind] ?? 'error'
   }
 
   private derivePhase(next: AnalysisCommand | null): AnalysisPhase {
