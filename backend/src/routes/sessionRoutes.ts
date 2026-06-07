@@ -118,9 +118,14 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
   const retryParts = listPartRecordsBySession(database.connection, sessionId)
     .filter(part => part.turnId && ownedTurnIds.has(part.turnId))
 
+  // Reset the walk cursor so hooks replay from the start. Individual hook
+  // guards (nextPacketIndex, bootstrapComplete, etc.) prevent re-execution of
+  // already-completed work. The failing hook's guard re-matches only for the
+  // specific packet/condition that originally failed.
   const updatedAnalysisState = {
     ...analysisState,
     phase: retryPhase,
+    walkCursor: 0,
     retry_failed_step_id: failedStep.id,
     retry_requested_at: Date.now(),
   }
