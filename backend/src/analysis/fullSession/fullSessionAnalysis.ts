@@ -11,7 +11,6 @@ import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import {
   AnalysisSessionBase,
-  type AnalysisCommand,
   type PartInfo,
   type RoundInfo,
   type TurnInfo,
@@ -26,7 +25,6 @@ import {
 } from '../schemas.js'
 import { SCHEMA_KEY as SELF_KEY, finalAnalysisReportSchema } from './schemas.js'
 import { ANALYSIS_WORKFLOW_KIND } from '../workflowKinds.js'
-import { STEP_TYPE } from '../../domain/executionModel.js'
 import { BootstrapStep } from '../shared/bootstrapStep.js'
 import { ToolCallAssessmentStep } from '../shared/toolCallAssessmentStep.js'
 import { TurnSummaryStep } from '../shared/turnSummaryStep.js'
@@ -36,7 +34,6 @@ import { buildToolCallEvaluationPrompt } from './evaluationPrompts.js'
 import { buildTurnSummaryEvaluationPrompt } from './evaluationPrompts.js'
 import { buildFinalAggregationEvaluationPrompt } from './evaluationPrompts.js'
 import { buildFullSessionSystemPrompt } from './systemPrompt.js'
-import { getLatestArtifactBySchemaKey, listArtifactsBySessionAndSchemaKey } from '../artifactRepository.js'
 
 export class FullSessionAnalysis extends AnalysisSessionBase {
   static readonly workflowKind = ANALYSIS_WORKFLOW_KIND.FULL_SESSION
@@ -93,14 +90,15 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
   // ── Hooks — called by buildPlan() during tree traversal ───────────────────
 
   protected onBeforeSession(): void {
-    this.addCommand(new BootstrapCommand(this.db, this.lm, this.mcp))
+    this.addCommand(new BootstrapStep(this.db, this.lm, this.mcp, {
+      indexSchemaKey: SCHEMA_KEY.EVIDENCE_PACKET_INDEX,
+    }))
   }
 
   protected onToolCall(part: PartInfo, _round: RoundInfo, _turn: TurnInfo): void {
     const targetArtifact = this.readArtifact(SCHEMA_KEY.ANALYSIS_TARGET)
     const indexArtifact = this.readArtifact(SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
     if (!targetArtifact || !indexArtifact) return
-    const target = targetArtifact.content as AnalysisTarget
 
     const knownPackets = (indexArtifact.content as EvidencePacketIndex).packets
     let packet: EvidencePacket | undefined = knownPackets.find(p => p.tool_call_part_id === part.id)
@@ -109,153 +107,39 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
       packet = this.discoverNewPackets(knownIds).find(p => p.tool_call_part_id === part.id)
     }
     if (packet) {
-      this.addCommand(new AssessCommand(this.db, this.lm, this.mcp, packet, target))
+      const analysisTarget = targetArtifact.content as AnalysisTarget
+      this.addCommand(new ToolCallAssessmentStep(this.db, this.lm, this.mcp, {
+        artifactSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
+        buildPrompt: buildToolCallEvaluationPrompt,
+        packet,
+        analysisTarget,
+      }))
     }
   }
 
   protected onAfterTurn(turn: TurnInfo): void {
     const hasToolCalls = turn.rounds.some(r => r.parts.some(p => p.type === 'tool_call'))
     if (hasToolCalls) {
-      this.addCommand(new TurnSummaryCommand(this.db, this.lm, this.mcp, turn.id))
+      this.addCommand(new TurnSummaryStep(this.db, this.lm, this.mcp, {
+        assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
+        summarySchemaKey: SELF_KEY.TURN_SUMMARY,
+        turnId: turn.id,
+        buildPrompt: (params) => buildTurnSummaryEvaluationPrompt({
+          analysisTarget: params.analysisTarget as AnalysisTarget,
+          subjectId: params.subjectId as string,
+          repeatedTools: params.repeatedTools as string[],
+          repeatedAttemptGuidance: params.repeatedAttemptGuidance as string | null,
+          turnPacketCount: params.turnPacketCount as number,
+        }),
+      }))
     }
   }
 
   protected onAfterSession(): void {
-    this.addCommand(new CoverageCommand(this.db, this.lm, this.mcp))
-    this.addCommand(new FinalCommand(this.db, this.lm, this.mcp))
-  }
-}
-
-// ── Command implementations ─────────────────────────────────────────────────
-
-class BootstrapCommand implements AnalysisCommand {
-  readonly kind = 'bootstrap'
-  readonly semanticId = ''
-  readonly stepTypeKey = STEP_TYPE.ANALYSIS_BOOTSTRAP
-
-  constructor(
-    private readonly db: BackendDatabase,
-    private readonly lm: ChatCompletionGateway,
-    private readonly mcp: McpGateway,
-  ) {}
-
-  isComplete(db: BackendDatabase, sessionId: string): boolean {
-    return getLatestArtifactBySchemaKey(db.connection, sessionId, SCHEMA_KEY.EVIDENCE_PACKET_INDEX) !== null
-  }
-
-  buildStep(): BootstrapStep {
-    return new BootstrapStep(this.db, this.lm, this.mcp, {
-      indexSchemaKey: SCHEMA_KEY.EVIDENCE_PACKET_INDEX,
-    })
-  }
-}
-
-class AssessCommand implements AnalysisCommand {
-  readonly kind = 'assess'
-  readonly stepTypeKey = STEP_TYPE.ANALYSIS_TOOL_CALL_ASSESSMENT
-
-  constructor(
-    private readonly db: BackendDatabase,
-    private readonly lm: ChatCompletionGateway,
-    private readonly mcp: McpGateway,
-    private readonly packet: EvidencePacket,
-    private readonly analysisTarget: AnalysisTarget,
-  ) {}
-
-  get semanticId(): string { return this.packet.tool_call_part_id }
-
-  isComplete(db: BackendDatabase, sessionId: string): boolean {
-    return listArtifactsBySessionAndSchemaKey(db.connection, sessionId, SELF_KEY.TOOL_CALL_ASSESSMENT)
-      .some(a => (a.metadata.tool_call_part_id as string | undefined) === this.semanticId)
-  }
-
-  buildStep(): ToolCallAssessmentStep {
-    return new ToolCallAssessmentStep(this.db, this.lm, this.mcp, {
-      artifactSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
-      buildPrompt: buildToolCallEvaluationPrompt,
-      packet: this.packet,
-      analysisTarget: this.analysisTarget,
-    })
-  }
-}
-
-class TurnSummaryCommand implements AnalysisCommand {
-  readonly kind = 'turn_summary'
-  readonly stepTypeKey = STEP_TYPE.ANALYSIS_TURN_SUMMARY
-
-  constructor(
-    private readonly db: BackendDatabase,
-    private readonly lm: ChatCompletionGateway,
-    private readonly mcp: McpGateway,
-    readonly semanticId: string,
-  ) {}
-
-  isComplete(db: BackendDatabase, sessionId: string): boolean {
-    return listArtifactsBySessionAndSchemaKey(db.connection, sessionId, SELF_KEY.TURN_SUMMARY)
-      .some(a => (a.metadata.turn_id as string | undefined) === this.semanticId)
-  }
-
-  buildStep(): TurnSummaryStep {
-    return new TurnSummaryStep(this.db, this.lm, this.mcp, {
+    this.addCommand(new CoverageValidationStep(this.db, this.lm, this.mcp, {
       assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
-      summarySchemaKey: SELF_KEY.TURN_SUMMARY,
-      turnId: this.semanticId,
-      buildPrompt: (params) => buildTurnSummaryEvaluationPrompt({
-        analysisTarget: params.analysisTarget as AnalysisTarget,
-        subjectId: params.subjectId as string,
-        repeatedTools: params.repeatedTools as string[],
-        repeatedAttemptGuidance: params.repeatedAttemptGuidance as string | null,
-        turnPacketCount: params.turnPacketCount as number,
-      }),
-    })
-  }
-}
-
-class CoverageCommand implements AnalysisCommand {
-  readonly kind = 'coverage'
-  readonly semanticId = ''
-  readonly stepTypeKey = STEP_TYPE.ANALYSIS_COVERAGE_VALIDATION
-
-  constructor(
-    private readonly db: BackendDatabase,
-    private readonly lm: ChatCompletionGateway,
-    private readonly mcp: McpGateway,
-  ) {}
-
-  isComplete(db: BackendDatabase, sessionId: string): boolean {
-    const indexArtifact = getLatestArtifactBySchemaKey(db.connection, sessionId, SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
-    if (!indexArtifact) return false
-    const packets = (indexArtifact.content as EvidencePacketIndex).packets
-    if (packets.length === 0) return true
-    const assessments = listArtifactsBySessionAndSchemaKey(db.connection, sessionId, SELF_KEY.TOOL_CALL_ASSESSMENT)
-    const assessedIds = new Set(assessments.map(a => a.metadata.tool_call_part_id as string | undefined).filter(Boolean))
-    return packets.every(p => assessedIds.has(p.tool_call_part_id))
-  }
-
-  buildStep(): CoverageValidationStep {
-    return new CoverageValidationStep(this.db, this.lm, this.mcp, {
-      assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
-    })
-  }
-}
-
-class FinalCommand implements AnalysisCommand {
-  readonly kind = 'final_aggregation'
-  readonly semanticId = ''
-  readonly stepTypeKey = STEP_TYPE.ANALYSIS_FINAL_AGGREGATION
-
-  constructor(
-    private readonly db: BackendDatabase,
-    private readonly lm: ChatCompletionGateway,
-    private readonly mcp: McpGateway,
-  ) {}
-
-  isComplete(db: BackendDatabase, sessionId: string): boolean {
-    return getLatestArtifactBySchemaKey(db.connection, sessionId, SELF_KEY.FINAL_ANALYSIS_REPORT) !== null
-  }
-
-  buildStep(): FinalAggregationStep {
-    return new FinalAggregationStep(this.db, this.lm, this.mcp, {
+    }))
+    this.addCommand(new FinalAggregationStep(this.db, this.lm, this.mcp, {
       assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
       summarySchemaKey: SELF_KEY.TURN_SUMMARY,
       reportSchemaKey: SELF_KEY.FINAL_ANALYSIS_REPORT,
@@ -280,7 +164,7 @@ class FinalCommand implements AnalysisCommand {
           total_tool_calls_assessed: assessments.length,
         }
       },
-    })
+    }))
   }
 }
 

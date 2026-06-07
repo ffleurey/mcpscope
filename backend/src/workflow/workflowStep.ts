@@ -5,11 +5,27 @@ import { insertStepRecord, getNextChildIndex, updateStepRecord } from '../persis
 import { formatStepId } from '../domain/hierarchicalIds.js'
 import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 import type { StepContext } from './stepContext.js'
-import type { StepResult } from '../domain/executionModel.js'
+import type { StepResult, StepTypeKey } from '../domain/executionModel.js'
 
 function now(): number { return Date.now() }
 
-export abstract class WorkflowStep {
+// ── AnalysisCommand — a single unit of work in the execution plan ──────────
+
+export interface AnalysisCommand {
+  /** Human-readable kind, e.g. 'bootstrap', 'assess', 'turn_summary'. */
+  readonly kind: string
+  /** Semantic identity within the plan, e.g. a tool_call_part_id or turn_id. */
+  readonly semanticId: string
+  /** StepTypeKey for the WorkflowStep that executes this command. */
+  readonly stepTypeKey: StepTypeKey
+
+  /** True when this command's output already exists in the DB. */
+  isComplete(db: BackendDatabase, sessionId: string): boolean
+}
+
+// ── WorkflowStep — base class for step execution ───────────────────────────
+
+export abstract class WorkflowStep implements AnalysisCommand {
   stepId: string = ''
   status: string = 'pending'
 
@@ -17,7 +33,11 @@ export abstract class WorkflowStep {
   protected readonly lm: ChatCompletionGateway
   protected readonly mcp: McpGateway
 
+  abstract readonly kind: string
+  abstract readonly stepTypeKey: StepTypeKey
   abstract get stepLabel(): string
+  abstract get semanticId(): string
+  abstract isComplete(db: BackendDatabase, sessionId: string): boolean
 
   constructor(
     db: BackendDatabase,

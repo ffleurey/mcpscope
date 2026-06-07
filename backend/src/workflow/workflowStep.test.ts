@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { openBackendDatabase } from '../persistence/db.js'
 import { createSessionRecord } from '../persistence/repository.js'
 import { WorkflowStep } from './workflowStep.js'
-import { stepTypeKey, type StepResult } from '../domain/executionModel.js'
+import { stepTypeKey, type StepResult, type StepTypeKey } from '../domain/executionModel.js'
 import type { BackendDatabase } from '../persistence/db.js'
 import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
@@ -69,6 +69,11 @@ const fakeMcpGateway: McpGateway = {
 
 class MockStep extends WorkflowStep {
   readonly stepLabel = 'Mock Step'
+  readonly kind = 'test'
+  readonly stepTypeKey: StepTypeKey = stepTypeKey('analysis_bootstrap')
+  get semanticId(): string { return '' }
+  isComplete(): boolean { return false }
+
   constructor(
     db: BackendDatabase,
     lm: ChatCompletionGateway,
@@ -129,6 +134,10 @@ describe('WorkflowStep.execute() step status persistence', () => {
     // A step that throws instead of returning
     class ThrowingStep extends WorkflowStep {
       readonly stepLabel = 'Throwing Step'
+      readonly kind = 'test'
+      readonly stepTypeKey: StepTypeKey = stepTypeKey('analysis_bootstrap')
+      get semanticId(): string { return '' }
+      isComplete(): boolean { return false }
       protected async run(): Promise<StepResult> {
         throw new Error('Runtime crash')
       }

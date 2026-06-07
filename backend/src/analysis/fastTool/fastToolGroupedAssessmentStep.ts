@@ -4,9 +4,10 @@ import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
-import type { StepResult } from '../../domain/executionModel.js'
+import type { StepResult, StepTypeKey } from '../../domain/executionModel.js'
+import { STEP_TYPE } from '../../domain/executionModel.js'
 import { getSessionRecord, getPartRecord, updatePartRecord, listPartRecordsBySession } from '../../persistence/repository.js'
-import { insertJsonArtifact } from '../artifactRepository.js'
+import { insertJsonArtifact, getLatestArtifactBySchemaKey } from '../artifactRepository.js'
 import { runDeterministicMcpToolCallsInSingleTurn } from '../../runtime/toolTurns.js'
 import { runAnalysisTurn } from '../boundedTurn.js'
 import {
@@ -30,6 +31,13 @@ export interface FastToolGroupedAssessmentStepConfig {
 
 export class FastToolGroupedAssessmentStep extends WorkflowStep {
   readonly stepLabel = 'Grouped Assessment'
+  readonly kind = 'assess'
+  readonly stepTypeKey: StepTypeKey = STEP_TYPE.ANALYSIS_TOOL_GROUP_ASSESSMENT
+  get semanticId(): string { return '' }
+
+  isComplete(db: BackendDatabase, sessionId: string): boolean {
+    return getLatestArtifactBySchemaKey(db.connection, sessionId, this.config.artifactSchemaKey) !== null
+  }
 
   constructor(
     db: BackendDatabase,

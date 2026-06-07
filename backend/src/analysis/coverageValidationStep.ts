@@ -15,7 +15,8 @@ import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import { WorkflowStep } from '../workflow/workflowStep.js'
 import type { StepContext } from '../workflow/stepContext.js'
-import type { StepResult } from '../domain/executionModel.js'
+import type { StepResult, StepTypeKey } from '../domain/executionModel.js'
+import { STEP_TYPE } from '../domain/executionModel.js'
 import {
   insertJsonArtifact,
   getLatestArtifactBySchemaKey,
@@ -40,6 +41,19 @@ export interface CoverageValidationStepConfig {
 
 export class CoverageValidationStep extends WorkflowStep {
   readonly stepLabel = 'Coverage Validation'
+  readonly kind = 'coverage'
+  readonly stepTypeKey: StepTypeKey = STEP_TYPE.ANALYSIS_COVERAGE_VALIDATION
+  get semanticId(): string { return '' }
+
+  isComplete(db: BackendDatabase, sessionId: string): boolean {
+    const indexArtifact = getLatestArtifactBySchemaKey(db.connection, sessionId, SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
+    if (!indexArtifact) return false
+    const packets = (indexArtifact.content as EvidencePacketIndex).packets
+    if (packets.length === 0) return true
+    const assessments = listArtifactsBySessionAndSchemaKey(db.connection, sessionId, this.config.assessmentSchemaKey)
+    const assessedIds = new Set(assessments.map(a => a.metadata.tool_call_part_id as string | undefined).filter(Boolean))
+    return packets.every(p => assessedIds.has(p.tool_call_part_id))
+  }
 
   constructor(
     db: BackendDatabase,

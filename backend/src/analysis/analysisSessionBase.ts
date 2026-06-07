@@ -24,7 +24,7 @@ import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
 import type { AnalysisWorkflowInput } from './analysisWorkflowInput.js'
 import type { StepContext } from '../workflow/stepContext.js'
 import { type StepTypeKey } from '../domain/executionModel.js'
-import { WorkflowStep } from '../workflow/workflowStep.js'
+import { type AnalysisCommand } from '../workflow/workflowStep.js'
 import {
   insertJsonArtifact,
   getLatestArtifactBySchemaKey,
@@ -136,25 +136,6 @@ export interface SessionTree {
   /** Maps step.id → detail (lazy-loaded). */
   turnDetails: Map<string, TurnInfo>
   compactionDetails: Map<string, CompactionInfo>
-}
-
-// ───────────────────────────────────────────────────────────────────────────────
-// AnalysisCommand — a single unit of work in the execution plan
-// ───────────────────────────────────────────────────────────────────────────────
-
-export interface AnalysisCommand {
-  /** Human-readable kind, e.g. 'bootstrap', 'assess', 'turn_summary'. */
-  readonly kind: string
-  /** Semantic identity within the plan, e.g. a tool_call_part_id or turn_id. */
-  readonly semanticId: string
-  /** StepTypeKey for the WorkflowStep that executes this command. */
-  readonly stepTypeKey: StepTypeKey
-
-  /** True when this command's output already exists in the DB. */
-  isComplete(db: BackendDatabase, sessionId: string): boolean
-
-  /** Build a fresh WorkflowStep to execute this command. */
-  buildStep(db: BackendDatabase, lm: ChatCompletionGateway, mcp: McpGateway): WorkflowStep
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
@@ -361,8 +342,7 @@ export abstract class AnalysisSessionBase {
       totalCount: plan.length,
     })
 
-    const step = next.buildStep(this.db, this.lm, this.mcp)
-    const result = await step.execute(this.buildStepContext(next.stepTypeKey))
+    const result = await (next as any).execute(this.buildStepContext(next.stepTypeKey))
 
     if (result.status === 'error') {
       this.state.phase = 'error'

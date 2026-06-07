@@ -4,7 +4,8 @@ import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
-import type { StepResult } from '../../domain/executionModel.js'
+import type { StepResult, StepTypeKey } from '../../domain/executionModel.js'
+import { STEP_TYPE } from '../../domain/executionModel.js'
 import { getSessionRecord, getPartRecord, updatePartRecord } from '../../persistence/repository.js'
 import { insertJsonArtifact, getLatestArtifactBySchemaKey, listArtifactsBySessionAndSchemaKey } from '../artifactRepository.js'
 import { runAnalysisTurn } from '../boundedTurn.js'
@@ -30,6 +31,14 @@ export interface TurnSummaryStepConfig {
 
 export class TurnSummaryStep extends WorkflowStep {
   readonly stepLabel = 'Turn Summary'
+  readonly kind = 'turn_summary'
+  readonly stepTypeKey: StepTypeKey = STEP_TYPE.ANALYSIS_TURN_SUMMARY
+  get semanticId(): string { return this.config.turnId }
+
+  isComplete(db: BackendDatabase, sessionId: string): boolean {
+    return listArtifactsBySessionAndSchemaKey(db.connection, sessionId, this.config.summarySchemaKey)
+      .some(a => (a.metadata.turn_id as string | undefined) === this.config.turnId)
+  }
 
   constructor(
     db: BackendDatabase,

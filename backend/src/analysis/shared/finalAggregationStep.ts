@@ -4,7 +4,8 @@ import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
-import type { StepResult } from '../../domain/executionModel.js'
+import type { StepResult, StepTypeKey } from '../../domain/executionModel.js'
+import { STEP_TYPE } from '../../domain/executionModel.js'
 import { getSessionRecord, getPartRecord, updatePartRecord } from '../../persistence/repository.js'
 import { insertJsonArtifact, getLatestArtifactBySchemaKey, listArtifactsBySessionAndSchemaKey } from '../artifactRepository.js'
 import { runAnalysisTurn } from '../boundedTurn.js'
@@ -36,6 +37,13 @@ export interface FinalAggregationStepConfig {
 
 export class FinalAggregationStep extends WorkflowStep {
   readonly stepLabel = 'Final Aggregation'
+  readonly kind = 'final_aggregation'
+  readonly stepTypeKey: StepTypeKey = STEP_TYPE.ANALYSIS_FINAL_AGGREGATION
+  get semanticId(): string { return '' }
+
+  isComplete(db: BackendDatabase, sessionId: string): boolean {
+    return getLatestArtifactBySchemaKey(db.connection, sessionId, this.config.reportSchemaKey) !== null
+  }
 
   constructor(
     db: BackendDatabase,

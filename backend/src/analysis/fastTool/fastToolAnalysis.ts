@@ -10,7 +10,6 @@ import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import {
   AnalysisSessionBase,
-  type AnalysisCommand,
 } from '../analysisSessionBase.js'
 import type { AnalysisWorkflowInput } from '../analysisWorkflowInput.js'
 import {
@@ -20,13 +19,11 @@ import {
 } from '../schemas.js'
 import { SCHEMA_KEY as SELF_KEY, fastToolFinalReportSchema, type FastToolWorkIndex } from './schemas.js'
 import { ANALYSIS_WORKFLOW_KIND } from '../workflowKinds.js'
-import { STEP_TYPE } from '../../domain/executionModel.js'
 import { BootstrapStep } from '../shared/bootstrapStep.js'
 import { FastToolGroupedAssessmentStep } from './fastToolGroupedAssessmentStep.js'
 import { FinalAggregationStep } from '../shared/finalAggregationStep.js'
 import { buildFastToolWorkIndex } from './fastToolPlanning.js'
 import { buildFastToolFinalAggregationPrompt } from './evaluationPrompts.js'
-import { getLatestArtifactBySchemaKey } from '../artifactRepository.js'
 import { buildFastToolSystemPrompt } from './systemPrompt.js'
 
 export class FastToolAnalysis extends AnalysisSessionBase {
@@ -82,7 +79,10 @@ export class FastToolAnalysis extends AnalysisSessionBase {
   // ── Hooks — called by buildPlan() during tree traversal ───────────────────
 
   protected onBeforeSession(): void {
-    this.addCommand(new BootstrapCommand(this.db, this.lm, this.mcp))
+    this.addCommand(new BootstrapStep(this.db, this.lm, this.mcp, {
+      indexSchemaKey: SELF_KEY.WORK_INDEX,
+      buildIndexContent: buildFastToolWorkIndex,
+    }))
   }
 
   protected onAfterSession(): void {
@@ -92,82 +92,15 @@ export class FastToolAnalysis extends AnalysisSessionBase {
 
     const workIndex = workIndexArtifact.content as FastToolWorkIndex
     const analysisTarget = targetArtifact.content as AnalysisTarget
+    const workUnit = workIndex.tool_groups[0]
+    if (!workUnit) return
 
-    this.addCommand(new GroupedAssessCommand(this.db, this.lm, this.mcp, workIndex, analysisTarget))
-    this.addCommand(new FinalCommand(this.db, this.lm, this.mcp))
-  }
-}
-
-// ── Command implementations ─────────────────────────────────────────────────
-
-class BootstrapCommand implements AnalysisCommand {
-  readonly kind = 'bootstrap'
-  readonly semanticId = ''
-  readonly stepTypeKey = STEP_TYPE.ANALYSIS_BOOTSTRAP
-
-  constructor(
-    private readonly db: BackendDatabase,
-    private readonly lm: ChatCompletionGateway,
-    private readonly mcp: McpGateway,
-  ) {}
-
-  isComplete(db: BackendDatabase, sessionId: string): boolean {
-    return getLatestArtifactBySchemaKey(db.connection, sessionId, SELF_KEY.WORK_INDEX) !== null
-  }
-
-  buildStep(): BootstrapStep {
-    return new BootstrapStep(this.db, this.lm, this.mcp, {
-      indexSchemaKey: SELF_KEY.WORK_INDEX,
-      buildIndexContent: buildFastToolWorkIndex,
-    })
-  }
-}
-
-class GroupedAssessCommand implements AnalysisCommand {
-  readonly kind = 'assess'
-  readonly semanticId = ''
-  readonly stepTypeKey = STEP_TYPE.ANALYSIS_TOOL_GROUP_ASSESSMENT
-
-  constructor(
-    private readonly db: BackendDatabase,
-    private readonly lm: ChatCompletionGateway,
-    private readonly mcp: McpGateway,
-    private readonly workIndex: FastToolWorkIndex,
-    private readonly analysisTarget: AnalysisTarget,
-  ) {}
-
-  isComplete(db: BackendDatabase, sessionId: string): boolean {
-    return getLatestArtifactBySchemaKey(db.connection, sessionId, SELF_KEY.GROUP_ASSESSMENT) !== null
-  }
-
-  buildStep(): FastToolGroupedAssessmentStep {
-    const workUnit = this.workIndex.tool_groups[0]
-    if (!workUnit) throw new Error('GroupedAssessCommand: no work groups in index')
-    return new FastToolGroupedAssessmentStep(this.db, this.lm, this.mcp, {
+    this.addCommand(new FastToolGroupedAssessmentStep(this.db, this.lm, this.mcp, {
       artifactSchemaKey: SELF_KEY.GROUP_ASSESSMENT,
       workUnit,
-      analysisTarget: this.analysisTarget,
-    })
-  }
-}
-
-class FinalCommand implements AnalysisCommand {
-  readonly kind = 'final_aggregation'
-  readonly semanticId = ''
-  readonly stepTypeKey = STEP_TYPE.ANALYSIS_FINAL_AGGREGATION
-
-  constructor(
-    private readonly db: BackendDatabase,
-    private readonly lm: ChatCompletionGateway,
-    private readonly mcp: McpGateway,
-  ) {}
-
-  isComplete(db: BackendDatabase, sessionId: string): boolean {
-    return getLatestArtifactBySchemaKey(db.connection, sessionId, SELF_KEY.FINAL_REPORT) !== null
-  }
-
-  buildStep(): FinalAggregationStep {
-    return new FinalAggregationStep(this.db, this.lm, this.mcp, {
+      analysisTarget,
+    }))
+    this.addCommand(new FinalAggregationStep(this.db, this.lm, this.mcp, {
       assessmentSchemaKey: SELF_KEY.GROUP_ASSESSMENT,
       summarySchemaKey: SELF_KEY.GROUP_ASSESSMENT,
       reportSchemaKey: SELF_KEY.FINAL_REPORT,
@@ -191,6 +124,6 @@ class FinalCommand implements AnalysisCommand {
           total_tool_calls_assessed: assessments.length,
         }
       },
-    })
+    }))
   }
 }

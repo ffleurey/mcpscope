@@ -16,9 +16,10 @@ import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
-import type { StepResult } from '../../domain/executionModel.js'
+import type { StepResult, StepTypeKey } from '../../domain/executionModel.js'
+import { STEP_TYPE } from '../../domain/executionModel.js'
 import { getSessionRecord } from '../../persistence/repository.js'
-import { insertJsonArtifact } from '../artifactRepository.js'
+import { insertJsonArtifact, getLatestArtifactBySchemaKey } from '../artifactRepository.js'
 import { runDeterministicMcpToolCallsInSingleTurn } from '../../runtime/toolTurns.js'
 import {
   SCHEMA_KEY,
@@ -42,6 +43,13 @@ function defaultIndexContent(packets: EvidencePacket[]): EvidencePacketIndex {
 
 export class BootstrapStep extends WorkflowStep {
   readonly stepLabel = 'Bootstrap'
+  readonly kind = 'bootstrap'
+  readonly stepTypeKey: StepTypeKey = STEP_TYPE.ANALYSIS_BOOTSTRAP
+  get semanticId(): string { return '' }
+
+  isComplete(db: BackendDatabase, sessionId: string): boolean {
+    return getLatestArtifactBySchemaKey(db.connection, sessionId, this.config.indexSchemaKey) !== null
+  }
 
   constructor(
     db: BackendDatabase,
