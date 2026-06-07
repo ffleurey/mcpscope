@@ -8,6 +8,6 @@ export default defineConfig({
     },
   },
   test: {
-    exclude: ['**/*.integration.test.ts', '**/node_modules/**', '**/dist/**', '**/tokenSanity.test.ts', '**/tokenSanity.integration.test.ts'],
+    exclude: ['**/*.integration.test.ts', '**/node_modules/**', '**/dist/**', '**/tokenSanity.integration.test.ts'],
   },
 })
