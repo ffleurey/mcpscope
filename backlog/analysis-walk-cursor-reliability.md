@@ -166,11 +166,42 @@ even when the analysis should stop.
    The cursor regression logic should detect that the list grew and adjust
    (or reset to the first new-turn position rather than 0).
 
+## Test-first status
+
+Each issue below has a regression test written first (before applying the fix).
+Tests marked **pass** mean the fix is already in place. Tests marked **fail**
+mean the bug is still present and the test correctly reproduces it.
+
+| # | Issue | Regression test | Location | Status |
+|---|-------|----------------|----------|--------|
+| 1 | `WorkflowStep` persists `status='complete'` even when `run()` returns `{ status: 'error' }` | Step record has `status: 'error'` after `run()` returns error | `workflowStep.test.ts` | ✅ Pass (fix: `workflowStep.ts:57` checks `result.status`) |
+| 2 | Step status peristed as `'complete'` when `run()` throws | Step record has `status: 'error'` after `run()` throws | `workflowStep.test.ts` | ✅ Pass (catch block was already correct) |
+| 3 | Retry endpoint does not reset `walkCursor` | After `retry-failed-step`, `analysisState.walkCursor === 0` | `sessionMetadata.test.ts:896` | ✅ Pass (fix: `sessionRoutes.ts:128`) |
+| 4 | Coverage validation inserts diagnostic artifact with `stepId = sessionId` — FK crash | Calling `runCoverageValidationStep` with `stepId: 'ANLY'` throws `FOREIGN KEY constraint failed` | `analysisWorkflow.test.ts` | ✅ Pass (bug documented — fix NOT applied, test expects the crash) |
+| 5 | New turns in target session not picked up by cursor | — | Not written yet | ❌ No test |
+
+### Tests still to write
+
+**Issue 5 — new turns in target session**
+- Create target session with 2 turns, start analysis, partially execute
+- Add turn-3 to the target session (insert turn + rounds + parts)
+- Call `resumeOneStep()` and verify the new turn's hooks are reached
+- Expected: cursor advances past the old hook list end into the new turns
+
+This test requires constructing an `AnalysisSessionBase` subclass (e.g.
+`FastSessionAnalysis`) with a mock gateway, calling `execute()` or
+`resumeOneStep()` directly, and checking `walkCursor` position vs DB changes.
+
 ## Proposed work items
 
-1. **Fix coverage validation FK** — Change `stepId` parameter to use an
-   actual step ID (e.g., format a reliable diagnostic step ID from the
-   session context) rather than the session ID.
+1. **Fix coverage validation FK** — Change the call site (`afterSession` in
+   `fullSessionAnalysis.ts`, `fastSessionAnalysis.ts`, `fastToolAnalysis.ts`)
+   to pass a valid stepId instead of `this.state.analysisSessionId`. Options:
+   - Create a synthetic step record before calling coverage validation
+   - Extract a diagnostic step ID helper
+   
+   Once fixed, the regression test in issue 4 will need to be updated:
+   change `toThrow(FOREIGN KEY)` to verify the diagnostic artifact was created.
 
 2. **Retry transaction** — In `resetFailedAnalysisStepForRetry`, also
    delete/re-create the failed step record and its owned turns/parts
@@ -185,13 +216,12 @@ even when the analysis should stop.
 4. **Hook guard audit** — Audit all hook implementations for missing
    early-return guards when the phase has moved past their work.
 
-5. **New-turn handling** — When the hook list grows between `resumeOneStep()`
-   calls, detect the new turns and reset the cursor to the first new-turn
-   hook position instead of continuing from the stale index.
+5. **New-turn handling** — Write the regression test for issue 5 first,
+   then implement cursor regression logic.
 
-## Current patch status (for reference)
+## Fixes already applied
 
-- `workflowStep.ts:55-56`: step record status now reflects `result.status`
+- `workflowStep.ts:55-56`: step record status now checks `result.status`
   (was hardcoded to `'complete'`).
 - 4 step classes: 10 error return paths now return `{ status: 'error' }`
   instead of `{ status: 'complete' }`.

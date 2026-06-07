@@ -495,6 +495,43 @@ describe('analysis workflow helpers', () => {
     expect(result.updatedState.coverageValidated).toBe(true)
   })
 
+  it('coverage validation with nonexistent stepId crashes with FK constraint (known bug: call site passes session ID)', () => {
+    db = makeTestDatabase()
+    createSessionRecord(db.connection, makeSessionRecord({ id: 'ANLY', sessionType: 'session_analysis', parentKind: 'session', parentId: 'TARG', mcpProfileSnapshots: [] }))
+    insertStepRecord(db.connection, makeStepRecord({ id: 'step-1', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 0, createdAt: 1, completedAt: 1 }))
+    insertStepRecord(db.connection, makeStepRecord({ id: 'step-2', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 1, createdAt: 1, completedAt: 1 }))
+    insertJsonArtifact(db.connection, {
+      id: 'artifact-packets-3',
+      sessionId: 'ANLY',
+      stepId: 'step-1',
+      content: {
+        packets: [
+          { turn_id: 'TURN-1', round_id: 'TURN-1.1', tool_call_part_id: 'TC-1', tool_name: 'test_tool', reasoning_before_part_id: null, tool_result_part_id: null, reasoning_after_part_id: null },
+          { turn_id: 'TURN-1', round_id: 'TURN-1.2', tool_call_part_id: 'TC-2', tool_name: 'test_tool', reasoning_before_part_id: null, tool_result_part_id: null, reasoning_after_part_id: null },
+        ],
+      },
+      metadata: { schema_key: SCHEMA_KEY.EVIDENCE_PACKET_INDEX },
+      createdAt: 1,
+    })
+    insertJsonArtifact(db.connection, {
+      id: 'artifact-assessment-3',
+      sessionId: 'ANLY',
+      stepId: 'step-2',
+      content: { ok: true },
+      metadata: { schema_key: FULL_KEY.TOOL_CALL_ASSESSMENT, tool_call_part_id: 'TC-1' },
+      createdAt: 2,
+    })
+
+    // The production call site (afterSession) passes this.state.analysisSessionId
+    // as stepId — that's the session ID, not a step ID. The artifacts table has
+    // step_id → v2_steps(id), so the insert fails with FK constraint.
+    expect(() => runCoverageValidationStep(db, {
+      state: makeAnalysisState({ analysisSessionId: 'ANLY', phase: 'coverage_validation' }),
+      stepId: 'ANLY', // ← session ID, not a step — this is the bug
+      assessmentSchemaKey: FULL_KEY.TOOL_CALL_ASSESSMENT,
+    })).toThrow(/FOREIGN KEY constraint failed/i)
+  })
+
   it('coverage validation detects unassessed packets and sets phase to error', () => {
     db = makeTestDatabase()
 
