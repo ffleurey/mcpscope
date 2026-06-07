@@ -217,12 +217,6 @@ export async function executeAnalysisLaunch(
       const wk = isKnownWorkflowKind(workflowKind) ? workflowKind : ANALYSIS_WORKFLOW_KIND.FULL_SESSION
       const initialAnalysisState: AnalysisSessionState = {
         phase: 'bootstrap',
-        bootstrapComplete: false,
-        nextPacketIndex: 0,
-        packetCount: 0,
-        currentTurnId: null,
-        coverageValidated: false,
-        finalAggregationComplete: false,
         analysisSessionId: session.id,
         targetSessionId,
         targetTurnId: input.target_turn_id,

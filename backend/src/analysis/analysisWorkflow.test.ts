@@ -15,7 +15,7 @@ import type { McpGateway } from '../runtime/toolTurns.js'
 import { BootstrapStep } from './shared/bootstrapStep.js'
 import { STEP_TYPE } from '../domain/executionModel.js'
 import { getLatestArtifactBySchemaKey, insertJsonArtifact, listArtifactsBySessionAndSchemaKey } from './artifactRepository.js'
-import { runCoverageValidationStep } from './coverageValidationStep.js'
+import { CoverageValidationStep } from './coverageValidationStep.js'
 import { FinalAggregationStep } from './shared/finalAggregationStep.js'
 import { buildRepeatedAttemptGuidance } from './shared/turnSummaryStep.js'
 import { SCHEMA_KEY, type AnalysisSessionState, type EvidencePacketIndex } from './schemas.js'
@@ -144,12 +144,6 @@ function makePartRecord(overrides: Partial<PartRecord> & Pick<PartRecord, 'id' |
 function makeAnalysisState(overrides: Partial<AnalysisSessionState>): AnalysisSessionState {
   return {
     phase: overrides.phase ?? 'bootstrap',
-    bootstrapComplete: overrides.bootstrapComplete ?? false,
-    nextPacketIndex: overrides.nextPacketIndex ?? 0,
-    packetCount: overrides.packetCount ?? 0,
-    currentTurnId: overrides.currentTurnId ?? null,
-    coverageValidated: overrides.coverageValidated ?? false,
-    finalAggregationComplete: overrides.finalAggregationComplete ?? false,
     analysisSessionId: overrides.analysisSessionId ?? 'ANLY',
     targetSessionId: overrides.targetSessionId ?? 'TARG',
     targetTurnId: overrides.targetTurnId ?? 'TARG.1',
@@ -341,7 +335,6 @@ describe('analysis workflow helpers', () => {
       workflowState: state as unknown as Record<string, unknown>,
     })
 
-    expect(state.packetCount).toBe(1)
     const packetIndexArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
     const packetIndex = packetIndexArtifact?.content as EvidencePacketIndex
     expect(packetIndex.packets).toHaveLength(1)
@@ -442,7 +435,6 @@ describe('analysis workflow helpers', () => {
       workflowState: state2 as unknown as Record<string, unknown>,
     })
 
-    expect(state2.packetCount).toBe(1)
     const packetIndexArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
     const packetIndex = packetIndexArtifact?.content as EvidencePacketIndex
     expect(packetIndex.packets).toHaveLength(1)
@@ -456,7 +448,7 @@ describe('analysis workflow helpers', () => {
     })
   })
 
-  it('coverage validation derives completion from tool call ids plus accepted assessments', () => {
+  it('coverage validation derives completion from tool call ids plus accepted assessments', async () => {
     db = makeTestDatabase()
 
     createSessionRecord(db.connection, makeSessionRecord({ id: 'ANLY', sessionType: 'session_analysis', parentKind: 'session', parentId: 'TARG' }))
@@ -484,57 +476,18 @@ describe('analysis workflow helpers', () => {
       createdAt: 2,
     })
 
-    const result = runCoverageValidationStep(db, {
-      state: makeAnalysisState({ analysisSessionId: 'ANLY', phase: 'coverage_validation' }),
-      stepId: 'step-3',
+    const step = new CoverageValidationStep(db as any, null as any, null as any, {
       assessmentSchemaKey: FULL_KEY.TOOL_CALL_ASSESSMENT,
     })
+    const result = await step.execute({
+      sessionId: 'ANLY',
+      stepTypeKey: STEP_TYPE.ANALYSIS_COVERAGE_VALIDATION,
+    })
 
-    expect(result.passed).toBe(true)
-    expect(result.updatedState.phase).toBe('final_aggregation')
-    expect(result.updatedState.coverageValidated).toBe(true)
+    expect(result.status).toBe('complete')
   })
 
-  it('coverage validation handles missing stepId gracefully without FK crash', () => {
-    db = makeTestDatabase()
-    createSessionRecord(db.connection, makeSessionRecord({ id: 'ANLY', sessionType: 'session_analysis', parentKind: 'session', parentId: 'TARG', mcpProfileSnapshots: [] }))
-    insertStepRecord(db.connection, makeStepRecord({ id: 'step-1', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 0, createdAt: 1, completedAt: 1 }))
-    insertStepRecord(db.connection, makeStepRecord({ id: 'step-2', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 1, createdAt: 1, completedAt: 1 }))
-    insertJsonArtifact(db.connection, {
-      id: 'artifact-packets-3',
-      sessionId: 'ANLY',
-      stepId: 'step-1',
-      content: {
-        packets: [
-          { turn_id: 'TURN-1', round_id: 'TURN-1.1', tool_call_part_id: 'TC-1', tool_name: 'test_tool', reasoning_before_part_id: null, tool_result_part_id: null, reasoning_after_part_id: null },
-          { turn_id: 'TURN-1', round_id: 'TURN-1.2', tool_call_part_id: 'TC-2', tool_name: 'test_tool', reasoning_before_part_id: null, tool_result_part_id: null, reasoning_after_part_id: null },
-        ],
-      },
-      metadata: { schema_key: SCHEMA_KEY.EVIDENCE_PACKET_INDEX },
-      createdAt: 1,
-    })
-    insertJsonArtifact(db.connection, {
-      id: 'artifact-assessment-3',
-      sessionId: 'ANLY',
-      stepId: 'step-2',
-      content: { ok: true },
-      metadata: { schema_key: FULL_KEY.TOOL_CALL_ASSESSMENT, tool_call_part_id: 'TC-1' },
-      createdAt: 2,
-    })
-
-    // The production call site (afterSession) passes this.state.analysisSessionId
-    // as stepId — that's a session ID, not a step ID. The function should handle
-    // this gracefully (return phase=error without crashing) rather than throwing FK.
-    const result = runCoverageValidationStep(db, {
-      state: makeAnalysisState({ analysisSessionId: 'ANLY', phase: 'coverage_validation' }),
-      stepId: 'ANLY', // ← session ID, not a step — the bug is in the call site
-      assessmentSchemaKey: FULL_KEY.TOOL_CALL_ASSESSMENT,
-    })
-    expect(result.passed).toBe(false)
-    expect(result.updatedState.phase).toBe('error')
-  })
-
-  it('coverage validation detects unassessed packets and sets phase to error', () => {
+  it('coverage validation returns error when packets lack assessments', async () => {
     db = makeTestDatabase()
 
     createSessionRecord(db.connection, makeSessionRecord({ id: 'ANLY', sessionType: 'session_analysis', parentKind: 'session', parentId: 'TARG', mcpProfileSnapshots: [] }))
@@ -563,18 +516,33 @@ describe('analysis workflow helpers', () => {
       createdAt: 2,
     })
 
-    const result = runCoverageValidationStep(db, {
-      state: makeAnalysisState({ analysisSessionId: 'ANLY', phase: 'coverage_validation' }),
-      stepId: 'step-3',
+    const step = new CoverageValidationStep(db as any, null as any, null as any, {
       assessmentSchemaKey: FULL_KEY.TOOL_CALL_ASSESSMENT,
     })
+    const result = await step.execute({
+      sessionId: 'ANLY',
+      stepTypeKey: STEP_TYPE.ANALYSIS_COVERAGE_VALIDATION,
+    })
 
-    expect(result.passed).toBe(false)
-    expect(result.updatedState.phase).toBe('error')
-    // Verify a diagnostic artifact was written (step-3 exists so FK is satisfied)
+    expect(result.status).toBe('error')
     const diags = listArtifactsBySessionAndSchemaKey(db.connection, 'ANLY', SCHEMA_KEY.DIAGNOSTIC)
     expect(diags.length).toBeGreaterThan(0)
     expect(diags.some(d => JSON.stringify(d.content).includes('TC-2'))).toBe(true)
+  })
+
+  it('coverage validation returns error when packet index is missing', async () => {
+    db = makeTestDatabase()
+    createSessionRecord(db.connection, makeSessionRecord({ id: 'ANLY', sessionType: 'session_analysis', parentKind: 'session', parentId: 'TARG', mcpProfileSnapshots: [] }))
+
+    const step = new CoverageValidationStep(db as any, null as any, null as any, {
+      assessmentSchemaKey: FULL_KEY.TOOL_CALL_ASSESSMENT,
+    })
+    const result = await step.execute({
+      sessionId: 'ANLY',
+      stepTypeKey: STEP_TYPE.ANALYSIS_COVERAGE_VALIDATION,
+    })
+
+    expect(result.status).toBe('error')
   })
 
   it('final aggregation still uses the LLM when multiple turn summaries need consolidation', async () => {
@@ -766,7 +734,6 @@ describe('analysis workflow helpers', () => {
       workflowState: state1 as unknown as Record<string, unknown>,
     })
 
-    expect(state1.phase).toBe('complete')
     expect(callCount).toBe(1)
 
     const finalArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', FULL_KEY.FINAL_ANALYSIS_REPORT)
@@ -965,8 +932,6 @@ describe('analysis workflow helpers', () => {
       stepTypeKey: STEP_TYPE.ANALYSIS_FINAL_AGGREGATION,
       workflowState: state2 as unknown as Record<string, unknown>,
     })
-
-    expect(state2.phase).toBe('complete')
 
     const finalArtifact = getLatestArtifactBySchemaKey(db.connection, 'ANLY', FULL_KEY.FINAL_ANALYSIS_REPORT)
     expect(finalArtifact?.content).toMatchObject({

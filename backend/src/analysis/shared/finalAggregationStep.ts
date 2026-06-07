@@ -4,7 +4,8 @@ import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
-import type { StepResult } from '../../domain/executionModel.js'
+import type { StepResult, StepTypeKey } from '../../domain/executionModel.js'
+import { STEP_TYPE } from '../../domain/executionModel.js'
 import { getSessionRecord, getPartRecord, updatePartRecord } from '../../persistence/repository.js'
 import { insertJsonArtifact, getLatestArtifactBySchemaKey, listArtifactsBySessionAndSchemaKey } from '../artifactRepository.js'
 import { runAnalysisTurn } from '../boundedTurn.js'
@@ -36,6 +37,13 @@ export interface FinalAggregationStepConfig {
 
 export class FinalAggregationStep extends WorkflowStep {
   readonly stepLabel = 'Final Aggregation'
+  readonly kind = 'final_aggregation'
+  readonly stepTypeKey: StepTypeKey = STEP_TYPE.ANALYSIS_FINAL_AGGREGATION
+  get semanticId(): string { return '' }
+
+  isComplete(db: BackendDatabase, sessionId: string): boolean {
+    return getLatestArtifactBySchemaKey(db.connection, sessionId, this.config.reportSchemaKey) !== null
+  }
 
   constructor(
     db: BackendDatabase,
@@ -73,7 +81,6 @@ export class FinalAggregationStep extends WorkflowStep {
           metadata: { schema_key: reportSchemaKey, total_packets: assessments.length, synthesis_mode: 'deterministic' },
           createdAt: now(),
         })
-        Object.assign(state, { phase: 'complete', finalAggregationComplete: true })
         return { status: 'complete', outputArtifacts: [] }
       }
     }
@@ -93,7 +100,6 @@ export class FinalAggregationStep extends WorkflowStep {
         content: { step_type: 'final_aggregation', error_kind: 'json_parse_error', message: 'Not valid JSON', detail: { raw_response: turnResult.responseText, error: String(e) } },
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
-      state.phase = 'error'
       return { status: 'error', outputArtifacts: [] }
     }
 
@@ -104,7 +110,6 @@ export class FinalAggregationStep extends WorkflowStep {
         content: { step_type: 'final_aggregation', error_kind: 'schema_validation_error', message: 'Schema mismatch', detail: { raw_response: turnResult.responseText, errors: (parsed.error as ZodError).issues } },
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
-      state.phase = 'error'
       return { status: 'error', outputArtifacts: [] }
     }
 
@@ -116,7 +121,6 @@ export class FinalAggregationStep extends WorkflowStep {
     })
 
     retireFinalPromptContext(this.db, turnResult.userPartId, turnResult.assistantReasoningPartIds)
-    Object.assign(state, { phase: 'complete', finalAggregationComplete: true })
 
     return { status: 'complete', outputArtifacts: [] }
   }

@@ -28,8 +28,9 @@ import type { RouteDeps } from './types.js'
 import {
   getAnalysisWorkflowKindFromSteps,
   getLatestAnalysisDiagnosticSummaryForSession,
-  getRetryPhaseForFailedAnalysisStep,
 } from '../analysis/analysisSessionPresentation.js'
+import { listArtifactsBySession, deleteJsonArtifact } from '../analysis/artifactRepository.js'
+import { rehydrateAnalysisWorkflow } from '../analysis/analysisWorkflowFactory.js'
 
 function buildSessionSummaryPayload(
   deps: Pick<RouteDeps, 'database' | 'toLifecycleState'>,
@@ -57,8 +58,15 @@ function buildSessionSummaryPayload(
   const workflowPhase = summary.sessionType === 'session_analysis'
     ? (() => {
         const sessionAnalysis = getSessionRecord(deps.database.connection, summary.id)
-        const analysisState = sessionAnalysis?.analysisState as { phase?: string } | null
+        const analysisState = sessionAnalysis?.analysisState as { phase?: string; planProgress?: { total: number; completed: number; currentCommandKind: string | null; currentCommandId: string | null } } | null
         return analysisState?.phase ?? null
+      })()
+    : null
+  const planProgress = summary.sessionType === 'session_analysis'
+    ? (() => {
+        const sessionAnalysis = getSessionRecord(deps.database.connection, summary.id)
+        const analysisState = sessionAnalysis?.analysisState as { planProgress?: { total: number; completed: number; currentCommandKind: string | null; currentCommandId: string | null } } | null
+        return analysisState?.planProgress ?? null
       })()
     : null
   const latestError = deps.toLifecycleState(summary) === 'error' && summary.sessionType === 'session_analysis'
@@ -80,6 +88,7 @@ function buildSessionSummaryPayload(
     compaction_strategy: summary.compactionStrategy,
     ...(workflowKind ? { workflow_kind: workflowKind } : {}),
     ...(workflowPhase ? { workflow_phase: workflowPhase } : {}),
+    ...(planProgress ? { plan_progress: planProgress } : {}),
     ...(latestError ? { latest_error: latestError } : {}),
     model_profile_snapshot: { name: summary.modelProfileSnapshot.name },
     mcp_profile_snapshots: summary.mcpProfileSnapshots,
@@ -105,27 +114,21 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
     throw new Error('Analysis session has no failed step to retry')
   }
 
-  const retryPhase = getRetryPhaseForFailedAnalysisStep(failedStep)
-  if (!retryPhase) {
-    throw new Error(`Failed step ${failedStep.id} is not retryable`)
-  }
+  // Remove artifacts for the failed step and all downstream steps.
+  // Downstream = steps with childIndex >= failedStep.childIndex.
+  const descendents = steps.filter(s => s.childIndex >= failedStep.childIndex)
+  const affectedStepIds = new Set(descendents.map(s => s.id))
 
   const ownedTurnIds = new Set(
     listTurnRecordsBySession(database.connection, sessionId)
-      .filter(turn => turn.ownerStepId === failedStep.id)
+      .filter(turn => turn.ownerStepId && affectedStepIds.has(turn.ownerStepId))
       .map(turn => turn.id),
   )
   const retryParts = listPartRecordsBySession(database.connection, sessionId)
     .filter(part => part.turnId && ownedTurnIds.has(part.turnId))
 
-  // Reset the walk cursor so hooks replay from the start. Individual hook
-  // guards (nextPacketIndex, bootstrapComplete, etc.) prevent re-execution of
-  // already-completed work. The failing hook's guard re-matches only for the
-  // specific packet/condition that originally failed.
-  const updatedAnalysisState = {
+  const updatedAnalysisState: Record<string, unknown> = {
     ...analysisState,
-    phase: retryPhase,
-    walkCursor: 0,
     retry_failed_step_id: failedStep.id,
     retry_requested_at: Date.now(),
   }
@@ -139,6 +142,8 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
   const tx = database.connection.transaction(() => {
     updateSessionAnalysisState(database.connection, sessionId, updatedAnalysisState)
     updateSessionRecord(database.connection, updatedSession)
+
+    // Exclude parts owned by the failed + downstream steps
     for (const part of retryParts) {
       updatePartRecord(database.connection, {
         ...part,
@@ -149,8 +154,32 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
         updatedAt: updatedSession.updatedAt,
       })
     }
+
+    // Delete artifacts owned by the failed + downstream steps
+    const allArtifacts = listArtifactsBySession(database.connection, sessionId)
+    for (const artifact of allArtifacts) {
+      if (artifact.stepId && affectedStepIds.has(artifact.stepId)) {
+        deleteJsonArtifact(database.connection, artifact.id)
+      }
+    }
   })
   tx()
+
+  // Derive phase from the plan after artifact removal.
+  // Rehydrate with null lm/mcp — plan construction only needs the database.
+  let retryPhase: string | null = null
+  try {
+    const instance = rehydrateAnalysisWorkflow(database, null as any, null as any, sessionId)
+    if (instance) {
+      retryPhase = instance.computeRetryPhase()
+      if (retryPhase) {
+        const currentState = getSessionRecord(database.connection, sessionId)?.analysisState as Record<string, unknown> ?? {}
+        updateSessionAnalysisState(database.connection, sessionId, { ...currentState, phase: retryPhase })
+      }
+    }
+  } catch {
+    // Plan reconstruction failed — leave phase as error.
+  }
 
   return {
     failedStepId: failedStep.id,

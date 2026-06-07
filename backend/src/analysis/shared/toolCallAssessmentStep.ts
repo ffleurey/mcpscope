@@ -4,9 +4,10 @@ import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
-import type { StepResult } from '../../domain/executionModel.js'
+import type { StepResult, StepTypeKey } from '../../domain/executionModel.js'
+import { STEP_TYPE } from '../../domain/executionModel.js'
 import { getSessionRecord, getPartRecord, updatePartRecord, listPartRecordsBySession } from '../../persistence/repository.js'
-import { insertJsonArtifact } from '../artifactRepository.js'
+import { insertJsonArtifact, listArtifactsBySessionAndSchemaKey } from '../artifactRepository.js'
 import { runDeterministicMcpToolCallsInSingleTurn } from '../../runtime/toolTurns.js'
 import { runAnalysisTurn } from '../boundedTurn.js'
 import {
@@ -35,14 +36,21 @@ export interface ToolCallAssessmentStepConfig {
     preReasoningPartId: string | null
     postReasoningPartId: string | null
   }) => string
-  /** Called after a successful assessment to determine next analysis phase. */
-  computeNextPhase: (ctx: { analysisSessionId: string; currentTurnId: string; nextPacketIndex: number; packetCount: number }) => 'assessing' | 'turn_summary'
   packet: EvidencePacket
   analysisTarget: AnalysisTarget
 }
 
 export class ToolCallAssessmentStep extends WorkflowStep {
   readonly stepLabel = 'Tool Call Assessment'
+  readonly kind = 'assess'
+  readonly stepTypeKey: StepTypeKey = STEP_TYPE.ANALYSIS_TOOL_CALL_ASSESSMENT
+  get semanticId(): string { return this.config.packet?.tool_call_part_id ?? '' }
+
+  isComplete(db: BackendDatabase, sessionId: string): boolean {
+    if (!this.config.packet?.tool_call_part_id) return false
+    return listArtifactsBySessionAndSchemaKey(db.connection, sessionId, this.config.artifactSchemaKey)
+      .some(a => (a.metadata.tool_call_part_id as string | undefined) === this.config.packet.tool_call_part_id)
+  }
 
   constructor(
     db: BackendDatabase,
@@ -57,7 +65,7 @@ export class ToolCallAssessmentStep extends WorkflowStep {
     const state = ctx.workflowState as unknown as AnalysisSessionState | undefined
     if (!state) throw new Error('ToolCallAssessmentStep: workflowState required')
 
-    const { artifactSchemaKey, buildPrompt, computeNextPhase, packet, analysisTarget } = this.config
+    const { artifactSchemaKey, buildPrompt, packet, analysisTarget } = this.config
     const { analysisSessionId } = state
 
     const analysisSession = getSessionRecord(this.db.connection, analysisSessionId)
@@ -152,19 +160,6 @@ export class ToolCallAssessmentStep extends WorkflowStep {
       turnResult.assistantReasoningPartIds, turnResult.turnId,
     )
 
-    const nextPhase = computeNextPhase({
-      analysisSessionId,
-      currentTurnId: packet.turn_id,
-      nextPacketIndex: state.nextPacketIndex + 1,
-      packetCount: state.packetCount,
-    })
-
-    Object.assign(state, {
-      currentTurnId: packet.turn_id,
-      nextPacketIndex: state.nextPacketIndex + 1,
-      phase: nextPhase,
-    })
-
     return { status: 'complete', outputArtifacts: [] }
   }
 
@@ -187,8 +182,7 @@ export class ToolCallAssessmentStep extends WorkflowStep {
     })
   }
 
-  private setErrorPhase(state: AnalysisSessionState): void {
-    state.phase = 'error'
+  private setErrorPhase(_state: AnalysisSessionState): void {
   }
 
   private mutateContextAfterAssessment(

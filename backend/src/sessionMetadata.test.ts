@@ -538,12 +538,6 @@ describe('session metadata API', () => {
     })
     updateSessionAnalysisState(app.backendDb.connection, 'ANLZ', {
       phase: 'error',
-      bootstrapComplete: false,
-      nextPacketIndex: 0,
-      packetCount: 0,
-      currentTurnId: null,
-      coverageValidated: false,
-      finalAggregationComplete: false,
       analysisSessionId: 'ANLZ',
       targetSessionId: 'PRNT',
       targetTurnId: '',
@@ -795,12 +789,6 @@ describe('session metadata API', () => {
     })
     updateSessionAnalysisState(app.backendDb.connection, 'ANLZ', {
       phase: 'error',
-      bootstrapComplete: false,
-      nextPacketIndex: 0,
-      packetCount: 0,
-      currentTurnId: null,
-      coverageValidated: false,
-      finalAggregationComplete: false,
       analysisSessionId: 'ANLZ',
       targetSessionId: 'PRNT',
       targetTurnId: '',
@@ -809,6 +797,48 @@ describe('session metadata API', () => {
       onlyFailedToolCalls: false,
       evaluationCriteria: [],
       workflow_kind: 'fast_session_analysis',
+    })
+
+    // A completed bootstrap step with its artifact.
+    insertStepRecord(app.backendDb.connection, makeStepRecord({
+      id: 'ANLZ.1W',
+      sessionId: 'ANLZ',
+      stepTypeKey: stepTypeKey('analysis_bootstrap'),
+      childIndex: 1,
+      status: 'complete',
+      createdAt: ts + 1,
+      completedAt: ts + 2,
+    }))
+    insertJsonArtifact(app.backendDb.connection, {
+      id: 'artifact-idx',
+      sessionId: 'ANLZ',
+      stepId: 'ANLZ.1W',
+      content: {
+        packets: [],
+        analysisTarget: {
+          target_session_id: 'PRNT', target_turn_id: '',
+          analysis_goal: '', selected_tool_names: [], only_failed_tool_calls: false,
+          evaluation_criteria: [], analyzed_turn_ids: [],
+          target_mcp_instructions_part_id: null, target_tool_definitions_part_id: null,
+          user_request_part_id: null, final_answer_part_id: null,
+        },
+      },
+      metadata: { schema_key: SCHEMA_KEY.EVIDENCE_PACKET_INDEX },
+      createdAt: ts + 2,
+    })
+    insertJsonArtifact(app.backendDb.connection, {
+      id: 'artifact-target',
+      sessionId: 'ANLZ',
+      stepId: 'ANLZ.1W',
+      content: {
+        target_session_id: 'PRNT', target_turn_id: '',
+        analysis_goal: '', selected_tool_names: [], only_failed_tool_calls: false,
+        evaluation_criteria: [], analyzed_turn_ids: [],
+        target_mcp_instructions_part_id: null, target_tool_definitions_part_id: null,
+        user_request_part_id: null, final_answer_part_id: null,
+      },
+      metadata: { schema_key: SCHEMA_KEY.ANALYSIS_TARGET },
+      createdAt: ts + 2,
     })
 
     insertStepRecord(app.backendDb.connection, makeStepRecord({
@@ -880,22 +910,15 @@ describe('session metadata API', () => {
 
     const retryRes = await app.inject({ method: 'POST', url: '/api/sessions/ANLZ/retry-failed-step' })
     expect(retryRes.statusCode).toBe(200)
-    expect(retryRes.json()).toMatchObject({
-      session_id: 'ANLZ',
-      failed_step_id: 'ANLZ.3W',
-      retry_phase: 'assessing',
-      latest_error: {
-        step_id: 'ANLZ.3W',
-        error_kind: 'schema_validation_error',
-        message: 'Fast assessment response did not match fast schema',
-      },
-    })
+    const retryBody = retryRes.json() as Record<string, unknown>
+    expect(retryBody.session_id).toBe('ANLZ')
+    expect(retryBody.failed_step_id).toBe('ANLZ.3W')
+    expect(retryBody.retry_phase).toBe('final_aggregation')
 
     const retriedSession = getSessionRecord(app.backendDb.connection, 'ANLZ')
     const retriedState = retriedSession?.analysisState as Record<string, unknown> | undefined
-    expect(retriedState?.phase).toBe('assessing')
+    expect(retriedState?.phase).toBe('final_aggregation') // plan-derived: after cascade, final aggregation is next
     expect(retriedState?.retry_failed_step_id).toBe('ANLZ.3W')
-    expect(retriedState?.walkCursor).toBe(0)
 
     const retriedPart = getPartRecord(app.backendDb.connection, 'ANLZ.1.1.1-A')
     expect(retriedPart?.context.state).toBe('excluded')

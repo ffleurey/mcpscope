@@ -182,6 +182,12 @@ export const sessionSummarySchema = z.object({
   compaction_strategy: compactionStrategyWithFallbackSchema,
   workflow_kind: z.enum(['full_session_analysis', 'fast_session_analysis', 'fast_tool_analysis']).optional(),
   workflow_phase: z.enum(['bootstrap', 'assessing', 'turn_summary', 'coverage_validation', 'final_aggregation', 'complete', 'error']).optional(),
+  plan_progress: z.object({
+    total: z.number(),
+    completed: z.number(),
+    currentCommandKind: z.string().nullable(),
+    currentCommandId: z.string().nullable(),
+  }).optional(),
   latest_error: z.object({
     step_id: z.string().nullable(),
     error_kind: z.string().nullable(),
@@ -385,6 +391,10 @@ export const analysisStreamEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('analysis-phase-changed'),
     phase: z.string(),
+    commandKind: z.string(),
+    commandId: z.string(),
+    completedCount: z.number(),
+    totalCount: z.number(),
   }),
   z.object({
     type: z.literal('analysis-complete'),

@@ -4708,6 +4708,7 @@ describe('analysis launch', () => {
     expect(launchRes.statusCode).toBe(201)
     const childId = launchRes.json().session.id as string
 
+    // Call 1: bootstrap runs
     const firstExecRes = await app.inject({
       method: 'POST',
       url: `/api/sessions/${childId}/execute?single_step=true`,
@@ -4715,6 +4716,7 @@ describe('analysis launch', () => {
     expect(firstExecRes.statusCode).toBe(200)
     expect(firstExecRes.body).not.toContain('analysis-complete')
 
+    // Call 2: grouped assessment runs — the real work unit.
     const secondExecRes = await app.inject({
       method: 'POST',
       url: `/api/sessions/${childId}/execute?single_step=true`,
@@ -4722,38 +4724,45 @@ describe('analysis launch', () => {
     expect(secondExecRes.statusCode).toBe(200)
     expect(secondExecRes.body).not.toContain('analysis-complete')
 
-    const thirdExecRes = await app.inject({
-      method: 'POST',
-      url: `/api/sessions/${childId}/execute?single_step=true`,
-    })
-    expect(thirdExecRes.statusCode).toBe(200)
-
-    const fourthExecRes = await app.inject({
-      method: 'POST',
-      url: `/api/sessions/${childId}/execute?single_step=true`,
-    })
-    expect(fourthExecRes.statusCode).toBe(200)
-
-    for (let i = 0; i < 10; i++) {
-      const execRes = await app.inject({
-        method: 'POST',
-        url: `/api/sessions/${childId}/execute?single_step=true`,
-      })
-      expect(execRes.statusCode).toBe(200)
-    }
-
-    const artifacts = app.backendDb.connection
+    // After the grouped assessment, verify the final report does NOT exist yet
+    // and the workflow hasn't completed.
+    let artifacts = app.backendDb.connection
       .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)
       .all(childId) as Array<{ metadata_json: string }>
-    const schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+    let schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
     expect(schemaKeys).toContain('analysis.analysis_target.v1')
     expect(schemaKeys).toContain('analysis.fast_tool_work_index.v1')
     expect(schemaKeys).toContain('analysis.fast_tool_group_assessment.v1')
     expect(schemaKeys).not.toContain('analysis.fast_tool_final_report.v1')
 
-    const sessionRec = getSessionRecord(app.backendDb.connection, childId)!
-    const phase = (sessionRec.analysisState as { phase?: string } | null)?.phase
+    let sessionRec = getSessionRecord(app.backendDb.connection, childId)!
+    let phase = (sessionRec.analysisState as { phase?: string } | null)?.phase
     expect(phase).not.toBe('complete')
+
+    // Call 3: final aggregation runs, completing the workflow.
+    const thirdExecRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute?single_step=true`,
+    })
+    expect(thirdExecRes.statusCode).toBe(200)
+    expect(thirdExecRes.body).toContain('analysis-complete')
+
+    // Call 4 should be rejected — workflow is complete.
+    const fourthExecRes = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${childId}/execute?single_step=true`,
+    })
+    expect(fourthExecRes.statusCode).toBe(422)
+
+    artifacts = app.backendDb.connection
+      .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)
+      .all(childId) as Array<{ metadata_json: string }>
+    schemaKeys = artifacts.map(a => (JSON.parse(a.metadata_json) as { schema_key: string }).schema_key)
+    expect(schemaKeys).toContain('analysis.fast_tool_final_report.v1')
+
+    sessionRec = getSessionRecord(app.backendDb.connection, childId)!
+    phase = (sessionRec.analysisState as { phase?: string } | null)?.phase
+    expect(phase).toBe('complete')
   })
 
   it('analysis execute rejects an assessment response whose identity does not match the expected packet', async () => {

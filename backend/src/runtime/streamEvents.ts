@@ -54,6 +54,10 @@ export type AnalysisStreamEvent =
   | {
       type: 'analysis-phase-changed'
       phase: string
+      commandKind: string
+      commandId: string
+      completedCount: number
+      totalCount: number
     }
   | {
       type: 'analysis-complete'

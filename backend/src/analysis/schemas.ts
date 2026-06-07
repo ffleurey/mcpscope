@@ -50,25 +50,24 @@ export type AnalysisPhase =
   | 'complete'
   | 'error'
 
+export interface PlanProgress {
+  /** Total number of commands in the current plan. */
+  total: number
+  /** Number of commands already completed. */
+  completed: number
+  /** Kind of the command currently being executed (or null if done). */
+  currentCommandKind: string | null
+  /** Semantic ID of the command currently being executed (or null if done). */
+  currentCommandId: string | null
+}
+
 export interface AnalysisSessionState {
   phase: AnalysisPhase
-  /** True after AnalysisBootstrapStep completes. */
-  bootstrapComplete: boolean
-  /** Index of the next packet to assess (0-based). */
-  nextPacketIndex: number
-  /** Total number of packets discovered by bootstrap. */
-  packetCount: number
-  /** The turn_id of the target session turn currently being assessed. */
-  currentTurnId: string | null
-  /** True after AnalysisCoverageValidationStep completes successfully. */
-  coverageValidated: boolean
-  /** True after AnalysisFinalAggregationTurn completes. */
-  finalAggregationComplete: boolean
   /** ID of the analysis (child) session. */
   analysisSessionId: string
   /** ID of the target (parent) session being analyzed. */
   targetSessionId: string
-  /** ID of the turn at which analysis should stop. */
+  /** ID of the turn at which analysis should stop (record of original scope). */
   targetTurnId: string
   /** The analysis goal text passed by the caller. */
   analysisGoal: string
@@ -80,8 +79,8 @@ export interface AnalysisSessionState {
   evaluationCriteria: string[]
   /** The analysis workflow kind, used for rehydration. */
   workflow_kind?: string
-  /** Internal cursor for resumable hook traversal. */
-  walkCursor?: number
+  /** Execution progress derived from the plan (updated after each step). */
+  planProgress?: PlanProgress
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

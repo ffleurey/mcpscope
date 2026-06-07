@@ -1,11 +1,9 @@
 /**
  * Full-session analysis — subclass of AnalysisSessionBase.
  *
- * Overrides 5 hooks:
- *   beforeSession  → bootstrap (discover analysis work)
- *   onToolCall     → run one tool-call assessment
- *   afterTurn      → summarise the turn's assessments
- *   afterSession   → coverage validation + final report
+ * buildPlan() produces a list of AnalysisCommands by reading the evidence
+ * packet index artifact left by bootstrap, creating one AssessCommand per
+ * packet and one TurnSummaryCommand per turn.
  */
 
 import type { BackendDatabase } from '../../persistence/db.js'
@@ -23,19 +21,18 @@ import {
   type AnalysisSessionState,
   type AnalysisTarget,
   type EvidencePacketIndex,
+  type EvidencePacket,
 } from '../schemas.js'
 import { SCHEMA_KEY as SELF_KEY, finalAnalysisReportSchema } from './schemas.js'
 import { ANALYSIS_WORKFLOW_KIND } from '../workflowKinds.js'
-import { STEP_TYPE } from '../../domain/executionModel.js'
 import { BootstrapStep } from '../shared/bootstrapStep.js'
 import { ToolCallAssessmentStep } from '../shared/toolCallAssessmentStep.js'
 import { TurnSummaryStep } from '../shared/turnSummaryStep.js'
 import { FinalAggregationStep } from '../shared/finalAggregationStep.js'
-import { runCoverageValidationStep } from '../coverageValidationStep.js'
+import { CoverageValidationStep } from '../coverageValidationStep.js'
 import { buildToolCallEvaluationPrompt } from './evaluationPrompts.js'
 import { buildTurnSummaryEvaluationPrompt } from './evaluationPrompts.js'
 import { buildFinalAggregationEvaluationPrompt } from './evaluationPrompts.js'
-import { getLatestArtifactBySchemaKey } from '../artifactRepository.js'
 import { buildFullSessionSystemPrompt } from './systemPrompt.js'
 
 export class FullSessionAnalysis extends AnalysisSessionBase {
@@ -49,12 +46,6 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
   ): FullSessionAnalysis {
     const state: AnalysisSessionState = {
       phase: 'bootstrap',
-      bootstrapComplete: false,
-      nextPacketIndex: 0,
-      packetCount: 0,
-      currentTurnId: null,
-      coverageValidated: false,
-      finalAggregationComplete: false,
       analysisSessionId: input.analysisSessionId,
       targetSessionId: input.targetSessionId,
       targetTurnId: input.targetTurnId,
@@ -96,83 +87,59 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
     return buildFullSessionSystemPrompt(input)
   }
 
-  // ── Hooks ─────────────────────────────────────────────────────────────────
+  // ── Hooks — called by buildPlan() during tree traversal ───────────────────
 
-  protected async beforeSession(): Promise<void> {
-    if (this.state.bootstrapComplete) return
-
-    this.emit({ type: 'analysis-phase-changed', phase: 'bootstrap' })
-
-    await new BootstrapStep(this.db, this.lm, this.mcp, {
+  protected onBeforeSession(): void {
+    this.addCommand(new BootstrapStep(this.db, this.lm, this.mcp, {
       indexSchemaKey: SCHEMA_KEY.EVIDENCE_PACKET_INDEX,
-    })
-      .execute(this.buildStepContext(STEP_TYPE.ANALYSIS_BOOTSTRAP))
-
-    this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })
+    }))
   }
 
-  protected async onToolCall(part: PartInfo, _round: RoundInfo, _turn: TurnInfo): Promise<void> {
-    const indexArtifact = this.readArtifact(SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
+  protected onToolCall(part: PartInfo, _round: RoundInfo, _turn: TurnInfo): void {
     const targetArtifact = this.readArtifact(SCHEMA_KEY.ANALYSIS_TARGET)
-    if (!indexArtifact || !targetArtifact) return
-
-    const packetIndex = indexArtifact.content as EvidencePacketIndex
-    const packet = packetIndex.packets[this.state.nextPacketIndex]
-    if (!packet || packet.tool_call_part_id !== part.id) return
-
-    await new ToolCallAssessmentStep(this.db, this.lm, this.mcp, {
-      artifactSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
-      buildPrompt: buildToolCallEvaluationPrompt,
-      computeNextPhase: ({ analysisSessionId, currentTurnId, nextPacketIndex }) => {
-        const artifact = getLatestArtifactBySchemaKey(this.db.connection, analysisSessionId, SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
-        const idx = artifact?.content as EvidencePacketIndex | undefined
-        const next = idx?.packets[nextPacketIndex]
-        return !next || next.turn_id !== currentTurnId ? 'turn_summary' : 'assessing'
-      },
-      packet,
-      analysisTarget: targetArtifact.content as AnalysisTarget,
-    }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_TOOL_CALL_ASSESSMENT))
-  }
-
-  protected async afterTurn(_turn: TurnInfo): Promise<void> {
-    if (!this.state.currentTurnId) return
-
     const indexArtifact = this.readArtifact(SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
-    if (!indexArtifact) return
-    const packetIndex = indexArtifact.content as EvidencePacketIndex
-    if (this.state.nextPacketIndex < packetIndex.packets.length) return
+    if (!targetArtifact || !indexArtifact) return
 
-    this.emit({ type: 'analysis-phase-changed', phase: 'turn_summary' })
-
-    await new TurnSummaryStep(this.db, this.lm, this.mcp, {
-      assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
-      summarySchemaKey: SELF_KEY.TURN_SUMMARY,
-      buildPrompt: (params) => buildTurnSummaryEvaluationPrompt({
-        analysisTarget: params.analysisTarget as AnalysisTarget,
-        subjectId: params.subjectId as string,
-        repeatedTools: params.repeatedTools as string[],
-        repeatedAttemptGuidance: params.repeatedAttemptGuidance as string | null,
-        turnPacketCount: params.turnPacketCount as number,
-      }),
-    }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_TURN_SUMMARY))
-
-    this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })
+    const knownPackets = (indexArtifact.content as EvidencePacketIndex).packets
+    let packet: EvidencePacket | undefined = knownPackets.find(p => p.tool_call_part_id === part.id)
+    if (!packet) {
+      const knownIds = new Set(knownPackets.map(p => p.tool_call_part_id))
+      packet = this.discoverNewPackets(knownIds).find(p => p.tool_call_part_id === part.id)
+    }
+    if (packet) {
+      const analysisTarget = targetArtifact.content as AnalysisTarget
+      this.addCommand(new ToolCallAssessmentStep(this.db, this.lm, this.mcp, {
+        artifactSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
+        buildPrompt: buildToolCallEvaluationPrompt,
+        packet,
+        analysisTarget,
+      }))
+    }
   }
 
-  protected async afterSession(): Promise<void> {
-    if (this.state.finalAggregationComplete) return
-    if (!this.state.coverageValidated) {
-      const validated = runCoverageValidationStep(this.db, {
-        state: this.state,
-        stepId: this.state.analysisSessionId,
+  protected onAfterTurn(turn: TurnInfo): void {
+    const hasToolCalls = turn.rounds.some(r => r.parts.some(p => p.type === 'tool_call'))
+    if (hasToolCalls) {
+      this.addCommand(new TurnSummaryStep(this.db, this.lm, this.mcp, {
         assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
-      })
-      this.state = { ...this.state, ...validated.updatedState }
+        summarySchemaKey: SELF_KEY.TURN_SUMMARY,
+        turnId: turn.id,
+        buildPrompt: (params) => buildTurnSummaryEvaluationPrompt({
+          analysisTarget: params.analysisTarget as AnalysisTarget,
+          subjectId: params.subjectId as string,
+          repeatedTools: params.repeatedTools as string[],
+          repeatedAttemptGuidance: params.repeatedAttemptGuidance as string | null,
+          turnPacketCount: params.turnPacketCount as number,
+        }),
+      }))
     }
+  }
 
-    this.emit({ type: 'analysis-phase-changed', phase: 'final_aggregation' })
-
-    await new FinalAggregationStep(this.db, this.lm, this.mcp, {
+  protected onAfterSession(): void {
+    this.addCommand(new CoverageValidationStep(this.db, this.lm, this.mcp, {
+      assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
+    }))
+    this.addCommand(new FinalAggregationStep(this.db, this.lm, this.mcp, {
       assessmentSchemaKey: SELF_KEY.TOOL_CALL_ASSESSMENT,
       summarySchemaKey: SELF_KEY.TURN_SUMMARY,
       reportSchemaKey: SELF_KEY.FINAL_ANALYSIS_REPORT,
@@ -197,8 +164,8 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
           total_tool_calls_assessed: assessments.length,
         }
       },
-    }).execute(this.buildStepContext(STEP_TYPE.ANALYSIS_FINAL_AGGREGATION))
-
-    this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })
+    }))
   }
 }
+
+

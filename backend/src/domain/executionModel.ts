@@ -212,6 +212,7 @@ export const STEP_TYPE = {
   ANALYSIS_TOOL_GROUP_ASSESSMENT: stepTypeKey('analysis_tool_group_assessment'),
   ANALYSIS_TURN_SUMMARY: stepTypeKey('analysis_turn_summary'),
   ANALYSIS_FINAL_AGGREGATION: stepTypeKey('analysis_final_aggregation'),
+  ANALYSIS_COVERAGE_VALIDATION: stepTypeKey('analysis_coverage_validation'),
 } as const
 
 // ─────────────────────────────────────────────────────────────────────────────

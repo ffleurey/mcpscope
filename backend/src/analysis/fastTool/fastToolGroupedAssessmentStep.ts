@@ -4,15 +4,15 @@ import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
-import type { StepResult } from '../../domain/executionModel.js'
+import type { StepResult, StepTypeKey } from '../../domain/executionModel.js'
+import { STEP_TYPE } from '../../domain/executionModel.js'
 import { getSessionRecord, getPartRecord, updatePartRecord, listPartRecordsBySession } from '../../persistence/repository.js'
-import { insertJsonArtifact } from '../artifactRepository.js'
+import { insertJsonArtifact, getLatestArtifactBySchemaKey } from '../artifactRepository.js'
 import { runDeterministicMcpToolCallsInSingleTurn } from '../../runtime/toolTurns.js'
 import { runAnalysisTurn } from '../boundedTurn.js'
 import {
   SCHEMA_KEY,
   evaluationResultSchema,
-  type AnalysisSessionState,
   type AnalysisTarget,
 } from '../schemas.js'
 import type { FastToolWorkGroup } from './schemas.js'
@@ -30,6 +30,13 @@ export interface FastToolGroupedAssessmentStepConfig {
 
 export class FastToolGroupedAssessmentStep extends WorkflowStep {
   readonly stepLabel = 'Grouped Assessment'
+  readonly kind = 'assess'
+  readonly stepTypeKey: StepTypeKey = STEP_TYPE.ANALYSIS_TOOL_GROUP_ASSESSMENT
+  get semanticId(): string { return '' }
+
+  isComplete(db: BackendDatabase, sessionId: string): boolean {
+    return getLatestArtifactBySchemaKey(db.connection, sessionId, this.config.artifactSchemaKey) !== null
+  }
 
   constructor(
     db: BackendDatabase,
@@ -41,9 +48,7 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
   }
 
   protected async run(ctx: StepContext): Promise<StepResult> {
-    const state = ctx.workflowState as unknown as AnalysisSessionState | undefined
-    if (!state) throw new Error('FastToolGroupedAssessmentStep: workflowState required')
-    const { analysisSessionId } = state
+    const analysisSessionId = ctx.sessionId
     const { workUnit, analysisTarget } = this.config
 
     const analysisSession = getSessionRecord(this.db.connection, analysisSessionId)
@@ -88,7 +93,6 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
         content: { step_type: 'fast_tool_grouped_assessment', error_kind: 'json_parse_error', message: 'Not valid JSON', detail: { raw_response: turnResult.responseText, error: String(e) } },
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, work_unit_id: workUnit.work_unit_id }, createdAt: ts,
       })
-      state.phase = 'error'
       return { status: 'error', outputArtifacts: [] }
     }
 
@@ -99,7 +103,6 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
         content: { step_type: 'fast_tool_grouped_assessment', error_kind: 'schema_validation_error', message: 'Schema mismatch', detail: { raw_response: turnResult.responseText, errors: (parsed.error as ZodError).issues } },
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, work_unit_id: workUnit.work_unit_id }, createdAt: ts,
       })
-      state.phase = 'error'
       return { status: 'error', outputArtifacts: [] }
     }
 
@@ -120,13 +123,6 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
       analysisSessionId, injectPartIds,
       turnResult.assistantReasoningPartIds, turnResult.turnId,
     )
-    const nextPhase = state.nextPacketIndex + 1 < state.packetCount ? 'assessing' : 'final_aggregation'
-
-    Object.assign(state, {
-      nextPacketIndex: state.nextPacketIndex + 1,
-      phase: nextPhase,
-    })
-
     return { status: 'complete', outputArtifacts: [] }
   }
 

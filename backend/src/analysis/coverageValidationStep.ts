@@ -1,13 +1,22 @@
 /**
  * AnalysisCoverageValidationStep
  *
- * Verifies that every packet in the evidence_packet_index has an accepted
- * tool_call_assessment artifact. On failure, writes a diagnostic artifact and
- * sets the session phase to 'error'. On success, advances to 'final_aggregation'.
+ * Verifies that every tool-call part discovered by buildPlan() has an accepted
+ * assessment artifact.  On failure, writes a diagnostic artifact and returns
+ * { status: 'error' }.  On success, returns { status: 'complete' }.
+ *
+ * Modeled as a WorkflowStep subclass so the validation creates an inspectable
+ * step record in the UI, same as every other command.
  */
 
 import crypto from 'node:crypto'
 import type { BackendDatabase } from '../persistence/db.js'
+import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
+import type { McpGateway } from '../runtime/toolTurns.js'
+import { WorkflowStep } from '../workflow/workflowStep.js'
+import type { StepContext } from '../workflow/stepContext.js'
+import type { StepResult, StepTypeKey } from '../domain/executionModel.js'
+import { STEP_TYPE } from '../domain/executionModel.js'
 import {
   insertJsonArtifact,
   getLatestArtifactBySchemaKey,
@@ -15,7 +24,6 @@ import {
 } from './artifactRepository.js'
 import {
   SCHEMA_KEY,
-  type AnalysisSessionState,
   type EvidencePacketIndex,
 } from './schemas.js'
 
@@ -27,80 +35,85 @@ function now(): number {
   return Date.now()
 }
 
-export interface CoverageValidationInput {
-  state: AnalysisSessionState
-  stepId: string
+export interface CoverageValidationStepConfig {
   assessmentSchemaKey: string
 }
 
-export interface CoverageValidationResult {
-  updatedState: AnalysisSessionState
-  passed: boolean
-}
+export class CoverageValidationStep extends WorkflowStep {
+  readonly stepLabel = 'Coverage Validation'
+  readonly kind = 'coverage'
+  readonly stepTypeKey: StepTypeKey = STEP_TYPE.ANALYSIS_COVERAGE_VALIDATION
+  get semanticId(): string { return '' }
 
-export function runCoverageValidationStep(
-  database: BackendDatabase,
-  input: CoverageValidationInput,
-): CoverageValidationResult {
-  const { state, stepId } = input
-  const { analysisSessionId } = state
-  const assessmentSchemaKey = input.assessmentSchemaKey
-
-  // ── Load artifacts ────────────────────────────────────────────────────────
-  const packetIndexArtifact = getLatestArtifactBySchemaKey(
-    database.connection,
-    analysisSessionId,
-    SCHEMA_KEY.EVIDENCE_PACKET_INDEX,
-  )
-  if (!packetIndexArtifact) {
-    const diagnosticId = uuid()
-    insertJsonArtifact(database.connection, {
-      id: diagnosticId,
-      sessionId: analysisSessionId,
-      stepId,
-      content: {
-        step_type: 'coverage_validation',
-        error_kind: 'missing_packet_index',
-        message: 'evidence_packet_index artifact missing — bootstrap may not have completed',
-        detail: {
-          has_packet_index: packetIndexArtifact != null,
-        },
-      },
-      metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC },
-      createdAt: now(),
-    })
-    return { updatedState: { ...state, phase: 'error' }, passed: false }
+  isComplete(db: BackendDatabase, sessionId: string): boolean {
+    const indexArtifact = getLatestArtifactBySchemaKey(db.connection, sessionId, SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
+    if (!indexArtifact) return false
+    const packets = (indexArtifact.content as EvidencePacketIndex).packets
+    if (packets.length === 0) return true
+    const assessments = listArtifactsBySessionAndSchemaKey(db.connection, sessionId, this.config.assessmentSchemaKey)
+    const assessedIds = new Set(assessments.map(a => a.metadata.tool_call_part_id as string | undefined).filter(Boolean))
+    return packets.every(p => assessedIds.has(p.tool_call_part_id))
   }
 
-  const packetIndex = packetIndexArtifact.content as EvidencePacketIndex
-  const assessments = listArtifactsBySessionAndSchemaKey(
-    database.connection,
-    analysisSessionId,
-    assessmentSchemaKey,
-  )
-  const assessedToolCallPartIds = new Set(
-    assessments.map(a => {
-      const meta = a.metadata as { tool_call_part_id?: string }
-      return meta.tool_call_part_id
-    }),
-  )
+  constructor(
+    db: BackendDatabase,
+    lm: ChatCompletionGateway,
+    mcp: McpGateway,
+    private readonly config: CoverageValidationStepConfig,
+  ) {
+    super(db, lm, mcp)
+  }
 
-  // ── Validate every packet is covered ─────────────────────────────────────
-  const unassessed = packetIndex.packets.filter(
-    p => !assessedToolCallPartIds.has(p.tool_call_part_id),
-  )
+  protected async run(ctx: StepContext): Promise<StepResult> {
+    const analysisSessionId = ctx.sessionId
 
-  const failures = unassessed.map(
-    p => `Tool call ${p.tool_call_part_id} (${p.tool_name}) has no accepted assessment`,
-  )
-
-  if (failures.length > 0) {
-    const diagnosticId = uuid()
-    try {
-      insertJsonArtifact(database.connection, {
-        id: diagnosticId,
+    const packetIndexArtifact = getLatestArtifactBySchemaKey(
+      this.db.connection,
+      analysisSessionId,
+      SCHEMA_KEY.EVIDENCE_PACKET_INDEX,
+    )
+    if (!packetIndexArtifact) {
+      insertJsonArtifact(this.db.connection, {
+        id: uuid(),
         sessionId: analysisSessionId,
-        stepId,
+        stepId: this.stepId,
+        content: {
+          step_type: 'coverage_validation',
+          error_kind: 'missing_packet_index',
+          message: 'evidence_packet_index artifact missing — bootstrap may not have completed',
+          detail: { has_packet_index: false },
+        },
+        metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC },
+        createdAt: now(),
+      })
+      return { status: 'error', outputArtifacts: [] }
+    }
+
+    const packetIndex = packetIndexArtifact.content as EvidencePacketIndex
+    const assessments = listArtifactsBySessionAndSchemaKey(
+      this.db.connection,
+      analysisSessionId,
+      this.config.assessmentSchemaKey,
+    )
+    const assessedToolCallPartIds = new Set(
+      assessments.map(a => {
+        const meta = a.metadata as { tool_call_part_id?: string }
+        return meta.tool_call_part_id
+      }),
+    )
+
+    const unassessed = packetIndex.packets.filter(
+      p => !assessedToolCallPartIds.has(p.tool_call_part_id),
+    )
+
+    if (unassessed.length > 0) {
+      const failures = unassessed.map(
+        p => `Tool call ${p.tool_call_part_id} (${p.tool_name}) has no accepted assessment`,
+      )
+      insertJsonArtifact(this.db.connection, {
+        id: uuid(),
+        sessionId: analysisSessionId,
+        stepId: this.stepId,
         content: {
           step_type: 'coverage_validation',
           error_kind: 'incomplete_coverage',
@@ -110,20 +123,9 @@ export function runCoverageValidationStep(
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC },
         createdAt: now(),
       })
-    } catch {
-      // The artifacts table has step_id → v2_steps(id). If the call site
-      // passes a session ID instead of a step ID the insert fails with FK.
-      // This is non-critical — the coverage result is still correct.
+      return { status: 'error', outputArtifacts: [] }
     }
-    return { updatedState: { ...state, phase: 'error' }, passed: false }
-  }
 
-  return {
-    updatedState: {
-      ...state,
-      phase: 'final_aggregation',
-      coverageValidated: true,
-    },
-    passed: true,
+    return { status: 'complete', outputArtifacts: [] }
   }
 }
