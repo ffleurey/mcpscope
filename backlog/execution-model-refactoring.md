@@ -186,6 +186,29 @@ etc.) set at construction time inside `buildPlan()`.  Steps no longer need to
 communicate position to each other through shared mutable state; the plan is the
 communication channel.
 
+### Decision 9: Steps ARE commands — no separate command/step layering
+
+`WorkflowStep` directly implements the `AnalysisCommand` interface.  There is no
+separate command class that wraps a step.  Each concrete step (`BootstrapStep`,
+`ToolCallAssessmentStep`, `TurnSummaryStep`, etc.) carries:
+
+- `kind`, `stepTypeKey`, `semanticId` — planning identity
+- `isComplete()` — idempotency check via artifact existence
+- `execute()` — step-record lifecycle (from `WorkflowStep`)
+- `run()` — business logic (from `WorkflowStep`)
+
+`resumeOneStep()` calls `execute()` directly on the command/step — no
+`buildStep()` indirection.  `addCommand()` receives `AnalysisCommand` instances,
+which ARE the step objects.
+
+Rationale: the previous two-layer design (`AssessCommand.buildStep()` returns
+`ToolCallAssessmentStep`) added no value.  Commands always produced exactly one
+step type.  The idempotency check (`isComplete()`) belongs on the step itself
+since it queries the same artifacts the step produces.  Merging them eliminates
+14 command classes across 3 workflow subfiles, removes the `buildStep()` factory
+pattern, and makes it impossible for a command class to get out of sync with its
+corresponding step.
+
 ---
 
 ## Specification
@@ -761,7 +784,7 @@ All items in the "Files to modify" table have been changed.  Key changes:
 | `inspectionQueries.ts` | `loadSessionTree()` no longer accepts a `targetTurnId` parameter.  Always loads the full tree. Populates `TurnInfo.id` (turn record ID). |
 | Step implementations | All `Object.assign(state, ...)` calls removed from `BootstrapStep`, `ToolCallAssessmentStep`, `TurnSummaryStep`, `FinalAggregationStep`, `FastToolGroupedAssessmentStep`. `computeNextPhase` removed from `ToolCallAssessmentStepConfig`.  `TurnSummaryStep` receives `turnId` from config instead of `state.currentTurnId`. |
 | `coverageValidationStep.ts` | Rewritten from standalone function to `WorkflowStep` subclass with step-record lifecycle. |
-| Workflow subclasses | `FullSessionAnalysis`, `FastSessionAnalysis`, `FastToolAnalysis` override hooks (`onBeforeSession`, `onToolCall`, `onAfterTurn`, `onAfterSession`) instead of a monolithic `buildPlan()`. Each hook calls `addCommand()` with the appropriate command class. Command classes (`BootstrapCommand`, `AssessCommand`, `TurnSummaryCommand`, `CoverageCommand`, `FinalCommand`, `GroupedAssessCommand`) inlined in each file. |
+| Workflow subclasses | `FullSessionAnalysis`, `FastSessionAnalysis`, `FastToolAnalysis` override hooks (`onBeforeSession`, `onToolCall`, `onAfterTurn`, `onAfterSession`). Each hook calls `addCommand()` with the appropriate WorkflowStep subclass directly — no more separate command wrapper classes. |
 | `launchAnalysis.ts` | Initial state no longer includes removed fields. |
 | `sessionRoutes.ts` | `resetFailedAnalysisStepForRetry` uses step `childIndex` ordering to cascade artifact removal instead of `walkCursor: 0` and phase computation. |
 | `artifactRepository.ts` | Added `deleteJsonArtifact()` for retry cleanup. |

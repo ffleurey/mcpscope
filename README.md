@@ -15,7 +15,7 @@ separate substrate.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
 - [DATA-MODEL.md](DATA-MODEL.md) - canonical runtime tree, part taxonomy, and canonical IDs
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) - SQLite tables, foreign keys, singleton defaults, and ER diagram
-- [SESSION-ANALYSIS.md](SESSION-ANALYSIS.md) - shipped `session_analysis` workflow and evidence-loading contract
+- [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) - shipped `session_analysis` workflow and evidence-loading contract
 - [MCP.md](MCP.md) - MCP interface reference: transport, tool surface, and structured results
 - [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
