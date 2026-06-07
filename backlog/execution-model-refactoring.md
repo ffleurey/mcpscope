@@ -130,6 +130,48 @@ They were needed only because the flatten/walk loop could fire the same hook
 multiple times.  With a plan list and derived-position execution, each command
 runs at most once by construction.
 
+### Decision 7: The full target session tree is loaded every step
+
+`loadTargetTree()` no longer accepts a `targetTurnId` filter.  It loads the
+entire target session tree from SQLite on every `resumeOneStep()` call.  The
+`targetTurnId` field remains in state as a record of the user's original scope.
+
+Scope filtering moves from the loader to `buildPlan()`.  The plan only includes
+commands for turns up to and including `targetTurnId`.  Turns beyond the scope
+are ignored.  This means new turns added *within* the scope after launch **are
+automatically included** — the plan includes commands for them, and
+`findFirstIncomplete()` finds the first one whose artifact doesn't exist yet.
+New turns added *beyond* the original scope are not included unless the user
+updates `targetTurnId` and resumes.
+
+Completeness is decided later by `findFirstIncomplete()` scanning artifact
+existence.
+
+### Decision 8: Workflow phases are derived from the plan, not mutated by steps
+
+`phase`, `nextPacketIndex`, `packetCount`, and `currentTurnId` are no longer
+persisted in `AnalysisSessionState` or mutated by steps via `Object.assign`.
+Instead, the current phase is derived by inspecting the first incomplete command's
+`kind`:
+
+| Command kind | Derived phase |
+|---|---|
+| `bootstrap` | `'bootstrap'` |
+| `assess` | `'assessing'` |
+| `turn_summary` | `'turn_summary'` |
+| `coverage` | `'coverage_validation'` |
+| `final_aggregation` | `'final_aggregation'` |
+| *(none — all complete)* | `'complete'` |
+
+Phase strings are kept identical to the current set (`bootstrap`, `assessing`,
+`turn_summary`, `coverage_validation`, `final_aggregation`, `complete`, `error`)
+to avoid breaking `analysis-phase-changed` events consumed by the API and UI.
+
+Each command instance already carries its own identity (packet index, turn ID,
+etc.) set at construction time inside `buildPlan()`.  Steps no longer need to
+communicate position to each other through shared mutable state; the plan is the
+communication channel.
+
 ---
 
 ## Specification
@@ -194,7 +236,10 @@ export abstract class AnalysisSessionBase {
 
 ### 2. `buildPlan()` — replacing `flatten()`
 
-Each subclass overrides `buildPlan()` to produce the correct command sequence.
+Each subclass overrides `buildPlan()` to traverse the tree and produce a
+semantic `AnalysisCommand[]`.  Artifacts are **not** read during plan
+construction — they are only checked later by `findFirstIncomplete()` to
+determine which commands still need execution.
 
 #### FullSessionAnalysis plan
 
@@ -202,17 +247,49 @@ Each subclass overrides `buildPlan()` to produce the correct command sequence.
 buildPlan(tree):
   commands = []
   commands.push(bootstrapCommand)
-  for each packet in evidence_packet_index:
-    commands.push(assessCommand(packet))
-  for each turn_id with assessments:
-    commands.push(summaryCommand(turn_id))
+  scopeTurns = turns in tree up to and including targetTurnId
+  for each turn in scopeTurns:
+    for each part in turn.rounds[].parts:
+      if part is a tool-call:
+        commands.push(assessCommand(part))
+  for each turn in scopeTurns:
+    if turn has any tool-call parts:
+      commands.push(summaryCommand(turn))
   commands.push(coverageCommand)
   commands.push(finalAggregationCommand)
   return commands
 ```
 
-Only the bootstrap command inspects the tree via the Visitor.  The rest read
-from artifacts (packet index, assessments) produced by earlier commands.
+The tree is traversed for discovery.  Artifact existence is ignored here —
+every tool-call part in scope gets an `AssessCommand`, every scoped turn with
+tool-calls gets a `TurnSummaryCommand`.  Redundant commands (already-complete
+work) are skipped later by `findFirstIncomplete()`.
+
+This is what makes tree growth work: a new turn within scope in the tree →
+`buildPlan()` produces assess + summary commands for it → `findFirstIncomplete()`
+finds the first incomplete one → execution picks up on the new content.
+
+#### FastSessionAnalysis plan
+
+```
+buildPlan(tree):
+  commands = []
+  commands.push(bootstrapCommand)
+  scopeTurns = turns in tree up to and including targetTurnId
+  for each turn in scopeTurns:
+    for each part in turn.rounds[].parts:
+      if part is a tool-call:
+        commands.push(assessCommand(part))
+  for each turn in scopeTurns:
+    if turn has any tool-call parts:
+      commands.push(summaryCommand(turn))
+  commands.push(coverageCommand)
+  commands.push(finalAggregationCommand)
+  return commands
+```
+
+Same structure as FullSessionAnalysis but with fast-specific prompt builders
+and schema keys passed to each command's `buildStep()`.
 
 #### FastToolAnalysis plan
 
@@ -224,6 +301,10 @@ buildPlan(tree):
   commands.push(finalAggregationCommand)
   return commands
 ```
+
+FastToolAnalysis skips per-turn summaries (no `summaryCommand` or `coverageCommand`
+— coverage is implicit in the grouped assessment).  The grouped assessment command
+uses `kind: 'assess'` so `derivePhase()` maps it to `'assessing'`.
 
 ### 3. `findFirstIncomplete()` — the derived position
 
@@ -243,23 +324,33 @@ Each command's `isComplete()` checks DB state:
 | `bootstrap` | Artifact with `SCHEMA_KEY.EVIDENCE_PACKET_INDEX` exists for this session |
 | `assess(packet)` | Artifact with the matching `assessmentSchemaKey` and `tool_call_part_id` metadata exists |
 | `turn_summary(turnId)` | Artifact with the matching `summarySchemaKey` and `turn_id` metadata exists |
-| `coverage` | No separate artifact needed — derived from whether all packets have assessments |
+| `coverage` | Scans assessment artifacts and compares against the tool-call parts discovered by `buildPlan()`. Complete when every tool-call part has a matching assessment artifact. |
 | `final_aggregation` | Artifact with the matching `reportSchemaKey` exists |
 
 ### 4. `resumeOneStep()` — the interpreter loop (one iteration)
 
 ```typescript
+private derivePhase(plan: AnalysisCommand[], next: AnalysisCommand | null): AnalysisPhase {
+  if (!next) return 'complete'
+  const phaseMap: Record<string, AnalysisPhase> = {
+    bootstrap: 'bootstrap',
+    assess: 'assessing',
+    turn_summary: 'turn_summary',
+    coverage: 'coverage_validation',
+    final_aggregation: 'final_aggregation',
+  }
+  return phaseMap[next.kind] ?? 'error'
+}
+
 async resumeOneStep(emitEvent?: AnalysisStreamEventSink): Promise<void> {
   this.emitFn = emitEvent
-
-  if (this.state.phase === 'complete' || this.state.phase === 'error') return
 
   const tree = this.loadTargetTree()
   const plan = this.buildPlan(tree)
   const next = this.findFirstIncomplete(plan)
+  this.state.phase = this.derivePhase(plan, next)
 
   if (!next) {
-    this.state.phase = 'complete'
     this.saveState()
     return
   }
@@ -267,9 +358,8 @@ async resumeOneStep(emitEvent?: AnalysisStreamEventSink): Promise<void> {
   const step = next.buildStep(this.db, this.lm, this.mcp)
   const result = await step.execute(this.buildStepContext(next.stepTypeKey))
 
-  // Sync phase from result — the step's run() method mutates workflowState
-  // (this remains unchanged from the current design; phase mutations still
-  // happen inside step.run() via Object.assign(state, ...)).
+  // Phase is re-derived on the next resumeOneStep() call via derivePhase().
+  // Steps no longer mutate shared state (phase, nextPacketIndex, etc.).
   this.saveState()
 
   if (result.status === 'error') {
@@ -343,9 +433,9 @@ persistence/retry paths.
 export interface AnalysisSessionState {
   phase: AnalysisPhase
   // Removed: walkCursor?: number
-  nextPacketIndex: number
-  packetCount: number
-  currentTurnId: string | null
+  // Removed: nextPacketIndex: number
+  // Removed: packetCount: number
+  // Removed: currentTurnId: string | null
   // Removed: bootstrapComplete: boolean
   // Removed: coverageValidated: boolean
   // Removed: finalAggregationComplete: boolean
@@ -373,19 +463,28 @@ Instead of `walkCursor: 0`, the retry endpoint:
 2. Finds the corresponding `AnalysisCommand` that produced it (by matching
    `stepTypeKey` and step params/state).
 3. Deletes or marks as excluded the artifacts created by that command.
-4. Sets `state.phase` to the phase before the failed command ran.
+4. Deletes or marks as excluded all downstream artifacts (commands after the
+   failed one in plan order), so `findFirstIncomplete()` naturally cascades
+   re-execution.
 5. The next `resumeOneStep()` finds the failed command as incomplete and
-   re-executes it.
+   re-executes it.  Downstream commands are also re-executed because their
+   artifacts have been removed.
 
 The exact artifact cleanup per command:
 
 | Command | Artifacts to remove on retry |
 |---|---|
-| `bootstrap` | `evidence_packet_index`, `analysis_target`, all subsequent assessments, summaries, report |
-| `assess` | That specific assessment artifact; optionally downstream summaries/report |
-| `turn_summary` | That specific summary artifact; optionally downstream report |
-| `coverage` | Nothing (deterministic, no artifacts) — just regress phase |
+| `bootstrap` | `evidence_packet_index`, `analysis_target`, all assessments, summaries, report |
+| `assess` | That specific assessment artifact + all downstream summaries and report |
+| `turn_summary` | That specific summary artifact + downstream report |
+| `coverage` | Nothing (deterministic, no artifacts) — coverage is re-derived in the next `resumeOneStep()` |
 | `final_aggregation` | The report artifact |
+
+**Cascade policy**: downstream artifacts are always removed on retry.  This is
+not optional — it is the only way to guarantee correctness, because a downstream
+command's output (e.g. a turn summary) may have been influenced by the failed
+command's output (e.g. the assessment it summarizes).  Re-running the failed
+command without re-running downstream consumers would produce inconsistent state.
 
 ### 8. Changes to `resetFailedAnalysisStepForRetry` behavior
 
@@ -400,39 +499,107 @@ const updatedAnalysisState = {
 }
 ```
 
-Proposed:
+The retry endpoint does not have a live analysis instance with a plan.  It
+must either **reconstruct the plan** or use **step-record metadata** as a
+proxy for plan ordering.
+
+**Option A — reconstruct the plan and derive phase (recommended):**
 
 ```typescript
-const updatedAnalysisState = {
-  ...analysisState,
-  phase: retryPhase,
-  // No walkCursor
-  // Guards like bootstrapComplete are left alone — they become irrelevant
-  retry_failed_step_id: failedStep.id,
+// Rehydrate the analysis workflow to get its plan
+const workflow = rehydrateAnalysisWorkflow(database, analysisSessionId)
+const tree = loadSessionTree(database.connection, analysisSessionId)   // no targetTurnId
+const plan = workflow.buildPlan(tree)
+
+// Map step_type_key to command by matching against plan
+const failedStep = getLatestErrorStep(database.connection, analysisSessionId)
+const failedCommandIndex = plan.findIndex(cmd => cmd.stepTypeKey === failedStep.stepTypeKey)
+
+// Remove artifacts from this command and all downstream
+for (let i = failedCommandIndex; i < plan.length; i++) {
+  removeArtifactsForCommand(database.connection, analysisSessionId, plan[i])
 }
 
-// Remove artifacts produced by the failed step (and optionally downstream steps)
-removeArtifactsForStep(database.connection, analysisSessionId, failedStep.id)
+// Derive the new phase from the first remaining incomplete command.
+// This avoids a stale 'error' phase persisting between retry and the next
+// resumeOneStep() call.
+const firstIncomplete = plan.find(cmd => {
+  return !cmd.isComplete(database.connection, analysisSessionId)
+})
+const derivedPhase = firstIncomplete
+  ? derivePhaseFromKind(firstIncomplete.kind)
+  : 'complete'
+
+const updatedAnalysisState = {
+  ...analysisState,
+  retry_failed_step_id: failedStep.id,
+  phase: derivedPhase,
+}
 ```
+
+Reconstructing the plan is deterministic (no LLM calls in `buildPlan()`), so
+this is safe and requires no new persisted fields.
+
+**Cost of bootstrap retry**: retrying bootstrap removes all downstream artifacts
+(assessments, summaries, report).  The next `resumeOneStep()` re-executes every
+command, including all LLM calls.  This is expensive but correct — bootstrap
+produces the packet index that every subsequent command depends on.  Re-running
+bootstrap without re-running downstream consumers would produce inconsistent
+state.
+
+**Option B — record plan ordinal in step records (alternative):**
+Add an `ordinal` field to each step record during `WorkflowStep.execute()`
+that records the command's index in the plan.  The retry endpoint can then
+delete all steps with `ordinal >= failedStep.ordinal` without needing to
+reconstruct the plan.  Option A is preferred for keeping step records simple.
+
+Phase is set by `derivePhase()` on the next `resumeOneStep()` — it is not
+stored in the retry-persisted state.  (The `retryPhase` computation from the
+current implementation is removed; the correct phase is always derived from
+the first incomplete command.)
 
 ### 9. Changes to step `run()` methods (shared steps)
 
-The `Object.assign(state, ...)` calls inside each step's `run()` method
-**still update `phase` and `nextPacketIndex`** — that part doesn't change.
-What changes is that they no longer need to set guard booleans:
+Steps no longer mutate shared state at all.  The `Object.assign(state, ...)`
+calls inside each step's `run()` method are **removed entirely**.  State
+fields (`phase`, `nextPacketIndex`, `currentTurnId`, guard booleans) are no
+longer part of the persisted `AnalysisSessionState` — they are derived from
+the plan.
+
+What each step removes from its `run()` method:
 
 | Step | Removes from `Object.assign` |
 |---|---|
-| `BootstrapStep.run()` | `bootstrapComplete` |
-| `ToolCallAssessmentStep.run()` | *(none — already doesn't set guards)* |
-| `TurnSummaryStep.run()` | *(none — already doesn't set guards)* |
-| `FinalAggregationStep.run()` | `finalAggregationComplete` |
+| `BootstrapStep.run()` | `bootstrapComplete`, `packetCount`, `phase` |
+| `ToolCallAssessmentStep.run()` | `nextPacketIndex`, `currentTurnId`, `phase` |
+| `TurnSummaryStep.run()` | `currentTurnId`, `phase` |
+| `CoverageValidationStep.run()` | `coverageValidated`, `phase` |
+| `FinalAggregationStep.run()` | `finalAggregationComplete`, `phase` |
+
+Each step's `run()` method still performs its core work (LLM calls, artifact
+writes) and returns `{ status, state }`.  The returned state diff is used
+only for step-record persistence, not merged into `AnalysisSessionState`.
+
+The only side effect a step should produce is **artifact writes**.  Everything
+else (position, phase, what to do next) is derived from what artifacts exist.
+
+**`computeNextPhase` removed**: `ToolCallAssessmentStepConfig.computeNextPhase`
+was a callback for the step to determine the next phase based on `nextPacketIndex`.
+Since `nextPacketIndex` is no longer present and phases are derived from the
+plan, this callback is removed from the config interface and from all call sites.
 
 ### 10. Changes to `execute()` and `resume()`
 
-These now call `resumeOneStep()` in a loop instead of `walk()`:
+These now call `resumeOneStep()` in a loop instead of `walk()`.  `canContinue()`
+is derived from the plan, not from a `phase` field:
 
 ```typescript
+canContinue(): boolean {
+  const tree = this.loadTargetTree()   // fast — in-memory from SQLite
+  const plan = this.buildPlan(tree)
+  return this.findFirstIncomplete(plan) !== null
+}
+
 async execute(emitEvent?: AnalysisStreamEventSink): Promise<void> {
   this.emitFn = emitEvent
   while (this.canContinue()) {
@@ -448,20 +615,36 @@ async resume(emitEvent?: AnalysisStreamEventSink): Promise<void> {
 }
 ```
 
-### 11. Changes to `coverageValidationStep.ts`
+The duplicate loop in `execute()` vs `resume()` is preserved for backward
+compatibility (callers distinguish "first run" from "resume" for eventing).
 
-`runCoverageValidationStep()` currently returns `{ updatedState, passed }`.
-Its caller (`afterSession` hook) mutates `this.state` directly.  In the new
-design the coverage check becomes a deterministic helper called by a command's
-`buildStep()` or checked as part of `isComplete()`.
+**Performance note**: `canContinue()` and `resumeOneStep()` each call
+`loadTargetTree()` + `buildPlan()` independently, so each loop iteration
+traverses the tree twice.  This is acceptable because both operations are
+O(n) scans over in-memory SQLite results (no LLM calls).  A future
+optimization could cache the plan within one `execute()`/`resume()` call
+window and clear it on persistence or error.
 
-Since coverage validation is deterministic (no LLM call), it could either:
+### 11. Coverage validation design
 
-(a) Remain a command with a trivial `buildStep()` that returns a no-op step,
-    with the check happening in `isComplete()`, or
-(b) Be folded into the `FinalAggregationCommand.isComplete()` logic.
+Coverage validation is a deterministic check (no LLM call) that verifies every
+tool-call part discovered by `buildPlan()` has a matching assessment artifact.
 
-Option (a) is cleaner for sequence clarity.
+It is modeled as a real `AnalysisCommand` with a `WorkflowStep` subclass:
+
+- **`isComplete()`**: scans assessment artifacts in the DB and compares their
+  `tool_call_part_id` metadata against the tool-call parts discovered by
+  `buildPlan()`.  Returns `true` when every part has a matching assessment.
+- **`buildStep()`**: returns a `CoverageValidationStep` whose `run()` method
+  performs the same check synchronously.  If coverage is incomplete, it writes
+  a diagnostic artifact listing the missing parts and returns `{ status: 'error',
+  missingParts }`.
+
+The step record is created and persisted (with status `complete` or `error`),
+giving the user an inspectable step entry for coverage status in the UI.
+
+This design keeps the sequence linear and uniform: every command, including
+coverage, produces a step record with a traceable outcome.
 
 ### 12. Removing the hook list from tests
 
@@ -472,9 +655,26 @@ turns in the target session, and that `findFirstIncomplete()` correctly
 detects new commands after a new turn is added.
 
 ```typescript
-it('buildPlan includes commands for new turns added after initial bootstrap', async () => {
+it('buildPlan includes commands for all turns in the tree', async () => {
+  const tree = loadSessionTree(db, targetSessionId)   // full tree, no targetTurnId filter
   const plan = workflow.buildPlan(tree)
-  expect(plan.some(c => c.kind === 'assess' && c.semanticId === newPacketId)).toBe(true)
+  const assessKinds = plan.filter(c => c.kind === 'assess')
+  expect(assessKinds.length).toBe(expectedPacketCount)
+})
+
+it('findFirstIncomplete detects new commands when the tree grows', async () => {
+  // Bootstrap already done — only first 2 turns exist
+  const plan1 = workflow.buildPlan(tree1)
+  expect(workflow.findFirstIncomplete(plan1)).toHaveKind('assess')
+
+  // Add a 3rd turn to the target session
+  addTurnToSession(db, turn3)
+  const tree2 = loadSessionTree(db, targetSessionId)
+
+  // buildPlan now includes commands for the new turn
+  const plan2 = workflow.buildPlan(tree2)
+  expect(plan2.some(c => c.kind === 'assess' && c.semanticId === newPacketId)).toBe(true)
+  expect(workflow.findFirstIncomplete(plan2)).not.toBeNull()
 })
 ```
 
@@ -483,18 +683,54 @@ it('buildPlan includes commands for new turns added after initial bootstrap', as
 ## Files to modify
 
 | File | What changes |
-|---|---|
-| `analysis/analysisSessionBase.ts` | Remove `hookList`, `walkCursor`, `singleStepLimit`, `flatten()`, `walk()`. Add `buildPlan()`, `findFirstIncomplete()`, `resumeOneStep()` as specified. Simplify `execute()`/`resume()` to loop on `resumeOneStep()`. |
-| `analysis/schemas.ts` | Remove `walkCursor`, `bootstrapComplete`, `coverageValidated`, `finalAggregationComplete` from `AnalysisSessionState`. |
-| `analysis/fullSession/fullSessionAnalysis.ts` | Implement `buildPlan()`. Remove hook overrides (they become internal helpers called by `buildPlan()`). Remove guard checks. |
+|---|---|---|
+| `analysis/analysisSessionBase.ts` | Remove `hookList`, `walkCursor`, `singleStepLimit`, `flatten()`, `walk()`. Add `buildPlan()`, `findFirstIncomplete()`, `resumeOneStep()`, `derivePhase()` as specified. Simplify `execute()`/`resume()` to loop on `resumeOneStep()`. Remove `targetTurnId` from `loadTargetTree()` call. |
+| `analysis/inspectionQueries.ts` | Remove `targetTurnId` parameter from `loadSessionTree()`. Remove step-slice logic — always return the full session tree. |
+| `analysis/schemas.ts` | Remove `walkCursor`, `nextPacketIndex`, `packetCount`, `currentTurnId`, `bootstrapComplete`, `coverageValidated`, `finalAggregationComplete` from `AnalysisSessionState`. Keep `targetTurnId` as a record of original scope. |
+| `analysis/fullSession/fullSessionAnalysis.ts` | Implement `buildPlan()` that traverses the full tree. Remove hook overrides. Remove guard checks, `computeNextPhase` closures, and `Object.assign` state mutations. |
 | `analysis/fastSession/fastSessionAnalysis.ts` | Same as fullSession. |
-| `analysis/fastTool/fastToolAnalysis.ts` | Same. |
-| `analysis/shared/bootstrapStep.ts` | Remove `bootstrapComplete` from `Object.assign`. |
-| `analysis/shared/finalAggregationStep.ts` | Remove `finalAggregationComplete` from `Object.assign`. |
-| `analysis/coverageValidationStep.ts` | No changes needed if kept as a command; or fold into `FinalAggregationCommand` |
-| `analysis/analysisSessionTree.test.ts` | Rewrite to test `buildPlan()` + `findFirstIncomplete()` instead of `flatten()`. |
-| `analysis/analysisWorkflow.test.ts` | Update assertions that check `walkCursor` or guard booleans in persisted state. |
-| `routes/sessionRoutes.ts` | Remove `walkCursor: 0` from `resetFailedAnalysisStepForRetry`. Add artifact cleanup for the failed step. |
+| `analysis/fastTool/fastToolAnalysis.ts` | Implement `buildPlan()` for the fast-tool sequence (bootstrap → grouped assess → final). Remove hook overrides. Remove guard checks and `Object.assign` state mutations. |
+| `analysis/shared/bootstrapStep.ts` | Remove all `Object.assign` state mutations. Core work (packet index artifact) unchanged. |
+| `analysis/shared/toolCallAssessmentStep.ts` | Remove `Object.assign` state mutations and `computeNextPhase` from config and step body. Step now receives its packet identity from `buildStep()` constructor args only. |
+| `analysis/shared/turnSummaryStep.ts` | Remove `Object.assign` state mutations. Step receives its turn ID from constructor config args instead of reading `state.currentTurnId`. |
+| `analysis/shared/finalAggregationStep.ts` | Remove `Object.assign` state mutations. |
+| `analysis/fastTool/fastToolGroupedAssessmentStep.ts` | Remove `Object.assign` state mutations. Step receives its work-unit identity from constructor config. |
+| `analysis/coverageValidationStep.ts` | Convert to a `WorkflowStep` subclass with `run()` that checks coverage and writes diagnostic artifact. |
+| `analysis/analysisSessionTree.test.ts` | Rewrite to test `buildPlan()` + `findFirstIncomplete()` with full-tree loading, including new-turn growth scenario. |
+| `analysis/analysisWorkflow.test.ts` | Update assertions that check `walkCursor`, `nextPacketIndex`, `packetCount`, `currentTurnId` or guard booleans in persisted state. Add test for tree growth via `buildPlan()`. |
+| `analysis/analysisWorkflowFactory.ts` | No structural changes. The `RehydratableAnalysisWorkflow` interface may need minor alignment if method signatures change. |
+| `analysis/analysisSessionPresentation.ts` | Verify no dependency on removed state fields. `workflow_kind` and `phase` are kept. |
+| `analysis/fastSession/evaluationPrompts.ts` | Remove `currentTurnId` from prompt builder parameter interfaces. The turn ID comes from the command instance, not shared state. |
+| `domain/executionModel.ts` | Add `ANALYSIS_COVERAGE_VALIDATION: stepTypeKey('analysis_coverage_validation')` to `STEP_TYPE` constant. |
+| `operations/launchAnalysis.ts` | Stop setting removed fields in initial state (`bootstrapComplete`, `nextPacketIndex`, `packetCount`, `currentTurnId`, `coverageValidated`, `finalAggregationComplete`). |
+| `routes/sessionRoutes.ts` | Remove `walkCursor: 0` from `resetFailedAnalysisStepForRetry`. Rehydrate the analysis workflow to reconstruct the plan, then cascade artifact removal from the failed command onward. Derive and persist the correct phase from the reconstructed plan. |
+| `sessionMetadata.test.ts` | Update test assertions that check for `walkCursor`, `nextPacketIndex`, `currentTurnId`, or guard booleans in the retried state. |
+
+---
+
+## Documentation review
+
+The following documentation files describe the current architecture and need
+updating to reflect the Plan + Interpret design.  Each file should be reviewed
+and updated as part of the implementation commit.
+
+### Files to update
+
+| File | What to update |
+|---|---|
+| `ARCHITECTURE.md` | Replace description of `flatten()` + `walk()` + `walkCursor` engine with the new `buildPlan()` + `findFirstIncomplete()` + `resumeOneStep()` architecture. Update "Visitor / Hook" pattern description to note that the Visitor is now only used for data collection during planning. Add a row for the "Plan + Interpret" pattern to the design patterns table. Remove references to `walkCursor`, `hookList`, `singleStepLimit`. |
+| `README.md` | If the repo map section references analysis walk mechanics, update to match. |
+
+### No changes needed
+
+| File | Reason |
+|---|---|
+| `DATA-MODEL.md` | Does not reference `AnalysisSessionState` field-level details. The session tree and record shapes are unchanged. |
+| `CLI.md` | CLI behavior (launch, resume, retry) is unchanged at the operation level. |
+| `MCP.md` | MCP tool behavior (analysis launch, step resume) is unchanged at the tool level. |
+| `TESTING.md` | Testing strategy (regression, replay) is unchanged. Test implementation details update inside the test files. |
+| `TUTORIAL.md` | User-facing workflow is the same: launch analysis, wait for completion, view results. |
+| `SESSION-ANALYSIS.md` | Located in `backlog/completed/` — historical design doc, not updated. |
 
 ---
 
@@ -511,3 +747,13 @@ execution path.  The validation criteria:
    in DB migration or backward-compat read logic).
 4. `bootstrapComplete`, `coverageValidated`, and `finalAggregationComplete`
    no longer appear in `AnalysisSessionState` or step `run()` methods.
+5. `nextPacketIndex`, `packetCount`, and `currentTurnId` no longer appear in
+   `AnalysisSessionState`.
+6. `loadSessionTree()` no longer accepts or uses a `targetTurnId` parameter.
+7. No `Object.assign(state, ...)` call remains in any `WorkflowStep.run()`
+   method — all state derivation flows through `derivePhase()` and
+   `findFirstIncomplete()`.<｜end▁of▁thinking｜>
+
+<｜｜DSML｜｜tool_calls>
+<｜｜DSML｜｜invoke name="read">
+<｜｜DSML｜｜parameter name="filePath" string="true">/home/franck/mcpscope/backlog/execution-model-refactoring.md
