@@ -120,13 +120,6 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
       analysisSessionId, injectPartIds,
       turnResult.assistantReasoningPartIds, turnResult.turnId,
     )
-    const nextPhase = state.nextPacketIndex + 1 < state.packetCount ? 'assessing' : 'final_aggregation'
-
-    Object.assign(state, {
-      nextPacketIndex: state.nextPacketIndex + 1,
-      phase: nextPhase,
-    })
-
     return { status: 'complete', outputArtifacts: [] }
   }
 

@@ -96,14 +96,6 @@ export class BootstrapStep extends WorkflowStep {
       this.stepId,
     )
 
-    Object.assign(state, {
-      phase: packets.length > 0 ? 'assessing' : 'coverage_validation',
-      bootstrapComplete: true,
-      packetCount: packets.length,
-      nextPacketIndex: 0,
-      currentTurnId: null,
-    })
-
     return { status: 'complete', outputArtifacts: [] }
   }
 }

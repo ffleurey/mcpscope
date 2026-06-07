@@ -35,7 +35,6 @@ export function buildFastSessionToolCallAssessmentPrompt(params: {
 export function buildFastSessionTurnSummaryPrompt(params: {
   analysisTarget: AnalysisTarget
   subjectId: string
-  currentTurnId: string
   turnPacketCount: number
   repeatedTools: string
 }): string {
@@ -46,7 +45,7 @@ export function buildFastSessionTurnSummaryPrompt(params: {
     evaluationFocus: buildAnalysisFocusInstructions(params.analysisTarget),
     contextBlock: [
       'Turn summary context:',
-      `- current_turn_id: ${params.currentTurnId}`,
+      `- current_turn_id: ${params.subjectId}`,
       `- turn_packet_count: ${params.turnPacketCount}`,
       `- repeated_tools: ${params.repeatedTools}`,
     ].join('\n'),

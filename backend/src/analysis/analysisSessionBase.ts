@@ -1,10 +1,13 @@
 /**
  * Abstract base class for session analysis workflows.
  *
- * Subclasses override hook methods corresponding to nodes in the target session's
- * canonical runtime tree.  The base class owns tree traversal, execution-loop
- * control (run / resume / resumeOneStep), step-record lifecycle, state persistence,
- * and rehydration — so subclasses express only their analysis behaviour.
+ * Subclasses implement buildPlan() to produce a list of AnalysisCommands by
+ * traversing the target session tree (Visitor pattern for data collection).
+ * The base class interprets the plan one command at a time (Interpreter
+ * pattern), instantiating the matching WorkflowStep and executing it.
+ *
+ * No walk cursor, no flattened hook list, no shared mutable state between
+ * steps.  Position is derived from plan vs. artifact existence.
  */
 
 import type { BackendDatabase } from '../persistence/db.js'
@@ -17,7 +20,8 @@ import {
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
 import type { AnalysisWorkflowInput } from './analysisWorkflowInput.js'
 import type { StepContext } from '../workflow/stepContext.js'
-import type { StepTypeKey } from '../domain/executionModel.js'
+import { type StepTypeKey } from '../domain/executionModel.js'
+import { WorkflowStep } from '../workflow/workflowStep.js'
 import {
   insertJsonArtifact,
   getLatestArtifactBySchemaKey,
@@ -25,9 +29,17 @@ import {
 } from './artifactRepository.js'
 import {
   type AnalysisSessionState,
+  type AnalysisPhase,
+  type EvidencePacket,
 } from './schemas.js'
 import { runAnalysisTurn } from './boundedTurn.js'
 import { loadSessionTree } from './inspectionQueries.js'
+import {
+  listPartRecordsBySession,
+  listRoundRecordsBySession,
+  listTurnRecordsBySession,
+} from '../persistence/repository.js'
+import type { PartRecord } from '../domain/model.js'
 
 import crypto from 'node:crypto'
 function uuid(): string { return crypto.randomUUID() }
@@ -123,6 +135,25 @@ export interface SessionTree {
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
+// AnalysisCommand — a single unit of work in the execution plan
+// ───────────────────────────────────────────────────────────────────────────────
+
+export interface AnalysisCommand {
+  /** Human-readable kind, e.g. 'bootstrap', 'assess', 'turn_summary'. */
+  readonly kind: string
+  /** Semantic identity within the plan, e.g. a tool_call_part_id or turn_id. */
+  readonly semanticId: string
+  /** StepTypeKey for the WorkflowStep that executes this command. */
+  readonly stepTypeKey: StepTypeKey
+
+  /** True when this command's output already exists in the DB. */
+  isComplete(db: BackendDatabase, sessionId: string): boolean
+
+  /** Build a fresh WorkflowStep to execute this command. */
+  buildStep(db: BackendDatabase, lm: ChatCompletionGateway, mcp: McpGateway): WorkflowStep
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
 // Abstract base class
 // ───────────────────────────────────────────────────────────────────────────────
 
@@ -138,11 +169,6 @@ export abstract class AnalysisSessionBase {
   private emitFn: AnalysisStreamEventSink | undefined
   protected get emitSink(): AnalysisStreamEventSink | undefined { return this.emitFn }
 
-  // ── re-entrant walk support ─────────────────────────────────────────────────
-  private hookList: Array<{ methodName: string; fn: () => Promise<void> }> | null = null
-  private walkCursor = 0
-  private singleStepLimit: number | null = null
-
   // ── constructor ─────────────────────────────────────────────────────────────
   constructor(
     db: BackendDatabase,
@@ -157,7 +183,6 @@ export abstract class AnalysisSessionBase {
     this.sessionId  = input.analysisSessionId
     this.goal       = input.analysisGoal
     this.state      = initialState
-    this.walkCursor = initialState.walkCursor ?? 0
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -166,36 +191,93 @@ export abstract class AnalysisSessionBase {
 
   protected abstract getWorkflowKind(): string
 
+  /** Build the complete plan of commands for this analysis session.
+   *  Called fresh on every resumeOneStep() so the plan reflects the current
+   *  state of the target session tree.  The Visitor pattern is used inside
+   *  this method for data collection only. */
+  protected abstract buildPlan(tree: SessionTree): AnalysisCommand[]
+
   // ────────────────────────────────────────────────────────────────────────────
   // Public execution API
   // ────────────────────────────────────────────────────────────────────────────
 
   async execute(emitEvent?: AnalysisStreamEventSink): Promise<void> {
     this.emitFn = emitEvent
-    this.walkCursor = 0
-    this.hookList = null
-    const tree = this.loadTargetTree()
-    await this.walk(tree)
+    while (this.canContinue()) {
+      await this.resumeOneStep()
+    }
   }
 
   async resume(emitEvent?: AnalysisStreamEventSink): Promise<void> {
     this.emitFn = emitEvent
-    this.hookList = null
-    const tree = this.loadTargetTree()
-    await this.walk(tree)
+    while (this.canContinue()) {
+      await this.resumeOneStep()
+    }
   }
 
   async resumeOneStep(emitEvent?: AnalysisStreamEventSink): Promise<void> {
     this.emitFn = emitEvent
-    this.hookList = null
-    this.singleStepLimit = 1
+
+    if (this.state.phase === 'complete' || this.state.phase === 'error') return
+
     const tree = this.loadTargetTree()
-    await this.walk(tree)
-    this.singleStepLimit = null
+    const plan = this.buildPlan(tree)
+    const next = this.findFirstIncomplete(plan)
+    this.state.phase = this.derivePhase(next)
+
+    if (!next) {
+      this.saveState()
+      return
+    }
+
+    this.emit({ type: 'analysis-phase-changed', phase: this.state.phase })
+
+    const step = next.buildStep(this.db, this.lm, this.mcp)
+    const result = await step.execute(this.buildStepContext(next.stepTypeKey))
+
+    if (result.status === 'error') {
+      this.state.phase = 'error'
+      this.saveState()
+      return
+    }
+
+    // After a successful step, rebuild the plan and re-derive phase.
+    // buildPlan() output may change when bootstrap completes (it reads the
+    // packet index artifact to create assess/summary commands).
+    const newTree = this.loadTargetTree()
+    const newPlan = this.buildPlan(newTree)
+    this.state.phase = this.derivePhase(this.findFirstIncomplete(newPlan))
+    this.saveState()
   }
 
   canContinue(): boolean {
-    return this.state.phase !== 'complete' && this.state.phase !== 'error'
+    if (this.state.phase === 'complete' || this.state.phase === 'error') return false
+    const tree = this.loadTargetTree()
+    const plan = this.buildPlan(tree)
+    return this.findFirstIncomplete(plan) !== null
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Derived position — find the first incomplete command in the plan
+  // ────────────────────────────────────────────────────────────────────────────
+
+  protected findFirstIncomplete(plan: AnalysisCommand[]): AnalysisCommand | null {
+    for (const cmd of plan) {
+      if (!cmd.isComplete(this.db, this.sessionId)) return cmd
+    }
+    return null
+  }
+
+  private derivePhase(next: AnalysisCommand | null): AnalysisPhase {
+    if (!next) return 'complete'
+    const phaseMap: Record<string, AnalysisPhase> = {
+      bootstrap: 'bootstrap',
+      assess: 'assessing',
+      turn_summary: 'turn_summary',
+      coverage: 'coverage_validation',
+      final_aggregation: 'final_aggregation',
+    }
+    return phaseMap[next.kind] ?? 'error'
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -211,140 +293,6 @@ export abstract class AnalysisSessionBase {
   }
 
   // ────────────────────────────────────────────────────────────────────────────
-  // Hooks — 22 tree positions, each defaults to no-op
-  // ────────────────────────────────────────────────────────────────────────────
-
-  // ── Session ─────────────────────────────────────────────────────────────────
-  protected async beforeSession(_s: SessionInfo): Promise<void> {}
-  protected async afterSession(_s: SessionInfo): Promise<void> {}
-
-  // ── Setup ───────────────────────────────────────────────────────────────────
-  protected async beforeSetup(_s: SetupInfo): Promise<void> {}
-  protected async onSystemPrompt(_p: PartInfo): Promise<void> {}
-  protected async onMcpInstructions(_p: PartInfo): Promise<void> {}
-  protected async onToolDefinitions(_p: PartInfo): Promise<void> {}
-  protected async afterSetup(_s: SetupInfo): Promise<void> {}
-
-  // ── Steps (generic — fires for every step) ──────────────────────────────────
-  protected async beforeStep(_s: StepInfo): Promise<void> {}
-  protected async afterStep(_s: StepInfo): Promise<void> {}
-
-  // ── WorkflowStep ────────────────────────────────────────────────────────────
-  protected async beforeWorkflowStep(_w: WorkflowStepInfo): Promise<void> {}
-  protected async afterWorkflowStep(_w: WorkflowStepInfo): Promise<void> {}
-
-  // ── CompactionStep ──────────────────────────────────────────────────────────
-  protected async beforeCompaction(_c: CompactionInfo): Promise<void> {}
-  protected async afterCompaction(_c: CompactionInfo): Promise<void> {}
-
-  // ── Turn ────────────────────────────────────────────────────────────────────
-  protected async beforeTurn(_t: TurnInfo): Promise<void> {}
-  protected async afterTurn(_t: TurnInfo): Promise<void> {}
-
-  // ── Round ───────────────────────────────────────────────────────────────────
-  protected async beforeRound(_r: RoundInfo): Promise<void> {}
-  protected async afterRound(_r: RoundInfo): Promise<void> {}
-
-  // ── Round parts ─────────────────────────────────────────────────────────────
-  protected async onUserPrompt(_p: PartInfo, _round: RoundInfo, _turn: TurnInfo): Promise<void> {}
-  protected async onReasoning(_p: PartInfo, _round: RoundInfo, _turn: TurnInfo): Promise<void> {}
-  protected async onToolCall(_p: PartInfo, _round: RoundInfo, _turn: TurnInfo): Promise<void> {}
-  protected async onAssistantAnswer(_p: PartInfo, _round: RoundInfo, _turn: TurnInfo): Promise<void> {}
-
-  // ────────────────────────────────────────────────────────────────────────────
-  // Traversal engine
-  // ────────────────────────────────────────────────────────────────────────────
-
-  /**
-   * Flatten the target tree into a linear list of hook descriptors.  This is
-   * called once per walk; the list is cached so that `resumeOneStep` can
-   * advance position-by-position without rebuilding.
-   */
-  private flatten(tree: SessionTree): Array<{ methodName: string; fn: () => Promise<void> }> {
-    if (this.hookList) return this.hookList
-
-    const list: Array<{ methodName: string; fn: () => Promise<void> }> = []
-
-    list.push({ methodName: 'beforeSession', fn: () => this.beforeSession(tree.session) })
-
-    if (tree.setup) {
-      const s = tree.setup
-      list.push({ methodName: 'beforeSetup', fn: () => this.beforeSetup(s) })
-      for (const part of s.parts) {
-        switch (part.type) {
-          case 'system_prompt':     list.push({ methodName: 'onSystemPrompt', fn: () => this.onSystemPrompt(part) }); break
-          case 'mcp_instructions':  list.push({ methodName: 'onMcpInstructions', fn: () => this.onMcpInstructions(part) }); break
-          case 'tool_definitions':  list.push({ methodName: 'onToolDefinitions', fn: () => this.onToolDefinitions(part) }); break
-        }
-      }
-      list.push({ methodName: 'afterSetup', fn: () => this.afterSetup(s) })
-    }
-
-    for (const step of tree.steps) {
-      list.push({ methodName: 'beforeStep', fn: () => this.beforeStep(step) })
-
-      if (step.isWorkflowStep) {
-        const wf: WorkflowStepInfo = { step, ownedTurnCount: 0 }
-        list.push({ methodName: 'beforeWorkflowStep', fn: () => this.beforeWorkflowStep(wf) })
-        list.push({ methodName: 'afterWorkflowStep', fn: () => this.afterWorkflowStep(wf) })
-      }
-
-      if (step.isCompaction) {
-        const compaction = tree.compactionDetails.get(step.id) ?? {
-          step, strategy: null, strippedPartIds: [], strippedPartCount: 0,
-          contextTokensBefore: null, contextTokensAfter: null, tokensRemoved: null,
-        }
-        list.push({ methodName: 'beforeCompaction', fn: () => this.beforeCompaction(compaction) })
-        list.push({ methodName: 'afterCompaction', fn: () => this.afterCompaction(compaction) })
-      }
-
-      if (step.isTurn) {
-        const turn = tree.turnDetails.get(step.id)
-        if (turn) {
-          list.push({ methodName: 'beforeTurn', fn: () => this.beforeTurn(turn) })
-          for (const round of turn.rounds) {
-            list.push({ methodName: 'beforeRound', fn: () => this.beforeRound(round) })
-            for (const part of round.parts) {
-              list.push({ methodName: 'onToolCall', fn: () => this.onToolCall(part, round, turn) })
-            }
-            list.push({ methodName: 'afterRound', fn: () => this.afterRound(round) })
-          }
-          list.push({ methodName: 'afterTurn', fn: () => this.afterTurn(turn) })
-        }
-      }
-
-      list.push({ methodName: 'afterStep', fn: () => this.afterStep(step) })
-    }
-
-    list.push({ methodName: 'afterSession', fn: () => this.afterSession(tree.session) })
-
-    this.hookList = list
-    return list
-  }
-
-  /**
-   * Walk the flattened hook list starting from `walkCursor`.
-   * When `singleStepLimit` is set, the walk stops after that many advances.
-   */
-  private async walk(tree: SessionTree): Promise<void> {
-    const list = this.flatten(tree)
-    let advanced = 0
-
-    for (let i = this.walkCursor; i < list.length; i++) {
-      const item = list[i]
-      if (!item) continue
-      await item.fn()
-
-      this.walkCursor = i + 1
-      this.state.walkCursor = this.walkCursor
-      this.saveState()
-
-      advanced++
-      if (this.singleStepLimit !== null && advanced >= this.singleStepLimit) break
-    }
-  }
-
-  // ────────────────────────────────────────────────────────────────────────────
   // State persistence
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -357,7 +305,7 @@ export abstract class AnalysisSessionBase {
   }
 
   // ────────────────────────────────────────────────────────────────────────────
-  // Infrastructure for subclasses — use these inside hooks
+  // Infrastructure for subclasses — use inside buildPlan helpers
   // ────────────────────────────────────────────────────────────────────────────
 
   /** Run a bounded LLM turn inside the analysis child session. */
@@ -432,6 +380,94 @@ export abstract class AnalysisSessionBase {
   }
 
   // ────────────────────────────────────────────────────────────────────────────
+  // Tree growth — discover tool-call parts added to the target session after
+  // bootstrap ran.  Returns packets for tool-call parts whose IDs are NOT in
+  // the knownPacketIds set.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  protected discoverNewPackets(knownPacketIds: Set<string>): EvidencePacket[] {
+    const { targetSessionId, targetTurnId, selectedToolNames, onlyFailedToolCalls } = this.state
+
+    const allTurns = listTurnRecordsBySession(this.db.connection, targetSessionId)
+    const targetTurnIndex = allTurns.findIndex(turn => turn.id === targetTurnId)
+    if (targetTurnIndex === -1) return []
+    const inScopeTurnIds = new Set(
+      allTurns.slice(0, targetTurnIndex + 1)
+        .filter(turn => turn.status === 'complete')
+        .map(turn => turn.id),
+    )
+
+    const allRounds = listRoundRecordsBySession(this.db.connection, targetSessionId)
+    const allParts = listPartRecordsBySession(this.db.connection, targetSessionId)
+
+    const partsByRound = new Map<string, PartRecord[]>()
+    for (const part of allParts) {
+      if (!part.roundId) continue
+      let bucket = partsByRound.get(part.roundId)
+      if (!bucket) { bucket = []; partsByRound.set(part.roundId, bucket) }
+      bucket.push(part)
+    }
+
+    const partsByTurn = new Map<string, PartRecord[]>()
+    for (const part of allParts) {
+      if (!part.turnId) continue
+      let bucket = partsByTurn.get(part.turnId)
+      if (!bucket) { bucket = []; partsByTurn.set(part.turnId, bucket) }
+      bucket.push(part)
+    }
+
+    const inScopeRounds = allRounds.filter(r => inScopeTurnIds.has(r.turnId))
+    const selectedToolNameSet = new Set(selectedToolNames)
+    const newPackets: EvidencePacket[] = []
+
+    for (const round of inScopeRounds) {
+      const roundParts = (partsByRound.get(round.id) ?? []).sort((a, b) => a.ordinal - b.ordinal)
+      const turnParts = (partsByTurn.get(round.turnId) ?? []).sort((a, b) => a.ordinal - b.ordinal)
+      const toolCallParts = roundParts.filter(p => p.partType === 'tool-call' && !knownPacketIds.has(p.id))
+      if (toolCallParts.length === 0) continue
+
+      const toolResultParts = turnParts.filter(p => p.partType === 'tool-result')
+      const reasoningAndContentParts = turnParts
+        .filter(p => p.partType === 'assistant-reasoning' || p.partType === 'assistant-content')
+        .sort((a, b) => a.ordinal - b.ordinal)
+
+      for (const toolCallPart of toolCallParts) {
+        const json = toolCallPart.payload.json as { name?: string; id?: string; arguments?: string } | null
+        const toolName = json?.name ?? 'unknown'
+        const toolCallParameters = json?.arguments ?? '{}'
+
+        if (selectedToolNameSet.size > 0 && !selectedToolNameSet.has(toolName)) continue
+
+        const toolResultPart = toolResultParts.find(tr => {
+          const trj = tr.payload.json as { tool_call_id?: string } | null
+          return trj?.tool_call_id ? trj.tool_call_id === json?.id : tr.roundId === round.id && tr.ordinal > toolCallPart.ordinal
+        })
+        if (onlyFailedToolCalls) {
+          const isError = (toolResultPart?.provenanceJson as { isError?: boolean } | null)?.isError === true
+          if (!isError) continue
+        }
+
+        const reasoningBeforePart = reasoningAndContentParts.findLast(p => p.ordinal < toolCallPart.ordinal) ?? null
+        const afterOrdinal = toolResultPart ? toolResultPart.ordinal : toolCallPart.ordinal
+        const reasoningAfterPart = reasoningAndContentParts.find(p => p.ordinal > afterOrdinal) ?? null
+
+        newPackets.push({
+          turn_id: round.turnId,
+          round_id: round.id,
+          tool_call_part_id: toolCallPart.id,
+          tool_name: toolName,
+          tool_call_parameters: toolCallParameters,
+          reasoning_before_part_id: reasoningBeforePart?.id ?? null,
+          tool_result_part_id: toolResultPart?.id ?? null,
+          reasoning_after_part_id: reasoningAfterPart?.id ?? null,
+        })
+      }
+    }
+
+    return newPackets
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
   // Target tree loading
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -439,7 +475,6 @@ export abstract class AnalysisSessionBase {
     const tree = loadSessionTree(
       this.db.connection,
       this.state.targetSessionId,
-      this.state.targetTurnId,
     )
     if (!tree) throw new Error(`Target session not found: ${this.state.targetSessionId}`)
     return tree

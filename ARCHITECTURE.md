@@ -187,7 +187,7 @@ The backend structure is intentionally split so architectural seams are visible 
 	- `stepContext.ts` — `StepContext` interface carrying execution-scoped data (`sessionId`, `stepTypeKey`, `emitSink`, `workflowState`)
 
 - `backend/src/analysis/` owns analysis-specific behavior built on top of the workflow layer:
-	- `analysisSessionBase.ts` — abstract base class with hook traversal engine and `buildStepContext()`
+	- `analysisSessionBase.ts` — abstract base class with plan construction (`buildPlan()` → `findFirstIncomplete()`) and step interpretation (`resumeOneStep()`), plus the `AnalysisCommand` interface
 	- `shared/` — reusable `WorkflowStep` subclasses (`BootstrapStep`, `ToolCallAssessmentStep`, `TurnSummaryStep`, `FinalAggregationStep`) that accept behavior via constructor-injected functions (zero knowledge of analysis types)
 	- `fullSession/`, `fastSession/`, `fastTool/` — self-contained analysis subclasses, each owning its own prompt builders, schema keys, Zod schemas, and system prompt
 	- `analysisWorkflowFactory.ts` — registry-based factory (`registerAnalysisWorkflow()`) instead of a `switch` on workflow kind. Adding a new analysis type only requires creating a new directory and calling the registration function.
@@ -211,9 +211,9 @@ behavior at the edges.
 |---|---|---|
 | **Template Method** | `WorkflowStep.execute()` calls abstract `run(ctx)` | Step-record lifecycle (create, emit started, run, complete/fail, emit done) lives in the base class once. Concrete steps write only business logic. |
 | **Command** | Each step is a self-contained object created with `new` and `config`, executed via `.execute(ctx)` | Encapsulates prompt, schema, and LLM interaction in one place. Hooks don't manage step internals. |
-| **Strategy** | Steps receive `buildPrompt`, `computeNextPhase`, `buildDeterministicReport` as constructor-injected functions | Zero branching on analysis-type identity inside shared code. Each subclass passes its own functions. |
+| **Strategy** | Steps receive `buildPrompt`, `buildDeterministicReport` as constructor-injected functions | Zero branching on analysis-type identity inside shared code. Each subclass passes its own functions. |
 | **Registry** | `workflowRegistry` Map in `analysisWorkflowFactory.ts` | Replaces `switch(workflowKind)`. Adding a new analysis type calls `registerAnalysisWorkflow()` — no factory edits. |
-| **Visitor / Hook** | `AnalysisSessionBase` flattens the session tree into a list of hook positions; subclasses override `beforeSession`, `onToolCall`, `afterTurn`, `afterSession` | Decouples the traversal engine from the concrete workflow logic. |
+| **Plan + Interpret** | `AnalysisSessionBase.buildPlan()` produces a list of `AnalysisCommand` objects; `resumeOneStep()` finds the first incomplete command (via artifact existence) and executes it. Subclasses override `buildPlan()` to define their command sequence. | Separates planning (what work to do) from execution (doing it). No walk cursor, no flattened hook list. Position is derived from the plan vs. artifact state — always consistent. |
 
 These patterns are the architectural seam: shared code (`shared/`, the base class)
 never imports from or branches on a concrete analysis type. Each subclass owns

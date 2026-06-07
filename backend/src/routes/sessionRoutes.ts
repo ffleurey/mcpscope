@@ -28,8 +28,8 @@ import type { RouteDeps } from './types.js'
 import {
   getAnalysisWorkflowKindFromSteps,
   getLatestAnalysisDiagnosticSummaryForSession,
-  getRetryPhaseForFailedAnalysisStep,
 } from '../analysis/analysisSessionPresentation.js'
+import { listArtifactsBySession, deleteJsonArtifact } from '../analysis/artifactRepository.js'
 
 function buildSessionSummaryPayload(
   deps: Pick<RouteDeps, 'database' | 'toLifecycleState'>,
@@ -105,27 +105,23 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
     throw new Error('Analysis session has no failed step to retry')
   }
 
-  const retryPhase = getRetryPhaseForFailedAnalysisStep(failedStep)
-  if (!retryPhase) {
-    throw new Error(`Failed step ${failedStep.id} is not retryable`)
-  }
+  // Remove artifacts for the failed step and all downstream steps.
+  // Downstream = steps with childIndex >= failedStep.childIndex.
+  const descendents = steps.filter(s => s.childIndex >= failedStep.childIndex)
+  const affectedStepIds = new Set(descendents.map(s => s.id))
 
   const ownedTurnIds = new Set(
     listTurnRecordsBySession(database.connection, sessionId)
-      .filter(turn => turn.ownerStepId === failedStep.id)
+      .filter(turn => turn.ownerStepId && affectedStepIds.has(turn.ownerStepId))
       .map(turn => turn.id),
   )
   const retryParts = listPartRecordsBySession(database.connection, sessionId)
     .filter(part => part.turnId && ownedTurnIds.has(part.turnId))
 
-  // Reset the walk cursor so hooks replay from the start. Individual hook
-  // guards (nextPacketIndex, bootstrapComplete, etc.) prevent re-execution of
-  // already-completed work. The failing hook's guard re-matches only for the
-  // specific packet/condition that originally failed.
+  // Phase is derived from the plan on the next resumeOneStep().  Leave it
+  // as-is (error) so the UI shows the failure until retry resumes.
   const updatedAnalysisState = {
     ...analysisState,
-    phase: retryPhase,
-    walkCursor: 0,
     retry_failed_step_id: failedStep.id,
     retry_requested_at: Date.now(),
   }
@@ -139,6 +135,8 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
   const tx = database.connection.transaction(() => {
     updateSessionAnalysisState(database.connection, sessionId, updatedAnalysisState)
     updateSessionRecord(database.connection, updatedSession)
+
+    // Exclude parts owned by the failed + downstream steps
     for (const part of retryParts) {
       updatePartRecord(database.connection, {
         ...part,
@@ -149,12 +147,20 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
         updatedAt: updatedSession.updatedAt,
       })
     }
+
+    // Delete artifacts owned by the failed + downstream steps
+    const allArtifacts = listArtifactsBySession(database.connection, sessionId)
+    for (const artifact of allArtifacts) {
+      if (artifact.stepId && affectedStepIds.has(artifact.stepId)) {
+        deleteJsonArtifact(database.connection, artifact.id)
+      }
+    }
   })
   tx()
 
   return {
     failedStepId: failedStep.id,
-    retryPhase,
+    retryPhase: null,
     latestError: getLatestAnalysisDiagnosticSummaryForSession(database.connection, sessionId),
   }
 }

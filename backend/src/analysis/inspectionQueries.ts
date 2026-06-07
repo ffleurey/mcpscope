@@ -232,7 +232,6 @@ function buildCompactionDetails(
 export function loadSessionTree(
   connection: Database.Database,
   sessionId: string,
-  targetTurnId?: string,
 ): SessionTree | null {
   const sessionRecord = getSessionRecord(connection, sessionId)
   if (!sessionRecord) return null
@@ -251,14 +250,7 @@ export function loadSessionTree(
     },
   }
 
-  let steps = listStepRecordsBySession(connection, sessionId) as unknown as StepRecord[]
-  if (targetTurnId) {
-    // Filter to steps up to and including the target turn
-    const targetIndex = steps.findIndex(s => s.id === targetTurnId)
-    if (targetIndex >= 0) {
-      steps = steps.slice(0, targetIndex + 1)
-    }
-  }
+  const steps = listStepRecordsBySession(connection, sessionId) as unknown as StepRecord[]
 
   const turns = listTurnRecordsBySession(connection, sessionId) as unknown as TurnRecord[]
   const rounds = listRoundRecordsBySession(connection, sessionId) as unknown as RoundRecord[]

@@ -35,8 +35,6 @@ export interface ToolCallAssessmentStepConfig {
     preReasoningPartId: string | null
     postReasoningPartId: string | null
   }) => string
-  /** Called after a successful assessment to determine next analysis phase. */
-  computeNextPhase: (ctx: { analysisSessionId: string; currentTurnId: string; nextPacketIndex: number; packetCount: number }) => 'assessing' | 'turn_summary'
   packet: EvidencePacket
   analysisTarget: AnalysisTarget
 }
@@ -57,7 +55,7 @@ export class ToolCallAssessmentStep extends WorkflowStep {
     const state = ctx.workflowState as unknown as AnalysisSessionState | undefined
     if (!state) throw new Error('ToolCallAssessmentStep: workflowState required')
 
-    const { artifactSchemaKey, buildPrompt, computeNextPhase, packet, analysisTarget } = this.config
+    const { artifactSchemaKey, buildPrompt, packet, analysisTarget } = this.config
     const { analysisSessionId } = state
 
     const analysisSession = getSessionRecord(this.db.connection, analysisSessionId)
@@ -152,19 +150,6 @@ export class ToolCallAssessmentStep extends WorkflowStep {
       turnResult.assistantReasoningPartIds, turnResult.turnId,
     )
 
-    const nextPhase = computeNextPhase({
-      analysisSessionId,
-      currentTurnId: packet.turn_id,
-      nextPacketIndex: state.nextPacketIndex + 1,
-      packetCount: state.packetCount,
-    })
-
-    Object.assign(state, {
-      currentTurnId: packet.turn_id,
-      nextPacketIndex: state.nextPacketIndex + 1,
-      phase: nextPhase,
-    })
-
     return { status: 'complete', outputArtifacts: [] }
   }
 
@@ -187,8 +172,7 @@ export class ToolCallAssessmentStep extends WorkflowStep {
     })
   }
 
-  private setErrorPhase(state: AnalysisSessionState): void {
-    state.phase = 'error'
+  private setErrorPhase(_state: AnalysisSessionState): void {
   }
 
   private mutateContextAfterAssessment(

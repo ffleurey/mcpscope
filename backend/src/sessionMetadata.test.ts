@@ -538,12 +538,6 @@ describe('session metadata API', () => {
     })
     updateSessionAnalysisState(app.backendDb.connection, 'ANLZ', {
       phase: 'error',
-      bootstrapComplete: false,
-      nextPacketIndex: 0,
-      packetCount: 0,
-      currentTurnId: null,
-      coverageValidated: false,
-      finalAggregationComplete: false,
       analysisSessionId: 'ANLZ',
       targetSessionId: 'PRNT',
       targetTurnId: '',
@@ -795,12 +789,6 @@ describe('session metadata API', () => {
     })
     updateSessionAnalysisState(app.backendDb.connection, 'ANLZ', {
       phase: 'error',
-      bootstrapComplete: false,
-      nextPacketIndex: 0,
-      packetCount: 0,
-      currentTurnId: null,
-      coverageValidated: false,
-      finalAggregationComplete: false,
       analysisSessionId: 'ANLZ',
       targetSessionId: 'PRNT',
       targetTurnId: '',
@@ -880,22 +868,15 @@ describe('session metadata API', () => {
 
     const retryRes = await app.inject({ method: 'POST', url: '/api/sessions/ANLZ/retry-failed-step' })
     expect(retryRes.statusCode).toBe(200)
-    expect(retryRes.json()).toMatchObject({
-      session_id: 'ANLZ',
-      failed_step_id: 'ANLZ.3W',
-      retry_phase: 'assessing',
-      latest_error: {
-        step_id: 'ANLZ.3W',
-        error_kind: 'schema_validation_error',
-        message: 'Fast assessment response did not match fast schema',
-      },
-    })
+    const retryBody = retryRes.json() as Record<string, unknown>
+    expect(retryBody.session_id).toBe('ANLZ')
+    expect(retryBody.failed_step_id).toBe('ANLZ.3W')
+    expect(retryBody.retry_phase).toBeNull()
 
     const retriedSession = getSessionRecord(app.backendDb.connection, 'ANLZ')
     const retriedState = retriedSession?.analysisState as Record<string, unknown> | undefined
-    expect(retriedState?.phase).toBe('assessing')
+    expect(retriedState?.phase).toBe('error') // phase remains error until resumeOneStep derives it
     expect(retriedState?.retry_failed_step_id).toBe('ANLZ.3W')
-    expect(retriedState?.walkCursor).toBe(0)
 
     const retriedPart = getPartRecord(app.backendDb.connection, 'ANLZ.1.1.1-A')
     expect(retriedPart?.context.state).toBe('excluded')

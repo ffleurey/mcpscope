@@ -63,6 +63,13 @@ export function updateJsonArtifact(
   })
 }
 
+export function deleteJsonArtifact(
+  connection: Database.Database,
+  id: string,
+): void {
+  connection.prepare(`DELETE FROM artifacts WHERE id = ?`).run(id)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Read
 // ─────────────────────────────────────────────────────────────────────────────

@@ -24,6 +24,7 @@ function now(): number { return Date.now() }
 export interface TurnSummaryStepConfig {
   assessmentSchemaKey: string
   summarySchemaKey: string
+  turnId: string
   buildPrompt: (params: Record<string, unknown>) => string
 }
 
@@ -43,15 +44,15 @@ export class TurnSummaryStep extends WorkflowStep {
     const state = ctx.workflowState as unknown as AnalysisSessionState | undefined
     if (!state) throw new Error('TurnSummaryStep: workflowState required')
 
-    const { analysisSessionId, currentTurnId } = state
-    if (!currentTurnId) throw new Error('TurnSummaryStep: currentTurnId is null')
+    const { analysisSessionId } = state
+    const { turnId } = this.config
 
     const analysisSession = getSessionRecord(this.db.connection, analysisSessionId)
     if (!analysisSession) throw new Error(`TurnSummary: session not found: ${analysisSessionId}`)
 
     const packetIndexArtifact = getLatestArtifactBySchemaKey(this.db.connection, analysisSessionId, SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
     const packetIndex = packetIndexArtifact?.content as EvidencePacketIndex | undefined
-    const turnPackets = packetIndex?.packets.filter(p => p.turn_id === currentTurnId) ?? []
+    const turnPackets = packetIndex?.packets.filter(p => p.turn_id === turnId) ?? []
 
     const analysisTargetArtifact = getLatestArtifactBySchemaKey(this.db.connection, analysisSessionId, SCHEMA_KEY.ANALYSIS_TARGET)
     if (!analysisTargetArtifact) throw new Error('TurnSummary: analysis_target missing')
@@ -62,24 +63,20 @@ export class TurnSummaryStep extends WorkflowStep {
       ? buildRepeatedAttemptGuidance(this.db, turnPackets) : null
     const assessmentArtifacts = listArtifactsBySessionAndSchemaKey(this.db.connection, analysisSessionId, this.config.assessmentSchemaKey)
     const assessmentsForTurn = assessmentArtifacts
-      .filter(a => (a.metadata.turn_id as string | undefined) === currentTurnId)
+      .filter(a => (a.metadata.turn_id as string | undefined) === turnId)
       .map(a => a.content as EvaluationResult)
 
     if (repeatedTools.length === 0) {
-      const det = buildDeterministicTurnSummary(currentTurnId, turnPackets, assessmentsForTurn)
+      const det = buildDeterministicTurnSummary(turnId, turnPackets, assessmentsForTurn)
       if (det) {
         insertJsonArtifact(this.db.connection, {
           id: uuid(), sessionId: analysisSessionId, stepId: this.stepId,
           content: det,
           metadata: {
-            schema_key: this.config.summarySchemaKey, turn_id: currentTurnId,
+            schema_key: this.config.summarySchemaKey, turn_id: turnId,
             total_assessed: turnPackets.length, synthesis_mode: 'deterministic_single_success',
           },
           createdAt: now(),
-        })
-        Object.assign(state, {
-          phase: state.nextPacketIndex < state.packetCount ? 'assessing' : 'coverage_validation',
-          currentTurnId: null,
         })
         return { status: 'complete', outputArtifacts: [] }
       }
@@ -87,8 +84,8 @@ export class TurnSummaryStep extends WorkflowStep {
 
     const summaryQuestion = this.config.buildPrompt({
       analysisTarget,
-      subjectId: currentTurnId,
-      currentTurnId,
+      subjectId: turnId,
+      turnId,
       repeatedTools,
       repeatedAttemptGuidance: repeatedTools.length > 0 ? repeatedAttemptGuidance : null,
       turnPacketCount: turnPackets.length,
@@ -104,10 +101,9 @@ export class TurnSummaryStep extends WorkflowStep {
     try { parsedJson = JSON.parse(extractJsonBlock(turnResult.responseText)) } catch (e) {
       insertJsonArtifact(this.db.connection, {
         id: uuid(), sessionId: analysisSessionId, stepId: this.stepId,
-        content: { step_type: 'turn_summary', error_kind: 'json_parse_error', message: 'Not valid JSON', detail: { raw_response: turnResult.responseText, error: String(e), turn_id: currentTurnId } },
+        content: { step_type: 'turn_summary', error_kind: 'json_parse_error', message: 'Not valid JSON', detail: { raw_response: turnResult.responseText, error: String(e), turn_id: turnId } },
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
-      state.phase = 'error'
       return { status: 'error', outputArtifacts: [] }
     }
 
@@ -115,35 +111,29 @@ export class TurnSummaryStep extends WorkflowStep {
     if (!parsed.success) {
       insertJsonArtifact(this.db.connection, {
         id: uuid(), sessionId: analysisSessionId, stepId: this.stepId,
-        content: { step_type: 'turn_summary', error_kind: 'schema_validation_error', message: 'Schema mismatch', detail: { raw_response: turnResult.responseText, errors: (parsed.error as ZodError).issues, turn_id: currentTurnId } },
+        content: { step_type: 'turn_summary', error_kind: 'schema_validation_error', message: 'Schema mismatch', detail: { raw_response: turnResult.responseText, errors: (parsed.error as ZodError).issues, turn_id: turnId } },
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
-      state.phase = 'error'
       return { status: 'error', outputArtifacts: [] }
     }
 
-    if (parsed.data.subject_id !== currentTurnId) {
+    if (parsed.data.subject_id !== turnId) {
       insertJsonArtifact(this.db.connection, {
         id: uuid(), sessionId: analysisSessionId, stepId: this.stepId,
-        content: { step_type: 'turn_summary', error_kind: 'identity_mismatch', message: 'Subject mismatch', detail: { raw_response: turnResult.responseText, expected_subject_id: currentTurnId, actual_subject_id: parsed.data.subject_id } },
-        metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, turn_id: currentTurnId }, createdAt: ts,
+        content: { step_type: 'turn_summary', error_kind: 'identity_mismatch', message: 'Subject mismatch', detail: { raw_response: turnResult.responseText, expected_subject_id: turnId, actual_subject_id: parsed.data.subject_id } },
+        metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, turn_id: turnId }, createdAt: ts,
       })
-      state.phase = 'error'
       return { status: 'error', outputArtifacts: [] }
     }
 
     insertJsonArtifact(this.db.connection, {
       id: uuid(), sessionId: analysisSessionId, stepId: this.stepId,
       content: parsed.data,
-      metadata: { schema_key: this.config.summarySchemaKey, turn_id: currentTurnId, total_assessed: turnPackets.length },
+      metadata: { schema_key: this.config.summarySchemaKey, turn_id: turnId, total_assessed: turnPackets.length },
       createdAt: ts,
     })
 
     retireSummaryPromptContext(this.db, turnResult.userPartId, turnResult.assistantReasoningPartIds)
-    Object.assign(state, {
-      phase: state.nextPacketIndex < state.packetCount ? 'assessing' : 'coverage_validation',
-      currentTurnId: null,
-    })
 
     return { status: 'complete', outputArtifacts: [] }
   }

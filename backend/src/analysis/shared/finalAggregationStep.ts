@@ -73,7 +73,6 @@ export class FinalAggregationStep extends WorkflowStep {
           metadata: { schema_key: reportSchemaKey, total_packets: assessments.length, synthesis_mode: 'deterministic' },
           createdAt: now(),
         })
-        Object.assign(state, { phase: 'complete', finalAggregationComplete: true })
         return { status: 'complete', outputArtifacts: [] }
       }
     }
@@ -93,7 +92,6 @@ export class FinalAggregationStep extends WorkflowStep {
         content: { step_type: 'final_aggregation', error_kind: 'json_parse_error', message: 'Not valid JSON', detail: { raw_response: turnResult.responseText, error: String(e) } },
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
-      state.phase = 'error'
       return { status: 'error', outputArtifacts: [] }
     }
 
@@ -104,7 +102,6 @@ export class FinalAggregationStep extends WorkflowStep {
         content: { step_type: 'final_aggregation', error_kind: 'schema_validation_error', message: 'Schema mismatch', detail: { raw_response: turnResult.responseText, errors: (parsed.error as ZodError).issues } },
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
-      state.phase = 'error'
       return { status: 'error', outputArtifacts: [] }
     }
 
@@ -116,7 +113,6 @@ export class FinalAggregationStep extends WorkflowStep {
     })
 
     retireFinalPromptContext(this.db, turnResult.userPartId, turnResult.assistantReasoningPartIds)
-    Object.assign(state, { phase: 'complete', finalAggregationComplete: true })
 
     return { status: 'complete', outputArtifacts: [] }
   }
