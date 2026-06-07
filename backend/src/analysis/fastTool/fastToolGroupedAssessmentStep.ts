@@ -13,7 +13,6 @@ import { runAnalysisTurn } from '../boundedTurn.js'
 import {
   SCHEMA_KEY,
   evaluationResultSchema,
-  type AnalysisSessionState,
   type AnalysisTarget,
 } from '../schemas.js'
 import type { FastToolWorkGroup } from './schemas.js'
@@ -49,9 +48,7 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
   }
 
   protected async run(ctx: StepContext): Promise<StepResult> {
-    const state = ctx.workflowState as unknown as AnalysisSessionState | undefined
-    if (!state) throw new Error('FastToolGroupedAssessmentStep: workflowState required')
-    const { analysisSessionId } = state
+    const analysisSessionId = ctx.sessionId
     const { workUnit, analysisTarget } = this.config
 
     const analysisSession = getSessionRecord(this.db.connection, analysisSessionId)
@@ -96,7 +93,6 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
         content: { step_type: 'fast_tool_grouped_assessment', error_kind: 'json_parse_error', message: 'Not valid JSON', detail: { raw_response: turnResult.responseText, error: String(e) } },
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, work_unit_id: workUnit.work_unit_id }, createdAt: ts,
       })
-      state.phase = 'error'
       return { status: 'error', outputArtifacts: [] }
     }
 
@@ -107,7 +103,6 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
         content: { step_type: 'fast_tool_grouped_assessment', error_kind: 'schema_validation_error', message: 'Schema mismatch', detail: { raw_response: turnResult.responseText, errors: (parsed.error as ZodError).issues } },
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, work_unit_id: workUnit.work_unit_id }, createdAt: ts,
       })
-      state.phase = 'error'
       return { status: 'error', outputArtifacts: [] }
     }
 

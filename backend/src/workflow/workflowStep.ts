@@ -21,6 +21,9 @@ export interface AnalysisCommand {
 
   /** True when this command's output already exists in the DB. */
   isComplete(db: BackendDatabase, sessionId: string): boolean
+
+  /** Execute this command — runs the step and returns a result. */
+  execute(ctx: StepContext): Promise<StepResult>
 }
 
 // ── WorkflowStep — base class for step execution ───────────────────────────

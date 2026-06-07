@@ -342,7 +342,7 @@ export abstract class AnalysisSessionBase {
       totalCount: plan.length,
     })
 
-    const result = await (next as any).execute(this.buildStepContext(next.stepTypeKey))
+    const result = await next.execute(this.buildStepContext(next.stepTypeKey))
 
     if (result.status === 'error') {
       this.state.phase = 'error'

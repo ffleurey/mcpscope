@@ -169,7 +169,7 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
   // Rehydrate with null lm/mcp — plan construction only needs the database.
   let retryPhase: string | null = null
   try {
-    const instance = rehydrateAnalysisWorkflow(database as any, null as any, null as any, sessionId)
+    const instance = rehydrateAnalysisWorkflow(database, null as any, null as any, sessionId)
     if (instance) {
       retryPhase = instance.computeRetryPhase()
       if (retryPhase) {
