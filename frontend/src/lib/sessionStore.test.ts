@@ -77,6 +77,7 @@ describe('sessionStore.startSession', () => {
       name: 'Local LM',
       baseUrl: 'http://localhost:1234',
       apiKey: undefined,
+      providerType: 'lmstudio',
       createdAt: 1,
       updatedAt: 1,
     }])

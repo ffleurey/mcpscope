@@ -3,10 +3,11 @@ import { formatSetupPartId } from '../domain/hierarchicalIds.js'
 import { deriveExactDeltaTokenMetadata } from '../domain/tokenAccounting.js'
 import { updatePartRecord, updateSessionRecord } from '../persistence/repository.js'
 import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from './modelTurns.js'
+import type { ChatCompletionGateway } from './modelTurns.js'
 import type { ApiMessage } from '../domain/selectors.js'
 import { buildLmToolDefinitions } from '../domain/selectors.js'
 import { probeRequestPromptTokens } from './promptTokenProbing.js'
+import { listModels } from '../services/lmstudio/client.js'
 
 function now(): number {
   return Date.now()
@@ -61,7 +62,7 @@ export function createSystemPromptPart(
 
 export async function ensureSystemPromptTokenMetadata(
   database: BackendDatabase,
-  lmStudioGateway: LmStudioGateway,
+  chatCompletionGateway: ChatCompletionGateway,
   session: SessionRecord,
   parts: PartRecord[],
 ): Promise<PartRecord[]> {
@@ -71,7 +72,7 @@ export async function ensureSystemPromptTokenMetadata(
   }
 
   const promptTokens = await probeRequestPromptTokens(
-    lmStudioGateway,
+    chatCompletionGateway,
     session,
     [
       {
@@ -146,25 +147,45 @@ function buildSessionPreludeMessages(parts: PartRecord[]): ApiMessage[] {
 
 export async function ensureSessionPreludeTokenMetadata(
   database: BackendDatabase,
-  lmStudioGateway: LmStudioGateway,
+  chatCompletionGateway: ChatCompletionGateway,
   session: SessionRecord,
   parts: PartRecord[],
 ): Promise<PartRecord[]> {
   // Capture the loaded context window size once (on first call, before probing tokens).
-  if (session.loadedContextLength == null && lmStudioGateway.getLoadedContextLength) {
-    const contextLength = await lmStudioGateway.getLoadedContextLength(
+  if (session.loadedContextLength == null && chatCompletionGateway.getLoadedContextLength) {
+    const contextLength = await chatCompletionGateway.getLoadedContextLength(
       session.modelProfileSnapshot.connectionBaseUrl,
       session.modelProfileSnapshot.apiKey ?? undefined,
       session.modelProfileSnapshot.modelKey,
     )
     if (contextLength != null) {
       session.loadedContextLength = contextLength
-      session.updatedAt = now()
-      updateSessionRecord(database.connection, session)
     }
   }
 
-  let nextParts = await ensureSystemPromptTokenMetadata(database, lmStudioGateway, session, parts)
+  // For hosted providers that don't expose a native context-length API, query
+  // the standard OAI models endpoint to get the context window for this model.
+  if (session.loadedContextLength == null) {
+    try {
+      const modelList = await listModels(
+        session.modelProfileSnapshot.connectionBaseUrl,
+        session.modelProfileSnapshot.apiKey ?? undefined,
+      )
+      const match = modelList.data?.find(m => m.id === session.modelProfileSnapshot.modelKey)
+      if (match?.context_length) {
+        session.loadedContextLength = match.context_length
+      }
+    } catch {
+      // Fallback: unable to determine context length
+    }
+  }
+
+  if (session.loadedContextLength != null) {
+    session.updatedAt = now()
+    updateSessionRecord(database.connection, session)
+  }
+
+  let nextParts = await ensureSystemPromptTokenMetadata(database, chatCompletionGateway, session, parts)
   const updatedAt = now()
   const updates = new Map<string, PartRecord>()
 
@@ -181,7 +202,7 @@ export async function ensureSessionPreludeTokenMetadata(
       { role: 'system' as const, content: mcpInstructionsPart.payload.text },
     ]
 
-    const combinedTokens = await probeRequestPromptTokens(lmStudioGateway, session, combinedMessages, undefined, {
+    const combinedTokens = await probeRequestPromptTokens(chatCompletionGateway, session, combinedMessages, undefined, {
       database,
       sessionId: session.id,
       turnId: null,
@@ -214,13 +235,13 @@ export async function ensureSessionPreludeTokenMetadata(
       ? preludeMessages
       : [{ role: 'user' as const, content: 'Token probe anchor.' }]
     const tools = buildLmToolDefinitions([toolDefinitionsPart])
-    const withoutToolsTokens = await probeRequestPromptTokens(lmStudioGateway, session, anchorMessages, undefined, {
+    const withoutToolsTokens = await probeRequestPromptTokens(chatCompletionGateway, session, anchorMessages, undefined, {
       database,
       sessionId: session.id,
       turnId: null,
       roundId: null,
     })
-    const withToolsTokens = await probeRequestPromptTokens(lmStudioGateway, session, anchorMessages, tools, {
+    const withToolsTokens = await probeRequestPromptTokens(chatCompletionGateway, session, anchorMessages, tools, {
       database,
       sessionId: session.id,
       turnId: null,

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import type { BackendDatabase } from '../../persistence/db.js'
-import type { LmStudioGateway } from '../../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
@@ -33,7 +33,7 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
 
   constructor(
     db: BackendDatabase,
-    lm: LmStudioGateway,
+    lm: ChatCompletionGateway,
     mcp: McpGateway,
     private readonly config: FastToolGroupedAssessmentStepConfig,
   ) {
@@ -89,7 +89,7 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, work_unit_id: workUnit.work_unit_id }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     const parsed = evaluationResultSchema.safeParse(parsedJson)
@@ -100,7 +100,7 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, work_unit_id: workUnit.work_unit_id }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     insertJsonArtifact(this.db.connection, {

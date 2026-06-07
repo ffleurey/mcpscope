@@ -1,5 +1,5 @@
 import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import { getSessionRecord } from '../persistence/repository.js'
 import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
@@ -17,7 +17,7 @@ export interface RehydratableAnalysisWorkflow {
 }
 
 type AnalysisSubclassCtor = {
-  rehydrate(db: BackendDatabase, lm: LmStudioGateway, mcp: McpGateway, sessionId: string): AnalysisSessionBase | null
+  rehydrate(db: BackendDatabase, lm: ChatCompletionGateway, mcp: McpGateway, sessionId: string): AnalysisSessionBase | null
   readonly workflowKind: string
   readonly workflowLabel: string
   buildSystemPrompt(input: { analysisGoal: string; additionalInstructions?: string }): string
@@ -35,7 +35,7 @@ registerAnalysisWorkflow(FastToolAnalysis as unknown as AnalysisSubclassCtor)
 
 export function rehydrateAnalysisWorkflow(
   database: BackendDatabase,
-  lmGateway: LmStudioGateway,
+  lmGateway: ChatCompletionGateway,
   mcpGateway: McpGateway,
   analysisSessionId: string,
 ): RehydratableAnalysisWorkflow | null {

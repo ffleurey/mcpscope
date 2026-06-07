@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import type { BackendDatabase } from '../../persistence/db.js'
-import type { LmStudioGateway } from '../../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
@@ -46,7 +46,7 @@ export class ToolCallAssessmentStep extends WorkflowStep {
 
   constructor(
     db: BackendDatabase,
-    lm: LmStudioGateway,
+    lm: ChatCompletionGateway,
     mcp: McpGateway,
     private readonly config: ToolCallAssessmentStepConfig,
   ) {
@@ -106,7 +106,7 @@ export class ToolCallAssessmentStep extends WorkflowStep {
         'LLM response was not valid JSON',
         { raw_response: turnResult.responseText, error: String(e) }, parseTs)
       this.setErrorPhase(state)
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     const parsed = evaluationResultSchema.safeParse(parsedJson)
@@ -115,7 +115,7 @@ export class ToolCallAssessmentStep extends WorkflowStep {
         'LLM response did not match evaluation_result schema',
         { raw_response: turnResult.responseText, errors: (parsed.error as ZodError).issues }, parseTs)
       this.setErrorPhase(state)
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     if (!validateAssessmentIdentity(packet, parsed.data)) {
@@ -127,7 +127,7 @@ export class ToolCallAssessmentStep extends WorkflowStep {
           actual: { subject_scope: parsed.data.subject_scope, subject_id: parsed.data.subject_id },
         }, parseTs)
       this.setErrorPhase(state)
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     insertJsonArtifact(this.db.connection, {

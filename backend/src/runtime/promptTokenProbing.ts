@@ -2,8 +2,8 @@ import type { BackendDatabase } from '../persistence/db.js'
 import { insertRawExchangeRecord } from '../persistence/repository.js'
 import type { ApiMessage } from '../domain/selectors.js'
 import type { RawExchangeRecord, SessionRecord } from '../domain/model.js'
-import { probePromptTokens, type LmStudioPromptProbeResult } from '../services/lmstudio/client.js'
-import type { LmStudioGateway } from './modelTurns.js'
+import { probePromptTokens, type PromptProbeResult } from '../services/lmstudio/client.js'
+import { sessionReasoningBody, type ChatCompletionGateway } from './modelTurns.js'
 
 export type LmToolDefinition = {
   type: 'function'
@@ -31,7 +31,7 @@ function buildProbeBody(
     temperature: session.modelProfileSnapshot.temperature,
     messages,
     ...(tools && tools.length > 0 ? { tools } : {}),
-    ...(session.modelProfileSnapshot.reasoning ? { reasoning: session.modelProfileSnapshot.reasoning } : {}),
+    ...sessionReasoningBody(session),
   }
 }
 
@@ -45,7 +45,7 @@ function now(): number {
 
 function makeProbeRawExchangeRecords(
   trace: ProbeTraceContext,
-  result: LmStudioPromptProbeResult,
+  result: PromptProbeResult,
 ): RawExchangeRecord[] {
   const createdAt = now()
   return [
@@ -83,7 +83,7 @@ function makeProbeRawExchangeRecords(
 }
 
 export async function probeRequestPromptTokens(
-  lmStudioGateway: LmStudioGateway,
+  chatCompletionGateway: ChatCompletionGateway,
   session: SessionRecord,
   messages: ApiMessage[],
   tools?: LmToolDefinition[],
@@ -94,8 +94,8 @@ export async function probeRequestPromptTokens(
   }
 
   const body = buildProbeBody(session, messages, tools)
-  if (lmStudioGateway.probePromptTokensDetailed) {
-    const result = await lmStudioGateway.probePromptTokensDetailed(
+  if (chatCompletionGateway.probePromptTokensDetailed) {
+    const result = await chatCompletionGateway.probePromptTokensDetailed(
       session.modelProfileSnapshot.connectionBaseUrl,
       session.modelProfileSnapshot.apiKey ?? undefined,
       body,
@@ -110,8 +110,8 @@ export async function probeRequestPromptTokens(
     return result.promptTokens
   }
 
-  return lmStudioGateway.probePromptTokens
-    ? lmStudioGateway.probePromptTokens(
+  return chatCompletionGateway.probePromptTokens
+    ? chatCompletionGateway.probePromptTokens(
         session.modelProfileSnapshot.connectionBaseUrl,
         session.modelProfileSnapshot.apiKey ?? undefined,
         body,

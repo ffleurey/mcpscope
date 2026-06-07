@@ -254,10 +254,10 @@ export function deleteMcpProfile(mcpProfileId: string) {
 
 const lmConnectionTestResponseSchema = z.object({ models: z.array(z.string()) })
 
-export function testLmConnection(baseUrl: string, apiKey?: string | null) {
+export function testLmConnection(baseUrl: string, apiKey?: string | null, providerType?: 'lmstudio' | 'openrouter') {
   return request('/api/lm-connections/test', {
     method: 'POST',
-    body: { baseUrl, apiKey: apiKey ?? null },
+    body: { baseUrl, apiKey: apiKey ?? null, providerType },
     schema: lmConnectionTestResponseSchema,
   })
 }
@@ -278,10 +278,10 @@ const lmConnectionModelsResponseSchema = z.object({ models: z.array(lmConnection
 
 export type LmConnectionModel = z.infer<typeof lmConnectionModelSchema>
 
-export function listLmConnectionModels(baseUrl: string, apiKey?: string | null) {
+export function listLmConnectionModels(baseUrl: string, apiKey?: string | null, providerType?: 'lmstudio' | 'openrouter') {
   return request('/api/lm-connections/models', {
     method: 'POST',
-    body: { baseUrl, apiKey: apiKey ?? null },
+    body: { baseUrl, apiKey: apiKey ?? null, providerType },
     schema: lmConnectionModelsResponseSchema,
   })
 }
@@ -324,6 +324,7 @@ export function preflightSession(input: {
   lmConnectionSnapshot: { baseUrl: string; apiKey?: string | null }
   mcpProfileSnapshots?: { url: string }[]
   selectedModel: { modelKey: string; modelDisplayName?: string }
+  providerType?: 'lmstudio' | 'openrouter'
 }) {
   return request('/api/sessions/preflight', {
     method: 'POST',
@@ -421,6 +422,10 @@ export function resumeScheduler(): Promise<{ ok: boolean; controlState: string }
 
 export function removeSchedulerJob(jobId: string): Promise<void> {
   return request<void>(`/api/scheduler/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' })
+}
+
+export function retryInitSession(sessionId: string): Promise<{ ok: true }> {
+  return request(`/api/sessions/${sessionId}/retry-init`, { method: 'POST' })
 }
 
 export async function streamSchedulerEvents(

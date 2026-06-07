@@ -1,5 +1,5 @@
 import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import type { ExecutionScheduler } from '../runtime/scheduler.js'
 
@@ -10,7 +10,7 @@ import type { ExecutionScheduler } from '../runtime/scheduler.js'
  */
 export interface OperationContext {
   db: BackendDatabase
-  lmStudioGateway: LmStudioGateway
+  chatCompletionGateway: ChatCompletionGateway
   mcpGateway: McpGateway
   maxToolRounds: number
   /** URL of mcpscope's own restricted analysis MCP endpoint (e.g. http://127.0.0.1:3030/mcp/analysis). */

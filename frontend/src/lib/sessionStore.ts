@@ -8,6 +8,7 @@ import {
   listSessions,
   preflightSession,
   retryFailedAnalysisStep as retryBackendFailedAnalysisStep,
+  retryInitSession,
 } from './api/backendClient'
 import { lmConnections, mcpProfiles, modelConfigs, sessionCreationDefaults } from './connectionStore'
 import type {
@@ -299,6 +300,17 @@ export async function selectChat(sessionId: string): Promise<void> {
   }
 }
 
+export async function retryInit(sessionId: string): Promise<void> {
+  clearSessionError()
+  try {
+    await retryInitSession(sessionId)
+    await refreshSessions()
+  } catch (error) {
+    setSessionError(toAppError(error))
+    throw error
+  }
+}
+
 export async function deleteChat(sessionId: string): Promise<void> {
   clearSessionError()
 
@@ -360,6 +372,7 @@ export async function startSession(input: {
         modelKey: selectedModelConfig.modelKey,
         modelDisplayName: selectedModelConfig.modelDisplayName,
       },
+      providerType: selectedConnection.providerType,
     })
 
     const { session, initJobId } = await createPrimarySession({

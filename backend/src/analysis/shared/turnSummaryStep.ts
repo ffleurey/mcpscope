@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import type { BackendDatabase } from '../../persistence/db.js'
-import type { LmStudioGateway } from '../../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
@@ -32,7 +32,7 @@ export class TurnSummaryStep extends WorkflowStep {
 
   constructor(
     db: BackendDatabase,
-    lm: LmStudioGateway,
+    lm: ChatCompletionGateway,
     mcp: McpGateway,
     private readonly config: TurnSummaryStepConfig,
   ) {
@@ -108,7 +108,7 @@ export class TurnSummaryStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     const parsed = evaluationResultSchema.safeParse(parsedJson)
@@ -119,7 +119,7 @@ export class TurnSummaryStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     if (parsed.data.subject_id !== currentTurnId) {
@@ -129,7 +129,7 @@ export class TurnSummaryStep extends WorkflowStep {
         metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC, turn_id: currentTurnId }, createdAt: ts,
       })
       state.phase = 'error'
-      return { status: 'complete', outputArtifacts: [] }
+      return { status: 'error', outputArtifacts: [] }
     }
 
     insertJsonArtifact(this.db.connection, {

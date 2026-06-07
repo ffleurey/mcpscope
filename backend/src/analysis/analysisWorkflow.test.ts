@@ -10,11 +10,11 @@ import {
   insertTurnRecord,
 } from '../persistence/repository.js'
 import type { PartRecord, RoundRecord, SessionRecord, TurnRecord } from '../domain/model.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import { BootstrapStep } from './shared/bootstrapStep.js'
 import { STEP_TYPE } from '../domain/executionModel.js'
-import { getLatestArtifactBySchemaKey, insertJsonArtifact } from './artifactRepository.js'
+import { getLatestArtifactBySchemaKey, insertJsonArtifact, listArtifactsBySessionAndSchemaKey } from './artifactRepository.js'
 import { runCoverageValidationStep } from './coverageValidationStep.js'
 import { FinalAggregationStep } from './shared/finalAggregationStep.js'
 import { buildRepeatedAttemptGuidance } from './shared/turnSummaryStep.js'
@@ -211,7 +211,7 @@ const fakeMcpGateway: McpGateway = {
   },
 }
 
-const fakeLmGateway: LmStudioGateway = {
+const fakeLmGateway: ChatCompletionGateway = {
   async createChatCompletion() {
     throw new Error('fakeLmGateway: createChatCompletion not implemented')
   },
@@ -495,6 +495,88 @@ describe('analysis workflow helpers', () => {
     expect(result.updatedState.coverageValidated).toBe(true)
   })
 
+  it('coverage validation handles missing stepId gracefully without FK crash', () => {
+    db = makeTestDatabase()
+    createSessionRecord(db.connection, makeSessionRecord({ id: 'ANLY', sessionType: 'session_analysis', parentKind: 'session', parentId: 'TARG', mcpProfileSnapshots: [] }))
+    insertStepRecord(db.connection, makeStepRecord({ id: 'step-1', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 0, createdAt: 1, completedAt: 1 }))
+    insertStepRecord(db.connection, makeStepRecord({ id: 'step-2', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 1, createdAt: 1, completedAt: 1 }))
+    insertJsonArtifact(db.connection, {
+      id: 'artifact-packets-3',
+      sessionId: 'ANLY',
+      stepId: 'step-1',
+      content: {
+        packets: [
+          { turn_id: 'TURN-1', round_id: 'TURN-1.1', tool_call_part_id: 'TC-1', tool_name: 'test_tool', reasoning_before_part_id: null, tool_result_part_id: null, reasoning_after_part_id: null },
+          { turn_id: 'TURN-1', round_id: 'TURN-1.2', tool_call_part_id: 'TC-2', tool_name: 'test_tool', reasoning_before_part_id: null, tool_result_part_id: null, reasoning_after_part_id: null },
+        ],
+      },
+      metadata: { schema_key: SCHEMA_KEY.EVIDENCE_PACKET_INDEX },
+      createdAt: 1,
+    })
+    insertJsonArtifact(db.connection, {
+      id: 'artifact-assessment-3',
+      sessionId: 'ANLY',
+      stepId: 'step-2',
+      content: { ok: true },
+      metadata: { schema_key: FULL_KEY.TOOL_CALL_ASSESSMENT, tool_call_part_id: 'TC-1' },
+      createdAt: 2,
+    })
+
+    // The production call site (afterSession) passes this.state.analysisSessionId
+    // as stepId — that's a session ID, not a step ID. The function should handle
+    // this gracefully (return phase=error without crashing) rather than throwing FK.
+    const result = runCoverageValidationStep(db, {
+      state: makeAnalysisState({ analysisSessionId: 'ANLY', phase: 'coverage_validation' }),
+      stepId: 'ANLY', // ← session ID, not a step — the bug is in the call site
+      assessmentSchemaKey: FULL_KEY.TOOL_CALL_ASSESSMENT,
+    })
+    expect(result.passed).toBe(false)
+    expect(result.updatedState.phase).toBe('error')
+  })
+
+  it('coverage validation detects unassessed packets and sets phase to error', () => {
+    db = makeTestDatabase()
+
+    createSessionRecord(db.connection, makeSessionRecord({ id: 'ANLY', sessionType: 'session_analysis', parentKind: 'session', parentId: 'TARG', mcpProfileSnapshots: [] }))
+    insertStepRecord(db.connection, makeStepRecord({ id: 'step-1', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 0, createdAt: 1, completedAt: 1 }))
+    insertStepRecord(db.connection, makeStepRecord({ id: 'step-2', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 1, createdAt: 1, completedAt: 1 }))
+    insertStepRecord(db.connection, makeStepRecord({ id: 'step-3', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 2, createdAt: 1, completedAt: 1 }))
+    insertJsonArtifact(db.connection, {
+      id: 'artifact-packets-2',
+      sessionId: 'ANLY',
+      stepId: 'step-1',
+      content: {
+        packets: [
+          { turn_id: 'TURN-1', round_id: 'TURN-1.1', tool_call_part_id: 'TC-1', tool_name: 'test_tool', reasoning_before_part_id: null, tool_result_part_id: null, reasoning_after_part_id: null },
+          { turn_id: 'TURN-1', round_id: 'TURN-1.2', tool_call_part_id: 'TC-2', tool_name: 'test_tool', reasoning_before_part_id: null, tool_result_part_id: null, reasoning_after_part_id: null },
+        ],
+      },
+      metadata: { schema_key: SCHEMA_KEY.EVIDENCE_PACKET_INDEX },
+      createdAt: 1,
+    })
+    insertJsonArtifact(db.connection, {
+      id: 'artifact-assessment-only',
+      sessionId: 'ANLY',
+      stepId: 'step-2',
+      content: { ok: true },
+      metadata: { schema_key: FULL_KEY.TOOL_CALL_ASSESSMENT, tool_call_part_id: 'TC-1' },
+      createdAt: 2,
+    })
+
+    const result = runCoverageValidationStep(db, {
+      state: makeAnalysisState({ analysisSessionId: 'ANLY', phase: 'coverage_validation' }),
+      stepId: 'step-3',
+      assessmentSchemaKey: FULL_KEY.TOOL_CALL_ASSESSMENT,
+    })
+
+    expect(result.passed).toBe(false)
+    expect(result.updatedState.phase).toBe('error')
+    // Verify a diagnostic artifact was written (step-3 exists so FK is satisfied)
+    const diags = listArtifactsBySessionAndSchemaKey(db.connection, 'ANLY', SCHEMA_KEY.DIAGNOSTIC)
+    expect(diags.length).toBeGreaterThan(0)
+    expect(diags.some(d => JSON.stringify(d.content).includes('TC-2'))).toBe(true)
+  })
+
   it('final aggregation still uses the LLM when multiple turn summaries need consolidation', async () => {
     db = makeTestDatabase()
 
@@ -609,7 +691,7 @@ describe('analysis workflow helpers', () => {
     })
 
     let callCount = 0
-    const lmGateway: LmStudioGateway = {
+    const lmGateway: ChatCompletionGateway = {
       async createChatCompletion() {
         callCount += 1
         return {
@@ -811,7 +893,7 @@ describe('analysis workflow helpers', () => {
       createdAt: 5,
     })
 
-    const lmGateway: LmStudioGateway = {
+    const lmGateway: ChatCompletionGateway = {
       async createChatCompletion() {
         return {
           id: 'cmpl-final-omitted-total',

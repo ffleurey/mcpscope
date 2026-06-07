@@ -3,7 +3,7 @@
  */
 
 import type { BackendDatabase } from '../../persistence/db.js'
-import type { LmStudioGateway } from '../../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import {
   AnalysisSessionBase,
@@ -33,7 +33,7 @@ export class FastToolAnalysis extends AnalysisSessionBase {
   static readonly workflowLabel = 'Fast Tool Analysis'
   static create(
     db: BackendDatabase,
-    lm: LmStudioGateway,
+    lm: ChatCompletionGateway,
     mcp: McpGateway,
     input: AnalysisWorkflowInput,
   ): FastToolAnalysis {
@@ -59,7 +59,7 @@ export class FastToolAnalysis extends AnalysisSessionBase {
 
   static rehydrate(
     db: BackendDatabase,
-    lm: LmStudioGateway,
+    lm: ChatCompletionGateway,
     mcp: McpGateway,
     sessionId: string,
   ): FastToolAnalysis | null {

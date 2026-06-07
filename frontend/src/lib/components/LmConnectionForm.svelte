@@ -12,6 +12,7 @@
   let name = $state('')
   let baseUrl = $state('http://localhost:1234/v1')
   let apiKey = $state('')
+  let providerType = $state<'lmstudio' | 'openrouter'>('lmstudio')
   let showApiKey = $state(false)
   let seededConnection = $state<LmStudioConnection | null | undefined>(undefined)
 
@@ -21,6 +22,7 @@
     name = connection?.name ?? ''
     baseUrl = connection?.baseUrl ?? 'http://localhost:1234/v1'
     apiKey = connection?.apiKey ?? ''
+    providerType = (connection as { providerType?: 'lmstudio' | 'openrouter' })?.providerType ?? 'lmstudio'
   })
 
   let errors = $state<Record<string, string>>({})
@@ -45,6 +47,7 @@
       name: name.trim(),
       baseUrl: baseUrl.trim(),
       apiKey: apiKey.trim() || undefined,
+      providerType,
       createdAt: connection?.createdAt ?? now,
       updatedAt: now,
     })
@@ -80,6 +83,21 @@
         {showApiKey ? 'Hide' : 'Show'}
       </button>
     </div>
+  </div>
+
+  <div class="field">
+    <label for="lc-provider">Provider Type</label>
+    <select id="lc-provider" bind:value={providerType}>
+      <option value="lmstudio">LM Studio (local)</option>
+      <option value="openrouter">OpenRouter (hosted)</option>
+    </select>
+    <span class="field-hint">
+      {#if providerType === 'openrouter'}
+        Uses OpenAI-compatible API. Set Base URL to https://openrouter.ai/api/v1
+      {:else}
+        Connects to locally running LM Studio instance.
+      {/if}
+    </span>
   </div>
 
   <div class="form-actions">

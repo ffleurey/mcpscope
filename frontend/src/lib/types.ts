@@ -1,8 +1,11 @@
+export type ProviderType = 'lmstudio' | 'openrouter'
+
 export interface LmStudioConnection {
   id: string
   name: string
   baseUrl: string
   apiKey?: string
+  providerType: ProviderType
   createdAt: number
   updatedAt: number
 }

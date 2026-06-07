@@ -1,12 +1,16 @@
-export interface LmStudioModelListResponse {
+export interface OaiModelListResponse {
   data?: Array<{
     id?: string
     object?: string
     owned_by?: string
+    /** Context window size in tokens. Returned by OpenRouter and some other providers. */
+    context_length?: number
+    /** API parameters this model supports (e.g. "tools", "reasoning"). OpenRouter-specific. */
+    supported_parameters?: string[]
   }>
 }
 
-export interface LmStudioChatCompletionUsage {
+export interface OaiChatCompletionUsage {
   prompt_tokens?: number
   completion_tokens?: number
   total_tokens?: number
@@ -16,7 +20,7 @@ export interface LmStudioChatCompletionUsage {
   }
 }
 
-export interface LmStudioChatCompletionResponse {
+export interface OaiChatCompletionResponse {
   id: string
   model: string
   created: number
@@ -37,10 +41,10 @@ export interface LmStudioChatCompletionResponse {
       }>
     }
   }>
-  usage?: LmStudioChatCompletionUsage
+  usage?: OaiChatCompletionUsage
 }
 
-export interface LmStudioChatCompletionChunk {
+export interface OaiChatCompletionChunk {
   id?: string
   model?: string
   created?: number
@@ -62,10 +66,10 @@ export interface LmStudioChatCompletionChunk {
     }
     finish_reason?: string | null
   }>
-  usage?: LmStudioChatCompletionUsage
+  usage?: OaiChatCompletionUsage
 }
 
-export type LmStudioAssistantSegment =
+export type AssistantSegment =
   | {
       kind: 'reasoning'
       text: string
@@ -79,14 +83,14 @@ export type LmStudioAssistantSegment =
       toolCallIndex: number
     }
 
-export interface LmStudioStreamedChatCompletionResult {
-  completion: LmStudioChatCompletionResponse
-  segments: LmStudioAssistantSegment[]
+export interface OaiStreamedChatCompletionResult {
+  completion: OaiChatCompletionResponse
+  segments: AssistantSegment[]
   rawResponseBody: string
-  chunks: LmStudioChatCompletionChunk[]
+  chunks: OaiChatCompletionChunk[]
 }
 
-export type LmStudioStreamDelta =
+export type StreamDelta =
   | {
       kind: 'reasoning'
       textDelta: string
@@ -103,11 +107,11 @@ export type LmStudioStreamDelta =
       argumentsDelta?: string | undefined
     }
 
-export interface LmStudioStreamCallbacks {
-  onDelta?(delta: LmStudioStreamDelta): void
+export interface StreamCallbacks {
+  onDelta?(delta: StreamDelta): void
 }
 
-export interface LmStudioRawExchange {
+export interface ProbeRawExchange {
   requestUrl: string
   requestMethod: string
   requestHeadersJson: Record<string, string> | null
@@ -117,10 +121,10 @@ export interface LmStudioRawExchange {
   responseBody: string | null
 }
 
-export interface LmStudioPromptProbeResult {
+export interface PromptProbeResult {
   promptTokens: number | null
-  completion: LmStudioChatCompletionResponse
-  rawExchange: LmStudioRawExchange
+  completion: OaiChatCompletionResponse
+  rawExchange: ProbeRawExchange
 }
 
 function buildUrl(baseUrl: string, relativePath: string): string {
@@ -143,7 +147,7 @@ function responseHeadersJson(headers: Headers): Record<string, string> | null {
   return contentType ? { 'content-type': contentType } : null
 }
 
-export async function listModels(baseUrl: string, apiKey?: string): Promise<LmStudioModelListResponse> {
+export async function listModels(baseUrl: string, apiKey?: string): Promise<OaiModelListResponse> {
   const response = await fetch(buildUrl(baseUrl, 'models'), {
     headers: {
       Accept: 'application/json',
@@ -152,10 +156,10 @@ export async function listModels(baseUrl: string, apiKey?: string): Promise<LmSt
   })
 
   if (!response.ok) {
-    throw new Error(`LM Studio models request failed: ${response.status} ${response.statusText}`)
+    throw new Error(`Models request failed: ${response.status} ${response.statusText}`)
   }
 
-  return (await response.json()) as LmStudioModelListResponse
+  return (await response.json()) as OaiModelListResponse
 }
 
 export interface LmStudioNativeModel {
@@ -226,18 +230,29 @@ export async function listModelsWithStatus(baseUrl: string, apiKey?: string): Pr
   }
 
   const compat = await listModels(baseUrl, apiKey)
-  const ids = compat.data?.map(m => m.id ?? '').filter(Boolean) ?? []
-  return ids.map((id) => ({
-    uid: id,
-    key: id,
-    displayName: id,
-    maxContextLength: null,
-    loadedContextLength: null,
-    isLoaded: false,
-    supportsReasoning: false,
-    defaultReasoningOn: false,
-    raw: { type: 'llm', key: id },
-  }))
+  const rawModels = compat.data?.filter(m => m.id) ?? []
+  return rawModels.map((m) => {
+    const id = m.id ?? ''
+    const supportsReasoning = m.supported_parameters?.includes('reasoning') ?? false
+    return {
+      uid: id,
+      key: id,
+      displayName: id,
+      maxContextLength: m.context_length ?? null,
+      loadedContextLength: null,
+      isLoaded: false,
+      supportsReasoning,
+      defaultReasoningOn: supportsReasoning,
+      raw: {
+        type: 'llm',
+        key: id,
+        context_length: m.context_length,
+        supported_parameters: m.supported_parameters,
+        object: m.object,
+        owned_by: m.owned_by,
+      } as LmStudioNativeModel,
+    }
+  })
 }
 
 /**
@@ -319,7 +334,7 @@ export async function createChatCompletion(
   baseUrl: string,
   apiKey: string | undefined,
   body: Record<string, unknown>,
-): Promise<LmStudioChatCompletionResponse> {
+): Promise<OaiChatCompletionResponse> {
   const response = await fetch(buildUrl(baseUrl, 'chat/completions'), {
     method: 'POST',
     headers: {
@@ -332,14 +347,14 @@ export async function createChatCompletion(
 
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(`LM Studio completion failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
+    throw new Error(`Completion failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
   }
 
-  return (await response.json()) as LmStudioChatCompletionResponse
+  return (await response.json()) as OaiChatCompletionResponse
 }
 
 function appendTextSegment(
-  segments: LmStudioAssistantSegment[],
+  segments: AssistantSegment[],
   kind: 'reasoning' | 'content',
   text: string | null | undefined,
 ): void {
@@ -357,7 +372,7 @@ function appendTextSegment(
 }
 
 function appendToolCallSegment(
-  segments: LmStudioAssistantSegment[],
+  segments: AssistantSegment[],
   toolCallIndex: number,
 ): void {
   const lastSegment = segments.at(-1)
@@ -398,10 +413,10 @@ function parseServerSentEventPayloads(rawText: string): string[] {
 
 export function parseChatCompletionStream(
   rawText: string,
-): LmStudioStreamedChatCompletionResult {
+): OaiStreamedChatCompletionResult {
   const payloads = parseServerSentEventPayloads(rawText)
-  const chunks: LmStudioChatCompletionChunk[] = []
-  const segments: LmStudioAssistantSegment[] = []
+  const chunks: OaiChatCompletionChunk[] = []
+  const segments: AssistantSegment[] = []
   const toolCalls = new Map<number, {
     id?: string
     type?: string
@@ -418,14 +433,14 @@ export function parseChatCompletionStream(
   let role = 'assistant'
   let content = ''
   let reasoningContent = ''
-  let usage: LmStudioChatCompletionUsage | undefined
+  let usage: OaiChatCompletionUsage | undefined
 
   for (const payload of payloads) {
     if (payload === '[DONE]') {
       continue
     }
 
-    const chunk = JSON.parse(payload) as LmStudioChatCompletionChunk
+    const chunk = JSON.parse(payload) as OaiChatCompletionChunk
     chunks.push(chunk)
 
     id = chunk.id ?? id
@@ -522,8 +537,8 @@ export function parseChatCompletionStream(
 }
 
 function emitChunkDeltas(
-  chunk: LmStudioChatCompletionChunk,
-  onDelta: ((delta: LmStudioStreamDelta) => void) | undefined,
+  chunk: OaiChatCompletionChunk,
+  onDelta: ((delta: StreamDelta) => void) | undefined,
 ): void {
   if (!onDelta) {
     return
@@ -565,8 +580,8 @@ export async function streamChatCompletion(
   baseUrl: string,
   apiKey: string | undefined,
   body: Record<string, unknown>,
-  callbacks?: LmStudioStreamCallbacks,
-): Promise<LmStudioStreamedChatCompletionResult> {
+  callbacks?: StreamCallbacks,
+): Promise<OaiStreamedChatCompletionResult> {
   const response = await fetch(buildUrl(baseUrl, 'chat/completions'), {
     method: 'POST',
     headers: {
@@ -585,7 +600,7 @@ export async function streamChatCompletion(
 
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(`LM Studio streamed completion failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
+    throw new Error(`Streamed completion failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
   }
 
   if (!response.body) {
@@ -619,7 +634,7 @@ export async function streamChatCompletion(
         const payload = currentDataLines.join('\n')
         currentDataLines = []
         if (payload !== '[DONE]') {
-          emitChunkDeltas(JSON.parse(payload) as LmStudioChatCompletionChunk, callbacks?.onDelta)
+          emitChunkDeltas(JSON.parse(payload) as OaiChatCompletionChunk, callbacks?.onDelta)
         }
         continue
       }
@@ -656,7 +671,7 @@ export async function streamChatCompletion(
   if (currentDataLines.length > 0) {
     const payload = currentDataLines.join('\n')
     if (payload !== '[DONE]') {
-      emitChunkDeltas(JSON.parse(payload) as LmStudioChatCompletionChunk, callbacks?.onDelta)
+      emitChunkDeltas(JSON.parse(payload) as OaiChatCompletionChunk, callbacks?.onDelta)
     }
   }
 
@@ -676,7 +691,7 @@ export async function probePromptTokensDetailed(
   baseUrl: string,
   apiKey: string | undefined,
   body: Record<string, unknown>,
-): Promise<LmStudioPromptProbeResult> {
+): Promise<PromptProbeResult> {
   const requestBody = {
     ...body,
     stream: false,
@@ -699,10 +714,10 @@ export async function probePromptTokensDetailed(
 
   const responseText = await response.text()
   if (!response.ok) {
-    throw new Error(`LM Studio completion failed: ${response.status} ${response.statusText}: ${responseText.slice(0, 500)}`)
+    throw new Error(`Completion failed: ${response.status} ${response.statusText}: ${responseText.slice(0, 500)}`)
   }
 
-  const completion = JSON.parse(responseText) as LmStudioChatCompletionResponse
+  const completion = JSON.parse(responseText) as OaiChatCompletionResponse
 
   return {
     promptTokens: completion.usage?.prompt_tokens ?? null,

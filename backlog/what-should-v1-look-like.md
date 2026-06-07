@@ -1,0 +1,19 @@
+# Criteria / Ambition to release a V1
+
+We want to release mcpscope as an opensource project.
+
+For that we have to package what we can call a V1 with a simple and useful set of features.
+
+We target developpers and ai enthousiasts who want to experiment with mcp servers and mcp server development. The core use-case is to allow experimenting with local AI models (LMStudio, Ollama) to help people undestand how the context work and how the llm actually picks tools and call them. The reason I built mcpscope in the first place was that I fealt that the built-in chat in LMStudio or other tools like OpenWebUI did not give me enough observability on the state of the context at all time. Working with locam model with small context windows from 8k to 64k means that context  management is very important.
+
+## Features and Gaps
+
+* LLM Provider support: Support for Ollama with full streaming and resonning like we have with LMStudio. Since Ollama and LMStudio are the most popular tools to run LLM locally it is good to have both in the V1. We have support for OpenRouter as well for remote LLM to complement but that is secondary and from tests it is not as easy to get the thinking and reasoning blocks. Being able to use bigger models for the analysis make sense and this is mostly where OpenRouter integration is useful. For the analysis, it is the result which is interesting, not the details of the session so the limitation in terms of observability does not matter. We could consider having also a standard OpenAI Connection option for other tools but we have to make sure that the standard part is enough for the basics.
+
+* Session Analysis: We need to ship V1 with a couple of different analsyis strategies which can be used out of the box. Currently we have 3 difefrent ones which have mostly been created to test the framework. None of them is really good and efficient, they need more work. Idealy I would like to propose 2 options. The first one targeted at small models like 'Gemma 4 e4b' which requies a deterministic step by step analysis along the lines of what we have implemented where we inject the exact content to be analysed automatically and provide full guidance. The second one targeting more "autonomous" models like "deepseek-v4-flash" and maybe some locally running version of Qwen 3.6. With those models we would like to provide less guidance and have them use more autonomously the mcp tools to decide and inspect the relevant parts without being forced to inspect everything. This should take advantage of their stronger abilities to still get good analysis but quicker and more efficently.
+
+* Acceptable UI and "Branding": The UI is very basic at this point, no effort has been put in it. It works but visually we should do some improvements and we should choose a color pallet and make a basic icon. for the colors we will go with a dark mode, some shades of grey and Oranges and Yellows as the main colors. We should pick one complementatry color. We should try to make sure that we use a few colors consistently so that we do not run into advanvced design issues. We need the readability to be good and the user experience to be efficient. We are not trying to be fancy and should use the underlying libs as much as possible to avoid too much custom CSS and alike. We need to do something about the dialogs and modals to make them consistent and decent lookking. It is not the case for now but that should not be too hard to fix.
+
+## What already work well
+
+* Inspection of session via the MCP server works well. It is strait forward to add the MCP server to any coding ageent (tried with Github Copilot, with Kilo Code and with Zed Agent) and it is able to undestand and use the tools to inspect sessions. This allows having the full analysis done outside MCPSope.

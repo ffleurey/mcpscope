@@ -1,16 +1,16 @@
 import type {
-  LmStudioAssistantSegment,
-  LmStudioChatCompletionResponse,
-  LmStudioStreamCallbacks,
-  LmStudioStreamedChatCompletionResult,
+  AssistantSegment,
+  OaiChatCompletionResponse,
+  StreamCallbacks,
+  OaiStreamedChatCompletionResult,
 } from '../services/lmstudio/client.js'
-import type { LmStudioGateway } from './modelTurns.js'
+import type { ChatCompletionGateway } from './modelTurns.js'
 
 function segmentsFromCompletion(
-  completion: LmStudioChatCompletionResponse,
-): LmStudioAssistantSegment[] {
+  completion: OaiChatCompletionResponse,
+): AssistantSegment[] {
   const responseMessage = completion.choices[0]?.message
-  const segments: LmStudioAssistantSegment[] = []
+  const segments: AssistantSegment[] = []
 
   if (responseMessage?.reasoning_content?.length) {
     segments.push({
@@ -37,17 +37,17 @@ function segmentsFromCompletion(
 }
 
 export async function executeChatCompletion(
-  lmStudioGateway: LmStudioGateway,
+  chatCompletionGateway: ChatCompletionGateway,
   baseUrl: string,
   apiKey: string | undefined,
   body: Record<string, unknown>,
-  callbacks?: LmStudioStreamCallbacks,
-): Promise<LmStudioStreamedChatCompletionResult> {
-  if (lmStudioGateway.streamChatCompletion) {
-    return lmStudioGateway.streamChatCompletion(baseUrl, apiKey, body, callbacks)
+  callbacks?: StreamCallbacks,
+): Promise<OaiStreamedChatCompletionResult> {
+  if (chatCompletionGateway.streamChatCompletion) {
+    return chatCompletionGateway.streamChatCompletion(baseUrl, apiKey, body, callbacks)
   }
 
-  const completion = await lmStudioGateway.createChatCompletion(baseUrl, apiKey, {
+  const completion = await chatCompletionGateway.createChatCompletion(baseUrl, apiKey, {
     ...body,
     stream: false,
   })

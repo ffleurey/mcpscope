@@ -4,8 +4,8 @@ import {
   allocateProportionalTokenCounts,
   deriveExactDeltaTokenMetadata,
   deriveExactUserTokenMetadata,
-  normalizeLmStudioUsage,
-  normalizeLmStudioUsageFromResponse,
+  normalizeUsage,
+  normalizeUsageFromResponse,
 } from './tokenAccounting.js'
 
 function makePart(count: number | null): PartRecord {
@@ -47,7 +47,7 @@ function makePart(count: number | null): PartRecord {
 
 describe('token accounting', () => {
   it('normalizes reasoning tokens from nested LM Studio usage', () => {
-    const usage = normalizeLmStudioUsage({
+    const usage = normalizeUsage({
       prompt_tokens: 26,
       completion_tokens: 152,
       total_tokens: 178,
@@ -66,7 +66,7 @@ describe('token accounting', () => {
   })
 
   it('prefers explicit top-level reasoning tokens when present', () => {
-    const usage = normalizeLmStudioUsageFromResponse({
+    const usage = normalizeUsageFromResponse({
       usage: {
         prompt_tokens: 12,
         completion_tokens: 7,

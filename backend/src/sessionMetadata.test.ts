@@ -895,6 +895,7 @@ describe('session metadata API', () => {
     const retriedState = retriedSession?.analysisState as Record<string, unknown> | undefined
     expect(retriedState?.phase).toBe('assessing')
     expect(retriedState?.retry_failed_step_id).toBe('ANLZ.3W')
+    expect(retriedState?.walkCursor).toBe(0)
 
     const retriedPart = getPartRecord(app.backendDb.connection, 'ANLZ.1.1.1-A')
     expect(retriedPart?.context.state).toBe('excluded')

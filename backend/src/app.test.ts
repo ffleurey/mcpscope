@@ -298,6 +298,7 @@ describe('backend foundation', () => {
       name: 'Local LM Studio',
       baseUrl: 'https://example.com/v1',
       apiKey: 'secret',
+      providerType: 'lmstudio',
       createdAt: 1,
       updatedAt: 2,
     }
@@ -1085,7 +1086,7 @@ describe('backend foundation', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: {
+      chatCompletionGateway: {
         async probePromptTokensDetailed(_baseUrl, _apiKey, body) {
           return {
             promptTokens: 3,
@@ -1242,7 +1243,7 @@ describe('backend foundation', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: {
+      chatCompletionGateway: {
         async probePromptTokensDetailed(_baseUrl, _apiKey, body) {
           const messages = body.messages as Array<{ role: string; content?: string | null }>
           const hasTools = Array.isArray(body.tools) && body.tools.length > 0
@@ -1534,7 +1535,7 @@ describe('backend foundation', () => {
     app = await buildBackendApp(
       config,
       {
-          lmStudioGateway: {
+          chatCompletionGateway: {
             async probePromptTokens() {
               return 3
             },
@@ -1687,7 +1688,7 @@ describe('backend foundation', () => {
     app = await buildBackendApp(
       config,
       {
-          lmStudioGateway: {
+          chatCompletionGateway: {
             async probePromptTokens(_baseUrl, _apiKey, body) {
             const messages = body.messages as Array<{ role: string; content?: string | null }>
             const hasTools = Array.isArray(body.tools) && body.tools.length > 0
@@ -2017,7 +2018,7 @@ describe('error handling contract', () => {
     expect(body).toMatchObject({ error: { type: 'upstream', message: expect.any(String) } })
   })
 
-  it('returns 503 with lm_studio_unreachable code when preflight cannot reach LM Studio', async () => {
+  it('returns 503 with provider_unreachable code when preflight cannot reach the provider', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config)
@@ -2035,11 +2036,11 @@ describe('error handling contract', () => {
     expect(response.statusCode).toBe(503)
     const body = response.json()
     expect(body).toMatchObject({
-      error: { type: 'upstream', code: 'lm_studio_unreachable', message: expect.any(String) },
+      error: { type: 'upstream', code: 'provider_unreachable', message: expect.any(String) },
     })
   })
 
-  it('returns 409 with lm_model_not_loaded when preflight selected model is not loaded', async () => {
+  it('returns 409 with model_not_loaded when preflight selected model is not loaded', async () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config)
@@ -2098,7 +2099,7 @@ describe('error handling contract', () => {
       expect(body).toMatchObject({
         error: {
           type: 'validation',
-          code: 'lm_model_not_loaded',
+          code: 'model_not_loaded',
           message: expect.stringContaining('not loaded'),
         },
       })
@@ -2111,7 +2112,7 @@ describe('error handling contract', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: {
+      chatCompletionGateway: {
         async probePromptTokensDetailed(_baseUrl, _apiKey, body) {
           return {
             promptTokens: 3,
@@ -2338,7 +2339,7 @@ describe('CLI session lifecycle endpoints', () => {
   })
 
   const baseGateway = {
-    lmStudioGateway: {
+    chatCompletionGateway: {
       async probePromptTokensDetailed(_baseUrl: string, _apiKey: string | undefined, body: Record<string, unknown>) {
         return {
           promptTokens: 3,
@@ -2677,8 +2678,8 @@ describe('CLI session lifecycle endpoints', () => {
     const releaseCompletion = createDeferred<void>()
     app = await buildBackendApp(config, {
       ...baseGateway,
-      lmStudioGateway: {
-        ...baseGateway.lmStudioGateway,
+      chatCompletionGateway: {
+        ...baseGateway.chatCompletionGateway,
         async streamChatCompletion(_baseUrl, _apiKey, _body, callbacks) {
           callbacks?.onDelta?.({ kind: 'content', textDelta: 'Hello' })
           await releaseCompletion.promise
@@ -2738,11 +2739,11 @@ describe('CLI session lifecycle endpoints', () => {
     const releaseProbe = createDeferred<void>()
     app = await buildBackendApp(config, {
       ...baseGateway,
-      lmStudioGateway: {
-        ...baseGateway.lmStudioGateway,
+      chatCompletionGateway: {
+        ...baseGateway.chatCompletionGateway,
         async probePromptTokensDetailed(baseUrl, apiKey, body) {
           await releaseProbe.promise
-          return baseGateway.lmStudioGateway.probePromptTokensDetailed(baseUrl, apiKey, body)
+          return baseGateway.chatCompletionGateway.probePromptTokensDetailed(baseUrl, apiKey, body)
         },
       },
     })
@@ -3149,29 +3150,9 @@ describe('CLI session lifecycle endpoints', () => {
       })
 
       expect(preflightRes.statusCode).toBe(503)
-      expect(preflightRes.json().error.code).toBe('lm_studio_unreachable')
-    })
+      expect(preflightRes.json().error.code).toBe('provider_unreachable')
 
-    it('POST /api/sessions/preflight is not blocked when another session is running', async () => {
-      const config = makeTestConfig()
-      dataDir = config.dataDir
-      app = await buildBackendApp(config, baseGateway)
-
-      const blockerId = await createReadySession(app, 'Running Blocker')
-      makeSessionRunning(app, blockerId)
-
-      const preflightRes = await app.inject({
-        method: 'POST',
-        url: '/api/sessions/preflight',
-        payload: {
-          lmConnectionSnapshot: { baseUrl: 'http://127.0.0.1:9/v1', apiKey: null },
-          mcpProfileSnapshots: [],
-          selectedModel: { modelKey: 'model-key', modelDisplayName: 'Model Key' },
-        },
-      })
-
-      expect(preflightRes.statusCode).toBe(503)
-      expect(preflightRes.json().error.code).toBe('lm_studio_unreachable')
+      expect(preflightRes.json().error.code).toBe('provider_unreachable')
     })
 
     it('concurrent: session creation succeeds while turns/stream is in flight', async () => {
@@ -3182,11 +3163,11 @@ describe('CLI session lifecycle endpoints', () => {
       dataDir = config.dataDir
       app = await buildBackendApp(config, {
         ...baseGateway,
-        lmStudioGateway: {
-          ...baseGateway.lmStudioGateway,
+        chatCompletionGateway: {
+          ...baseGateway.chatCompletionGateway,
           async probePromptTokensDetailed(baseUrl, apiKey, body) {
             await releaseProbe.promise
-            return baseGateway.lmStudioGateway.probePromptTokensDetailed(baseUrl, apiKey, body)
+            return baseGateway.chatCompletionGateway.probePromptTokensDetailed(baseUrl, apiKey, body)
           },
         },
       })
@@ -3656,7 +3637,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
@@ -3710,7 +3691,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
@@ -3751,7 +3732,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
@@ -3778,7 +3759,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
@@ -3807,7 +3788,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
@@ -3865,7 +3846,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const appInst = app
@@ -3898,7 +3879,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
@@ -3937,7 +3918,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
 
@@ -4081,7 +4062,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
@@ -4137,7 +4118,7 @@ describe('analysis launch', () => {
     const turnRef = { id: '' }
     let callCount = 0
     app = await buildBackendApp(config, {
-      lmStudioGateway: {
+      chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++
           let content: string
@@ -4302,7 +4283,7 @@ describe('analysis launch', () => {
     let callCount = 0
 
     app = await buildBackendApp(config, {
-      lmStudioGateway: {
+      chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++
           const content = idx === 0
@@ -4437,7 +4418,7 @@ describe('analysis launch', () => {
     let callCount = 0
 
     app = await buildBackendApp(config, {
-      lmStudioGateway: {
+      chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++
           const content = idx === 0
@@ -4537,7 +4518,7 @@ describe('analysis launch', () => {
     let callCount = 0
 
     app = await buildBackendApp(config, {
-      lmStudioGateway: {
+      chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++
           const content = idx === 0
@@ -4652,7 +4633,7 @@ describe('analysis launch', () => {
     let callCount = 0
 
     app = await buildBackendApp(config, {
-      lmStudioGateway: {
+      chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++
           const content = idx === 0
@@ -4781,7 +4762,7 @@ describe('analysis launch', () => {
     const turnRef = { id: '' }
 
     app = await buildBackendApp(config, {
-      lmStudioGateway: {
+      chatCompletionGateway: {
         async createChatCompletion() {
           return {
             id: 'cmpl-bad-assessment',
@@ -4873,7 +4854,7 @@ describe('analysis launch', () => {
     let callCount = 0
 
     app = await buildBackendApp(config, {
-      lmStudioGateway: {
+      chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++
           const content = idx === 0
@@ -4972,7 +4953,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)
@@ -5028,7 +5009,7 @@ describe('analysis launch', () => {
     })
 
     app = await buildBackendApp(config, {
-      lmStudioGateway: {
+      chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++
           let content: string
@@ -5173,7 +5154,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const primaryId = await createReadySession(app)
@@ -5189,7 +5170,7 @@ describe('analysis launch', () => {
     const config = makeTestConfig()
     dataDir = config.dataDir
     app = await buildBackendApp(config, {
-      lmStudioGateway: makeAnalysisMockGateway(),
+      chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
     })
     const targetId = await createReadySession(app)

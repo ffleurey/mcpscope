@@ -10,7 +10,7 @@
  */
 
 import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import { createToolEnabledTurn } from '../runtime/toolTurns.js'
 import type { TurnStreamEventSink } from '../runtime/streamEvents.js'
@@ -35,7 +35,7 @@ export interface AnalysisTurnResult {
  */
 export async function runAnalysisTurn(
   database: BackendDatabase,
-  lmGateway: LmStudioGateway,
+  lmGateway: ChatCompletionGateway,
   mcpGateway: McpGateway,
   analysisSessionId: string,
   userContent: string,

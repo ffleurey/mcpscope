@@ -10,13 +10,13 @@ import type { SessionTraceBundle } from '../domain/trace.js'
 export type { SessionTraceBundle } from '../domain/trace.js'
 import {
   parseChatCompletionStream,
-  type LmStudioAssistantSegment,
-  type LmStudioChatCompletionResponse,
-  type LmStudioPromptProbeResult,
-  type LmStudioStreamedChatCompletionResult,
+  type AssistantSegment,
+  type OaiChatCompletionResponse,
+  type PromptProbeResult,
+  type OaiStreamedChatCompletionResult,
 } from '../services/lmstudio/client.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 
 type RawExchangePair = {
   request: RawExchangeRecord
@@ -80,9 +80,9 @@ function parseMcpRpcBody(text: string | null): {
   }
 }
 
-function segmentsFromCompletion(completion: LmStudioChatCompletionResponse): LmStudioAssistantSegment[] {
+function segmentsFromCompletion(completion: OaiChatCompletionResponse): AssistantSegment[] {
   const responseMessage = completion.choices[0]?.message
-  const segments: LmStudioAssistantSegment[] = []
+  const segments: AssistantSegment[] = []
 
   if (responseMessage?.reasoning_content?.length) {
     segments.push({
@@ -108,11 +108,11 @@ function segmentsFromCompletion(completion: LmStudioChatCompletionResponse): LmS
   return segments
 }
 
-function parseRecordedLmResponse(responseBody: string | null): LmStudioStreamedChatCompletionResult {
+function parseRecordedLmResponse(responseBody: string | null): OaiStreamedChatCompletionResult {
   const text = responseBody ?? ''
   const trimmed = text.trim()
   if (trimmed.startsWith('{')) {
-    const completion = JSON.parse(trimmed) as LmStudioChatCompletionResponse
+    const completion = JSON.parse(trimmed) as OaiChatCompletionResponse
     return {
       completion,
       segments: segmentsFromCompletion(completion),
@@ -292,7 +292,7 @@ function normalizeTraceBundle(trace: SessionTraceBundle) {
   }
 }
 
-function createReplayLmStudioGateway(trace: SessionTraceBundle): LmStudioGateway {
+function createReplayChatCompletionGateway(trace: SessionTraceBundle): ChatCompletionGateway {
   const probePairs = pairRawExchanges(trace.rawExchanges, 'lmstudio-probe-request', 'lmstudio-probe-response')
   const streamedPairs = pairRawExchanges(trace.rawExchanges, 'lmstudio-request', 'lmstudio-response')
   let probeIndex = 0
@@ -302,7 +302,7 @@ function createReplayLmStudioGateway(trace: SessionTraceBundle): LmStudioGateway
     async createChatCompletion() {
       throw new Error('Replay harness expects streamed completions or recorded prompt probes only')
     },
-    async probePromptTokensDetailed(baseUrl, _apiKey, body): Promise<LmStudioPromptProbeResult> {
+    async probePromptTokensDetailed(baseUrl, _apiKey, body): Promise<PromptProbeResult> {
       const pair = probePairs[probeIndex]
       if (!pair) {
         throw new Error('Replay trace exhausted LM Studio probe exchanges')
@@ -312,7 +312,7 @@ function createReplayLmStudioGateway(trace: SessionTraceBundle): LmStudioGateway
       assert.equal(pair.request.requestUrl, `${baseUrl.replace(/\/$/, '')}/chat/completions`)
       assert.deepEqual(body, parseJsonBody(pair.request.requestBody))
 
-      const completion = parseJsonBody(pair.response.responseBody) as LmStudioChatCompletionResponse
+      const completion = parseJsonBody(pair.response.responseBody) as OaiChatCompletionResponse
       return {
         promptTokens: completion.usage?.prompt_tokens ?? null,
         completion,
@@ -502,7 +502,7 @@ export async function replayTrace(trace: SessionTraceBundle): Promise<ReplayResu
       maxToolRounds: Math.max(1, trace.rounds.length + 2),
     },
     {
-      lmStudioGateway: createReplayLmStudioGateway(trace),
+      chatCompletionGateway: createReplayChatCompletionGateway(trace),
       mcpGateway: createReplayMcpGateway(trace),
     },
   )

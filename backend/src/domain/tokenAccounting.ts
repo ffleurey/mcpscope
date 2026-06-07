@@ -1,7 +1,7 @@
 import type { PartRecord, TokenMetadata } from './model.js'
-import type { LmStudioChatCompletionResponse, LmStudioChatCompletionUsage } from '../services/lmstudio/client.js'
+import type { OaiChatCompletionResponse, OaiChatCompletionUsage } from '../services/lmstudio/client.js'
 
-export interface NormalizedLmStudioUsage {
+export interface NormalizedUsage {
   promptTokens: number | null
   completionTokens: number | null
   reasoningTokens: number | null
@@ -69,9 +69,9 @@ export function allocateProportionalTokenCounts(totalTokens: number, weights: nu
   return flooredShares
 }
 
-export function normalizeLmStudioUsage(
-  usage: LmStudioChatCompletionUsage | undefined,
-): NormalizedLmStudioUsage {
+export function normalizeUsage(
+  usage: OaiChatCompletionUsage | undefined,
+): NormalizedUsage {
   const promptTokens = usage?.prompt_tokens ?? null
   const completionTokens = usage?.completion_tokens ?? null
   const totalTokens = usage?.total_tokens ?? null
@@ -90,10 +90,10 @@ export function normalizeLmStudioUsage(
   }
 }
 
-export function normalizeLmStudioUsageFromResponse(
-  response: Pick<LmStudioChatCompletionResponse, 'usage'>,
-): NormalizedLmStudioUsage {
-  return normalizeLmStudioUsage(response.usage)
+export function normalizeUsageFromResponse(
+  response: Pick<OaiChatCompletionResponse, 'usage'>,
+): NormalizedUsage {
+  return normalizeUsage(response.usage)
 }
 
 export function deriveExactUserTokenMetadata(

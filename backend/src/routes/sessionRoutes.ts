@@ -93,7 +93,7 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
   }
 
   const analysisState = session.analysisState as Record<string, unknown> | null
-  if (!analysisState || analysisState.phase !== 'error') {
+  if (!analysisState || (analysisState.phase !== 'error' && !analysisState.retry_failed_step_id)) {
     throw new Error('Analysis session is not in a failed state')
   }
 
@@ -118,9 +118,14 @@ function resetFailedAnalysisStepForRetry(database: RouteDeps['database'], sessio
   const retryParts = listPartRecordsBySession(database.connection, sessionId)
     .filter(part => part.turnId && ownedTurnIds.has(part.turnId))
 
+  // Reset the walk cursor so hooks replay from the start. Individual hook
+  // guards (nextPacketIndex, bootstrapComplete, etc.) prevent re-execution of
+  // already-completed work. The failing hook's guard re-matches only for the
+  // specific packet/condition that originally failed.
   const updatedAnalysisState = {
     ...analysisState,
     phase: retryPhase,
+    walkCursor: 0,
     retry_failed_step_id: failedStep.id,
     retry_requested_at: Date.now(),
   }
@@ -380,6 +385,26 @@ export function registerSessionRoutes(deps: RouteDeps): void {
       }
       throw err
     }
+  })
+
+  app.post('/api/sessions/:sessionId/retry-init', async (request, reply) => {
+    const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
+    const session = getSessionRecord(database.connection, sessionId)
+    if (!session) {
+      reply.code(404)
+      return apiError('not_found', 'Session not found')
+    }
+    if (session.initStatus !== 'error') {
+      reply.code(422)
+      return apiError('validation', 'Session is not in error state — nothing to retry.')
+    }
+
+    session.initStatus = 'pending'
+    session.updatedAt = Date.now()
+    updateSessionRecord(database.connection, session)
+
+    scheduler.enqueueInit(opCtx, sessionId)
+    return { ok: true }
   })
 
   app.patch('/api/sessions/:sessionId', async (request, reply) => {

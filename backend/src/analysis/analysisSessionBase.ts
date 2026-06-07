@@ -8,7 +8,7 @@
  */
 
 import type { BackendDatabase } from '../persistence/db.js'
-import type { LmStudioGateway } from '../runtime/modelTurns.js'
+import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import {
   getSessionRecord,
@@ -129,7 +129,7 @@ export interface SessionTree {
 export abstract class AnalysisSessionBase {
   // ── per-instance state ──────────────────────────────────────────────────────
   protected readonly db: BackendDatabase
-  protected readonly lm: LmStudioGateway
+  protected readonly lm: ChatCompletionGateway
   protected readonly mcp: McpGateway
   protected readonly sessionId: string
   protected readonly goal: string
@@ -146,7 +146,7 @@ export abstract class AnalysisSessionBase {
   // ── constructor ─────────────────────────────────────────────────────────────
   constructor(
     db: BackendDatabase,
-    lm: LmStudioGateway,
+    lm: ChatCompletionGateway,
     mcp: McpGateway,
     input: AnalysisWorkflowInput,
     initialState: AnalysisSessionState,

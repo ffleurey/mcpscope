@@ -143,30 +143,32 @@ export function registerConfigurationRoutes({ app, database }: RouteDeps): void 
   })
 
   app.post('/api/lm-connections/test', async (request, reply) => {
-    const { baseUrl, apiKey } = z.object({ baseUrl: z.string().url(), apiKey: z.string().nullable().optional() }).parse(request.body)
+    const { baseUrl, apiKey, providerType } = z.object({ baseUrl: z.string().url(), apiKey: z.string().nullable().optional(), providerType: z.enum(['lmstudio', 'openrouter']).optional() }).parse(request.body)
     try {
       const result = await listModels(baseUrl, apiKey ?? undefined)
       return { models: result.data?.map(m => m.id ?? '').filter(Boolean) ?? [] }
     } catch (e) {
-      app.log.warn({ baseUrl, err: e instanceof Error ? e.message : String(e) }, 'LM connection test failed')
+      const label = providerType === 'openrouter' ? 'OpenRouter' : 'LM Studio'
+      app.log.warn({ baseUrl, err: e instanceof Error ? e.message : String(e) }, `${label} connection test failed`)
       reply.code(503)
-      return apiError('upstream', e instanceof Error ? e.message : 'LM Studio unreachable', {
-        code: 'lm_studio_unreachable',
-        details: { baseUrl },
+      return apiError('upstream', e instanceof Error ? e.message : `${label} unreachable`, {
+        code: 'provider_unreachable',
+        details: { baseUrl, providerType },
       })
     }
   })
 
   app.post('/api/lm-connections/models', async (request, reply) => {
-    const { baseUrl, apiKey } = z.object({ baseUrl: z.string().url(), apiKey: z.string().nullable().optional() }).parse(request.body)
+    const { baseUrl, apiKey, providerType } = z.object({ baseUrl: z.string().url(), apiKey: z.string().nullable().optional(), providerType: z.enum(['lmstudio', 'openrouter']).optional() }).parse(request.body)
+    const label = providerType === 'openrouter' ? 'OpenRouter' : 'LM Studio'
     try {
       return { models: await listModelsWithStatus(baseUrl, apiKey ?? undefined) }
     } catch (e) {
-      app.log.warn({ baseUrl, err: e instanceof Error ? e.message : String(e) }, 'LM models listing failed')
+      app.log.warn({ baseUrl, err: e instanceof Error ? e.message : String(e) }, `${label} models listing failed`)
       reply.code(503)
-      return apiError('upstream', e instanceof Error ? e.message : 'LM Studio unreachable', {
-        code: 'lm_studio_unreachable',
-        details: { baseUrl },
+      return apiError('upstream', e instanceof Error ? e.message : `${label} unreachable`, {
+        code: 'provider_unreachable',
+        details: { baseUrl, providerType },
       })
     }
   })
@@ -219,37 +221,45 @@ export function registerConfigurationRoutes({ app, database }: RouteDeps): void 
   })
 
   app.post('/api/sessions/preflight', async (request, reply) => {
-    const { lmConnectionSnapshot, mcpProfileSnapshots, selectedModel } = z.object({
+    const { lmConnectionSnapshot, mcpProfileSnapshots, selectedModel, providerType } = z.object({
       lmConnectionSnapshot: z.object({ baseUrl: z.string(), apiKey: z.string().nullable().optional() }),
       mcpProfileSnapshots: z.array(z.object({ url: z.string() })).default([]),
       selectedModel: z.object({ modelKey: z.string().min(1), modelDisplayName: z.string().min(1).optional() }),
+      providerType: z.enum(['lmstudio', 'openrouter']).optional(),
     }).parse(request.body)
+
+    const label = providerType === 'openrouter' ? 'OpenRouter' : 'LM Studio'
 
     let listedByCompatApi: boolean
     try {
       const modelList = await listModels(lmConnectionSnapshot.baseUrl, lmConnectionSnapshot.apiKey ?? undefined)
       listedByCompatApi = modelList.data?.some(m => m.id === selectedModel.modelKey) ?? false
     } catch (e) {
-      app.log.warn({ baseUrl: lmConnectionSnapshot.baseUrl, err: e instanceof Error ? e.message : String(e) }, 'Preflight: LM Studio unreachable')
+      app.log.warn({ baseUrl: lmConnectionSnapshot.baseUrl, err: e instanceof Error ? e.message : String(e) }, `Preflight: ${label} unreachable`)
       reply.code(503)
-      return apiError('upstream', 'Cannot reach LM Studio. Check that it is running and accessible.', {
-        code: 'lm_studio_unreachable',
-        details: { baseUrl: lmConnectionSnapshot.baseUrl },
+      return apiError('upstream', `Cannot reach ${label}. Check that it is running and accessible.`, {
+        code: 'provider_unreachable',
+        details: { baseUrl: lmConnectionSnapshot.baseUrl, providerType },
       })
     }
 
-    const loaded = await isModelLoaded(lmConnectionSnapshot.baseUrl, lmConnectionSnapshot.apiKey ?? undefined, selectedModel.modelKey)
-    if (loaded === false || (loaded === null && !listedByCompatApi)) {
-      const label = selectedModel.modelDisplayName ?? selectedModel.modelKey
-      reply.code(409)
-      return apiError('validation', `Selected model "${label}" is not loaded in LM Studio. Load it and try again.`, {
-        code: 'lm_model_not_loaded',
-        details: {
-          modelKey: selectedModel.modelKey,
-          modelDisplayName: selectedModel.modelDisplayName ?? null,
-          baseUrl: lmConnectionSnapshot.baseUrl,
-        },
-      })
+    // For hosted providers (OpenRouter) the model is always available — skip the
+    // loaded-model check which only applies to local runners like LM Studio.
+    if (providerType !== 'openrouter') {
+      const loaded = await isModelLoaded(lmConnectionSnapshot.baseUrl, lmConnectionSnapshot.apiKey ?? undefined, selectedModel.modelKey)
+      if (loaded === false || (loaded === null && !listedByCompatApi)) {
+        const modelLabel = selectedModel.modelDisplayName ?? selectedModel.modelKey
+        reply.code(409)
+        return apiError('validation', `Selected model "${modelLabel}" is not loaded in ${label}. Load it and try again.`, {
+          code: 'model_not_loaded',
+          details: {
+            modelKey: selectedModel.modelKey,
+            modelDisplayName: selectedModel.modelDisplayName ?? null,
+            baseUrl: lmConnectionSnapshot.baseUrl,
+            providerType,
+          },
+        })
+      }
     }
 
     for (const mcpRef of mcpProfileSnapshots) {
