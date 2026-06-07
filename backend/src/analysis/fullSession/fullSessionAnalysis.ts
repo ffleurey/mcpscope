@@ -12,7 +12,9 @@ import type { McpGateway } from '../../runtime/toolTurns.js'
 import {
   AnalysisSessionBase,
   type AnalysisCommand,
-  type SessionTree,
+  type PartInfo,
+  type RoundInfo,
+  type TurnInfo,
 } from '../analysisSessionBase.js'
 import type { AnalysisWorkflowInput } from '../analysisWorkflowInput.js'
 import {
@@ -88,36 +90,39 @@ export class FullSessionAnalysis extends AnalysisSessionBase {
     return buildFullSessionSystemPrompt(input)
   }
 
-  // ── buildPlan ─────────────────────────────────────────────────────────────
+  // ── Hooks — called by buildPlan() during tree traversal ───────────────────
 
-  protected buildPlan(_tree: SessionTree): AnalysisCommand[] {
-    const commands: AnalysisCommand[] = []
+  protected onBeforeSession(): void {
+    this.addCommand(new BootstrapCommand(this.db, this.lm, this.mcp))
+  }
 
-    commands.push(new BootstrapCommand(this.db, this.lm, this.mcp))
-
-    const indexArtifact = this.readArtifact(SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
+  protected onToolCall(part: PartInfo, _round: RoundInfo, _turn: TurnInfo): void {
     const targetArtifact = this.readArtifact(SCHEMA_KEY.ANALYSIS_TARGET)
-    if (!indexArtifact || !targetArtifact) return commands
-
-    const knownPackets = (indexArtifact.content as EvidencePacketIndex).packets
+    const indexArtifact = this.readArtifact(SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
+    if (!targetArtifact || !indexArtifact) return
     const target = targetArtifact.content as AnalysisTarget
 
-    const knownPacketIds = new Set(knownPackets.map(p => p.tool_call_part_id))
-    const allPackets = [...knownPackets, ...this.discoverNewPackets(knownPacketIds)]
-
-    for (const packet of allPackets) {
-      commands.push(new AssessCommand(this.db, this.lm, this.mcp, packet, target))
+    const knownPackets = (indexArtifact.content as EvidencePacketIndex).packets
+    let packet: EvidencePacket | undefined = knownPackets.find(p => p.tool_call_part_id === part.id)
+    if (!packet) {
+      const knownIds = new Set(knownPackets.map(p => p.tool_call_part_id))
+      packet = this.discoverNewPackets(knownIds).find(p => p.tool_call_part_id === part.id)
     }
-
-    const turnIds = [...new Set(allPackets.map(p => p.turn_id))]
-    for (const turnId of turnIds) {
-      commands.push(new TurnSummaryCommand(this.db, this.lm, this.mcp, turnId))
+    if (packet) {
+      this.addCommand(new AssessCommand(this.db, this.lm, this.mcp, packet, target))
     }
+  }
 
-    commands.push(new CoverageCommand(this.db, this.lm, this.mcp, allPackets.length))
-    commands.push(new FinalCommand(this.db, this.lm, this.mcp))
+  protected onAfterTurn(turn: TurnInfo): void {
+    const hasToolCalls = turn.rounds.some(r => r.parts.some(p => p.type === 'tool_call'))
+    if (hasToolCalls) {
+      this.addCommand(new TurnSummaryCommand(this.db, this.lm, this.mcp, turn.id))
+    }
+  }
 
-    return commands
+  protected onAfterSession(): void {
+    this.addCommand(new CoverageCommand(this.db, this.lm, this.mcp))
+    this.addCommand(new FinalCommand(this.db, this.lm, this.mcp))
   }
 }
 
@@ -215,13 +220,16 @@ class CoverageCommand implements AnalysisCommand {
     private readonly db: BackendDatabase,
     private readonly lm: ChatCompletionGateway,
     private readonly mcp: McpGateway,
-    private readonly totalPacketCount: number,
   ) {}
 
   isComplete(db: BackendDatabase, sessionId: string): boolean {
-    if (this.totalPacketCount === 0) return true
+    const indexArtifact = getLatestArtifactBySchemaKey(db.connection, sessionId, SCHEMA_KEY.EVIDENCE_PACKET_INDEX)
+    if (!indexArtifact) return false
+    const packets = (indexArtifact.content as EvidencePacketIndex).packets
+    if (packets.length === 0) return true
     const assessments = listArtifactsBySessionAndSchemaKey(db.connection, sessionId, SELF_KEY.TOOL_CALL_ASSESSMENT)
-    return assessments.length >= this.totalPacketCount
+    const assessedIds = new Set(assessments.map(a => a.metadata.tool_call_part_id as string | undefined).filter(Boolean))
+    return packets.every(p => assessedIds.has(p.tool_call_part_id))
   }
 
   buildStep(): CoverageValidationStep {

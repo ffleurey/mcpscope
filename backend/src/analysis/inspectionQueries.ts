@@ -182,6 +182,7 @@ function buildTurnDetails(
       })
 
     result.set(step.id, {
+      id: turn.id,
       step: stepRecordToStepInfo(step),
       turnNumber: turn.turnNumber,
       ownerStepId: turn.ownerStepId ?? null,

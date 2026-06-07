@@ -11,7 +11,6 @@ import type { McpGateway } from '../../runtime/toolTurns.js'
 import {
   AnalysisSessionBase,
   type AnalysisCommand,
-  type SessionTree,
 } from '../analysisSessionBase.js'
 import type { AnalysisWorkflowInput } from '../analysisWorkflowInput.js'
 import {
@@ -80,22 +79,22 @@ export class FastToolAnalysis extends AnalysisSessionBase {
     return buildFastToolSystemPrompt(input)
   }
 
-  protected buildPlan(_tree: SessionTree): AnalysisCommand[] {
-    const commands: AnalysisCommand[] = []
+  // ── Hooks — called by buildPlan() during tree traversal ───────────────────
 
-    commands.push(new BootstrapCommand(this.db, this.lm, this.mcp))
+  protected onBeforeSession(): void {
+    this.addCommand(new BootstrapCommand(this.db, this.lm, this.mcp))
+  }
 
+  protected onAfterSession(): void {
     const workIndexArtifact = this.readArtifact(SELF_KEY.WORK_INDEX)
     const targetArtifact = this.readArtifact(SCHEMA_KEY.ANALYSIS_TARGET)
-    if (!workIndexArtifact || !targetArtifact) return commands
+    if (!workIndexArtifact || !targetArtifact) return
 
     const workIndex = workIndexArtifact.content as FastToolWorkIndex
     const analysisTarget = targetArtifact.content as AnalysisTarget
 
-    commands.push(new GroupedAssessCommand(this.db, this.lm, this.mcp, workIndex, analysisTarget))
-    commands.push(new FinalCommand(this.db, this.lm, this.mcp))
-
-    return commands
+    this.addCommand(new GroupedAssessCommand(this.db, this.lm, this.mcp, workIndex, analysisTarget))
+    this.addCommand(new FinalCommand(this.db, this.lm, this.mcp))
   }
 }
 

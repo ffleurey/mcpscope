@@ -1,13 +1,16 @@
 /**
  * Abstract base class for session analysis workflows.
  *
- * Subclasses implement buildPlan() to produce a list of AnalysisCommands by
- * traversing the target session tree (Visitor pattern for data collection).
- * The base class interprets the plan one command at a time (Interpreter
- * pattern), instantiating the matching WorkflowStep and executing it.
+ * The base class provides a tree-traversal Visitor pattern with 22 hook
+ * positions.  Subclasses override hooks to add AnalysisCommand objects to
+ * the execution plan via addCommand().  The plan is then interpreted one
+ * command at a time — findFirstIncomplete() derives position from artifact
+ * existence, builds the matching WorkflowStep, and executes it.
  *
- * No walk cursor, no flattened hook list, no shared mutable state between
- * steps.  Position is derived from plan vs. artifact existence.
+ * Key distinction from the old architecture:
+ * - Hooks PLAN work (add commands to the plan)
+ * - Commands DO work (execute via WorkflowStep, idempotent via artifacts)
+ * - No walk cursor, no flattened hook list, no shared mutable state
  */
 
 import type { BackendDatabase } from '../persistence/db.js'
@@ -102,6 +105,7 @@ export interface WorkflowStepInfo {
 }
 
 export interface TurnInfo {
+  id: string
   step: StepInfo
   turnNumber: number | null
   ownerStepId: string | null
@@ -169,6 +173,13 @@ export abstract class AnalysisSessionBase {
   private emitFn: AnalysisStreamEventSink | undefined
   protected get emitSink(): AnalysisStreamEventSink | undefined { return this.emitFn }
 
+  // ── command accumulator (filled during buildPlan) ───────────────────────────
+  private commands: AnalysisCommand[] = []
+
+  protected addCommand(cmd: AnalysisCommand): void {
+    this.commands.push(cmd)
+  }
+
   // ── constructor ─────────────────────────────────────────────────────────────
   constructor(
     db: BackendDatabase,
@@ -191,11 +202,115 @@ export abstract class AnalysisSessionBase {
 
   protected abstract getWorkflowKind(): string
 
-  /** Build the complete plan of commands for this analysis session.
-   *  Called fresh on every resumeOneStep() so the plan reflects the current
-   *  state of the target session tree.  The Visitor pattern is used inside
-   *  this method for data collection only. */
-  protected abstract buildPlan(tree: SessionTree): AnalysisCommand[]
+  // ────────────────────────────────────────────────────────────────────────────
+  // buildPlan — concrete, drives the Visitor traversal and collects commands
+  // ────────────────────────────────────────────────────────────────────────────
+
+  buildPlan(tree: SessionTree): AnalysisCommand[] {
+    this.commands = []
+
+    this.onBeforeSession(tree.session)
+
+    if (tree.setup) {
+      const s = tree.setup
+      this.onBeforeSetup(s)
+      for (const part of s.parts) {
+        switch (part.type) {
+          case 'system_prompt':    this.onSystemPrompt(part); break
+          case 'mcp_instructions': this.onMcpInstructions(part); break
+          case 'tool_definitions': this.onToolDefinitions(part); break
+        }
+      }
+      this.onAfterSetup(s)
+    }
+
+    for (const step of tree.steps) {
+      this.onBeforeStep(step)
+
+      if (step.isWorkflowStep) {
+        const wf: WorkflowStepInfo = { step, ownedTurnCount: 0 }
+        this.onBeforeWorkflowStep(wf)
+        this.onAfterWorkflowStep(wf)
+      }
+
+      if (step.isCompaction) {
+        const compaction = tree.compactionDetails.get(step.id) ?? {
+          step, strategy: null, strippedPartIds: [], strippedPartCount: 0,
+          contextTokensBefore: null, contextTokensAfter: null, tokensRemoved: null,
+        }
+        this.onBeforeCompaction(compaction)
+        this.onAfterCompaction(compaction)
+      }
+
+      if (step.isTurn) {
+        const turn = tree.turnDetails.get(step.id)
+        if (turn) {
+          this.onBeforeTurn(turn)
+          for (const round of turn.rounds) {
+            this.onBeforeRound(round)
+            for (const part of round.parts) {
+              switch (part.type) {
+                case 'user_prompt':     this.onUserPrompt(part, round, turn); break
+                case 'reasoning':       this.onReasoning(part, round, turn); break
+                case 'tool_call':       this.onToolCall(part, round, turn); break
+                case 'assistant_answer': this.onAssistantAnswer(part, round, turn); break
+              }
+            }
+            this.onAfterRound(round)
+          }
+          this.onAfterTurn(turn)
+        }
+      }
+
+      this.onAfterStep(step)
+    }
+
+    this.onAfterSession(tree.session)
+
+    return this.commands
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Hooks — 22 tree positions, each defaults to no-op.
+  // Subclasses override hooks and call addCommand() to populate the plan.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // ── Session ─────────────────────────────────────────────────────────────────
+  protected onBeforeSession(_s: SessionInfo): void {}
+  protected onAfterSession(_s: SessionInfo): void {}
+
+  // ── Setup ───────────────────────────────────────────────────────────────────
+  protected onBeforeSetup(_s: SetupInfo): void {}
+  protected onSystemPrompt(_p: PartInfo): void {}
+  protected onMcpInstructions(_p: PartInfo): void {}
+  protected onToolDefinitions(_p: PartInfo): void {}
+  protected onAfterSetup(_s: SetupInfo): void {}
+
+  // ── Steps (generic — fires for every step) ──────────────────────────────────
+  protected onBeforeStep(_s: StepInfo): void {}
+  protected onAfterStep(_s: StepInfo): void {}
+
+  // ── WorkflowStep ────────────────────────────────────────────────────────────
+  protected onBeforeWorkflowStep(_w: WorkflowStepInfo): void {}
+  protected onAfterWorkflowStep(_w: WorkflowStepInfo): void {}
+
+  // ── CompactionStep ──────────────────────────────────────────────────────────
+  protected onBeforeCompaction(_c: CompactionInfo): void {}
+  protected onAfterCompaction(_c: CompactionInfo): void {}
+
+  // ── Turn ────────────────────────────────────────────────────────────────────
+  protected onBeforeTurn(_t: TurnInfo): void {}
+  protected onAfterTurn(_t: TurnInfo): void {}
+
+  // ── Round ───────────────────────────────────────────────────────────────────
+  protected onBeforeRound(_r: RoundInfo): void {}
+  protected onAfterRound(_r: RoundInfo): void {}
+
+  // ── Round parts ─────────────────────────────────────────────────────────────
+  protected onUserPrompt(_p: PartInfo, _round: RoundInfo, _turn: TurnInfo): void {}
+  protected onReasoning(_p: PartInfo, _round: RoundInfo, _turn: TurnInfo): void {}
+  protected onToolCall(_p: PartInfo, _round: RoundInfo, _turn: TurnInfo): void {}
+  protected onAssistantAnswer(_p: PartInfo, _round: RoundInfo, _turn: TurnInfo): void {}
 
   // ────────────────────────────────────────────────────────────────────────────
   // Public execution API
@@ -242,8 +357,8 @@ export abstract class AnalysisSessionBase {
     }
 
     // After a successful step, rebuild the plan and re-derive phase.
-    // buildPlan() output may change when bootstrap completes (it reads the
-    // packet index artifact to create assess/summary commands).
+    // buildPlan() traverses the tree via hooks; artifact state determines
+    // completeness so the new plan reflects what's still left to do.
     const newTree = this.loadTargetTree()
     const newPlan = this.buildPlan(newTree)
     this.state.phase = this.derivePhase(this.findFirstIncomplete(newPlan))
@@ -305,7 +420,7 @@ export abstract class AnalysisSessionBase {
   }
 
   // ────────────────────────────────────────────────────────────────────────────
-  // Infrastructure for subclasses — use inside buildPlan helpers
+  // Infrastructure for subclasses — use inside hooks
   // ────────────────────────────────────────────────────────────────────────────
 
   /** Run a bounded LLM turn inside the analysis child session. */
