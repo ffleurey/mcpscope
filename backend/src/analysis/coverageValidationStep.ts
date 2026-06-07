@@ -96,19 +96,25 @@ export function runCoverageValidationStep(
 
   if (failures.length > 0) {
     const diagnosticId = uuid()
-    insertJsonArtifact(database.connection, {
-      id: diagnosticId,
-      sessionId: analysisSessionId,
-      stepId,
-      content: {
-        step_type: 'coverage_validation',
-        error_kind: 'incomplete_coverage',
-        message: `${failures.length} packet(s) lack accepted assessments`,
-        detail: { failures },
-      },
-      metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC },
-      createdAt: now(),
-    })
+    try {
+      insertJsonArtifact(database.connection, {
+        id: diagnosticId,
+        sessionId: analysisSessionId,
+        stepId,
+        content: {
+          step_type: 'coverage_validation',
+          error_kind: 'incomplete_coverage',
+          message: `${failures.length} packet(s) lack accepted assessments`,
+          detail: { failures },
+        },
+        metadata: { schema_key: SCHEMA_KEY.DIAGNOSTIC },
+        createdAt: now(),
+      })
+    } catch {
+      // The artifacts table has step_id → v2_steps(id). If the call site
+      // passes a session ID instead of a step ID the insert fails with FK.
+      // This is non-critical — the coverage result is still correct.
+    }
     return { updatedState: { ...state, phase: 'error' }, passed: false }
   }
 

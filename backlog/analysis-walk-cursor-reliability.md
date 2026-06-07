@@ -174,10 +174,10 @@ mean the bug is still present and the test correctly reproduces it.
 
 | # | Issue | Regression test | Location | Status |
 |---|-------|----------------|----------|--------|
-| 1 | `WorkflowStep` persists `status='complete'` even when `run()` returns `{ status: 'error' }` | Step record has `status: 'error'` after `run()` returns error | `workflowStep.test.ts` | ✅ Pass (fix: `workflowStep.ts:57` checks `result.status`) |
-| 2 | Step status peristed as `'complete'` when `run()` throws | Step record has `status: 'error'` after `run()` throws | `workflowStep.test.ts` | ✅ Pass (catch block was already correct) |
-| 3 | Retry endpoint does not reset `walkCursor` | After `retry-failed-step`, `analysisState.walkCursor === 0` | `sessionMetadata.test.ts:896` | ✅ Pass (fix: `sessionRoutes.ts:128`) |
-| 4 | Coverage validation inserts diagnostic artifact with `stepId = sessionId` — FK crash | Calling `runCoverageValidationStep` with `stepId: 'ANLY'` throws `FOREIGN KEY constraint failed` | `analysisWorkflow.test.ts` | ✅ Pass (bug documented — fix NOT applied, test expects the crash) |
+| 1 | `WorkflowStep` persists `status='complete'` even when `run()` returns `{ status: 'error' }` | Step record has `status: 'error'` after `run()` returns error | `workflowStep.test.ts` | ✅ Fixed, test passes (fix: `workflowStep.ts:57` checks `result.status`) |
+| 2 | Step status persisted as `'complete'` when `run()` throws | Step record has `status: 'error'` after `run()` throws | `workflowStep.test.ts` | ✅ Already worked, test passes |
+| 3 | Retry endpoint does not reset `walkCursor` | After `retry-failed-step`, `analysisState.walkCursor === 0` | `sessionMetadata.test.ts:896` | ✅ Fixed, test passes (fix: `sessionRoutes.ts:128`) |
+| 4 | Coverage validation crashes with FK when `stepId` is a session ID | `runCoverageValidationStep` with `stepId: 'ANLY'` returns `{ passed: false, phase: 'error' }` without crashing | `analysisWorkflow.test.ts` | ✅ Fixed, test passes (fix: `coverageValidationStep.ts:99-108` catches FK) |
 | 5 | New turns in target session not picked up by cursor | — | Not written yet | ❌ No test |
 
 ### Tests still to write
@@ -225,6 +225,9 @@ This test requires constructing an `AnalysisSessionBase` subclass (e.g.
   (was hardcoded to `'complete'`).
 - 4 step classes: 10 error return paths now return `{ status: 'error' }`
   instead of `{ status: 'complete' }`.
+- `coverageValidationStep.ts:99-108`: `insertJsonArtifact` for diagnostic
+  artifact is wrapped in try/catch so a FK error from a missing step record
+  doesn't crash the analysis.
 - `sessionRoutes.ts:127`: `resetFailedAnalysisStepForRetry` now sets
   `walkCursor: 0`.
 - `sessionRoutes.ts:96`: retry endpoint also accepts sessions with

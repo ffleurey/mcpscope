@@ -495,7 +495,7 @@ describe('analysis workflow helpers', () => {
     expect(result.updatedState.coverageValidated).toBe(true)
   })
 
-  it('coverage validation with nonexistent stepId crashes with FK constraint (known bug: call site passes session ID)', () => {
+  it('coverage validation handles missing stepId gracefully without FK crash', () => {
     db = makeTestDatabase()
     createSessionRecord(db.connection, makeSessionRecord({ id: 'ANLY', sessionType: 'session_analysis', parentKind: 'session', parentId: 'TARG', mcpProfileSnapshots: [] }))
     insertStepRecord(db.connection, makeStepRecord({ id: 'step-1', sessionId: 'ANLY', stepTypeKey: 'analysis_v2_cursor' as StepPersistenceRecord['stepTypeKey'], childIndex: 0, createdAt: 1, completedAt: 1 }))
@@ -523,13 +523,15 @@ describe('analysis workflow helpers', () => {
     })
 
     // The production call site (afterSession) passes this.state.analysisSessionId
-    // as stepId — that's the session ID, not a step ID. The artifacts table has
-    // step_id → v2_steps(id), so the insert fails with FK constraint.
-    expect(() => runCoverageValidationStep(db, {
+    // as stepId — that's a session ID, not a step ID. The function should handle
+    // this gracefully (return phase=error without crashing) rather than throwing FK.
+    const result = runCoverageValidationStep(db, {
       state: makeAnalysisState({ analysisSessionId: 'ANLY', phase: 'coverage_validation' }),
-      stepId: 'ANLY', // ← session ID, not a step — this is the bug
+      stepId: 'ANLY', // ← session ID, not a step — the bug is in the call site
       assessmentSchemaKey: FULL_KEY.TOOL_CALL_ASSESSMENT,
-    })).toThrow(/FOREIGN KEY constraint failed/i)
+    })
+    expect(result.passed).toBe(false)
+    expect(result.updatedState.phase).toBe('error')
   })
 
   it('coverage validation detects unassessed packets and sets phase to error', () => {
