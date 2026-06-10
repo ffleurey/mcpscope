@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { modelConfigs, lmConnections, upsertModelConfig, removeModelConfig, sessionCreationDefaults, setDefaultModelConfig } from '../connectionStore'
   import { listModels, loadModel, unloadModel } from '../services/lmstudio'
+  import { fetchLmConnectionModelDetails } from '../api/backendClient'
   import type { LmStudioModel } from '../services/lmstudio'
   import type { ModelConfig } from '../types'
   import ModelConfigForm from './ModelConfigForm.svelte'
@@ -101,11 +102,25 @@
     }
   }
 
-  function openDetails(config: ModelConfig) {
-    const m = liveModel(config)
-    detailsData = m?.raw ?? { note: 'Model status not yet fetched. Click Refresh.' }
-    detailsTitle = `Model Details — ${config.modelDisplayName}`
-    showDetails = true
+  async function openDetails(config: ModelConfig) {
+    const conn = $lmConnections.find(c => c.id === config.connectionId)
+    if (conn?.providerType === 'ollama') {
+      detailsTitle = `Model Details — ${config.modelDisplayName}`
+      detailsData = { note: 'Loading…' }
+      showDetails = true
+      try {
+        const result = await fetchLmConnectionModelDetails(conn.baseUrl, config.modelKey, conn.providerType)
+        detailsData = result.details
+      } catch (e) {
+        const m = liveModel(config)
+        detailsData = m?.raw ?? { error: e instanceof Error ? e.message : String(e) }
+      }
+    } else {
+      const m = liveModel(config)
+      detailsData = m?.raw ?? { note: 'Model status not yet fetched. Click Refresh.' }
+      detailsTitle = `Model Details — ${config.modelDisplayName}`
+      showDetails = true
+    }
   }
 
   async function handleSave(config: ModelConfig) {
@@ -145,7 +160,7 @@
 
   function isLmStudioConnection(connectionId: string): boolean {
     const conn = $lmConnections.find(c => c.id === connectionId)
-    return conn?.providerType !== 'openrouter'
+    return conn?.providerType === 'lmstudio'
   }
 
   onMount(() => { fetchAllStatuses() })

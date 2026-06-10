@@ -53,7 +53,7 @@
     $lmConnections.find(c => c.id === connectionId) ?? null,
   )
   let isLmStudio = $derived(
-    selectedConnection?.providerType !== 'openrouter',
+    selectedConnection?.providerType === 'lmstudio',
   )
 
   let errors = $state<Record<string, string>>({})

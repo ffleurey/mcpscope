@@ -1,4 +1,4 @@
-import type { BackendDatabase } from '../persistence/db.js'
+import type { BackendDatabase } from "../persistence/db.js";
 import {
   createSessionRecord,
   getNextPreludePartSequence,
@@ -19,14 +19,14 @@ import {
   updateRoundRecord,
   updateSessionRecord,
   updateTurnRecord,
-} from '../persistence/repository.js'
+} from "../persistence/repository.js";
 import {
   formatPartId,
   formatRoundId,
   formatTurnId,
   generateUniqueSessionId,
   isValidSessionId,
-} from '../domain/hierarchicalIds.js'
+} from "../domain/hierarchicalIds.js";
 import type {
   McpProfileSnapshot,
   ModelProfileSnapshot,
@@ -36,85 +36,95 @@ import type {
   SessionRecord,
   SessionType,
   TurnRecord,
-} from '../domain/model.js'
-import { deriveContextEntries, deriveTranscriptEntries, buildModelMessages } from '../domain/selectors.js'
+} from "../domain/model.js";
+import {
+  deriveContextEntries,
+  deriveTranscriptEntries,
+  buildModelMessages,
+} from "../domain/selectors.js";
 import type {
   OaiChatCompletionResponse,
   PromptProbeResult,
   StreamCallbacks,
   OaiStreamedChatCompletionResult,
-} from '../services/lmstudio/client.js'
-import { buildSessionTraceBundle } from '../domain/trace.js'
+} from "../services/lmstudio/client.js";
+import { buildSessionTraceBundle } from "../domain/trace.js";
 import {
   allocateProportionalTokenCounts,
   deriveExactDeltaTokenMetadata,
   normalizeUsageFromResponse,
-} from '../domain/tokenAccounting.js'
-import { createSystemPromptPart, ensureSessionPreludeTokenMetadata } from './sessionPrelude.js'
-import { probeRequestPromptTokens } from './promptTokenProbing.js'
-import { executeChatCompletion } from './streamedCompletion.js'
-import type { TurnStreamEventSink } from './streamEvents.js'
-import { applyContextCompaction } from '../domain/compaction.js'
-import { DEFAULT_SESSION_TITLE, maybeApplyAutomaticSessionTitle } from './sessionTitles.js'
+} from "../domain/tokenAccounting.js";
+import {
+  createSystemPromptPart,
+  ensureSessionPreludeTokenMetadata,
+} from "./sessionPrelude.js";
+import { probeRequestPromptTokens } from "./promptTokenProbing.js";
+import { executeChatCompletion } from "./streamedCompletion.js";
+import type { TurnStreamEventSink } from "./streamEvents.js";
+import { applyContextCompaction } from "../domain/compaction.js";
+import {
+  DEFAULT_SESSION_TITLE,
+  maybeApplyAutomaticSessionTitle,
+} from "./sessionTitles.js";
 
 export interface ChatCompletionGateway {
   createChatCompletion(
     baseUrl: string,
     apiKey: string | undefined,
     body: Record<string, unknown>,
-  ): Promise<OaiChatCompletionResponse>
+  ): Promise<OaiChatCompletionResponse>;
   streamChatCompletion?(
     baseUrl: string,
     apiKey: string | undefined,
     body: Record<string, unknown>,
     callbacks?: StreamCallbacks,
-  ): Promise<OaiStreamedChatCompletionResult>
+  ): Promise<OaiStreamedChatCompletionResult>;
   probePromptTokens?(
     baseUrl: string,
     apiKey: string | undefined,
     body: Record<string, unknown>,
-  ): Promise<number | null>
+  ): Promise<number | null>;
   probePromptTokensDetailed?(
     baseUrl: string,
     apiKey: string | undefined,
     body: Record<string, unknown>,
-  ): Promise<PromptProbeResult>
+  ): Promise<PromptProbeResult>;
   getLoadedContextLength?(
     baseUrl: string,
     apiKey: string | undefined,
     modelKey: string,
-  ): Promise<number | null>
+  ): Promise<number | null>;
 }
 
 export interface CreateSessionInput {
-  sessionId?: string | undefined
-  title?: string | undefined
-  modelProfileSnapshot: ModelProfileSnapshot
-  mcpProfileSnapshots?: McpProfileSnapshot[] | undefined
-  compactionStrategy?: 'none' | 'strip-reasoning' | undefined
+  sessionId?: string | undefined;
+  title?: string | undefined;
+  modelProfileSnapshot: ModelProfileSnapshot;
+  mcpProfileSnapshots?: McpProfileSnapshot[] | undefined;
+  compactionStrategy?: "none" | "strip-reasoning" | undefined;
   /** Session type. Defaults to 'primary' when omitted. */
-  sessionType?: SessionType | undefined
+  sessionType?: SessionType | undefined;
   /** Parent object kind. Must be provided together with parentId. */
-  parentKind?: ParentKind | null | undefined
+  parentKind?: ParentKind | null | undefined;
   /** Parent object id. Must be provided together with parentKind. */
-  parentId?: string | null | undefined
+  parentId?: string | null | undefined;
 }
 
 export interface CreateTurnInput {
-  sessionId: string
-  userContent: string
-  ownerStepId?: string | null | undefined
-  reservedTurn?: TurnRecord | undefined
+  sessionId: string;
+  userContent: string;
+  ownerStepId?: string | null | undefined;
+  reservedTurn?: TurnRecord | undefined;
 }
 
 export interface RuntimeTurnResult {
-  session: SessionRecord
-  turn: TurnRecord
-  round: RoundRecord
-  rounds: RoundRecord[]
-  parts: PartRecord[]
-  transcript: ReturnType<typeof deriveTranscriptEntries>
-  context: ReturnType<typeof deriveContextEntries>
+  session: SessionRecord;
+  turn: TurnRecord;
+  round: RoundRecord;
+  rounds: RoundRecord[];
+  parts: PartRecord[];
+  transcript: ReturnType<typeof deriveTranscriptEntries>;
+  context: ReturnType<typeof deriveContextEntries>;
 }
 
 export class SessionIdInputError extends Error {}
@@ -122,67 +132,80 @@ export class SessionIdConflictError extends Error {}
 export class SessionIdGenerationError extends Error {}
 
 type SegmentTokenMetadata = {
-  count: number | null
-  source: PartRecord['tokens']['source']
-  confidence: PartRecord['tokens']['confidence']
-  note: string | null
-  provenanceJson: unknown
-}
+  count: number | null;
+  source: PartRecord["tokens"]["source"];
+  confidence: PartRecord["tokens"]["confidence"];
+  note: string | null;
+  provenanceJson: unknown;
+};
 
 function normalizeSegmentText(text: string): string | null {
-  return text.trim().length > 0 ? text : null
+  return text.trim().length > 0 ? text : null;
 }
 
-export function sessionReasoningBody(session: SessionRecord): Record<string, unknown> {
-  if (!session.modelProfileSnapshot.reasoning) return {}
-  const isOpenRouter = session.modelProfileSnapshot.connectionBaseUrl.toLowerCase().includes('openrouter')
-  if (isOpenRouter) {
+export function sessionReasoningBody(
+  session: SessionRecord,
+): Record<string, unknown> {
+  if (!session.modelProfileSnapshot.reasoning) return {};
+  const url = session.modelProfileSnapshot.connectionBaseUrl.toLowerCase();
+  if (url.includes("openrouter")) {
     // OpenRouter expects reasoning to be an object and uses include_reasoning
     // to control whether reasoning_content appears in the stream.
-    return { reasoning: { }, include_reasoning: true }
+    return { reasoning: {}, include_reasoning: true };
+  }
+  if (url.includes("ollama")) {
+    // Ollama handles reasoning natively per model — no special param needed.
+    // Sending reasoning: "on" would be an LM Studio-specific parameter Ollama
+    // doesn't understand.
+    return {};
   }
   // LM Studio uses reasoning: "on"|"off" as a string.
-  return { reasoning: session.modelProfileSnapshot.reasoning }
+  return { reasoning: session.modelProfileSnapshot.reasoning };
 }
 
 function createUuid(): string {
-  return crypto.randomUUID()
+  return crypto.randomUUID();
 }
 
 function now(): number {
-  return Date.now()
+  return Date.now();
 }
 
 export function createSession(
   database: BackendDatabase,
   input: CreateSessionInput,
 ): SessionRecord {
-  const timestamp = now()
-  const explicitSessionId = input.sessionId?.trim().toUpperCase()
+  const timestamp = now();
+  const explicitSessionId = input.sessionId?.trim().toUpperCase();
   if (explicitSessionId && !isValidSessionId(explicitSessionId)) {
-    throw new SessionIdInputError('Session ID must be 4 uppercase characters from A-Z and 2-9, excluding O, I, 0, 1')
+    throw new SessionIdInputError(
+      "Session ID must be 4 uppercase characters from A-Z and 2-9, excluding O, I, 0, 1",
+    );
   }
 
-  const sessionId = explicitSessionId
-    ?? generateUniqueSessionId(
-      candidate => getSessionRecord(database.connection, candidate) !== null,
+  const sessionId =
+    explicitSessionId ??
+    generateUniqueSessionId(
+      (candidate) => getSessionRecord(database.connection, candidate) !== null,
       3,
-    )
+    );
 
   if (sessionId == null) {
-    throw new SessionIdGenerationError('Could not generate a unique session ID after 3 attempts')
+    throw new SessionIdGenerationError(
+      "Could not generate a unique session ID after 3 attempts",
+    );
   }
 
   if (getSessionRecord(database.connection, sessionId) !== null) {
-    throw new SessionIdConflictError(`Session ID already exists: ${sessionId}`)
+    throw new SessionIdConflictError(`Session ID already exists: ${sessionId}`);
   }
 
   const session: SessionRecord = {
     id: sessionId,
     title: input.title?.trim() || DEFAULT_SESSION_TITLE,
-    status: 'ready',
-    initStatus: 'pending',
-    sessionType: input.sessionType ?? 'primary',
+    status: "ready",
+    initStatus: "pending",
+    sessionType: input.sessionType ?? "primary",
     parentKind: input.parentKind ?? null,
     parentId: input.parentId ?? null,
     createdAt: timestamp,
@@ -193,24 +216,24 @@ export function createSession(
     systemPromptTokens: null,
     toolDefinitionsTokens: null,
     isContextExhausted: false,
-    compactionStrategy: input.compactionStrategy ?? 'strip-reasoning',
-  }
+    compactionStrategy: input.compactionStrategy ?? "strip-reasoning",
+  };
 
   const tx = database.connection.transaction(() => {
-    createSessionRecord(database.connection, session)
+    createSessionRecord(database.connection, session);
     const systemPromptPart = createSystemPromptPart(
       session,
       getNextPartOrdinal(database.connection, session.id),
       getNextPreludePartSequence(database.connection, session.id),
       timestamp,
-    )
+    );
     if (systemPromptPart) {
-      insertPartRecord(database.connection, systemPromptPart)
+      insertPartRecord(database.connection, systemPromptPart);
     }
-  })
-  tx()
+  });
+  tx();
 
-  return session
+  return session;
 }
 
 export async function createModelOnlyTurn(
@@ -219,9 +242,9 @@ export async function createModelOnlyTurn(
   input: CreateTurnInput,
   emitEvent?: TurnStreamEventSink,
 ): Promise<RuntimeTurnResult> {
-  const session = getSessionRecord(database.connection, input.sessionId)
+  const session = getSessionRecord(database.connection, input.sessionId);
   if (!session) {
-    throw new Error(`Session not found: ${input.sessionId}`)
+    throw new Error(`Session not found: ${input.sessionId}`);
   }
 
   const existingParts = await ensureSessionPreludeTokenMetadata(
@@ -229,22 +252,37 @@ export async function createModelOnlyTurn(
     chatCompletionGateway,
     session,
     listPartRecordsBySession(database.connection, session.id),
-  )
-  const requestMessages = buildModelMessages(session, existingParts, input.userContent)
-  const startedAt = input.reservedTurn?.createdAt ?? now()
-  const turnNumber = input.reservedTurn?.turnNumber
-    ?? getNextTurnNumber(database.connection, session.id, input.ownerStepId ?? null)
-  const turnId = input.reservedTurn?.id
-    ?? formatTurnId(session.id, turnNumber, input.ownerStepId ?? null)
-  const roundId = formatRoundId(session.id, turnNumber, 1, input.ownerStepId ?? null)
+  );
+  const requestMessages = buildModelMessages(
+    session,
+    existingParts,
+    input.userContent,
+  );
+  const startedAt = input.reservedTurn?.createdAt ?? now();
+  const turnNumber =
+    input.reservedTurn?.turnNumber ??
+    getNextTurnNumber(
+      database.connection,
+      session.id,
+      input.ownerStepId ?? null,
+    );
+  const turnId =
+    input.reservedTurn?.id ??
+    formatTurnId(session.id, turnNumber, input.ownerStepId ?? null);
+  const roundId = formatRoundId(
+    session.id,
+    turnNumber,
+    1,
+    input.ownerStepId ?? null,
+  );
   const turn: TurnRecord = input.reservedTurn
     ? { ...input.reservedTurn }
     : {
         id: turnId,
         sessionId: session.id,
-      ownerStepId: input.ownerStepId ?? null,
+        ownerStepId: input.ownerStepId ?? null,
         turnNumber,
-        status: 'streaming',
+        status: "streaming",
         createdAt: startedAt,
         completedAt: null,
         outcome: null,
@@ -258,12 +296,12 @@ export async function createModelOnlyTurn(
         contextTokensAfterCompaction: null,
         compactionApplied: null,
         compactionTokensRemoved: null,
-      }
+      };
   const round: RoundRecord = {
     id: roundId,
     turnId,
     roundIndex: 0,
-    status: 'streaming',
+    status: "streaming",
     finishReason: null,
     startedAt,
     completedAt: null,
@@ -275,7 +313,7 @@ export async function createModelOnlyTurn(
     },
     requestPayloadJson: null,
     responseTraceJson: null,
-  }
+  };
 
   const requestBody = {
     model: session.modelProfileSnapshot.modelKey,
@@ -286,19 +324,29 @@ export async function createModelOnlyTurn(
     },
     messages: requestMessages,
     ...sessionReasoningBody(session),
-  }
+  };
 
-  const initialOrdinal = getNextPartOrdinal(database.connection, session.id)
-  const initialPartNumber = getNextRoundPartSequence(database.connection, roundId)
+  const initialOrdinal = getNextPartOrdinal(database.connection, session.id);
+  const initialPartNumber = getNextRoundPartSequence(
+    database.connection,
+    roundId,
+  );
   const userPart: PartRecord = {
-    id: formatPartId(session.id, turnNumber, 1, initialPartNumber, 'user-message', input.ownerStepId ?? null),
+    id: formatPartId(
+      session.id,
+      turnNumber,
+      1,
+      initialPartNumber,
+      "user-message",
+      input.ownerStepId ?? null,
+    ),
     sessionId: session.id,
     turnId,
     roundId,
     parentPartId: null,
     ordinal: initialOrdinal,
-    partType: 'user-message',
-    roleLabel: 'user',
+    partType: "user-message",
+    roleLabel: "user",
     payload: {
       text: input.userContent,
       json: null,
@@ -306,41 +354,41 @@ export async function createModelOnlyTurn(
       summary: null,
     },
     display: {
-      state: 'transcript',
+      state: "transcript",
       collapsedByDefault: false,
     },
     context: {
-      state: 'included',
+      state: "included",
       note: null,
       strippedByCompactionAtTurnId: null,
     },
     tokens: {
       count: null,
-      source: 'unknown',
-      confidence: 'unknown',
-      note: 'Prompt split not derived yet',
+      source: "unknown",
+      confidence: "unknown",
+      note: "Prompt split not derived yet",
     },
     provenanceJson: null,
     createdAt: startedAt,
     updatedAt: startedAt,
-  }
+  };
 
   const persistInitialState = database.connection.transaction(() => {
     if (!input.reservedTurn) {
-      insertTurnRecord(database.connection, turn)
+      insertTurnRecord(database.connection, turn);
     }
-    insertRoundRecord(database.connection, round)
-    insertPartRecord(database.connection, userPart)
-  })
-  persistInitialState()
+    insertRoundRecord(database.connection, round);
+    insertPartRecord(database.connection, userPart);
+  });
+  persistInitialState();
   emitEvent?.({
-    type: 'turn-started',
+    type: "turn-started",
     turn: { ...turn },
-  })
+  });
   emitEvent?.({
-    type: 'round-started',
+    type: "round-started",
     round: { ...round },
-  })
+  });
 
   const streamedCompletion = await executeChatCompletion(
     chatCompletionGateway,
@@ -350,218 +398,256 @@ export async function createModelOnlyTurn(
     {
       onDelta(delta) {
         emitEvent?.({
-          type: 'part-delta',
+          type: "part-delta",
           turnId,
           roundId,
           delta,
-        })
+        });
       },
     },
-  )
-  const completion = streamedCompletion.completion
+  );
+  const completion = streamedCompletion.completion;
 
-  const completedAt = now()
-  const finishReason = completion.choices[0]?.finish_reason
-  if (finishReason !== 'stop') {
-    throw new Error(`Unsupported finish reason for model-only pipeline: ${finishReason ?? 'unknown'}`)
+  const completedAt = now();
+  const finishReason = completion.choices[0]?.finish_reason;
+  if (finishReason !== "stop") {
+    throw new Error(
+      `Unsupported finish reason for model-only pipeline: ${finishReason ?? "unknown"}`,
+    );
   }
 
-  const usage = normalizeUsageFromResponse(completion)
+  const usage = normalizeUsageFromResponse(completion);
 
-  turn.status = 'complete'
-  turn.completedAt = completedAt
-  turn.outcome = 'model-response'
+  turn.status = "complete";
+  turn.completedAt = completedAt;
+  turn.outcome = "model-response";
   turn.usage = {
     promptTokens: usage.promptTokens,
     completionTokens: usage.completionTokens,
     reasoningTokens: usage.reasoningTokens,
     totalTokens: usage.totalTokens,
-  }
+  };
 
-  round.status = 'complete'
-  round.finishReason = 'stop'
-  round.completedAt = completedAt
-  round.usage = { ...turn.usage }
-  round.requestPayloadJson = requestBody
+  round.status = "complete";
+  round.finishReason = "stop";
+  round.completedAt = completedAt;
+  round.usage = { ...turn.usage };
+  round.requestPayloadJson = requestBody;
   round.responseTraceJson = {
     completion,
     assistantSegments: streamedCompletion.segments,
-  }
+  };
 
   const reasoningSegments = streamedCompletion.segments
-    .filter((segment): segment is { kind: 'reasoning'; text: string } => segment.kind === 'reasoning')
-    .map(segment => normalizeSegmentText(segment.text))
-    .filter((text): text is string => text !== null)
+    .filter(
+      (segment): segment is { kind: "reasoning"; text: string } =>
+        segment.kind === "reasoning",
+    )
+    .map((segment) => normalizeSegmentText(segment.text))
+    .filter((text): text is string => text !== null);
   const contentSegments = streamedCompletion.segments
-    .filter((segment): segment is { kind: 'content'; text: string } => segment.kind === 'content')
-    .map(segment => normalizeSegmentText(segment.text))
-    .filter((text): text is string => text !== null)
+    .filter(
+      (segment): segment is { kind: "content"; text: string } =>
+        segment.kind === "content",
+    )
+    .map((segment) => normalizeSegmentText(segment.text))
+    .filter((text): text is string => text !== null);
 
-  const reasoningTokenMetadata: SegmentTokenMetadata[] = reasoningSegments.length === 0
-    ? []
-    : (
-        usage.reasoningTokens == null
-          ? reasoningSegments.map(() => ({
-              count: null,
-              source: 'unknown' as const,
-              confidence: 'unknown' as const,
-              note: 'Reasoning token count was not returned by the backend',
-              provenanceJson: null,
-            }))
-          : reasoningSegments.length === 1
-            ? [{
+  const reasoningTokenMetadata: SegmentTokenMetadata[] =
+    reasoningSegments.length === 0
+      ? []
+      : usage.reasoningTokens == null
+        ? reasoningSegments.map(() => ({
+            count: null,
+            source: "unknown" as const,
+            confidence: "unknown" as const,
+            note: "Reasoning token count was not returned by the backend",
+            provenanceJson: null,
+          }))
+        : reasoningSegments.length === 1
+          ? [
+              {
                 count: usage.reasoningTokens,
-                source: 'exact-api' as const,
-                confidence: 'exact' as const,
+                source: "exact-api" as const,
+                confidence: "exact" as const,
                 note: null,
-                provenanceJson: { derivedFrom: 'completion.usage.reasoning_tokens' },
-              }]
-            : []
-      )
-  const assistantContentTokenMetadata: SegmentTokenMetadata[] = contentSegments.length === 0
-    ? []
-    : (
-        usage.assistantContentTokens == null
-          ? contentSegments.map(() => ({
-              count: null,
-              source: 'unknown' as const,
-              confidence: 'unknown' as const,
-              note: 'Completion usage not returned by the backend',
-              provenanceJson: null,
-            }))
-          : contentSegments.length === 1
-            ? [{
+                provenanceJson: {
+                  derivedFrom: "completion.usage.reasoning_tokens",
+                },
+              },
+            ]
+          : [];
+  const assistantContentTokenMetadata: SegmentTokenMetadata[] =
+    contentSegments.length === 0
+      ? []
+      : usage.assistantContentTokens == null
+        ? contentSegments.map(() => ({
+            count: null,
+            source: "unknown" as const,
+            confidence: "unknown" as const,
+            note: "Completion usage not returned by the backend",
+            provenanceJson: null,
+          }))
+        : contentSegments.length === 1
+          ? [
+              {
                 count: usage.assistantContentTokens,
-                source: 'exact-api' as const,
-                confidence: 'exact' as const,
+                source: "exact-api" as const,
+                confidence: "exact" as const,
                 note: null,
-                provenanceJson: { derivedFrom: 'completion.usage.completion_tokens - completion.usage.reasoning_tokens' },
-              }]
-            : []
-      )
+                provenanceJson: {
+                  derivedFrom:
+                    "completion.usage.completion_tokens - completion.usage.reasoning_tokens",
+                },
+              },
+            ]
+          : [];
 
   if (reasoningSegments.length > 1) {
     const counts = allocateProportionalTokenCounts(
       usage.reasoningTokens ?? 0,
-      reasoningSegments.map(text => Math.max(1, text.length)),
-    )
-    reasoningTokenMetadata.splice(0, reasoningTokenMetadata.length, ...counts.map(count => ({
-      count,
-      source: 'estimated' as const,
-      confidence: 'estimated' as const,
-      note: 'Allocated proportionally from the exact round reasoning token total',
-      provenanceJson: {
-        derivedFrom: 'completion.usage.reasoning_tokens',
-        allocation: 'proportional-by-payload',
-      },
-    })))
+      reasoningSegments.map((text) => Math.max(1, text.length)),
+    );
+    reasoningTokenMetadata.splice(
+      0,
+      reasoningTokenMetadata.length,
+      ...counts.map((count) => ({
+        count,
+        source: "estimated" as const,
+        confidence: "estimated" as const,
+        note: "Allocated proportionally from the exact round reasoning token total",
+        provenanceJson: {
+          derivedFrom: "completion.usage.reasoning_tokens",
+          allocation: "proportional-by-payload",
+        },
+      })),
+    );
   }
 
   if (contentSegments.length > 1) {
     const counts = allocateProportionalTokenCounts(
       usage.assistantContentTokens ?? 0,
-      contentSegments.map(text => Math.max(1, text.length)),
-    )
-    assistantContentTokenMetadata.splice(0, assistantContentTokenMetadata.length, ...counts.map(count => ({
-      count,
-      source: 'estimated' as const,
-      confidence: 'estimated' as const,
-      note: 'Allocated proportionally from the exact assistant content token total',
-      provenanceJson: {
-        derivedFrom: 'completion.usage.completion_tokens - completion.usage.reasoning_tokens',
-        allocation: 'proportional-by-payload',
-      },
-    })))
+      contentSegments.map((text) => Math.max(1, text.length)),
+    );
+    assistantContentTokenMetadata.splice(
+      0,
+      assistantContentTokenMetadata.length,
+      ...counts.map((count) => ({
+        count,
+        source: "estimated" as const,
+        confidence: "estimated" as const,
+        note: "Allocated proportionally from the exact assistant content token total",
+        provenanceJson: {
+          derivedFrom:
+            "completion.usage.completion_tokens - completion.usage.reasoning_tokens",
+          allocation: "proportional-by-payload",
+        },
+      })),
+    );
   }
 
-  const assistantParts: PartRecord[] = []
-  let nextOrdinal = initialOrdinal + 1
-  let nextPartNumber = initialPartNumber + 1
+  const assistantParts: PartRecord[] = [];
+  let nextOrdinal = initialOrdinal + 1;
+  let nextPartNumber = initialPartNumber + 1;
 
   for (const segment of streamedCompletion.segments) {
-    if (segment.kind === 'reasoning') {
-      const text = normalizeSegmentText(segment.text)
+    if (segment.kind === "reasoning") {
+      const text = normalizeSegmentText(segment.text);
       if (!text) {
-        continue
+        continue;
       }
-      const tokenMetadata = reasoningTokenMetadata.shift()
+      const tokenMetadata = reasoningTokenMetadata.shift();
       assistantParts.push({
-        id: formatPartId(session.id, turnNumber, 1, nextPartNumber++, 'assistant-reasoning', input.ownerStepId ?? null),
+        id: formatPartId(
+          session.id,
+          turnNumber,
+          1,
+          nextPartNumber++,
+          "assistant-reasoning",
+          input.ownerStepId ?? null,
+        ),
         sessionId: session.id,
         turnId,
         roundId,
         parentPartId: null,
         ordinal: nextOrdinal++,
-        partType: 'assistant-reasoning',
-        roleLabel: 'assistant',
+        partType: "assistant-reasoning",
+        roleLabel: "assistant",
         payload: {
           text,
           json: null,
-          mimeType: 'text/plain',
+          mimeType: "text/plain",
           summary: null,
         },
         display: {
-          state: 'transcript',
+          state: "transcript",
           collapsedByDefault: true,
         },
         context: {
-          state: 'included',
-          note: 'Reasoning preserved in context for this turn; compaction will strip it after turn completion',
+          state: "included",
+          note: "Reasoning preserved in context for this turn; compaction will strip it after turn completion",
           strippedByCompactionAtTurnId: null,
         },
         tokens: {
           count: tokenMetadata?.count ?? null,
-          source: tokenMetadata?.source ?? 'unknown',
-          confidence: tokenMetadata?.confidence ?? 'unknown',
+          source: tokenMetadata?.source ?? "unknown",
+          confidence: tokenMetadata?.confidence ?? "unknown",
           note: tokenMetadata?.note ?? null,
         },
         provenanceJson: tokenMetadata?.provenanceJson ?? null,
         createdAt: completedAt,
         updatedAt: completedAt,
-      })
-      continue
+      });
+      continue;
     }
 
-    if (segment.kind === 'content') {
-      const text = normalizeSegmentText(segment.text)
+    if (segment.kind === "content") {
+      const text = normalizeSegmentText(segment.text);
       if (!text) {
-        continue
+        continue;
       }
-      const tokenMetadata = assistantContentTokenMetadata.shift()
+      const tokenMetadata = assistantContentTokenMetadata.shift();
       assistantParts.push({
-        id: formatPartId(session.id, turnNumber, 1, nextPartNumber++, 'assistant-content', input.ownerStepId ?? null),
+        id: formatPartId(
+          session.id,
+          turnNumber,
+          1,
+          nextPartNumber++,
+          "assistant-content",
+          input.ownerStepId ?? null,
+        ),
         sessionId: session.id,
         turnId,
         roundId,
         parentPartId: null,
         ordinal: nextOrdinal++,
-        partType: 'assistant-content',
-        roleLabel: 'assistant',
+        partType: "assistant-content",
+        roleLabel: "assistant",
         payload: {
           text,
           json: null,
-          mimeType: 'text/plain',
+          mimeType: "text/plain",
           summary: null,
         },
         display: {
-          state: 'transcript',
+          state: "transcript",
           collapsedByDefault: false,
         },
         context: {
-          state: 'included',
-          note: 'Assistant answer remains part of later model-visible history',
+          state: "included",
+          note: "Assistant answer remains part of later model-visible history",
           strippedByCompactionAtTurnId: null,
         },
         tokens: {
           count: tokenMetadata?.count ?? null,
-          source: tokenMetadata?.source ?? 'unknown',
-          confidence: tokenMetadata?.confidence ?? 'unknown',
+          source: tokenMetadata?.source ?? "unknown",
+          confidence: tokenMetadata?.confidence ?? "unknown",
           note: tokenMetadata?.note ?? null,
         },
         provenanceJson: tokenMetadata?.provenanceJson ?? null,
         createdAt: completedAt,
         updatedAt: completedAt,
-      })
+      });
     }
   }
 
@@ -570,112 +656,138 @@ export async function createModelOnlyTurn(
     sessionId: session.id,
     turnId,
     roundId,
-    kind: 'lmstudio-request' as const,
-    requestUrl: `${session.modelProfileSnapshot.connectionBaseUrl.replace(/\/$/, '')}/chat/completions`,
-    requestMethod: 'POST',
+    kind: "lmstudio-request" as const,
+    requestUrl: `${session.modelProfileSnapshot.connectionBaseUrl.replace(/\/$/, "")}/chat/completions`,
+    requestMethod: "POST",
     requestHeadersJson: {
-      'content-type': 'application/json',
-      accept: 'text/event-stream',
+      "content-type": "application/json",
+      accept: "text/event-stream",
     },
     requestBody: JSON.stringify(requestBody),
     responseStatus: 200,
     responseHeadersJson: null,
     responseBody: null,
     createdAt: startedAt,
-  }
+  };
 
   const rawResponseExchange = {
     id: createUuid(),
     sessionId: session.id,
     turnId,
     roundId,
-    kind: 'lmstudio-response' as const,
-    requestUrl: `${session.modelProfileSnapshot.connectionBaseUrl.replace(/\/$/, '')}/chat/completions`,
-    requestMethod: 'POST',
+    kind: "lmstudio-response" as const,
+    requestUrl: `${session.modelProfileSnapshot.connectionBaseUrl.replace(/\/$/, "")}/chat/completions`,
+    requestMethod: "POST",
     requestHeadersJson: null,
     requestBody: null,
     responseStatus: 200,
     responseHeadersJson: null,
     responseBody: streamedCompletion.rawResponseBody,
     createdAt: completedAt,
-  }
+  };
 
-  session.status = 'active'
-  session.updatedAt = completedAt
-  maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent)
-  const prefixMessages = requestMessages.slice(0, Math.max(0, requestMessages.length - 1))
-  const prefixTokens = prefixMessages.length > 0
-    ? await probeRequestPromptTokens(chatCompletionGateway, session, prefixMessages, undefined, {
-        database,
-        sessionId: session.id,
-        turnId,
-        roundId,
-      })
-    : 0
+  session.status = "active";
+  session.updatedAt = completedAt;
+  maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent);
+  const prefixMessages = requestMessages.slice(
+    0,
+    Math.max(0, requestMessages.length - 1),
+  );
+  const prefixTokens =
+    prefixMessages.length > 0
+      ? await probeRequestPromptTokens(
+          chatCompletionGateway,
+          session,
+          prefixMessages,
+          undefined,
+          {
+            database,
+            sessionId: session.id,
+            turnId,
+            roundId,
+          },
+        )
+      : 0;
   userPart.tokens = deriveExactDeltaTokenMetadata(
     turn.usage.promptTokens,
     prefixTokens,
-    'Derived as exact round prompt delta for the current model-only user message',
-    'Exact model-only user message tokens could not be derived',
-  )
+    "Derived as exact round prompt delta for the current model-only user message",
+    "Exact model-only user message tokens could not be derived",
+  );
   userPart.provenanceJson = {
-    derivedFrom: 'lmstudio.prompt_tokens.user-delta',
-  }
-  userPart.updatedAt = completedAt
+    derivedFrom: "lmstudio.prompt_tokens.user-delta",
+  };
+  userPart.updatedAt = completedAt;
 
   const finalizeTx = database.connection.transaction(() => {
-    updateTurnRecord(database.connection, turn)
-    updateRoundRecord(database.connection, round)
-    updatePartRecord(database.connection, userPart)
+    updateTurnRecord(database.connection, turn);
+    updateRoundRecord(database.connection, round);
+    updatePartRecord(database.connection, userPart);
     for (const part of assistantParts) {
-      insertPartRecord(database.connection, part)
+      insertPartRecord(database.connection, part);
     }
-    insertRawExchangeRecord(database.connection, rawRequestExchange)
-    insertRawExchangeRecord(database.connection, rawResponseExchange)
-    updateSessionRecord(database.connection, session)
-  })
-  finalizeTx()
+    insertRawExchangeRecord(database.connection, rawRequestExchange);
+    insertRawExchangeRecord(database.connection, rawResponseExchange);
+    updateSessionRecord(database.connection, session);
+  });
+  finalizeTx();
 
   // Apply context compaction (e.g. strip reasoning) now that the turn is fully persisted.
-  const compaction = applyContextCompaction(database.connection, turn, session.compactionStrategy)
-  Object.assign(turn, compaction.turn)
+  const compaction = applyContextCompaction(
+    database.connection,
+    turn,
+    session.compactionStrategy,
+  );
+  Object.assign(turn, compaction.turn);
 
-  const persistedParts = listPartRecordsBySession(database.connection, session.id)
-  assistantParts.forEach(part => emitEvent?.({
-    type: 'part-committed',
-    part,
-  }))
-  compaction.parts.forEach(part => emitEvent?.({
-    type: 'part-committed',
-    part,
-  }))
+  const persistedParts = listPartRecordsBySession(
+    database.connection,
+    session.id,
+  );
+  assistantParts.forEach((part) =>
+    emitEvent?.({
+      type: "part-committed",
+      part,
+    }),
+  );
+  compaction.parts.forEach((part) =>
+    emitEvent?.({
+      type: "part-committed",
+      part,
+    }),
+  );
   emitEvent?.({
-    type: 'round-committed',
+    type: "round-committed",
     round: { ...round },
-  })
+  });
   const trace = buildSessionTraceBundle({
     session,
     steps: listStepRecordsBySession(database.connection, session.id),
     turns: listTurnRecordsBySession(database.connection, session.id),
     rounds: listRoundRecordsBySession(database.connection, session.id),
     parts: persistedParts,
-    rawExchanges: listRawExchangeRecordsBySession(database.connection, session.id),
+    rawExchanges: listRawExchangeRecordsBySession(
+      database.connection,
+      session.id,
+    ),
     transcript: deriveTranscriptEntries(persistedParts),
     context: deriveContextEntries(persistedParts),
-  })
+  });
   emitEvent?.({
-    type: 'turn-committed',
+    type: "turn-committed",
     turn: { ...turn },
     trace,
-  })
+  });
 
   return {
     session,
     turn,
     round,
     rounds: [round],
-    parts: persistedParts.filter(part => part.turnId === turnId || part.turnId === compaction.step.id),
+    parts: persistedParts.filter(
+      (part) => part.turnId === turnId || part.turnId === compaction.step.id,
+    ),
     transcript: trace.transcript,
     context: trace.context,
-  }
+  };
 }

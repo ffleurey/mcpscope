@@ -29,7 +29,7 @@ import {
   type StreamCallbacks,
   type PromptProbeResult,
   type ProbeRawExchange,
-} from '../lmstudio/client.js'
+} from "../openai/client.js";
 
 export {
   createChatCompletion,
@@ -38,7 +38,7 @@ export {
   probePromptTokens,
   probePromptTokensDetailed,
   streamChatCompletion,
-}
+};
 
 export type {
   OaiChatCompletionResponse,
@@ -51,4 +51,4 @@ export type {
   StreamCallbacks,
   PromptProbeResult,
   ProbeRawExchange,
-}
+};
