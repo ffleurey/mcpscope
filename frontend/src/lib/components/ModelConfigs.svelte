@@ -6,6 +6,7 @@
   import type { LmStudioModel } from '../services/lmstudio'
   import type { ModelConfig } from '../types'
   import ModelConfigForm from './ModelConfigForm.svelte'
+import { formatContextSize } from '../modelConfigHelpers'
   import InlineAppError from './InlineAppError.svelte'
   import JsonDialog from './JsonDialog.svelte'
   import { AppError, toAppError } from '../errors'
@@ -239,16 +240,9 @@
           <div class="detail-row">
             <dt>Model Key</dt><dd><code>{config.modelKey}</code></dd>
           </div>
-          {#if live?.maxContextLength}
+          {#if config.contextSize}
             <div class="detail-row">
-              <dt>Context</dt>
-              <dd>
-                {#if isLmStudioConnection(config.connectionId) && live?.isLoaded && live.loadedContextLength}
-                  {live.loadedContextLength.toLocaleString()} tokens loaded (max {live.maxContextLength.toLocaleString()})
-                {:else}
-                  {live.maxContextLength.toLocaleString()} tokens
-                {/if}
-              </dd>
+              <dt>Context Size</dt><dd>{formatContextSize(config.contextSize)}</dd>
             </div>
           {/if}
           <div class="detail-row">

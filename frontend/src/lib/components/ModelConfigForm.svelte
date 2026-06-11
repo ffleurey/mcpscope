@@ -4,6 +4,7 @@
   import { listModels, loadModel } from '../services/lmstudio'
   import type { LmStudioModel } from '../services/lmstudio'
   import type { ModelConfig, LmStudioConnection } from '../types'
+import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
 
   interface Props {
     modelConfig?: ModelConfig | null
@@ -12,6 +13,8 @@
   }
 
   let { modelConfig = null, onSave, onCancel }: Props = $props()
+
+
 
   let name = $state('')
   let connectionId = $state('')
@@ -276,14 +279,9 @@
     <div class="context-size-row">
       <select id="mc-context-size" bind:value={contextSize}>
         <option value={undefined}>Auto (provider default)</option>
-        <option value={16384}>16K (16,384)</option>
-        <option value={24576}>24K (24,576)</option>
-        <option value={32768}>32K (32,768)</option>
-        <option value={49152}>48K (49,152)</option>
-        <option value={65536}>64K (65,536)</option>
-        <option value={81920}>80K (81,920)</option>
-        <option value={98304}>96K (98,304)</option>
-        <option value={131072}>128K (131,072)</option>
+        {#each CONTEXT_SIZE_PRESETS as preset (preset.value)}
+          <option value={preset.value}>{preset.label}</option>
+        {/each}
         <option value={-1}>Custom…</option>
       </select>
       {#if contextSize === -1}
