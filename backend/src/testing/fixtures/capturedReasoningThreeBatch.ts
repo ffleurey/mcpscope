@@ -75,6 +75,7 @@ export const capturedReasoningThreeBatchSession: SessionRecord = {
     systemPrompt: 'Use the available tools when they can answer directly. Follow explicit batching instructions exactly. Do not summarize until all required tool batches are complete.',
     temperature: 0,
     reasoning: 'on',
+    contextSize: null,
     createdAt: 1,
     updatedAt: 1,
   },

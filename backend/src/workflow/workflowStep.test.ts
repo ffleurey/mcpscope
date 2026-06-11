@@ -31,6 +31,7 @@ function makeSession(db: BackendDatabase, id: string): void {
       connectionBaseUrl: 'https://example.invalid/v1', apiKey: null,
       systemPrompt: 'Reply exactly.', temperature: 0,
       reasoning: null,
+      contextSize: null,
       createdAt: 1, updatedAt: 1,
     },
     mcpProfileSnapshots: [],
