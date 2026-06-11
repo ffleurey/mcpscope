@@ -21,6 +21,7 @@ export const modelConfigSchema = z.object({
   systemPrompt: z.string(),
   temperature: z.number(),
   reasoning: z.enum(["on", "off"]).optional(),
+  contextSize: z.number().int().positive().optional(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 });
@@ -161,6 +162,7 @@ export const modelProfileSnapshotSchema = z.object({
   systemPrompt: z.string(),
   temperature: z.number(),
   reasoning: z.enum(["on", "off"]).nullable(),
+  contextSize: z.number().int().positive().nullable().optional(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 });

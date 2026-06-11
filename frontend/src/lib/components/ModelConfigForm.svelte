@@ -20,6 +20,8 @@
   let temperature = $state(0.7)
   let systemPrompt = $state('')
   let reasoning = $state<'on' | 'off' | undefined>(undefined)
+  let contextSize = $state<number | undefined>(undefined)
+  let customContextSize = $state('')
   let seededModelConfig = $state<ModelConfig | null | undefined>(undefined)
 
   $effect(() => {
@@ -32,6 +34,8 @@
     temperature = modelConfig?.temperature ?? 0.7
     systemPrompt = modelConfig?.systemPrompt ?? ''
     reasoning = modelConfig?.reasoning
+    contextSize = modelConfig?.contextSize
+    customContextSize = modelConfig?.contextSize ? String(modelConfig.contextSize) : ''
   })
 
   let availableModels = $state<LmStudioModel[]>([])
@@ -159,6 +163,9 @@
   function handleSubmit() {
     if (!validate()) return
     const now = Date.now()
+    const resolvedContextSize = contextSize === -1
+      ? (customContextSize ? parseInt(customContextSize, 10) : undefined)
+      : contextSize
     onSave({
       id: modelConfig?.id ?? crypto.randomUUID(),
       name: name.trim(),
@@ -168,6 +175,7 @@
       systemPrompt: systemPrompt.trim(),
       temperature,
       reasoning: selectedModelMeta?.supportsReasoning ? reasoning : undefined,
+      contextSize: resolvedContextSize,
       createdAt: modelConfig?.createdAt ?? now,
       updatedAt: now,
     })
@@ -264,6 +272,32 @@
   {/if}
 
   <div class="field">
+    <label for="mc-context-size">Context Size <span class="field-hint">(leave empty for provider default){#if selectedModelMeta?.maxContextLength} — max {selectedModelMeta.maxContextLength.toLocaleString()}{/if}</span></label>
+    <div class="context-size-row">
+      <select id="mc-context-size" bind:value={contextSize}>
+        <option value={undefined}>Auto (provider default)</option>
+        <option value={16384}>16K (16,384)</option>
+        <option value={24576}>24K (24,576)</option>
+        <option value={32768}>32K (32,768)</option>
+        <option value={49152}>48K (49,152)</option>
+        <option value={65536}>64K (65,536)</option>
+        <option value={81920}>80K (81,920)</option>
+        <option value={98304}>96K (98,304)</option>
+        <option value={131072}>128K (131,072)</option>
+        <option value={-1}>Custom…</option>
+      </select>
+      {#if contextSize === -1}
+        <input
+          type="number"
+          min="1"
+          bind:value={customContextSize}
+          placeholder="Enter context size"
+        />
+      {/if}
+    </div>
+  </div>
+
+  <div class="field">
     <label for="mc-system-prompt">System Prompt</label>
     <textarea id="mc-system-prompt" bind:value={systemPrompt} rows="4" placeholder="Optional system prompt"></textarea>
   </div>
@@ -318,12 +352,14 @@
     font-size: 0.78rem;
     margin-top: 0.25rem;
   }
-  .model-select-row {
+  .model-select-row, .context-size-row {
     display: flex;
     gap: 0.5rem;
     align-items: center;
   }
   .model-select-row select { flex: 1; }
+  .context-size-row input { width: 160px; }
+  .context-size-row select { flex: 1; }
   .loading-hint, .no-connections {    font-size: 0.82rem;
     color: var(--text-muted);
     margin: 0.25rem 0 0;

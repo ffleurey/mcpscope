@@ -19,6 +19,7 @@ export interface ModelConfig {
   systemPrompt: string;
   temperature: number;
   reasoning?: "on" | "off";
+  contextSize?: number;
   createdAt: number;
   updatedAt: number;
 }
