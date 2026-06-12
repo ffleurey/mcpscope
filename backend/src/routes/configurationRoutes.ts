@@ -29,6 +29,7 @@ import {
   loadModel as loadLmModel,
   unloadModel as unloadLmModel,
 } from "../services/lmstudio/client.js";
+import { listUserModels } from "../services/openrouter/client.js";
 import { getOllamaModelDetails } from "../services/ollama/client.js";
 import type { RouteDeps } from "./types.js";
 
@@ -236,9 +237,11 @@ export function registerConfigurationRoutes({
       .parse(request.body);
     const label = providerLabel(providerType);
     try {
-      return {
-        models: await listModelsWithStatus(baseUrl, apiKey ?? undefined),
-      };
+      const models =
+        providerType === "openrouter"
+          ? await listUserModels(baseUrl, apiKey ?? undefined)
+          : await listModelsWithStatus(baseUrl, apiKey ?? undefined);
+      return { models };
     } catch (e) {
       app.log.warn(
         { baseUrl, err: e instanceof Error ? e.message : String(e) },
