@@ -243,19 +243,11 @@ import { formatContextSize } from '../modelConfigHelpers'
           <div class="detail-row">
             <dt>Model Key</dt><dd><code>{config.modelKey}</code></dd>
           </div>
-          <div class="detail-row">
-            <dt>Context Size</dt>
-            <dd>
-              {#if config.contextSize}
-                {formatContextSize(config.contextSize)}
-              {:else}
-                <span class="text-muted">Auto</span>
-              {/if}
-              {#if live?.isLoaded && live.loadedContextLength}
-                <span class="badge-loaded-context">● loaded: {live.loadedContextLength.toLocaleString()}</span>
-              {/if}
-            </dd>
-          </div>
+          {#if config.contextSize}
+            <div class="detail-row">
+              <dt>Context Size</dt><dd>{formatContextSize(config.contextSize)}</dd>
+            </div>
+          {/if}
           <div class="detail-row">
             <dt>Temperature</dt><dd><span class="badge">{config.temperature}</span></dd>
           </div>
