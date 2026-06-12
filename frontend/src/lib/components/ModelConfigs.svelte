@@ -213,6 +213,9 @@ import { formatContextSize } from '../modelConfigHelpers'
           <div class="card-actions">
             {#if isLmStudioConnection(config.connectionId) && live?.isLoaded}
               <span class="badge-loaded">● loaded</span>
+              {#if live.loadedContextLength}
+                <span class="badge-loaded-context">{live.loadedContextLength.toLocaleString()} ctx</span>
+              {/if}
               <button class="btn btn-sm" onclick={() => handleEject(config)} disabled={!!busy}>
                 {busy === 'ejecting' ? 'Ejecting…' : 'Eject'}
               </button>
@@ -240,11 +243,19 @@ import { formatContextSize } from '../modelConfigHelpers'
           <div class="detail-row">
             <dt>Model Key</dt><dd><code>{config.modelKey}</code></dd>
           </div>
-          {#if config.contextSize}
-            <div class="detail-row">
-              <dt>Context Size</dt><dd>{formatContextSize(config.contextSize)}</dd>
-            </div>
-          {/if}
+          <div class="detail-row">
+            <dt>Context Size</dt>
+            <dd>
+              {#if config.contextSize}
+                {formatContextSize(config.contextSize)}
+              {:else}
+                <span class="text-muted">Auto</span>
+              {/if}
+              {#if live?.isLoaded && live.loadedContextLength}
+                <span class="badge-loaded-context">● loaded: {live.loadedContextLength.toLocaleString()}</span>
+              {/if}
+            </dd>
+          </div>
           <div class="detail-row">
             <dt>Temperature</dt><dd><span class="badge">{config.temperature}</span></dd>
           </div>
@@ -328,7 +339,9 @@ import { formatContextSize } from '../modelConfigHelpers'
   }
   .card-actions { display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
   .badge-loaded { font-size: 0.75rem; color: #4ade80; font-weight: 500; }
+  .badge-loaded-context { font-size: 0.75rem; color: #4ade80; font-weight: 500; white-space: nowrap; }
   .badge-unloaded { font-size: 0.75rem; color: var(--text-muted); }
+  .text-muted { color: var(--text-muted); }
   .card-details { margin: 0; }
   .detail-row {
     display: flex;
