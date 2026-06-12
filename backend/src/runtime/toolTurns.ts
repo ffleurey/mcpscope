@@ -28,7 +28,7 @@ import {
   updateTurnRecord,
 } from '../persistence/repository.js'
 import { formatPartId, formatRoundId, formatSetupPartId, formatTurnId } from '../domain/hierarchicalIds.js'
-import { sessionReasoningBody, type ChatCompletionGateway, type RuntimeTurnResult } from './modelTurns.js'
+import { sessionReasoningBody, sessionContextBody, type ChatCompletionGateway, type RuntimeTurnResult } from './modelTurns.js'
 import type { ApiMessage } from '../domain/selectors.js'
 import type { McpRawExchange, McpToolCallResult, McpToolsListResult } from '../services/mcp/httpClient.js'
 import { buildSessionTraceBundle } from '../domain/trace.js'
@@ -1341,6 +1341,7 @@ export async function createToolEnabledTurn(
       messages: requestMessages,
       tools: lmTools,
       ...sessionReasoningBody(session),
+      ...sessionContextBody(session),
     }
 
     currentRound.requestPayloadJson = requestBody

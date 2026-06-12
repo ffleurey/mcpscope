@@ -163,6 +163,14 @@ export function sessionReasoningBody(
   return { reasoning: session.modelProfileSnapshot.reasoning };
 }
 
+export function sessionContextBody(
+  session: SessionRecord,
+): Record<string, unknown> {
+  const contextSize = session.modelProfileSnapshot.contextSize;
+  if (!contextSize) return {};
+  return { num_ctx: contextSize };
+}
+
 function createUuid(): string {
   return crypto.randomUUID();
 }
@@ -324,6 +332,7 @@ export async function createModelOnlyTurn(
     },
     messages: requestMessages,
     ...sessionReasoningBody(session),
+    ...sessionContextBody(session),
   };
 
   const initialOrdinal = getNextPartOrdinal(database.connection, session.id);
