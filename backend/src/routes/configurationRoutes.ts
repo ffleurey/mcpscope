@@ -257,15 +257,16 @@ export function registerConfigurationRoutes({
   });
 
   app.post("/api/lm-connections/models/load", async (request, reply) => {
-    const { baseUrl, apiKey, modelKey } = z
+    const { baseUrl, apiKey, modelKey, contextSize } = z
       .object({
         baseUrl: z.string().url(),
         apiKey: z.string().nullable().optional(),
         modelKey: z.string().min(1),
+        contextSize: z.number().int().positive().optional(),
       })
       .parse(request.body);
     try {
-      await loadLmModel(baseUrl, apiKey ?? undefined, modelKey);
+      await loadLmModel(baseUrl, apiKey ?? undefined, modelKey, contextSize);
       return { ok: true };
     } catch (e) {
       app.log.warn(

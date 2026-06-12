@@ -328,10 +328,11 @@ export function loadLmConnectionModel(
   baseUrl: string,
   modelKey: string,
   apiKey?: string | null,
+  contextSize?: number,
 ) {
   return request("/api/lm-connections/models/load", {
     method: "POST",
-    body: { baseUrl, modelKey, apiKey: apiKey ?? null },
+    body: { baseUrl, modelKey, apiKey: apiKey ?? null, contextSize },
     schema: lmConnectionModelMutationResponseSchema,
   });
 }

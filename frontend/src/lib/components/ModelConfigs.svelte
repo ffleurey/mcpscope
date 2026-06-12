@@ -77,7 +77,7 @@ import { formatContextSize } from '../modelConfigHelpers'
     nextCardError.delete(config.id)
     cardError = nextCardError
     try {
-      await loadModel(conn.baseUrl, config.modelKey, conn.apiKey)
+      await loadModel(conn.baseUrl, config.modelKey, conn.apiKey, config.contextSize)
       await fetchAllStatuses()
     } catch (e) {
       cardError = new Map(cardError).set(config.id, toAppError(e))

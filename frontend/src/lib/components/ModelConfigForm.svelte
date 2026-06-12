@@ -139,10 +139,13 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   async function handleLoadModel() {
     const conn = $lmConnections.find(c => c.id === connectionId)
     if (!conn || !modelKey) return
+    const resolvedContextSize = contextSize === -1
+      ? (customContextSize ? parseInt(customContextSize, 10) : undefined)
+      : contextSize
     modelLoading = true
     modelLoadError = null
     try {
-      await loadModel(conn.baseUrl, modelKey, conn.apiKey)
+      await loadModel(conn.baseUrl, modelKey, conn.apiKey, resolvedContextSize)
       await fetchModels(connectionId)
     } catch (e) {
       modelLoadError = e instanceof Error ? e.message : String(e)

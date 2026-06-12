@@ -79,8 +79,9 @@ export async function loadModel(
   baseUrl: string,
   modelKey: string,
   apiKey?: string,
+  contextSize?: number,
 ): Promise<void> {
-  await loadLmConnectionModel(baseUrl, modelKey, apiKey ?? null);
+  await loadLmConnectionModel(baseUrl, modelKey, apiKey ?? null, contextSize);
 }
 
 export async function unloadModel(

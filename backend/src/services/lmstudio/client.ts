@@ -209,8 +209,13 @@ export async function loadModel(
   baseUrl: string,
   apiKey: string | undefined,
   modelKey: string,
+  contextSize?: number,
 ): Promise<void> {
   const url = `${rootUrl(baseUrl)}/api/v1/models/load`;
+  const body: Record<string, unknown> = { model: modelKey };
+  if (contextSize !== undefined) {
+    body.context_length = contextSize;
+  }
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -218,7 +223,7 @@ export async function loadModel(
       Accept: "application/json",
       ...authHeaders(apiKey),
     },
-    body: JSON.stringify({ model: modelKey }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
     const text = await response.text();
