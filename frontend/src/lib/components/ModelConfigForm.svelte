@@ -3,7 +3,7 @@
   import { lmConnections } from '../connectionStore'
   import { listModels, loadModel } from '../services/lmstudio'
   import type { LmStudioModel } from '../services/lmstudio'
-  import type { ModelConfig, LmStudioConnection } from '../types'
+  import type { ModelConfig } from '../types'
 import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
 
   interface Props {
