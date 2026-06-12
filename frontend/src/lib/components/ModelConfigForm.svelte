@@ -295,6 +295,9 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
           placeholder="Enter context size"
         />
       {/if}
+      {#if isLmStudio && selectedModelMeta?.isLoaded && selectedModelMeta.loadedContextLength}
+        <span class="loaded-context-indicator">● Loaded: {selectedModelMeta.loadedContextLength.toLocaleString()} tokens</span>
+      {/if}
     </div>
   </div>
 
@@ -361,6 +364,12 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   .model-select-row select { flex: 1; }
   .context-size-row input { width: 160px; }
   .context-size-row select { flex: 1; }
+  .loaded-context-indicator {
+    font-size: 0.78rem;
+    color: #4ade80;
+    font-weight: 500;
+    white-space: nowrap;
+  }
   .loading-hint, .no-connections {    font-size: 0.82rem;
     color: var(--text-muted);
     margin: 0.25rem 0 0;
