@@ -8,13 +8,23 @@ All provider-specific logic is consolidated in `backend/src/services/provider/`.
 
 ## Detection
 
-Provider detection happens via `detectProvider(baseUrl)` in `backend/src/services/provider/detection.ts`.
+Provider detection happens via `detectProvider(baseUrl, explicitProviderType?)` in `backend/src/services/provider/detection.ts`.
 
-| Provider | Detection method |
-|----------|----------------|
-| **OpenRouter** | URL contains `openrouter` |
-| **Ollama** | URL contains `ollama` or port `:11434` |
-| **LM Studio** | Default fallback for unknown URLs |
+Each [LM Connection](backend/src/domain/configuration.ts) carries a `providerType` field (`"lmstudio"`, `"openrouter"`, or `"ollama"` set by the user when creating the connection). This is the authoritative source.
+
+During session creation, `providerType` is copied from the connection into the [modelProfileSnapshot](backend/src/domain/model.ts). All runtime code passes this explicit type to `detectProvider`, avoiding URL sniffing.
+
+| Priority | Source |
+|----------|--------|
+| **1** (authoritative) | `modelProfileSnapshot.providerType` (from connection config) |
+| **2** (fallback) | URL patterns for sessions created before `providerType` was added |
+
+### Adding a new provider type
+
+1. Add the value to `providerTypeValues` in `backend/src/domain/configuration.ts`
+2. Add a pattern to `URL_PATTERNS` in `detection.ts` (optional, for backward compat)
+3. Update the `ProviderType` union in `detection.ts` if needed
+4. Add a `case` in `buildReasoningParams`, `normalizeStreamUsage`, `getProviderContextLength`, and `probeRequestPromptTokens`
 
 ---
 
@@ -106,7 +116,7 @@ Resolution order:
 
 ## Adding a new provider
 
-1. **Detection**: Add a pattern to `URL_PATTERNS` in `detection.ts`
+1. **Connection type**: Add the value to `providerTypeValues` in `configuration.ts` and to the `ProviderType` union in `detection.ts`
 2. **Reasoning params**: Add a `case` in `buildReasoningParams` in `reasoning.ts`
 3. **Token parsing**: Add a `case` in `normalizeStreamUsage` in `tokenUsage.ts` and implement a provider-specific normalizer
 4. **Context length**: Add resolution in `getProviderContextLength` in `contextLength.ts`
