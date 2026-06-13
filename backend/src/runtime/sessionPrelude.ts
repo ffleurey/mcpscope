@@ -10,8 +10,10 @@ import type { ChatCompletionGateway } from "./modelTurns.js";
 import type { ApiMessage } from "../domain/selectors.js";
 import { buildLmToolDefinitions } from "../domain/selectors.js";
 import { probeRequestPromptTokens } from "./promptTokenProbing.js";
-import { listModels } from "../services/lmstudio/client.js";
-import { getOllamaContextLength } from "../services/ollama/client.js";
+import {
+  detectProvider,
+  getProviderContextLength,
+} from "../services/provider/index.js";
 
 function now(): number {
   return Date.now();
@@ -179,37 +181,21 @@ export async function ensureSessionPreludeTokenMetadata(
     }
   }
 
-  // For hosted providers that don't expose a native context-length API, query
-  // the standard OAI models endpoint to get the context window for this model.
+  // For providers where the native gateway didn't return context length,
+  // try the provider-specific fallback (Ollama /api/show, OAI /v1/models, etc.).
   if (session.loadedContextLength == null) {
-    try {
-      const modelList = await listModels(
-        session.modelProfileSnapshot.connectionBaseUrl,
-        session.modelProfileSnapshot.apiKey ?? undefined,
-      );
-      const match = modelList.data?.find(
-        (m) => m.id === session.modelProfileSnapshot.modelKey,
-      );
-      if (match?.context_length) {
-        session.loadedContextLength = match.context_length;
-      }
-    } catch {
-      // Fallback: unable to determine context length
-    }
-  }
-
-  // For Ollama, try the native /api/show endpoint which reliably returns
-  // context_length in model_info.
-  if (session.loadedContextLength == null) {
-    const url = session.modelProfileSnapshot.connectionBaseUrl.toLowerCase();
-    if (url.includes("ollama")) {
-      const contextLength = await getOllamaContextLength(
-        session.modelProfileSnapshot.connectionBaseUrl,
-        session.modelProfileSnapshot.modelKey,
-      );
-      if (contextLength != null) {
-        session.loadedContextLength = contextLength;
-      }
+    const provider = detectProvider(
+      session.modelProfileSnapshot.connectionBaseUrl,
+    );
+    const contextLength = await getProviderContextLength(
+      session.modelProfileSnapshot.connectionBaseUrl,
+      session.modelProfileSnapshot.apiKey ?? undefined,
+      session.modelProfileSnapshot.modelKey,
+      provider,
+      session.modelProfileSnapshot.contextSize,
+    );
+    if (contextLength != null) {
+      session.loadedContextLength = contextLength;
     }
   }
 

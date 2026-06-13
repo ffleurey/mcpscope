@@ -39,7 +39,11 @@ import {
   formatTurnId,
 } from "../domain/hierarchicalIds.js";
 import {
-  sessionReasoningBody,
+  buildReasoningParams,
+  detectProvider,
+  normalizeStreamUsage,
+} from "../services/provider/index.js";
+import {
   sessionContextBody,
   type ChatCompletionGateway,
   type RuntimeTurnResult,
@@ -54,7 +58,6 @@ import { buildSessionTraceBundle } from "../domain/trace.js";
 import {
   allocateProportionalTokenCounts,
   deriveExactDeltaTokenMetadata,
-  normalizeUsageFromResponse,
 } from "../domain/tokenAccounting.js";
 import {
   deriveExactToolPreludeTokens,
@@ -940,15 +943,39 @@ function buildReasoningPartsFromSegments(
     return [];
   }
 
+  // When the API doesn't report reasoning tokens, estimate from text length.
+  // Uses ~4 chars per token, matching the heuristic used in normalizeStreamUsage
+  // for providers like Ollama that don't report reasoning tokens separately.
   const tokenMetadata =
     reasoningTokens == null
-      ? reasoningSegments.map(() => ({
-          count: null,
-          source: "unknown" as const,
-          confidence: "unknown" as const,
-          note: "Reasoning token count was not returned by the backend",
-          provenanceJson: null,
-        }))
+      ? reasoningSegments.length === 1
+        ? [
+            {
+              count: Math.max(1, Math.round(reasoningSegments[0]!.length / 4)),
+              source: "estimated" as const,
+              confidence: "estimated" as const,
+              note: "Estimated from thinking text length (4 chars/token heuristic)",
+              provenanceJson: {
+                derivedFrom: "estimated-from-text-length",
+              },
+            },
+          ]
+        : allocateProportionalTokenCounts(
+            reasoningSegments.reduce(
+              (sum, text) => sum + Math.max(1, Math.round(text.length / 4)),
+              0,
+            ),
+            reasoningSegments.map((text) => Math.max(1, text.length)),
+          ).map((count) => ({
+            count,
+            source: "estimated" as const,
+            confidence: "estimated" as const,
+            note: "Estimated from thinking text length and allocated proportionally",
+            provenanceJson: {
+              derivedFrom: "estimated-from-text-length",
+              allocation: "proportional-by-payload",
+            },
+          }))
       : reasoningSegments.length === 1
         ? [
             {
@@ -1646,7 +1673,10 @@ export async function createToolEnabledTurn(
       },
       messages: requestMessages,
       tools: lmTools,
-      ...sessionReasoningBody(session),
+      ...buildReasoningParams(
+        session.modelProfileSnapshot.reasoning,
+        session.modelProfileSnapshot.connectionBaseUrl,
+      ),
       ...sessionContextBody(session),
     };
 
@@ -1673,7 +1703,20 @@ export async function createToolEnabledTurn(
 
     const completedAt = now();
     const finishReason = completion.choices[0]?.finish_reason;
-    const usage = normalizeUsageFromResponse(completion);
+    const provider = detectProvider(
+      session.modelProfileSnapshot.connectionBaseUrl,
+    );
+    const reasoningText = streamedCompletion.segments
+      .filter(
+        (s): s is { kind: "reasoning"; text: string } => s.kind === "reasoning",
+      )
+      .map((s) => s.text)
+      .join("");
+    const usage = normalizeStreamUsage(
+      streamedCompletion.rawResponseBody,
+      provider,
+      reasoningText || undefined,
+    );
 
     currentRound.status = "complete";
     currentRound.finishReason =

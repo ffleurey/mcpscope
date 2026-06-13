@@ -9,6 +9,11 @@
   import TracePartBlock from './TracePartBlock.svelte'
   import { highlightStructuredText } from '../textHighlight'
 
+  function fmtTokenCount(count: number | null, isEstimated: boolean): string {
+    if (count === null) return ''
+    return isEstimated ? `~${count.toLocaleString()} tokens` : `${count.toLocaleString()} tokens`
+  }
+
   interface Props {
     parts: PartRecord[]
     roundStream?: StreamingRoundState | null
@@ -93,6 +98,10 @@
       .replace(/(?:\n[ \t]*)+$/, '')
 
     return normalized.length > 0 ? normalized : null
+  }
+
+  function isEstimated(part: PartRecord | null): boolean {
+    return part !== null && (part.tokens.confidence === 'estimated' || part.tokens.confidence === 'unknown')
   }
 
   const sortedParts = $derived([...parts].sort((left, right) => left.ordinal - right.ordinal))
@@ -194,7 +203,7 @@
             <IdBadge id={item.part.id} />
           {/if}
           {#if item.part.tokens.count !== null}
-            <span class="token-pill">{item.part.tokens.count.toLocaleString()} tokens</span>
+            <span class="token-pill">{fmtTokenCount(item.part.tokens.count, isEstimated(item.part))}</span>
           {/if}
         </div>
         {#if assistantText}
@@ -215,7 +224,7 @@
               <IdBadge id={item.part.id} />
             {/if}
             {#if item.part.tokens.count !== null}
-              <span class="token-pill">{item.part.tokens.count.toLocaleString()} tokens</span>
+              <span class="token-pill">{fmtTokenCount(item.part.tokens.count, isEstimated(item.part))}</span>
             {/if}
           </span>
         </summary>
@@ -244,7 +253,7 @@
               <span class="status-pill">waiting</span>
             {/if}
             {#if totalTokens !== null}
-              <span class="token-pill">{totalTokens.toLocaleString()} tokens</span>
+              <span class="token-pill">{fmtTokenCount(totalTokens, isEstimated(item.toolCall) || item.results.some(r => isEstimated(r)))}</span>
             {/if}
           </span>
         </summary>
@@ -394,7 +403,7 @@
   }
 
   .collapsed-summary::before {
-    content: '▶';
+    content: '\25B6';
     font-size: 0.6rem;
     color: var(--text-muted);
     transition: transform 0.15s;

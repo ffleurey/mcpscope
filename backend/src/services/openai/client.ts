@@ -45,6 +45,8 @@ export interface OaiChatCompletionResponse {
       role?: string;
       content?: string | null;
       reasoning_content?: string | null;
+      reasoning?: string | null; // OpenRouter non-streaming
+      thinking?: string | null; // Ollama OAI-compat non-streaming
       tool_calls?: Array<{
         id?: string;
         type?: string;
@@ -68,6 +70,8 @@ export interface OaiChatCompletionChunk {
       role?: string;
       content?: string | null;
       reasoning_content?: string | null;
+      reasoning?: string | null; // OpenRouter streaming
+      thinking?: string | null; // Ollama OAI-compat streaming
       tool_calls?: Array<{
         index?: number;
         id?: string;
@@ -155,9 +159,10 @@ function buildUrl(baseUrl: string, relativePath: string): string {
  *
  * Different providers use different field names for reasoning/thinking content:
  * - OpenAI standard / LM Studio: `reasoning_content`
+ * - OpenRouter streaming: `reasoning`
  * - Ollama (native format via OAI-compat): `thinking`
  *
- * This helper checks both so the parser is provider-agnostic.
+ * This helper checks all known field names so the parser is provider-agnostic.
  */
 export function extractReasoningContent(
   obj: Record<string, unknown> | undefined | null,
@@ -165,6 +170,8 @@ export function extractReasoningContent(
   if (!obj) return null;
   const rc = obj["reasoning_content"];
   if (typeof rc === "string" && rc.length > 0) return rc;
+  const r = obj["reasoning"];
+  if (typeof r === "string" && r.length > 0) return r;
   const t = obj["thinking"];
   if (typeof t === "string" && t.length > 0) return t;
   return null;

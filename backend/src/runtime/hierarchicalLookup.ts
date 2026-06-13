@@ -117,6 +117,8 @@ function buildPartNode(
     id: part.id,
     type: publicType,
     token_count: tokenCount,
+    token_source: part.tokens.source,
+    token_confidence: part.tokens.confidence,
     context_state: contextState,
   };
 

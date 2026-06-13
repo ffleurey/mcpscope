@@ -14,7 +14,9 @@ function segmentsFromCompletion(
 
   const reasoningText = responseMessage?.reasoning_content?.length
     ? responseMessage.reasoning_content
-    : (responseMessage as { thinking?: string } | undefined)?.thinking;
+    : (responseMessage as Record<string, unknown>)?.reasoning
+      ? String((responseMessage as Record<string, unknown>).reasoning)
+      : (responseMessage as { thinking?: string } | undefined)?.thinking;
   if (reasoningText?.length) {
     segments.push({
       kind: "reasoning",

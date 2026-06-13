@@ -52,7 +52,6 @@ import { buildSessionTraceBundle } from "../domain/trace.js";
 import {
   allocateProportionalTokenCounts,
   deriveExactDeltaTokenMetadata,
-  normalizeUsageFromResponse,
 } from "../domain/tokenAccounting.js";
 import {
   createSystemPromptPart,
@@ -66,6 +65,11 @@ import {
   DEFAULT_SESSION_TITLE,
   maybeApplyAutomaticSessionTitle,
 } from "./sessionTitles.js";
+import {
+  buildReasoningParams,
+  detectProvider,
+  normalizeStreamUsage,
+} from "../services/provider/index.js";
 
 export interface ChatCompletionGateway {
   createChatCompletion(
@@ -141,26 +145,6 @@ type SegmentTokenMetadata = {
 
 function normalizeSegmentText(text: string): string | null {
   return text.trim().length > 0 ? text : null;
-}
-
-export function sessionReasoningBody(
-  session: SessionRecord,
-): Record<string, unknown> {
-  if (!session.modelProfileSnapshot.reasoning) return {};
-  const url = session.modelProfileSnapshot.connectionBaseUrl.toLowerCase();
-  if (url.includes("openrouter")) {
-    // OpenRouter expects reasoning to be an object and uses include_reasoning
-    // to control whether reasoning_content appears in the stream.
-    return { reasoning: {}, include_reasoning: true };
-  }
-  if (url.includes("ollama")) {
-    // Ollama handles reasoning natively per model — no special param needed.
-    // Sending reasoning: "on" would be an LM Studio-specific parameter Ollama
-    // doesn't understand.
-    return {};
-  }
-  // LM Studio uses reasoning: "on"|"off" as a string.
-  return { reasoning: session.modelProfileSnapshot.reasoning };
 }
 
 export function sessionContextBody(
@@ -331,7 +315,10 @@ export async function createModelOnlyTurn(
       include_usage: true,
     },
     messages: requestMessages,
-    ...sessionReasoningBody(session),
+    ...buildReasoningParams(
+      session.modelProfileSnapshot.reasoning,
+      session.modelProfileSnapshot.connectionBaseUrl,
+    ),
     ...sessionContextBody(session),
   };
 
@@ -425,7 +412,20 @@ export async function createModelOnlyTurn(
     );
   }
 
-  const usage = normalizeUsageFromResponse(completion);
+  const provider = detectProvider(
+    session.modelProfileSnapshot.connectionBaseUrl,
+  );
+  const reasoningText = streamedCompletion.segments
+    .filter(
+      (s): s is { kind: "reasoning"; text: string } => s.kind === "reasoning",
+    )
+    .map((s) => s.text)
+    .join("");
+  const usage = normalizeStreamUsage(
+    streamedCompletion.rawResponseBody,
+    provider,
+    reasoningText || undefined,
+  );
 
   turn.status = "complete";
   turn.completedAt = completedAt;
@@ -466,13 +466,37 @@ export async function createModelOnlyTurn(
     reasoningSegments.length === 0
       ? []
       : usage.reasoningTokens == null
-        ? reasoningSegments.map(() => ({
-            count: null,
-            source: "unknown" as const,
-            confidence: "unknown" as const,
-            note: "Reasoning token count was not returned by the backend",
-            provenanceJson: null,
-          }))
+        ? reasoningSegments.length === 1
+          ? [
+              {
+                count: Math.max(
+                  1,
+                  Math.round(reasoningSegments[0]!.length / 4),
+                ),
+                source: "estimated" as const,
+                confidence: "estimated" as const,
+                note: "Estimated from thinking text length (4 chars/token heuristic)",
+                provenanceJson: {
+                  derivedFrom: "estimated-from-text-length",
+                },
+              },
+            ]
+          : allocateProportionalTokenCounts(
+              reasoningSegments.reduce(
+                (sum, text) => sum + Math.max(1, Math.round(text.length / 4)),
+                0,
+              ),
+              reasoningSegments.map((text) => Math.max(1, text.length)),
+            ).map((count) => ({
+              count,
+              source: "estimated" as const,
+              confidence: "estimated" as const,
+              note: "Estimated from thinking text length and allocated proportionally",
+              provenanceJson: {
+                derivedFrom: "estimated-from-text-length",
+                allocation: "proportional-by-payload",
+              },
+            }))
         : reasoningSegments.length === 1
           ? [
               {

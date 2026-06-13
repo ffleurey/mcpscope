@@ -1,40 +1,51 @@
-import { z } from 'zod'
-import { OperationError } from './errors.js'
+import { z } from "zod";
+import { OperationError } from "./errors.js";
 import {
   getSessionCreationDefaults,
   listLmConnections,
   listMcpServerProfiles,
   listModelConfigs,
-} from '../persistence/repository.js'
-import { createSession, SessionIdConflictError, SessionIdGenerationError, SessionIdInputError } from '../runtime/modelTurns.js'
-import type { McpProfileSnapshot } from '../domain/model.js'
-import type { OperationContext } from './context.js'
+} from "../persistence/repository.js";
+import {
+  createSession,
+  SessionIdConflictError,
+  SessionIdGenerationError,
+  SessionIdInputError,
+} from "../runtime/modelTurns.js";
+import type { McpProfileSnapshot } from "../domain/model.js";
+import type { OperationContext } from "./context.js";
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
 export const createInputSchema = z.object({
-  title: z.string().min(1).describe('Session title'),
-  id: z.string().optional().describe('Optional explicit 4-char session ID (A-Z 2-9, no O/I/0/1)'),
-  compaction: z.enum(['none', 'strip-reasoning']).optional().describe(
-    'Compaction strategy applied after each turn. Defaults to strip-reasoning.',
-  ),
-})
+  title: z.string().min(1).describe("Session title"),
+  id: z
+    .string()
+    .optional()
+    .describe("Optional explicit 4-char session ID (A-Z 2-9, no O/I/0/1)"),
+  compaction: z
+    .enum(["none", "strip-reasoning"])
+    .optional()
+    .describe(
+      "Compaction strategy applied after each turn. Defaults to strip-reasoning.",
+    ),
+});
 
-export type CreateInput = z.infer<typeof createInputSchema>
+export type CreateInput = z.infer<typeof createInputSchema>;
 
 export interface CreateResult {
-  api_version: 1
+  api_version: 1;
   session: {
-    id: string
-    title: string
-    status: string
-    init_status: string
-    model: { id: string; name: string }
-    mcp: { id: string; name: string }[]
-    compaction_strategy: string
-    created_at: number
-    updated_at: number
-  }
+    id: string;
+    title: string;
+    status: string;
+    init_status: string;
+    model: { id: string; name: string };
+    mcp: { id: string; name: string }[];
+    compaction_strategy: string;
+    created_at: number;
+    updated_at: number;
+  };
 }
 
 /** Zod output shape for MCP structured output. Mirrors CreateResult. */
@@ -51,116 +62,157 @@ export const createOutputSchema = {
     created_at: z.number(),
     updated_at: z.number(),
   }),
-}
+};
 
 export const createOperation = {
-  id: 'create' as const,
+  id: "create" as const,
   description:
-    'Create a new session using backend-owned defaults (model config, LM connection, MCP profile). '
-    + 'Returns immediately; session may still be initializing. '
-    + 'Poll with status to wait for state=ready before sending a prompt.',
+    "Create a new session using backend-owned defaults (model config, LM connection, MCP profile). " +
+    "Returns immediately; session may still be initializing. " +
+    "Poll with status to wait for state=ready before sending a prompt.",
   schema: createInputSchema,
   outputSchema: createOutputSchema,
-  async execute(ctx: OperationContext, input: CreateInput): Promise<CreateResult> {
-    const { db, logger } = ctx
-    let mcpSnapshotsRef: McpProfileSnapshot[] = []
+  async execute(
+    ctx: OperationContext,
+    input: CreateInput,
+  ): Promise<CreateResult> {
+    const { db, logger } = ctx;
+    let mcpSnapshotsRef: McpProfileSnapshot[] = [];
 
     type TransactionResult =
-      | { kind: 'validation_error'; message: string; code: string }
-      | { kind: 'id_input_error'; error: SessionIdInputError }
-      | { kind: 'id_conflict_error'; error: SessionIdConflictError }
-      | { kind: 'id_generation_error'; error: SessionIdGenerationError }
-      | { kind: 'created'; session: ReturnType<typeof createSession>; modelConfigId: string; modelConfigName: string }
+      | { kind: "validation_error"; message: string; code: string }
+      | { kind: "id_input_error"; error: SessionIdInputError }
+      | { kind: "id_conflict_error"; error: SessionIdConflictError }
+      | { kind: "id_generation_error"; error: SessionIdGenerationError }
+      | {
+          kind: "created";
+          session: ReturnType<typeof createSession>;
+          modelConfigId: string;
+          modelConfigName: string;
+        };
 
-    const result: TransactionResult = db.connection.transaction((): TransactionResult => {
-      const defaults = getSessionCreationDefaults(db.connection)
+    const result: TransactionResult = db.connection.transaction(
+      (): TransactionResult => {
+        const defaults = getSessionCreationDefaults(db.connection);
 
-      if (!defaults.defaultModelConfigId) {
-        return { kind: 'validation_error', message: 'No default model config is configured for new sessions.', code: 'default_model_not_configured' }
-      }
+        if (!defaults.defaultModelConfigId) {
+          return {
+            kind: "validation_error",
+            message: "No default model config is configured for new sessions.",
+            code: "default_model_not_configured",
+          };
+        }
 
-      const modelConfigs = listModelConfigs(db.connection)
-      const modelConfig = modelConfigs.find(c => c.id === defaults.defaultModelConfigId)
-      if (!modelConfig) {
-        return { kind: 'validation_error', message: `Default model config "${defaults.defaultModelConfigId}" no longer exists.`, code: 'default_model_config_not_found' }
-      }
+        const modelConfigs = listModelConfigs(db.connection);
+        const modelConfig = modelConfigs.find(
+          (c) => c.id === defaults.defaultModelConfigId,
+        );
+        if (!modelConfig) {
+          return {
+            kind: "validation_error",
+            message: `Default model config "${defaults.defaultModelConfigId}" no longer exists.`,
+            code: "default_model_config_not_found",
+          };
+        }
 
-      const lmConnections = listLmConnections(db.connection)
-      const lmConnection = lmConnections.find(c => c.id === modelConfig.connectionId)
-      if (!lmConnection) {
-        return { kind: 'validation_error', message: `LM connection "${modelConfig.connectionId}" referenced by the default model config no longer exists.`, code: 'default_lm_connection_not_found' }
-      }
+        const lmConnections = listLmConnections(db.connection);
+        const lmConnection = lmConnections.find(
+          (c) => c.id === modelConfig.connectionId,
+        );
+        if (!lmConnection) {
+          return {
+            kind: "validation_error",
+            message: `LM connection "${modelConfig.connectionId}" referenced by the default model config no longer exists.`,
+            code: "default_lm_connection_not_found",
+          };
+        }
 
-      // Use all profiles with defaultEnabled = true
-      const mcpProfiles = listMcpServerProfiles(db.connection)
-      const mcpProfileSnapshots: McpProfileSnapshot[] = mcpProfiles
-        .filter(p => p.defaultEnabled)
-        .map(p => ({
-          id: p.id,
-          name: p.name,
-          url: p.url,
-          transport: p.transport,
-          authType: p.authType ?? null,
-          authValue: p.authValue ?? null,
-          createdAt: p.createdAt,
-          updatedAt: p.updatedAt,
-        }))
+        // Use all profiles with defaultEnabled = true
+        const mcpProfiles = listMcpServerProfiles(db.connection);
+        const mcpProfileSnapshots: McpProfileSnapshot[] = mcpProfiles
+          .filter((p) => p.defaultEnabled)
+          .map((p) => ({
+            id: p.id,
+            name: p.name,
+            url: p.url,
+            transport: p.transport,
+            authType: p.authType ?? null,
+            authValue: p.authValue ?? null,
+            createdAt: p.createdAt,
+            updatedAt: p.updatedAt,
+          }));
 
-      const modelProfileSnapshot = {
-        id: modelConfig.id,
-        name: modelConfig.name,
-        connectionBaseUrl: lmConnection.baseUrl,
-        apiKey: lmConnection.apiKey ?? null,
-        modelKey: modelConfig.modelKey,
-        modelDisplayName: modelConfig.modelDisplayName,
-        systemPrompt: modelConfig.systemPrompt,
-        temperature: modelConfig.temperature,
-        reasoning: modelConfig.reasoning ?? null,
-        createdAt: modelConfig.createdAt,
-        updatedAt: modelConfig.updatedAt,
-      }
+        const modelProfileSnapshot = {
+          id: modelConfig.id,
+          name: modelConfig.name,
+          connectionBaseUrl: lmConnection.baseUrl,
+          apiKey: lmConnection.apiKey ?? null,
+          modelKey: modelConfig.modelKey,
+          modelDisplayName: modelConfig.modelDisplayName,
+          systemPrompt: modelConfig.systemPrompt,
+          temperature: modelConfig.temperature,
+          reasoning: modelConfig.reasoning ?? null,
+          contextSize: modelConfig.contextSize ?? null,
+          createdAt: modelConfig.createdAt,
+          updatedAt: modelConfig.updatedAt,
+        };
 
-      try {
-        const session = createSession(db, {
-          sessionId: input.id,
-          title: input.title,
-          modelProfileSnapshot,
-          mcpProfileSnapshots,
-          compactionStrategy: input.compaction ?? 'strip-reasoning',
-        })
-        mcpSnapshotsRef = mcpProfileSnapshots
-        return { kind: 'created', session, modelConfigId: modelConfig.id, modelConfigName: modelConfig.name }
-      } catch (error) {
-        if (error instanceof SessionIdInputError) return { kind: 'id_input_error', error }
-        if (error instanceof SessionIdConflictError) return { kind: 'id_conflict_error', error }
-        if (error instanceof SessionIdGenerationError) return { kind: 'id_generation_error', error }
-        throw error
-      }
-    })()
+        try {
+          const session = createSession(db, {
+            sessionId: input.id,
+            title: input.title,
+            modelProfileSnapshot,
+            mcpProfileSnapshots,
+            compactionStrategy: input.compaction ?? "strip-reasoning",
+          });
+          mcpSnapshotsRef = mcpProfileSnapshots;
+          return {
+            kind: "created",
+            session,
+            modelConfigId: modelConfig.id,
+            modelConfigName: modelConfig.name,
+          };
+        } catch (error) {
+          if (error instanceof SessionIdInputError)
+            return { kind: "id_input_error", error };
+          if (error instanceof SessionIdConflictError)
+            return { kind: "id_conflict_error", error };
+          if (error instanceof SessionIdGenerationError)
+            return { kind: "id_generation_error", error };
+          throw error;
+        }
+      },
+    )();
 
-    if (result.kind === 'validation_error') {
-      throw new OperationError(result.message, result.code)
+    if (result.kind === "validation_error") {
+      throw new OperationError(result.message, result.code);
     }
-    if (result.kind === 'id_input_error') {
-      throw new OperationError(result.error.message, 'invalid_session_id')
+    if (result.kind === "id_input_error") {
+      throw new OperationError(result.error.message, "invalid_session_id");
     }
-    if (result.kind === 'id_conflict_error') {
-      throw new OperationError(result.error.message, 'duplicate_session_id')
+    if (result.kind === "id_conflict_error") {
+      throw new OperationError(result.error.message, "duplicate_session_id");
     }
-    if (result.kind === 'id_generation_error') {
-      throw new OperationError(result.error.message, 'session_id_generation_failed')
+    if (result.kind === "id_generation_error") {
+      throw new OperationError(
+        result.error.message,
+        "session_id_generation_failed",
+      );
     }
 
-    const { session, modelConfigId, modelConfigName } = result
+    const { session, modelConfigId, modelConfigName } = result;
 
     if (ctx.scheduler) {
       try {
-        ctx.scheduler.enqueueInit(ctx, session.id)
+        ctx.scheduler.enqueueInit(ctx, session.id);
       } catch (err: unknown) {
         logger?.error(
-          { sessionId: session.id, err: err instanceof Error ? err.message : String(err) },
-          'Scheduler init enqueue failed (non-fatal — session will initialize on first turn)',
-        )
+          {
+            sessionId: session.id,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "Scheduler init enqueue failed (non-fatal — session will initialize on first turn)",
+        );
       }
     }
 
@@ -172,11 +224,11 @@ export const createOperation = {
         status: session.status,
         init_status: session.initStatus,
         model: { id: modelConfigId, name: modelConfigName },
-        mcp: mcpSnapshotsRef.map(s => ({ id: s.id, name: s.name })),
+        mcp: mcpSnapshotsRef.map((s) => ({ id: s.id, name: s.name })),
         compaction_strategy: session.compactionStrategy,
         created_at: session.createdAt,
         updated_at: session.updatedAt,
       },
-    }
+    };
   },
-}
+};
