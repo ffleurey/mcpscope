@@ -17,6 +17,16 @@
 import { detectProvider } from "./detection.js";
 
 /**
+ * Estimate token count from text using a 4-characters-per-token heuristic.
+ *
+ * This is a rough estimate used when the API does not report token counts
+ * (e.g. fallback for providers whose responses lack usage info).
+ */
+export function estimateTokensFromText(text: string): number {
+  return Math.max(1, Math.round(text.length / 4));
+}
+
+/**
  * Build provider-specific reasoning request body params.
  *
  * @param reasoning - The user's reasoning preference ("on", "off", or null)

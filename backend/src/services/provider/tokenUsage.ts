@@ -267,7 +267,6 @@ function normalizeOpenRouterUsage(rawResponseBody: string): NormalizedUsage {
 export function normalizeStreamUsage(
   rawResponseBody: string,
   provider: ProviderType,
-  _reasoningText?: string,
 ): NormalizedUsage {
   switch (provider) {
     case "ollama":

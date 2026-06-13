@@ -68,6 +68,7 @@ import {
 import {
   buildReasoningParams,
   detectProvider,
+  estimateTokensFromText,
   normalizeStreamUsage,
 } from "../services/provider/index.js";
 
@@ -415,16 +416,9 @@ export async function createModelOnlyTurn(
   const provider = detectProvider(
     session.modelProfileSnapshot.connectionBaseUrl,
   );
-  const reasoningText = streamedCompletion.segments
-    .filter(
-      (s): s is { kind: "reasoning"; text: string } => s.kind === "reasoning",
-    )
-    .map((s) => s.text)
-    .join("");
   const usage = normalizeStreamUsage(
     streamedCompletion.rawResponseBody,
     provider,
-    reasoningText || undefined,
   );
 
   turn.status = "complete";
@@ -469,10 +463,7 @@ export async function createModelOnlyTurn(
         ? reasoningSegments.length === 1
           ? [
               {
-                count: Math.max(
-                  1,
-                  Math.round(reasoningSegments[0]!.length / 4),
-                ),
+                count: estimateTokensFromText(reasoningSegments[0]!),
                 source: "estimated" as const,
                 confidence: "estimated" as const,
                 note: "Estimated from thinking text length (4 chars/token heuristic)",
@@ -483,7 +474,7 @@ export async function createModelOnlyTurn(
             ]
           : allocateProportionalTokenCounts(
               reasoningSegments.reduce(
-                (sum, text) => sum + Math.max(1, Math.round(text.length / 4)),
+                (sum, text) => sum + estimateTokensFromText(text),
                 0,
               ),
               reasoningSegments.map((text) => Math.max(1, text.length)),

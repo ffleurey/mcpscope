@@ -9,6 +9,7 @@ import {
 import {
   buildReasoningParams,
   detectProvider,
+  estimateTokensFromText,
 } from "../services/provider/index.js";
 import type { ChatCompletionGateway } from "./modelTurns.js";
 
@@ -131,12 +132,11 @@ export async function probeRequestPromptTokens(
       session.modelProfileSnapshot.connectionBaseUrl,
     );
     if (provider === "openrouter") {
-      const totalChars = messages.reduce(
-        (sum, m) =>
-          sum + (typeof m.content === "string" ? m.content.length : 0),
-        0,
+      return estimateTokensFromText(
+        messages
+          .map((m) => (typeof m.content === "string" ? m.content : ""))
+          .join(""),
       );
-      return Math.max(1, Math.round(totalChars / 4));
     }
 
     return null;
