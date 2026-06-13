@@ -14,8 +14,6 @@
  * (reasoning_content, reasoning, thinking) dynamically.
  */
 
-import { detectProvider } from "./detection.js";
-
 /**
  * Estimate token count from text using a 4-characters-per-token heuristic.
  *
@@ -44,13 +42,18 @@ export function estimateTokensFromText(text: string): number {
  */
 export function buildReasoningParams(
   reasoning: string | null,
-  baseUrl: string,
+  _baseUrl: string,
   providerType?: string | null,
 ): Record<string, unknown> {
   // No preference → let the provider use its default
   if (reasoning === null) return {};
 
-  const provider = detectProvider(baseUrl, providerType);
+  const provider: "lmstudio" | "openrouter" | "ollama" | "openai" =
+    providerType === "openrouter" ||
+    providerType === "ollama" ||
+    providerType === "openai"
+      ? providerType
+      : "lmstudio";
 
   // LM Studio always uses explicit reasoning: "on"|"off" in request body
   if (provider === "lmstudio") {

@@ -8,7 +8,6 @@ import {
 } from "../services/lmstudio/client.js";
 import {
   buildReasoningParams,
-  detectProvider,
   estimateTokensFromText,
 } from "../services/provider/index.js";
 import type { ChatCompletionGateway } from "./modelTurns.js";
@@ -130,10 +129,7 @@ export async function probeRequestPromptTokens(
     // Fallback for providers like OpenRouter whose non-streaming
     // responses don't include usage.  Estimate from message text
     // plus tool definitions when present.
-    const provider = detectProvider(
-      session.modelProfileSnapshot.connectionBaseUrl,
-      session.modelProfileSnapshot.providerType,
-    );
+    const provider = session.modelProfileSnapshot.providerType ?? "lmstudio";
     if (provider === "openrouter") {
       const messageText = messages
         .map((m) => (typeof m.content === "string" ? m.content : ""))

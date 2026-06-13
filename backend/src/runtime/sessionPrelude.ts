@@ -10,10 +10,7 @@ import type { ChatCompletionGateway } from "./modelTurns.js";
 import type { ApiMessage } from "../domain/selectors.js";
 import { buildLmToolDefinitions } from "../domain/selectors.js";
 import { probeRequestPromptTokens } from "./promptTokenProbing.js";
-import {
-  detectProvider,
-  getProviderContextLength,
-} from "../services/provider/index.js";
+import { getProviderContextLength } from "../services/provider/index.js";
 
 function now(): number {
   return Date.now();
@@ -184,10 +181,7 @@ export async function ensureSessionPreludeTokenMetadata(
   // For providers where the native gateway didn't return context length,
   // try the provider-specific fallback (Ollama /api/show, OAI /v1/models, etc.).
   if (session.loadedContextLength == null) {
-    const provider = detectProvider(
-      session.modelProfileSnapshot.connectionBaseUrl,
-      session.modelProfileSnapshot.providerType,
-    );
+    const provider = session.modelProfileSnapshot.providerType ?? "lmstudio";
     const contextLength = await getProviderContextLength(
       session.modelProfileSnapshot.connectionBaseUrl,
       session.modelProfileSnapshot.apiKey ?? undefined,

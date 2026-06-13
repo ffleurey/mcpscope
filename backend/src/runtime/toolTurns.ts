@@ -40,7 +40,6 @@ import {
 } from "../domain/hierarchicalIds.js";
 import {
   buildReasoningParams,
-  detectProvider,
   estimateTokensFromText,
   normalizeStreamUsage,
 } from "../services/provider/index.js";
@@ -1705,10 +1704,7 @@ export async function createToolEnabledTurn(
 
     const completedAt = now();
     const finishReason = completion.choices[0]?.finish_reason;
-    const provider = detectProvider(
-      session.modelProfileSnapshot.connectionBaseUrl,
-      session.modelProfileSnapshot.providerType,
-    );
+    const provider = session.modelProfileSnapshot.providerType ?? "lmstudio";
     const usage = normalizeStreamUsage(
       streamedCompletion.rawResponseBody,
       provider,

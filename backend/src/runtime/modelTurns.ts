@@ -67,7 +67,6 @@ import {
 } from "./sessionTitles.js";
 import {
   buildReasoningParams,
-  detectProvider,
   estimateTokensFromText,
   normalizeStreamUsage,
 } from "../services/provider/index.js";
@@ -414,10 +413,7 @@ export async function createModelOnlyTurn(
     );
   }
 
-  const provider = detectProvider(
-    session.modelProfileSnapshot.connectionBaseUrl,
-    session.modelProfileSnapshot.providerType,
-  );
+  const provider = session.modelProfileSnapshot.providerType ?? "lmstudio";
   const usage = normalizeStreamUsage(
     streamedCompletion.rawResponseBody,
     provider,
