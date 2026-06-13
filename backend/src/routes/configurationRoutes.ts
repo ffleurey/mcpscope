@@ -260,14 +260,27 @@ export function registerConfigurationRoutes({
   });
 
   app.post("/api/lm-connections/models/load", async (request, reply) => {
-    const { baseUrl, apiKey, modelKey, contextSize } = z
+    const { baseUrl, apiKey, modelKey, contextSize, providerType } = z
       .object({
         baseUrl: z.string().url(),
         apiKey: z.string().nullable().optional(),
         modelKey: z.string().min(1),
         contextSize: z.number().int().positive().optional(),
+        providerType: z.enum(["lmstudio", "openrouter", "ollama"]).optional(),
       })
       .parse(request.body);
+    if (providerType && providerType !== "lmstudio") {
+      const label = providerLabel(providerType);
+      reply.code(400);
+      return apiError(
+        "validation",
+        `${label} does not support model load/unload — models are loaded automatically on first request.`,
+        {
+          code: "model_load_not_supported",
+          details: { providerType },
+        },
+      );
+    }
     try {
       await loadLmModel(baseUrl, apiKey ?? undefined, modelKey, contextSize);
       return { ok: true };
@@ -289,13 +302,26 @@ export function registerConfigurationRoutes({
   });
 
   app.post("/api/lm-connections/models/unload", async (request, reply) => {
-    const { baseUrl, apiKey, instanceId } = z
+    const { baseUrl, apiKey, instanceId, providerType } = z
       .object({
         baseUrl: z.string().url(),
         apiKey: z.string().nullable().optional(),
         instanceId: z.string().min(1),
+        providerType: z.enum(["lmstudio", "openrouter", "ollama"]).optional(),
       })
       .parse(request.body);
+    if (providerType && providerType !== "lmstudio") {
+      const label = providerLabel(providerType);
+      reply.code(400);
+      return apiError(
+        "validation",
+        `${label} does not support model load/unload — models are loaded automatically on first request.`,
+        {
+          code: "model_unload_not_supported",
+          details: { providerType },
+        },
+      );
+    }
     try {
       await unloadLmModel(baseUrl, apiKey ?? undefined, instanceId);
       return { ok: true };

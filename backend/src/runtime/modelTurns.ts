@@ -678,7 +678,7 @@ export async function createModelOnlyTurn(
     sessionId: session.id,
     turnId,
     roundId,
-    kind: "lmstudio-request" as const,
+    kind: "llm-request" as const,
     requestUrl: `${session.modelProfileSnapshot.connectionBaseUrl.replace(/\/$/, "")}/chat/completions`,
     requestMethod: "POST",
     requestHeadersJson: {
@@ -697,7 +697,7 @@ export async function createModelOnlyTurn(
     sessionId: session.id,
     turnId,
     roundId,
-    kind: "lmstudio-response" as const,
+    kind: "llm-response" as const,
     requestUrl: `${session.modelProfileSnapshot.connectionBaseUrl.replace(/\/$/, "")}/chat/completions`,
     requestMethod: "POST",
     requestHeadersJson: null,
@@ -737,7 +737,7 @@ export async function createModelOnlyTurn(
     "Exact model-only user message tokens could not be derived",
   );
   userPart.provenanceJson = {
-    derivedFrom: "lmstudio.prompt_tokens.user-delta",
+    derivedFrom: "prompt_tokens.user-delta",
   };
   userPart.updatedAt = completedAt;
 

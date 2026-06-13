@@ -132,28 +132,28 @@ function parseRecordedLmResponse(
 
 function pairRawExchanges(
   rawExchanges: RawExchangeRecord[],
-  requestKind: RawExchangeRecord["kind"],
-  responseKind: RawExchangeRecord["kind"],
+  requestKinds: RawExchangeRecord["kind"][],
+  responseKinds: RawExchangeRecord["kind"][],
 ): RawExchangePair[] {
   const pairs: RawExchangePair[] = [];
   let pending: RawExchangeRecord | null = null;
 
   for (const exchange of rawExchanges) {
-    if (exchange.kind === requestKind) {
+    if (requestKinds.includes(exchange.kind)) {
       if (pending) {
-        throw new Error(`Unpaired ${requestKind} exchange in trace`);
+        throw new Error(`Unpaired ${requestKinds.join("/")} exchange in trace`);
       }
       pending = exchange;
       continue;
     }
 
-    if (exchange.kind !== responseKind) {
+    if (!responseKinds.includes(exchange.kind)) {
       continue;
     }
 
     if (!pending) {
       throw new Error(
-        `Encountered ${responseKind} without matching ${requestKind}`,
+        `Encountered ${responseKinds[0]} without matching ${requestKinds[0]}`,
       );
     }
 
@@ -165,7 +165,7 @@ function pairRawExchanges(
   }
 
   if (pending) {
-    throw new Error(`Trace ended with unpaired ${requestKind}`);
+    throw new Error(`Trace ended with unpaired ${requestKinds[0]}`);
   }
 
   return pairs;
@@ -346,13 +346,13 @@ function createReplayChatCompletionGateway(
 ): ChatCompletionGateway {
   const probePairs = pairRawExchanges(
     trace.rawExchanges,
-    "lmstudio-probe-request",
-    "lmstudio-probe-response",
+    ["lmstudio-probe-request", "llm-probe-request"],
+    ["lmstudio-probe-response", "llm-probe-response"],
   );
   const streamedPairs = pairRawExchanges(
     trace.rawExchanges,
-    "lmstudio-request",
-    "lmstudio-response",
+    ["lmstudio-request", "llm-request"],
+    ["lmstudio-response", "llm-response"],
   );
   let probeIndex = 0;
   let streamedIndex = 0;
@@ -423,8 +423,8 @@ function createReplayChatCompletionGateway(
 function createReplayMcpGateway(trace: SessionTraceBundle): McpGateway {
   const mcpPairs = pairRawExchanges(
     trace.rawExchanges,
-    "mcp-request",
-    "mcp-response",
+    ["mcp-request"],
+    ["mcp-response"],
   );
   const initializePairs: RawExchangePair[] = [];
   const listToolsPairs: RawExchangePair[] = [];

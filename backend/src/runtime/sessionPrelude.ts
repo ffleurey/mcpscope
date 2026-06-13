@@ -105,10 +105,10 @@ export async function ensureSystemPromptTokenMetadata(
       count: promptTokens,
       source: "exact-api",
       confidence: "exact",
-      note: "Exact LM Studio prompt token count for the system prompt message",
+      note: "Exact prompt token count for the system prompt message",
     },
     provenanceJson: {
-      derivedFrom: "lmstudio.prompt_tokens.probe",
+      derivedFrom: "prompt_tokens.probe",
     },
     updatedAt,
   };
@@ -261,7 +261,7 @@ export async function ensureSessionPreludeTokenMetadata(
         updatePartTokens(
           mcpInstructionsPart,
           metadata,
-          { derivedFrom: "lmstudio.prompt_tokens.prelude-delta" },
+          { derivedFrom: "prompt_tokens.prelude-delta" },
           updatedAt,
         ),
       );
@@ -304,7 +304,7 @@ export async function ensureSessionPreludeTokenMetadata(
     const metadata = deriveExactDeltaTokenMetadata(
       withToolsTokens,
       withoutToolsTokens,
-      "Derived as exact prompt delta introduced by LM Studio tool definitions",
+      "Derived as exact prompt delta introduced by tool definitions",
       "Exact tool-definition tokens could not be probed",
     );
 
@@ -316,7 +316,7 @@ export async function ensureSessionPreludeTokenMetadata(
         updatePartTokens(
           toolDefinitionsPart,
           metadata,
-          { derivedFrom: "lmstudio.prompt_tokens.tools-delta" },
+          { derivedFrom: "prompt_tokens.tools-delta" },
           updatedAt,
         ),
       );

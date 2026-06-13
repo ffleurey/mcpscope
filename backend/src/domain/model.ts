@@ -80,12 +80,19 @@ export const tokenConfidenceValues = [
   "unknown",
 ] as const;
 export const exchangeKindValues = [
+  // Provider-agnostic exchange kinds (current)
+  "llm-request",
+  "llm-response",
+  "llm-probe-request",
+  "llm-probe-response",
+  // MCP exchanges
+  "mcp-request",
+  "mcp-response",
+  // Legacy LM Studio-specific labels (kept for backward compatibility with stored data)
   "lmstudio-request",
   "lmstudio-response",
   "lmstudio-probe-request",
   "lmstudio-probe-response",
-  "mcp-request",
-  "mcp-response",
 ] as const;
 
 export const sessionTypeSchema = z.enum(sessionTypeValues);

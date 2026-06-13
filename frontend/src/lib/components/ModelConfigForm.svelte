@@ -145,7 +145,7 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
     modelLoading = true
     modelLoadError = null
     try {
-      await loadModel(conn.baseUrl, modelKey, conn.apiKey, resolvedContextSize)
+      await loadModel(conn.baseUrl, modelKey, conn.apiKey, resolvedContextSize, conn.providerType)
       await fetchModels(connectionId)
     } catch (e) {
       modelLoadError = e instanceof Error ? e.message : String(e)

@@ -80,14 +80,27 @@ export async function loadModel(
   modelKey: string,
   apiKey?: string,
   contextSize?: number,
+  providerType?: string,
 ): Promise<void> {
-  await loadLmConnectionModel(baseUrl, modelKey, apiKey ?? null, contextSize);
+  await loadLmConnectionModel(
+    baseUrl,
+    modelKey,
+    apiKey ?? null,
+    contextSize,
+    providerType,
+  );
 }
 
 export async function unloadModel(
   baseUrl: string,
   instanceId: string,
   apiKey?: string,
+  providerType?: string,
 ): Promise<void> {
-  await unloadLmConnectionModel(baseUrl, instanceId, apiKey ?? null);
+  await unloadLmConnectionModel(
+    baseUrl,
+    instanceId,
+    apiKey ?? null,
+    providerType,
+  );
 }

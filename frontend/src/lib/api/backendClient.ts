@@ -329,10 +329,17 @@ export function loadLmConnectionModel(
   modelKey: string,
   apiKey?: string | null,
   contextSize?: number,
+  providerType?: string,
 ) {
   return request("/api/lm-connections/models/load", {
     method: "POST",
-    body: { baseUrl, modelKey, apiKey: apiKey ?? null, contextSize },
+    body: {
+      baseUrl,
+      modelKey,
+      apiKey: apiKey ?? null,
+      contextSize,
+      providerType,
+    },
     schema: lmConnectionModelMutationResponseSchema,
   });
 }
@@ -341,10 +348,11 @@ export function unloadLmConnectionModel(
   baseUrl: string,
   instanceId: string,
   apiKey?: string | null,
+  providerType?: string,
 ) {
   return request("/api/lm-connections/models/unload", {
     method: "POST",
-    body: { baseUrl, instanceId, apiKey: apiKey ?? null },
+    body: { baseUrl, instanceId, apiKey: apiKey ?? null, providerType },
     schema: lmConnectionModelMutationResponseSchema,
   });
 }

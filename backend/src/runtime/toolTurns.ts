@@ -169,7 +169,7 @@ function parseToolCalls(
   }));
 }
 
-function createLmStudioRawExchange(
+function createProviderRawExchange(
   session: SessionRecord,
   turnId: string,
   roundId: string,
@@ -185,7 +185,7 @@ function createLmStudioRawExchange(
       sessionId: session.id,
       turnId,
       roundId,
-      kind: "lmstudio-request",
+      kind: "llm-request",
       requestUrl: endpoint,
       requestMethod: "POST",
       requestHeadersJson: {
@@ -203,7 +203,7 @@ function createLmStudioRawExchange(
       sessionId: session.id,
       turnId,
       roundId,
-      kind: "lmstudio-response",
+      kind: "llm-response",
       requestUrl: endpoint,
       requestMethod: "POST",
       requestHeadersJson: null,
@@ -326,7 +326,7 @@ async function applyPendingPromptSuffixAttribution(
     const updatedPart = updatePartTokens(
       pending.userPart,
       tokens,
-      { derivedFrom: "lmstudio.prompt_tokens.user-delta" },
+      { derivedFrom: "prompt_tokens.user-delta" },
       updatedAt,
     );
 
@@ -425,7 +425,7 @@ async function applyPendingPromptSuffixAttribution(
         {
           derivedFrom: hasToolResults
             ? "completion.usage.assistant-content-tokens"
-            : "lmstudio.prompt_tokens.assistant-tool-message-delta",
+            : "prompt_tokens.assistant-tool-message-delta",
           allocation: "proportional-by-payload",
         },
         updatedAt,
@@ -459,13 +459,13 @@ async function applyPendingPromptSuffixAttribution(
                 : "Allocated proportionally from the exact grouped assistant tool-call prompt delta",
             },
       singleExactCase
-        ? { derivedFrom: "lmstudio.prompt_tokens.tool-call-delta" }
+        ? { derivedFrom: "prompt_tokens.tool-call-delta" }
         : singleApiCase
           ? { derivedFrom: "completion.usage.assistant-content-tokens" }
           : {
               derivedFrom: hasToolResults
                 ? "completion.usage.assistant-content-tokens"
-                : "lmstudio.prompt_tokens.assistant-tool-message-delta",
+                : "prompt_tokens.assistant-tool-message-delta",
               allocation: "proportional-by-payload",
             },
       updatedAt,
@@ -514,7 +514,7 @@ async function applyPendingPromptSuffixAttribution(
                   ? "Derived as total tool-result context budget (promptTokens − prefix − assistantMessage)"
                   : "Allocated proportionally from total tool-result context budget (promptTokens − prefix − assistantMessage)",
             },
-        { derivedFrom: "lmstudio.prompt_tokens.tool-result-proportional" },
+        { derivedFrom: "prompt_tokens.tool-result-proportional" },
         updatedAt,
       );
     },
@@ -758,7 +758,7 @@ export async function ensureMcpContext(
         },
         context: {
           state: "included",
-          note: "Provided through the LM Studio tools array",
+          note: "Provided through the provider's tools parameter",
           strippedByCompactionAtTurnId: null,
         },
         tokens: {
@@ -1738,7 +1738,7 @@ export async function createToolEnabledTurn(
       pendingPromptSuffix,
     );
 
-    const rawExchanges = createLmStudioRawExchange(
+    const rawExchanges = createProviderRawExchange(
       session,
       turnId,
       currentRound.id,
