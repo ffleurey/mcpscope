@@ -12,7 +12,7 @@
  *   (native `/api/v1/models`); this module serves as the fallback.
  */
 
-import { type ProviderType } from "./detection.js";
+import type { ProviderType } from "./index.js";
 import { rootUrl, listModels } from "../openai/client.js";
 
 // ─────────────────────────────────────────────────────────────────────────────

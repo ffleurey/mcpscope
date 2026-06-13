@@ -15,7 +15,7 @@ During session creation, `providerType` is copied from the connection into the [
 ### Adding a new provider type
 
 1. Add the value to `providerTypeValues` in `backend/src/domain/configuration.ts`
-2. Update the `ProviderType` type in `detection.ts`
+2. Update the `ProviderType` type in `backend/src/services/provider/index.ts`
 3. Add a `case` in `buildReasoningParams`, `normalizeStreamUsage`, `getProviderContextLength`, and `probeRequestPromptTokens`
 
 ---
@@ -92,7 +92,7 @@ Resolution order:
 
 | File | Purpose |
 |------|---------|
-| `backend/src/services/provider/detection.ts` | `ProviderType` type definition |
+| `backend/src/services/provider/index.ts` | `ProviderType` type definition, barrel exports |
 | `backend/src/services/provider/reasoning.ts` | Request-body reasoning params + `estimateTokensFromText` |
 | `backend/src/services/provider/tokenUsage.ts` | Provider-aware response usage normalization |
 | `backend/src/services/provider/contextLength.ts` | Provider-aware context window resolution |

@@ -17,7 +17,7 @@
  * `tokenAccounting.ts` with a provider-aware entry point.
  */
 
-import { type ProviderType } from "./detection.js";
+import type { ProviderType } from "./index.js";
 import type { NormalizedUsage } from "../../domain/tokenAccounting.js";
 
 // ─────────────────────────────────────────────────────────────────────────────

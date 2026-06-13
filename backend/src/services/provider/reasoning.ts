@@ -48,10 +48,8 @@ export function buildReasoningParams(
   // No preference → let the provider use its default
   if (reasoning === null) return {};
 
-  const provider: "lmstudio" | "openrouter" | "ollama" | "openai" =
-    providerType === "openrouter" ||
-    providerType === "ollama" ||
-    providerType === "openai"
+  const provider =
+    providerType === "openrouter" || providerType === "ollama"
       ? providerType
       : "lmstudio";
 
