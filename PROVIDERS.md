@@ -12,19 +12,13 @@ Provider detection happens via `detectProvider(baseUrl, explicitProviderType?)` 
 
 Each [LM Connection](backend/src/domain/configuration.ts) carries a `providerType` field (`"lmstudio"`, `"openrouter"`, or `"ollama"` set by the user when creating the connection). This is the authoritative source.
 
-During session creation, `providerType` is copied from the connection into the [modelProfileSnapshot](backend/src/domain/model.ts). All runtime code passes this explicit type to `detectProvider`, avoiding URL sniffing.
-
-| Priority | Source |
-|----------|--------|
-| **1** (authoritative) | `modelProfileSnapshot.providerType` (from connection config) |
-| **2** (fallback) | URL patterns for sessions created before `providerType` was added |
+During session creation, `providerType` is copied from the connection into the [modelProfileSnapshot](backend/src/domain/model.ts). All runtime code passes this explicit type to `detectProvider`.
 
 ### Adding a new provider type
 
 1. Add the value to `providerTypeValues` in `backend/src/domain/configuration.ts`
-2. Add a pattern to `URL_PATTERNS` in `detection.ts` (optional, for backward compat)
-3. Update the `ProviderType` union in `detection.ts` if needed
-4. Add a `case` in `buildReasoningParams`, `normalizeStreamUsage`, `getProviderContextLength`, and `probeRequestPromptTokens`
+2. Update the `ProviderType` union in `detection.ts`
+3. Add a `case` in `buildReasoningParams`, `normalizeStreamUsage`, `getProviderContextLength`, and `probeRequestPromptTokens`
 
 ---
 
