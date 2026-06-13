@@ -319,6 +319,7 @@ export async function createModelOnlyTurn(
     ...buildReasoningParams(
       session.modelProfileSnapshot.reasoning,
       session.modelProfileSnapshot.connectionBaseUrl,
+      session.modelProfileSnapshot.providerType,
     ),
     ...sessionContextBody(session),
   };
@@ -415,6 +416,7 @@ export async function createModelOnlyTurn(
 
   const provider = detectProvider(
     session.modelProfileSnapshot.connectionBaseUrl,
+    session.modelProfileSnapshot.providerType,
   );
   const usage = normalizeStreamUsage(
     streamedCompletion.rawResponseBody,

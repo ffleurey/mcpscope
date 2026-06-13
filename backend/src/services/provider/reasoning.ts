@@ -30,7 +30,8 @@ export function estimateTokensFromText(text: string): number {
  * Build provider-specific reasoning request body params.
  *
  * @param reasoning - The user's reasoning preference ("on", "off", or null)
- * @param baseUrl  - The connection base URL (used for provider detection)
+ * @param baseUrl  - The connection base URL
+ * @param providerType - Optional explicit provider type (avoids URL sniffing)
  * @returns A record of params to spread into the request body, or `{}` when
  *          no reasoning params are needed.
  *
@@ -44,11 +45,12 @@ export function estimateTokensFromText(text: string): number {
 export function buildReasoningParams(
   reasoning: string | null,
   baseUrl: string,
+  providerType?: string | null,
 ): Record<string, unknown> {
   // No preference → let the provider use its default
   if (reasoning === null) return {};
 
-  const provider = detectProvider(baseUrl);
+  const provider = detectProvider(baseUrl, providerType);
 
   // LM Studio always uses explicit reasoning: "on"|"off" in request body
   if (provider === "lmstudio") {

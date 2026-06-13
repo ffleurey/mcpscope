@@ -162,6 +162,7 @@ export const modelProfileSnapshotSchema = z.object({
   systemPrompt: z.string(),
   temperature: z.number(),
   reasoning: z.enum(["on", "off"]).nullable(),
+  providerType: providerTypeSchema.nullable().optional(),
   contextSize: z.number().int().positive().nullable().optional(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),

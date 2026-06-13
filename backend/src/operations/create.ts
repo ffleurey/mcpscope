@@ -153,6 +153,7 @@ export const createOperation = {
           temperature: modelConfig.temperature,
           reasoning: modelConfig.reasoning ?? null,
           contextSize: modelConfig.contextSize ?? null,
+          providerType: lmConnection.providerType ?? null,
           createdAt: modelConfig.createdAt,
           updatedAt: modelConfig.updatedAt,
         };

@@ -186,6 +186,7 @@ export async function ensureSessionPreludeTokenMetadata(
   if (session.loadedContextLength == null) {
     const provider = detectProvider(
       session.modelProfileSnapshot.connectionBaseUrl,
+      session.modelProfileSnapshot.providerType,
     );
     const contextLength = await getProviderContextLength(
       session.modelProfileSnapshot.connectionBaseUrl,

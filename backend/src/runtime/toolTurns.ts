@@ -1677,6 +1677,7 @@ export async function createToolEnabledTurn(
       ...buildReasoningParams(
         session.modelProfileSnapshot.reasoning,
         session.modelProfileSnapshot.connectionBaseUrl,
+        session.modelProfileSnapshot.providerType,
       ),
       ...sessionContextBody(session),
     };
@@ -1706,6 +1707,7 @@ export async function createToolEnabledTurn(
     const finishReason = completion.choices[0]?.finish_reason;
     const provider = detectProvider(
       session.modelProfileSnapshot.connectionBaseUrl,
+      session.modelProfileSnapshot.providerType,
     );
     const usage = normalizeStreamUsage(
       streamedCompletion.rawResponseBody,

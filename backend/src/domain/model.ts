@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { providerTypeValues } from "./configuration.js";
 
 export const DOMAIN_MODEL_VERSION = 2;
 
@@ -113,6 +114,7 @@ export const modelProfileSnapshotSchema = z.object({
   systemPrompt: z.string(),
   temperature: z.number(),
   reasoning: z.enum(["on", "off"]).nullable(),
+  providerType: z.enum(providerTypeValues).nullable().optional(),
   contextSize: z.number().int().positive().optional().nullable(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),

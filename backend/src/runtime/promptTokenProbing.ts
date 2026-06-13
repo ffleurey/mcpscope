@@ -42,6 +42,7 @@ function buildProbeBody(
     ...buildReasoningParams(
       session.modelProfileSnapshot.reasoning,
       session.modelProfileSnapshot.connectionBaseUrl,
+      session.modelProfileSnapshot.providerType,
     ),
   };
 }
@@ -131,6 +132,7 @@ export async function probeRequestPromptTokens(
     // plus tool definitions when present.
     const provider = detectProvider(
       session.modelProfileSnapshot.connectionBaseUrl,
+      session.modelProfileSnapshot.providerType,
     );
     if (provider === "openrouter") {
       const messageText = messages

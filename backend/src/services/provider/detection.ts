@@ -29,13 +29,32 @@ const URL_PATTERNS: Array<{
 
 /**
  * Detect the provider type from a connection base URL.
+ *
+ * When an explicit `providerType` is provided (from the connection config),
+ * it takes priority over URL-based detection.  This avoids fragile URL
+ * sniffing for installations using non-default ports or custom domains.
  */
-export function detectProvider(baseUrl: string): ProviderType {
+export function detectProvider(
+  baseUrl: string,
+  explicitProviderType?: string | null,
+): ProviderType {
+  // Explicit provider type from the connection config is authoritative.
+  if (explicitProviderType && isProviderType(explicitProviderType)) {
+    return explicitProviderType;
+  }
+
+  // Fall back to URL-based detection for backward compatibility.
   const url = baseUrl.toLowerCase();
   for (const { match, provider } of URL_PATTERNS) {
     if (match(url)) return provider;
   }
   return "lmstudio";
+}
+
+function isProviderType(value: string): value is ProviderType {
+  return (["lmstudio", "openrouter", "ollama", "openai"] as string[]).includes(
+    value,
+  );
 }
 
 /**
