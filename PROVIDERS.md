@@ -108,7 +108,7 @@ Resolution order:
 
 ## Adding a new provider
 
-1. **Connection type**: Add the value to `providerTypeValues` in `configuration.ts` and to the `ProviderType` union in `detection.ts`
+1. **Connection type**: Add the value to `providerTypeValues` in `configuration.ts` and to the `ProviderType` type in `index.ts`
 2. **Reasoning params**: Add a `case` in `buildReasoningParams` in `reasoning.ts`
 3. **Token parsing**: Add a `case` in `normalizeStreamUsage` in `tokenUsage.ts` and implement a provider-specific normalizer
 4. **Context length**: Add resolution in `getProviderContextLength` in `contextLength.ts`
