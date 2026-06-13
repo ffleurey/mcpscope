@@ -104,12 +104,15 @@ function usageFromObject(
 // ─────────────────────────────────────────────────────────────────────────────
 
 function normalizeOaiUsage(rawResponseBody: string): NormalizedUsage {
-  // The raw response body is either:
-  //   a) SSE-formatted text (streaming path) — look for `data: ...` lines
-  //   b) Plain JSON (non-streaming fallback) — parse directly
+  // Detect whether the response is SSE-formatted (streaming) or plain JSON
+  // (non-streaming fallback). SSE detection checks for `data:` lines rather
+  // than checking if the body starts with `data:`, because some providers
+  // prefix SSE with comment lines (e.g. OpenRouter sends `: OPENROUTER PROCESSING`).
+  const isSse =
+    rawResponseBody.includes("\ndata:") || rawResponseBody.startsWith("data:");
 
-  // Path A: Plain JSON (non-streaming fallback) — one-shot completion response
-  if (!rawResponseBody.startsWith("data:")) {
+  if (!isSse) {
+    // Plain JSON (non-streaming fallback) — one-shot completion response
     try {
       const parsed = JSON.parse(rawResponseBody) as Record<string, unknown>;
       const result = usageFromObject(
@@ -117,12 +120,12 @@ function normalizeOaiUsage(rawResponseBody: string): NormalizedUsage {
       );
       if (result) return result;
     } catch {
-      // fall through to SSE path
+      // ignore
     }
     return nullUsage();
   }
 
-  // Path B: SSE format — iterate over chunks, last usage wins
+  // SSE format — iterate over chunks, last usage wins
   const payloads = parseSsePayloads(rawResponseBody);
   let result: NormalizedUsage | null = null;
 
@@ -238,6 +241,18 @@ function nullUsage(): NormalizedUsage {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// OpenRouter normalizer
+// ─────────────────────────────────────────────────────────────────────────────
+
+function normalizeOpenRouterUsage(rawResponseBody: string): NormalizedUsage {
+  // OpenRouter follows standard OAI streaming format.  The SSE may be
+  // prefixed with a comment line (`: OPENROUTER PROCESSING`), so the
+  // SSE detection in normalizeOaiUsage checks for `\ndata:` rather than
+  // requiring the body to start with `data:`.
+  return normalizeOaiUsage(rawResponseBody);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -258,6 +273,7 @@ export function normalizeStreamUsage(
     case "ollama":
       return normalizeOllamaUsage(rawResponseBody);
     case "openrouter":
+      return normalizeOpenRouterUsage(rawResponseBody);
     case "lmstudio":
     default:
       return normalizeOaiUsage(rawResponseBody);

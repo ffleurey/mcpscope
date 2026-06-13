@@ -6,7 +6,10 @@ import {
   probePromptTokens,
   type PromptProbeResult,
 } from "../services/lmstudio/client.js";
-import { buildReasoningParams } from "../services/provider/index.js";
+import {
+  buildReasoningParams,
+  detectProvider,
+} from "../services/provider/index.js";
 import type { ChatCompletionGateway } from "./modelTurns.js";
 
 export type LmToolDefinition = {
@@ -107,6 +110,7 @@ export async function probeRequestPromptTokens(
       session.modelProfileSnapshot.apiKey ?? undefined,
       body,
     );
+
     if (trace) {
       const records = makeProbeRawExchangeRecords(trace, result);
       const tx = trace.database.connection.transaction(() => {
@@ -116,7 +120,26 @@ export async function probeRequestPromptTokens(
       });
       tx();
     }
-    return result.promptTokens;
+
+    if (result.promptTokens != null) {
+      return result.promptTokens;
+    }
+
+    // Fallback for providers like OpenRouter whose non-streaming
+    // responses don't include usage.  Estimate from message text.
+    const provider = detectProvider(
+      session.modelProfileSnapshot.connectionBaseUrl,
+    );
+    if (provider === "openrouter") {
+      const totalChars = messages.reduce(
+        (sum, m) =>
+          sum + (typeof m.content === "string" ? m.content.length : 0),
+        0,
+      );
+      return Math.max(1, Math.round(totalChars / 4));
+    }
+
+    return null;
   }
 
   return chatCompletionGateway.probePromptTokens
