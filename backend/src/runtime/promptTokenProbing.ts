@@ -1,24 +1,31 @@
-import type { BackendDatabase } from '../persistence/db.js'
-import { insertRawExchangeRecord } from '../persistence/repository.js'
-import type { ApiMessage } from '../domain/selectors.js'
-import type { RawExchangeRecord, SessionRecord } from '../domain/model.js'
-import { probePromptTokens, type PromptProbeResult } from '../services/lmstudio/client.js'
-import { sessionReasoningBody, type ChatCompletionGateway } from './modelTurns.js'
+import type { BackendDatabase } from "../persistence/db.js";
+import { insertRawExchangeRecord } from "../persistence/repository.js";
+import type { ApiMessage } from "../domain/selectors.js";
+import type { RawExchangeRecord, SessionRecord } from "../domain/model.js";
+import {
+  probePromptTokens,
+  type PromptProbeResult,
+} from "../services/lmstudio/client.js";
+import {
+  buildReasoningParams,
+  estimateTokensFromText,
+} from "../services/provider/index.js";
+import type { ChatCompletionGateway } from "./modelTurns.js";
 
 export type LmToolDefinition = {
-  type: 'function'
+  type: "function";
   function: {
-    name: string
-    description: string
-    parameters: Record<string, unknown>
-  }
-}
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+};
 
 interface ProbeTraceContext {
-  database: BackendDatabase
-  sessionId: string
-  turnId: string | null
-  roundId: string | null
+  database: BackendDatabase;
+  sessionId: string;
+  turnId: string | null;
+  roundId: string | null;
 }
 
 function buildProbeBody(
@@ -31,30 +38,34 @@ function buildProbeBody(
     temperature: session.modelProfileSnapshot.temperature,
     messages,
     ...(tools && tools.length > 0 ? { tools } : {}),
-    ...sessionReasoningBody(session),
-  }
+    ...buildReasoningParams(
+      session.modelProfileSnapshot.reasoning,
+      session.modelProfileSnapshot.connectionBaseUrl,
+      session.modelProfileSnapshot.providerType,
+    ),
+  };
 }
 
 function createUuid(): string {
-  return crypto.randomUUID()
+  return crypto.randomUUID();
 }
 
 function now(): number {
-  return Date.now()
+  return Date.now();
 }
 
 function makeProbeRawExchangeRecords(
   trace: ProbeTraceContext,
   result: PromptProbeResult,
 ): RawExchangeRecord[] {
-  const createdAt = now()
+  const createdAt = now();
   return [
     {
       id: createUuid(),
       sessionId: trace.sessionId,
       turnId: trace.turnId,
       roundId: trace.roundId,
-      kind: 'lmstudio-probe-request',
+      kind: "llm-probe-request",
       requestUrl: result.rawExchange.requestUrl,
       requestMethod: result.rawExchange.requestMethod,
       requestHeadersJson: result.rawExchange.requestHeadersJson,
@@ -69,7 +80,7 @@ function makeProbeRawExchangeRecords(
       sessionId: trace.sessionId,
       turnId: trace.turnId,
       roundId: trace.roundId,
-      kind: 'lmstudio-probe-response',
+      kind: "llm-probe-response",
       requestUrl: result.rawExchange.requestUrl,
       requestMethod: result.rawExchange.requestMethod,
       requestHeadersJson: null,
@@ -79,7 +90,7 @@ function makeProbeRawExchangeRecords(
       responseBody: result.rawExchange.responseBody,
       createdAt,
     },
-  ]
+  ];
 }
 
 export async function probeRequestPromptTokens(
@@ -90,24 +101,47 @@ export async function probeRequestPromptTokens(
   trace?: ProbeTraceContext,
 ): Promise<number | null> {
   if (messages.length === 0) {
-    return null
+    return null;
   }
 
-  const body = buildProbeBody(session, messages, tools)
+  const body = buildProbeBody(session, messages, tools);
   if (chatCompletionGateway.probePromptTokensDetailed) {
     const result = await chatCompletionGateway.probePromptTokensDetailed(
       session.modelProfileSnapshot.connectionBaseUrl,
       session.modelProfileSnapshot.apiKey ?? undefined,
       body,
-    )
+    );
+
     if (trace) {
-      const records = makeProbeRawExchangeRecords(trace, result)
+      const records = makeProbeRawExchangeRecords(trace, result);
       const tx = trace.database.connection.transaction(() => {
-        records.forEach(record => insertRawExchangeRecord(trace.database.connection, record))
-      })
-      tx()
+        records.forEach((record) =>
+          insertRawExchangeRecord(trace.database.connection, record),
+        );
+      });
+      tx();
     }
-    return result.promptTokens
+
+    if (result.promptTokens != null) {
+      return result.promptTokens;
+    }
+
+    // Fallback for providers like OpenRouter whose non-streaming
+    // responses don't include usage.  Estimate from message text
+    // plus tool definitions when present.
+    const provider = session.modelProfileSnapshot.providerType ?? "lmstudio";
+    if (provider === "openrouter") {
+      const messageText = messages
+        .map((m) => (typeof m.content === "string" ? m.content : ""))
+        .join("");
+      const toolsText =
+        tools && tools.length > 0
+          ? JSON.stringify(tools.map((t) => t.function))
+          : "";
+      return estimateTokensFromText(messageText + toolsText);
+    }
+
+    return null;
   }
 
   return chatCompletionGateway.probePromptTokens
@@ -120,5 +154,5 @@ export async function probeRequestPromptTokens(
         session.modelProfileSnapshot.connectionBaseUrl,
         session.modelProfileSnapshot.apiKey ?? undefined,
         body,
-      )
+      );
 }

@@ -1,239 +1,146 @@
-export interface OaiModelListResponse {
-  data?: Array<{
-    id?: string
-    object?: string
-    owned_by?: string
-    /** Context window size in tokens. Returned by OpenRouter and some other providers. */
-    context_length?: number
-    /** API parameters this model supports (e.g. "tools", "reasoning"). OpenRouter-specific. */
-    supported_parameters?: string[]
-  }>
-}
+/**
+ * LM Studio client — re-exports shared OAI functions + LM Studio-specific APIs.
+ *
+ * Shared OAI types and functions are imported from the generic openai client.
+ * LM Studio-specific functions (native model listing, load/unload, etc.) live
+ * here because they depend on LM Studio's proprietary /api/v1/models endpoints.
+ */
 
-export interface OaiChatCompletionUsage {
-  prompt_tokens?: number
-  completion_tokens?: number
-  total_tokens?: number
-  reasoning_tokens?: number
-  completion_tokens_details?: {
-    reasoning_tokens?: number
-  }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Re-export shared OAI types and functions
+// ─────────────────────────────────────────────────────────────────────────────
 
-export interface OaiChatCompletionResponse {
-  id: string
-  model: string
-  created: number
-  choices: Array<{
-    index: number
-    finish_reason: string | null
-    message?: {
-      role?: string
-      content?: string | null
-      reasoning_content?: string | null
-      tool_calls?: Array<{
-        id?: string
-        type?: string
-        function?: {
-          name?: string
-          arguments?: string
-        }
-      }>
-    }
-  }>
-  usage?: OaiChatCompletionUsage
-}
+export {
+  // Functions
+  listModels,
+  createChatCompletion,
+  parseChatCompletionStream,
+  streamChatCompletion,
+  probePromptTokens,
+  probePromptTokensDetailed,
+  // Types
+  type OaiModelListResponse,
+  type OaiChatCompletionUsage,
+  type OaiChatCompletionResponse,
+  type OaiChatCompletionChunk,
+  type AssistantSegment,
+  type OaiStreamedChatCompletionResult,
+  type StreamDelta,
+  type StreamCallbacks,
+  type ProbeRawExchange,
+  type PromptProbeResult,
+} from "../openai/client.js";
 
-export interface OaiChatCompletionChunk {
-  id?: string
-  model?: string
-  created?: number
-  choices?: Array<{
-    index?: number
-    delta?: {
-      role?: string
-      content?: string | null
-      reasoning_content?: string | null
-      tool_calls?: Array<{
-        index?: number
-        id?: string
-        type?: string
-        function?: {
-          name?: string
-          arguments?: string
-        }
-      }>
-    }
-    finish_reason?: string | null
-  }>
-  usage?: OaiChatCompletionUsage
-}
-
-export type AssistantSegment =
-  | {
-      kind: 'reasoning'
-      text: string
-    }
-  | {
-      kind: 'content'
-      text: string
-    }
-  | {
-      kind: 'tool-call'
-      toolCallIndex: number
-    }
-
-export interface OaiStreamedChatCompletionResult {
-  completion: OaiChatCompletionResponse
-  segments: AssistantSegment[]
-  rawResponseBody: string
-  chunks: OaiChatCompletionChunk[]
-}
-
-export type StreamDelta =
-  | {
-      kind: 'reasoning'
-      textDelta: string
-    }
-  | {
-      kind: 'content'
-      textDelta: string
-    }
-  | {
-      kind: 'tool-call'
-      toolCallIndex: number
-      idDelta?: string | undefined
-      nameDelta?: string | undefined
-      argumentsDelta?: string | undefined
-    }
-
-export interface StreamCallbacks {
-  onDelta?(delta: StreamDelta): void
-}
-
-export interface ProbeRawExchange {
-  requestUrl: string
-  requestMethod: string
-  requestHeadersJson: Record<string, string> | null
-  requestBody: string | null
-  responseStatus: number | null
-  responseHeadersJson: Record<string, string> | null
-  responseBody: string | null
-}
-
-export interface PromptProbeResult {
-  promptTokens: number | null
-  completion: OaiChatCompletionResponse
-  rawExchange: ProbeRawExchange
-}
-
-function buildUrl(baseUrl: string, relativePath: string): string {
-  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
-  return new URL(relativePath, normalizedBaseUrl).toString()
-}
-
-/** Strips any path component from baseUrl and returns the scheme+host root. */
-function rootUrl(baseUrl: string): string {
-  const u = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`)
-  return `${u.protocol}//${u.host}`
-}
-
-function authHeaders(apiKey?: string): Record<string, string> {
-  return apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
-}
-
-function responseHeadersJson(headers: Headers): Record<string, string> | null {
-  const contentType = headers.get('content-type')
-  return contentType ? { 'content-type': contentType } : null
-}
-
-export async function listModels(baseUrl: string, apiKey?: string): Promise<OaiModelListResponse> {
-  const response = await fetch(buildUrl(baseUrl, 'models'), {
-    headers: {
-      Accept: 'application/json',
-      ...authHeaders(apiKey),
-    },
-  })
-
-  if (!response.ok) {
-    throw new Error(`Models request failed: ${response.status} ${response.statusText}`)
-  }
-
-  return (await response.json()) as OaiModelListResponse
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// LM Studio-specific types
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface LmStudioNativeModel {
-  type?: string
-  key?: string
-  display_name?: string
-  max_context_length?: number
+  type?: string;
+  key?: string;
+  display_name?: string;
+  max_context_length?: number;
+  quantization?: { name?: string; bits_per_weight?: number };
   capabilities?: {
     reasoning?: {
-      allowed_options?: string[]
-      default?: string
-    }
-  }
+      allowed_options?: string[];
+      default?: string;
+    };
+  };
   loaded_instances?: Array<{
-    id?: string
+    id?: string;
     config?: {
-      context_length?: number
-    }
-  }>
+      context_length?: number;
+    };
+  }>;
 }
 
 export interface LmStudioModelStatus {
-  uid: string
-  key: string
-  displayName: string
-  maxContextLength: number | null
-  loadedContextLength: number | null
-  isLoaded: boolean
-  supportsReasoning: boolean
-  defaultReasoningOn: boolean
-  raw: LmStudioNativeModel
+  uid: string;
+  key: string;
+  displayName: string;
+  maxContextLength: number | null;
+  loadedContextLength: number | null;
+  isLoaded: boolean;
+  supportsReasoning: boolean;
+  defaultReasoningOn: boolean;
+  raw: LmStudioNativeModel;
 }
 
-async function listNativeLlmModels(baseUrl: string, apiKey?: string): Promise<LmStudioNativeModel[] | null> {
+// ─────────────────────────────────────────────────────────────────────────────
+// LM Studio-specific internal helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { rootUrl, authHeaders, listModels } from "../openai/client.js";
+
+async function listNativeLlmModels(
+  baseUrl: string,
+  apiKey?: string,
+): Promise<LmStudioNativeModel[] | null> {
   try {
-    const url = `${rootUrl(baseUrl)}/api/v1/models`
+    const url = `${rootUrl(baseUrl)}/api/v1/models`;
     const response = await fetch(url, {
-      headers: { Accept: 'application/json', ...authHeaders(apiKey) },
-    })
-    if (!response.ok) return null
-    const data = (await response.json()) as { models?: LmStudioNativeModel[] }
-    return (data.models ?? []).filter(m => m.type === 'llm' && typeof m.key === 'string')
+      headers: { Accept: "application/json", ...authHeaders(apiKey) },
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { models?: LmStudioNativeModel[] };
+    return (data.models ?? []).filter(
+      (m) => m.type === "llm" && typeof m.key === "string",
+    );
   } catch {
-    return null
+    return null;
   }
 }
 
-export async function listModelsWithStatus(baseUrl: string, apiKey?: string): Promise<LmStudioModelStatus[]> {
-  const nativeModels = await listNativeLlmModels(baseUrl, apiKey)
+// ─────────────────────────────────────────────────────────────────────────────
+// LM Studio-specific API functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function listModelsWithStatus(
+  baseUrl: string,
+  apiKey?: string,
+): Promise<LmStudioModelStatus[]> {
+  const nativeModels = await listNativeLlmModels(baseUrl, apiKey);
   if (nativeModels && nativeModels.length > 0) {
-    return nativeModels.map((m) => {
-      const displayName = m.display_name ?? m.key ?? ''
-      const loadedInstance = m.loaded_instances?.[0]
-      const reasoningOptions = m.capabilities?.reasoning?.allowed_options ?? []
-      const supportsReasoning = reasoningOptions.includes('on') && reasoningOptions.includes('off')
+    const models = nativeModels.map((m) => {
+      const displayName = m.display_name ?? m.key ?? "";
+      const qName = m.quantization?.name;
+      const qualifiedName = qName ? `${displayName} (${qName})` : displayName;
+      const loadedInstance = m.loaded_instances?.[0];
+      const reasoningOptions = m.capabilities?.reasoning?.allowed_options ?? [];
+      const supportsReasoning =
+        reasoningOptions.includes("on") && reasoningOptions.includes("off");
       return {
-        uid: `${m.key}:${displayName}`,
-        key: m.key ?? '',
-        displayName,
+        uid: `${m.key}:${qualifiedName}`,
+        key: m.key ?? "",
+        displayName: qualifiedName,
         maxContextLength: m.max_context_length ?? null,
         loadedContextLength: loadedInstance?.config?.context_length ?? null,
         isLoaded: (m.loaded_instances?.length ?? 0) > 0,
         supportsReasoning,
-        defaultReasoningOn: m.capabilities?.reasoning?.default === 'on',
+        defaultReasoningOn: m.capabilities?.reasoning?.default === "on",
         raw: m,
+      };
+    });
+    // Ensure unique uids — LM Studio may return the same model key twice with
+    // different quantization, context config, or loaded instance state.
+    const uidCounts = new Map<string, number>();
+    return models.map((m) => {
+      const count = (uidCounts.get(m.uid) ?? 0) + 1;
+      uidCounts.set(m.uid, count);
+      if (count > 1) {
+        return { ...m, uid: `${m.uid}:#${count}` };
       }
-    })
+      return m;
+    });
   }
 
-  const compat = await listModels(baseUrl, apiKey)
-  const rawModels = compat.data?.filter(m => m.id) ?? []
-  return rawModels.map((m) => {
-    const id = m.id ?? ''
-    const supportsReasoning = m.supported_parameters?.includes('reasoning') ?? false
+  const compat = await listModels(baseUrl, apiKey);
+  const rawModels = compat.data?.filter((m) => m.id) ?? [];
+  const models = rawModels.map((m) => {
+    const id = m.id ?? "";
+    const supportsReasoning =
+      m.supported_parameters?.includes("reasoning") ?? false;
     return {
       uid: id,
       key: id,
@@ -244,15 +151,25 @@ export async function listModelsWithStatus(baseUrl: string, apiKey?: string): Pr
       supportsReasoning,
       defaultReasoningOn: supportsReasoning,
       raw: {
-        type: 'llm',
+        type: "llm",
         key: id,
         context_length: m.context_length,
         supported_parameters: m.supported_parameters,
         object: m.object,
         owned_by: m.owned_by,
       } as LmStudioNativeModel,
+    };
+  });
+  // Same unique-uid treatment for compat-fallback models.
+  const uidCounts = new Map<string, number>();
+  return models.map((m) => {
+    const count = (uidCounts.get(m.uid) ?? 0) + 1;
+    uidCounts.set(m.uid, count);
+    if (count > 1) {
+      return { ...m, uid: `${m.uid}:#${count}` };
     }
-  })
+    return m;
+  });
 }
 
 /**
@@ -264,11 +181,11 @@ export async function isModelLoaded(
   apiKey: string | undefined,
   modelKey: string,
 ): Promise<boolean | null> {
-  const models = await listNativeLlmModels(baseUrl, apiKey)
-  if (!models) return null
-  const model = models.find(m => m.key === modelKey)
-  if (!model) return false
-  return (model.loaded_instances?.length ?? 0) > 0
+  const models = await listNativeLlmModels(baseUrl, apiKey);
+  if (!models) return null;
+  const model = models.find((m) => m.key === modelKey);
+  if (!model) return false;
+  return (model.loaded_instances?.length ?? 0) > 0;
 }
 
 /**
@@ -282,30 +199,37 @@ export async function getLoadedContextLength(
   apiKey: string | undefined,
   modelKey: string,
 ): Promise<number | null> {
-  const models = await listNativeLlmModels(baseUrl, apiKey)
-  if (!models) return null
-  const model = models.find(m => m.key === modelKey)
-  return model?.loaded_instances?.[0]?.config?.context_length ?? null
+  const models = await listNativeLlmModels(baseUrl, apiKey);
+  if (!models) return null;
+  const model = models.find((m) => m.key === modelKey);
+  return model?.loaded_instances?.[0]?.config?.context_length ?? null;
 }
 
 export async function loadModel(
   baseUrl: string,
   apiKey: string | undefined,
   modelKey: string,
+  contextSize?: number,
 ): Promise<void> {
-  const url = `${rootUrl(baseUrl)}/api/v1/models/load`
+  const url = `${rootUrl(baseUrl)}/api/v1/models/load`;
+  const body: Record<string, unknown> = { model: modelKey };
+  if (contextSize !== undefined) {
+    body.context_length = contextSize;
+  }
   const response = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
+      "Content-Type": "application/json",
+      Accept: "application/json",
       ...authHeaders(apiKey),
     },
-    body: JSON.stringify({ model: modelKey }),
-  })
+    body: JSON.stringify(body),
+  });
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`LM Studio load model failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
+    const text = await response.text();
+    throw new Error(
+      `LM Studio load model failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`,
+    );
   }
 }
 
@@ -314,422 +238,20 @@ export async function unloadModel(
   apiKey: string | undefined,
   instanceId: string,
 ): Promise<void> {
-  const url = `${rootUrl(baseUrl)}/api/v1/models/unload`
+  const url = `${rootUrl(baseUrl)}/api/v1/models/unload`;
   const response = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
+      "Content-Type": "application/json",
+      Accept: "application/json",
       ...authHeaders(apiKey),
     },
     body: JSON.stringify({ instance_id: instanceId }),
-  })
+  });
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`LM Studio unload model failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
-  }
-}
-
-export async function createChatCompletion(
-  baseUrl: string,
-  apiKey: string | undefined,
-  body: Record<string, unknown>,
-): Promise<OaiChatCompletionResponse> {
-  const response = await fetch(buildUrl(baseUrl, 'chat/completions'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...authHeaders(apiKey),
-    },
-    body: JSON.stringify(body),
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Completion failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
-  }
-
-  return (await response.json()) as OaiChatCompletionResponse
-}
-
-function appendTextSegment(
-  segments: AssistantSegment[],
-  kind: 'reasoning' | 'content',
-  text: string | null | undefined,
-): void {
-  if (!text) {
-    return
-  }
-
-  const lastSegment = segments.at(-1)
-  if (lastSegment?.kind === kind) {
-    lastSegment.text += text
-    return
-  }
-
-  segments.push({ kind, text })
-}
-
-function appendToolCallSegment(
-  segments: AssistantSegment[],
-  toolCallIndex: number,
-): void {
-  const lastSegment = segments.at(-1)
-  if (lastSegment?.kind === 'tool-call' && lastSegment.toolCallIndex === toolCallIndex) {
-    return
-  }
-
-  segments.push({
-    kind: 'tool-call',
-    toolCallIndex,
-  })
-}
-
-function parseServerSentEventPayloads(rawText: string): string[] {
-  const payloads: string[] = []
-  let currentDataLines: string[] = []
-
-  for (const rawLine of rawText.split(/\r?\n/)) {
-    if (rawLine.length === 0) {
-      if (currentDataLines.length > 0) {
-        payloads.push(currentDataLines.join('\n'))
-        currentDataLines = []
-      }
-      continue
-    }
-
-    if (rawLine.startsWith('data:')) {
-      currentDataLines.push(rawLine.slice(5).trimStart())
-    }
-  }
-
-  if (currentDataLines.length > 0) {
-    payloads.push(currentDataLines.join('\n'))
-  }
-
-  return payloads
-}
-
-export function parseChatCompletionStream(
-  rawText: string,
-): OaiStreamedChatCompletionResult {
-  const payloads = parseServerSentEventPayloads(rawText)
-  const chunks: OaiChatCompletionChunk[] = []
-  const segments: AssistantSegment[] = []
-  const toolCalls = new Map<number, {
-    id?: string
-    type?: string
-    function: {
-      name: string
-      arguments: string
-    }
-  }>()
-
-  let id = ''
-  let model = ''
-  let created = 0
-  let finishReason: string | null = null
-  let role = 'assistant'
-  let content = ''
-  let reasoningContent = ''
-  let usage: OaiChatCompletionUsage | undefined
-
-  for (const payload of payloads) {
-    if (payload === '[DONE]') {
-      continue
-    }
-
-    const chunk = JSON.parse(payload) as OaiChatCompletionChunk
-    chunks.push(chunk)
-
-    id = chunk.id ?? id
-    model = chunk.model ?? model
-    created = chunk.created ?? created
-    usage = chunk.usage ?? usage
-
-    const choice = chunk.choices?.[0]
-    if (!choice) {
-      continue
-    }
-
-    finishReason = choice.finish_reason ?? finishReason
-    const delta = choice.delta
-    if (!delta) {
-      continue
-    }
-
-    role = delta.role ?? role
-
-    if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length > 0) {
-      reasoningContent += delta.reasoning_content
-      appendTextSegment(segments, 'reasoning', delta.reasoning_content)
-    }
-
-    if (typeof delta.content === 'string' && delta.content.length > 0) {
-      content += delta.content
-      appendTextSegment(segments, 'content', delta.content)
-    }
-
-    if (Array.isArray(delta.tool_calls)) {
-      for (const toolCallDelta of delta.tool_calls) {
-        const toolCallIndex = toolCallDelta.index ?? 0
-        const record = toolCalls.get(toolCallIndex) ?? {
-          function: {
-            name: '',
-            arguments: '',
-          },
-        }
-
-        if (typeof toolCallDelta.id === 'string') {
-          record.id = `${record.id ?? ''}${toolCallDelta.id}`
-        }
-        if (typeof toolCallDelta.type === 'string') {
-          record.type = toolCallDelta.type
-        }
-        if (typeof toolCallDelta.function?.name === 'string') {
-          record.function.name += toolCallDelta.function.name
-        }
-        if (typeof toolCallDelta.function?.arguments === 'string') {
-          record.function.arguments += toolCallDelta.function.arguments
-        }
-
-        toolCalls.set(toolCallIndex, record)
-        appendToolCallSegment(segments, toolCallIndex)
-      }
-    }
-  }
-
-  const orderedToolCalls = [...toolCalls.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([index, toolCall]) => ({
-      id: toolCall.id ?? `tool-call-${index}`,
-      type: (toolCall.type ?? 'function'),
-      function: {
-        name: toolCall.function.name || 'unknown',
-        arguments: toolCall.function.arguments || '{}',
-      },
-    }))
-
-  return {
-    completion: {
-      id,
-      model,
-      created,
-      choices: [
-        {
-          index: 0,
-          finish_reason: finishReason,
-          message: {
-            role,
-            content: content || null,
-            ...(reasoningContent ? { reasoning_content: reasoningContent } : {}),
-            ...(orderedToolCalls.length > 0 ? { tool_calls: orderedToolCalls } : {}),
-          },
-        },
-      ],
-      ...(usage ? { usage } : {}),
-    },
-    segments,
-    rawResponseBody: rawText,
-    chunks,
-  }
-}
-
-function emitChunkDeltas(
-  chunk: OaiChatCompletionChunk,
-  onDelta: ((delta: StreamDelta) => void) | undefined,
-): void {
-  if (!onDelta) {
-    return
-  }
-
-  const delta = chunk.choices?.[0]?.delta
-  if (!delta) {
-    return
-  }
-
-  if (typeof delta.reasoning_content === 'string' && delta.reasoning_content.length > 0) {
-    onDelta({
-      kind: 'reasoning',
-      textDelta: delta.reasoning_content,
-    })
-  }
-
-  if (typeof delta.content === 'string' && delta.content.length > 0) {
-    onDelta({
-      kind: 'content',
-      textDelta: delta.content,
-    })
-  }
-
-  if (Array.isArray(delta.tool_calls)) {
-    for (const toolCallDelta of delta.tool_calls) {
-      onDelta({
-        kind: 'tool-call',
-        toolCallIndex: toolCallDelta.index ?? 0,
-        ...(typeof toolCallDelta.id === 'string' ? { idDelta: toolCallDelta.id } : {}),
-        ...(typeof toolCallDelta.function?.name === 'string' ? { nameDelta: toolCallDelta.function.name } : {}),
-        ...(typeof toolCallDelta.function?.arguments === 'string' ? { argumentsDelta: toolCallDelta.function.arguments } : {}),
-      })
-    }
-  }
-}
-
-export async function streamChatCompletion(
-  baseUrl: string,
-  apiKey: string | undefined,
-  body: Record<string, unknown>,
-  callbacks?: StreamCallbacks,
-): Promise<OaiStreamedChatCompletionResult> {
-  const response = await fetch(buildUrl(baseUrl, 'chat/completions'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-      ...authHeaders(apiKey),
-    },
-    body: JSON.stringify({
-      ...body,
-      stream: true,
-      stream_options: {
-        include_usage: true,
-      },
-    }),
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Streamed completion failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
-  }
-
-  if (!response.body) {
-    const rawText = await response.text()
-    const parsed = parseChatCompletionStream(rawText)
-    parsed.chunks.forEach(chunk => emitChunkDeltas(chunk, callbacks?.onDelta))
-    return parsed
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let rawText = ''
-  let buffered = ''
-  let currentDataLines: string[] = []
-
-  const processBufferedLines = () => {
-    while (true) {
-      const newlineIndex = buffered.indexOf('\n')
-      if (newlineIndex < 0) {
-        return
-      }
-
-      const rawLine = buffered.slice(0, newlineIndex)
-      buffered = buffered.slice(newlineIndex + 1)
-      const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
-
-      if (line.length === 0) {
-        if (currentDataLines.length === 0) {
-          continue
-        }
-        const payload = currentDataLines.join('\n')
-        currentDataLines = []
-        if (payload !== '[DONE]') {
-          emitChunkDeltas(JSON.parse(payload) as OaiChatCompletionChunk, callbacks?.onDelta)
-        }
-        continue
-      }
-
-      if (line.startsWith('data:')) {
-        currentDataLines.push(line.slice(5).trimStart())
-      }
-    }
-  }
-
-  while (true) {
-    const { value, done } = await reader.read()
-    if (done) {
-      break
-    }
-
-    const text = decoder.decode(value, { stream: true })
-    rawText += text
-    buffered += text
-    processBufferedLines()
-  }
-
-  const finalChunk = decoder.decode()
-  rawText += finalChunk
-  buffered += finalChunk
-  processBufferedLines()
-
-  if (buffered.length > 0) {
-    const line = buffered.endsWith('\r') ? buffered.slice(0, -1) : buffered
-    if (line.startsWith('data:')) {
-      currentDataLines.push(line.slice(5).trimStart())
-    }
-  }
-  if (currentDataLines.length > 0) {
-    const payload = currentDataLines.join('\n')
-    if (payload !== '[DONE]') {
-      emitChunkDeltas(JSON.parse(payload) as OaiChatCompletionChunk, callbacks?.onDelta)
-    }
-  }
-
-  return parseChatCompletionStream(rawText)
-}
-
-export async function probePromptTokens(
-  baseUrl: string,
-  apiKey: string | undefined,
-  body: Record<string, unknown>,
-): Promise<number | null> {
-  const result = await probePromptTokensDetailed(baseUrl, apiKey, body)
-  return result.promptTokens
-}
-
-export async function probePromptTokensDetailed(
-  baseUrl: string,
-  apiKey: string | undefined,
-  body: Record<string, unknown>,
-): Promise<PromptProbeResult> {
-  const requestBody = {
-    ...body,
-    stream: false,
-    max_tokens: 1,
-  }
-  const requestUrl = buildUrl(baseUrl, 'chat/completions')
-  const requestHeaders = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  }
-  const requestBodyText = JSON.stringify(requestBody)
-  const response = await fetch(requestUrl, {
-    method: 'POST',
-    headers: {
-      ...requestHeaders,
-      ...authHeaders(apiKey),
-    },
-    body: requestBodyText,
-  })
-
-  const responseText = await response.text()
-  if (!response.ok) {
-    throw new Error(`Completion failed: ${response.status} ${response.statusText}: ${responseText.slice(0, 500)}`)
-  }
-
-  const completion = JSON.parse(responseText) as OaiChatCompletionResponse
-
-  return {
-    promptTokens: completion.usage?.prompt_tokens ?? null,
-    completion,
-    rawExchange: {
-      requestUrl,
-      requestMethod: 'POST',
-      requestHeadersJson: requestHeaders,
-      requestBody: requestBodyText,
-      responseStatus: response.status,
-      responseHeadersJson: responseHeadersJson(response.headers),
-      responseBody: responseText,
-    },
+    const text = await response.text();
+    throw new Error(
+      `LM Studio unload model failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`,
+    );
   }
 }

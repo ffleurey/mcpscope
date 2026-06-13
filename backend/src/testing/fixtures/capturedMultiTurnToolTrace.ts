@@ -21,6 +21,7 @@ export const capturedMultiTurnToolTrace: SessionTraceBundle = {
       systemPrompt: 'Use tools when they can answer directly.',
       temperature: 0,
       reasoning: 'on',
+      contextSize: null,
       createdAt: 1,
       updatedAt: 1,
     },

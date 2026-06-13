@@ -94,7 +94,7 @@
         </div>
         <dl class="card-details">
           <div class="detail-row">
-            <dt>Provider</dt><dd>{conn.providerType === 'openrouter' ? 'OpenRouter' : 'LM Studio'}</dd>
+            <dt>Provider</dt><dd>{conn.providerType === 'openrouter' ? 'OpenRouter' : conn.providerType === 'ollama' ? 'Ollama' : 'LM Studio'}</dd>
           </div>
           <div class="detail-row">
             <dt>Base URL</dt><dd><code>{conn.baseUrl}</code></dd>
@@ -110,7 +110,7 @@
 
 {#if testDialogConn && testDialogResult}
   <ConnectionTestDialog
-    title="{testDialogConn.providerType === 'openrouter' ? 'OpenRouter' : 'LM Studio'} Connection Test"
+    title="{testDialogConn.providerType === 'openrouter' ? 'OpenRouter' : testDialogConn.providerType === 'ollama' ? 'Ollama' : 'LM Studio'} Connection Test"
     target={testDialogConn.baseUrl}
     result={testDialogResult}
     onClose={closeTestDialog}

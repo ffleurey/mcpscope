@@ -3,7 +3,8 @@
   import { lmConnections } from '../connectionStore'
   import { listModels, loadModel } from '../services/lmstudio'
   import type { LmStudioModel } from '../services/lmstudio'
-  import type { ModelConfig, LmStudioConnection } from '../types'
+  import type { ModelConfig } from '../types'
+import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
 
   interface Props {
     modelConfig?: ModelConfig | null
@@ -13,6 +14,8 @@
 
   let { modelConfig = null, onSave, onCancel }: Props = $props()
 
+
+
   let name = $state('')
   let connectionId = $state('')
   let modelKey = $state('')
@@ -20,6 +23,8 @@
   let temperature = $state(0.7)
   let systemPrompt = $state('')
   let reasoning = $state<'on' | 'off' | undefined>(undefined)
+  let contextSize = $state<number | undefined>(undefined)
+  let customContextSize = $state('')
   let seededModelConfig = $state<ModelConfig | null | undefined>(undefined)
 
   $effect(() => {
@@ -32,6 +37,8 @@
     temperature = modelConfig?.temperature ?? 0.7
     systemPrompt = modelConfig?.systemPrompt ?? ''
     reasoning = modelConfig?.reasoning
+    contextSize = modelConfig?.contextSize
+    customContextSize = modelConfig?.contextSize ? String(modelConfig.contextSize) : ''
   })
 
   let availableModels = $state<LmStudioModel[]>([])
@@ -53,7 +60,7 @@
     $lmConnections.find(c => c.id === connectionId) ?? null,
   )
   let isLmStudio = $derived(
-    selectedConnection?.providerType !== 'openrouter',
+    selectedConnection?.providerType === 'lmstudio',
   )
 
   let errors = $state<Record<string, string>>({})
@@ -132,10 +139,13 @@
   async function handleLoadModel() {
     const conn = $lmConnections.find(c => c.id === connectionId)
     if (!conn || !modelKey) return
+    const resolvedContextSize = contextSize === -1
+      ? (customContextSize ? parseInt(customContextSize, 10) : undefined)
+      : contextSize
     modelLoading = true
     modelLoadError = null
     try {
-      await loadModel(conn.baseUrl, modelKey, conn.apiKey)
+      await loadModel(conn.baseUrl, modelKey, conn.apiKey, resolvedContextSize, conn.providerType)
       await fetchModels(connectionId)
     } catch (e) {
       modelLoadError = e instanceof Error ? e.message : String(e)
@@ -159,6 +169,9 @@
   function handleSubmit() {
     if (!validate()) return
     const now = Date.now()
+    const resolvedContextSize = contextSize === -1
+      ? (customContextSize ? parseInt(customContextSize, 10) : undefined)
+      : contextSize
     onSave({
       id: modelConfig?.id ?? crypto.randomUUID(),
       name: name.trim(),
@@ -168,6 +181,7 @@
       systemPrompt: systemPrompt.trim(),
       temperature,
       reasoning: selectedModelMeta?.supportsReasoning ? reasoning : undefined,
+      contextSize: resolvedContextSize,
       createdAt: modelConfig?.createdAt ?? now,
       updatedAt: now,
     })
@@ -264,6 +278,30 @@
   {/if}
 
   <div class="field">
+    <label for="mc-context-size">Context Size <span class="field-hint">(leave empty for provider default){#if selectedModelMeta?.maxContextLength} — max {selectedModelMeta.maxContextLength.toLocaleString()}{/if}</span></label>
+    <div class="context-size-row">
+      <select id="mc-context-size" bind:value={contextSize}>
+        <option value={undefined}>Auto (provider default)</option>
+        {#each CONTEXT_SIZE_PRESETS as preset (preset.value)}
+          <option value={preset.value}>{preset.label}</option>
+        {/each}
+        <option value={-1}>Custom…</option>
+      </select>
+      {#if contextSize === -1}
+        <input
+          type="number"
+          min="1"
+          bind:value={customContextSize}
+          placeholder="Enter context size"
+        />
+      {/if}
+      {#if isLmStudio && selectedModelMeta?.isLoaded && selectedModelMeta.loadedContextLength}
+        <span class="loaded-context-indicator">● Loaded: {selectedModelMeta.loadedContextLength.toLocaleString()} tokens</span>
+      {/if}
+    </div>
+  </div>
+
+  <div class="field">
     <label for="mc-system-prompt">System Prompt</label>
     <textarea id="mc-system-prompt" bind:value={systemPrompt} rows="4" placeholder="Optional system prompt"></textarea>
   </div>
@@ -318,12 +356,20 @@
     font-size: 0.78rem;
     margin-top: 0.25rem;
   }
-  .model-select-row {
+  .model-select-row, .context-size-row {
     display: flex;
     gap: 0.5rem;
     align-items: center;
   }
   .model-select-row select { flex: 1; }
+  .context-size-row input { width: 160px; }
+  .context-size-row select { flex: 1; }
+  .loaded-context-indicator {
+    font-size: 0.78rem;
+    color: #4ade80;
+    font-weight: 500;
+    white-space: nowrap;
+  }
   .loading-hint, .no-connections {    font-size: 0.82rem;
     color: var(--text-muted);
     margin: 0.25rem 0 0;

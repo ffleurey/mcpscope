@@ -3,37 +3,42 @@ import type {
   OaiChatCompletionResponse,
   StreamCallbacks,
   OaiStreamedChatCompletionResult,
-} from '../services/lmstudio/client.js'
-import type { ChatCompletionGateway } from './modelTurns.js'
+} from "../services/lmstudio/client.js";
+import type { ChatCompletionGateway } from "./modelTurns.js";
 
 function segmentsFromCompletion(
   completion: OaiChatCompletionResponse,
 ): AssistantSegment[] {
-  const responseMessage = completion.choices[0]?.message
-  const segments: AssistantSegment[] = []
+  const responseMessage = completion.choices[0]?.message;
+  const segments: AssistantSegment[] = [];
 
-  if (responseMessage?.reasoning_content?.length) {
+  const reasoningText = responseMessage?.reasoning_content?.length
+    ? responseMessage.reasoning_content
+    : (responseMessage as Record<string, unknown>)?.reasoning
+      ? String((responseMessage as Record<string, unknown>).reasoning)
+      : (responseMessage as { thinking?: string } | undefined)?.thinking;
+  if (reasoningText?.length) {
     segments.push({
-      kind: 'reasoning',
-      text: responseMessage.reasoning_content,
-    })
+      kind: "reasoning",
+      text: reasoningText,
+    });
   }
 
   if (responseMessage?.content?.length) {
     segments.push({
-      kind: 'content',
+      kind: "content",
       text: responseMessage.content,
-    })
+    });
   }
 
   responseMessage?.tool_calls?.forEach((_toolCall, index) => {
     segments.push({
-      kind: 'tool-call',
+      kind: "tool-call",
       toolCallIndex: index,
-    })
-  })
+    });
+  });
 
-  return segments
+  return segments;
 }
 
 export async function executeChatCompletion(
@@ -44,18 +49,27 @@ export async function executeChatCompletion(
   callbacks?: StreamCallbacks,
 ): Promise<OaiStreamedChatCompletionResult> {
   if (chatCompletionGateway.streamChatCompletion) {
-    return chatCompletionGateway.streamChatCompletion(baseUrl, apiKey, body, callbacks)
+    return chatCompletionGateway.streamChatCompletion(
+      baseUrl,
+      apiKey,
+      body,
+      callbacks,
+    );
   }
 
-  const completion = await chatCompletionGateway.createChatCompletion(baseUrl, apiKey, {
-    ...body,
-    stream: false,
-  })
+  const completion = await chatCompletionGateway.createChatCompletion(
+    baseUrl,
+    apiKey,
+    {
+      ...body,
+      stream: false,
+    },
+  );
 
   return {
     completion,
     segments: segmentsFromCompletion(completion),
     rawResponseBody: JSON.stringify(completion),
     chunks: [],
-  }
+  };
 }

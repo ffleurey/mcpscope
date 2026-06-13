@@ -26,7 +26,7 @@ The value of the project depends on correctness and inspectability:
 
 ## Tech stack
 
-**Backend:** Fastify + TypeScript, SQLite (better-sqlite3), LM Studio HTTP/SSE client, MCP HTTP client
+**Backend:** Fastify + TypeScript, SQLite (better-sqlite3), OpenAI-compatible HTTP/SSE client (shared across LM Studio, OpenRouter, and Ollama), MCP HTTP client
 
 **Frontend:** Svelte 5 + TypeScript + Vite — thin UI layer over backend-owned state, lives under `frontend/`
 
@@ -526,7 +526,7 @@ Reasoning behavior:
 
 ## Streaming model
 
-True reasoning/tool/content ordering is taken from streamed LM Studio SSE events, not guessed from a final merged completion response.
+True reasoning/tool/content ordering is taken from streamed SSE events (all providers use the shared OpenAI-compatible SSE parser), not guessed from a final merged completion response.
 
 The runtime captures:
 
@@ -537,27 +537,27 @@ The runtime captures:
 
 These are assembled into committed backend parts so multi-block reasoning inside a single tool-enabled turn remains inspectable.
 
-### Internal LM Studio service-layer types
+### Internal service-layer types
 
-The LM Studio client layer has its own internal type hierarchy:
+The shared OpenAI-compatible client (`services/openai/client.ts`) defines the internal type hierarchy used by all providers:
 
-- **`LmStudioChatCompletionChunk`** — one raw SSE chunk
-- **`LmStudioStreamDelta`** — one typed transient increment derived from a chunk
-- **`LmStudioAssistantSegment`** — one fully assembled response block in true production order
+- **`OaiChatCompletionChunk`** — one raw SSE chunk
+- **`StreamDelta`** — one typed transient increment derived from a chunk
+- **`AssistantSegment`** — one fully assembled response block in true production order
 
 These are internal service-layer concepts. They are not the public runtime tree.
 
 ### Normalization into the canonical model
 
-The runtime receives provider-specific LM Studio streaming structures and normalizes them into mcpscope parts.
+The runtime receives provider-agnostic streaming structures (normalized from each provider's SSE format by the shared OAI client) and normalizes them into mcpscope parts.
 
-| LM Studio segment kind | Canonical part type |
+| Assistant segment kind | Canonical part type |
 |---|---|
 | `reasoning` | `reasoning` |
 | `content` | `assistant_answer` |
 | `tool-call` | `tool_call` |
 
-Additional canonical part types come from setup or user / MCP interactions rather than LM Studio completion segments:
+Additional canonical part types come from setup or user / MCP interactions rather than model completion segments:
 
 - `system_prompt`
 - `mcp_instructions`
@@ -570,7 +570,7 @@ Tool-result details are included inside the canonical `tool_call` node rather th
 
 The word **delta** appears at two different layers:
 
-- **`LmStudioStreamDelta`** — internal LM Studio assembly increment
+- **`StreamDelta`** — internal provider-agnostic assembly increment (from `openai/client.ts`)
 - **domain delta** — transient backend-to-frontend streaming update such as `part-delta`
 
 They are related, but they are not the same concept.

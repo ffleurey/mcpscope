@@ -2,9 +2,11 @@
   import { onMount } from 'svelte'
   import { modelConfigs, lmConnections, upsertModelConfig, removeModelConfig, sessionCreationDefaults, setDefaultModelConfig } from '../connectionStore'
   import { listModels, loadModel, unloadModel } from '../services/lmstudio'
+  import { fetchLmConnectionModelDetails } from '../api/backendClient'
   import type { LmStudioModel } from '../services/lmstudio'
   import type { ModelConfig } from '../types'
   import ModelConfigForm from './ModelConfigForm.svelte'
+import { formatContextSize } from '../modelConfigHelpers'
   import InlineAppError from './InlineAppError.svelte'
   import JsonDialog from './JsonDialog.svelte'
   import { AppError, toAppError } from '../errors'
@@ -75,7 +77,7 @@
     nextCardError.delete(config.id)
     cardError = nextCardError
     try {
-      await loadModel(conn.baseUrl, config.modelKey, conn.apiKey)
+      await loadModel(conn.baseUrl, config.modelKey, conn.apiKey, config.contextSize, conn.providerType)
       await fetchAllStatuses()
     } catch (e) {
       cardError = new Map(cardError).set(config.id, toAppError(e))
@@ -92,7 +94,7 @@
     nextCardError.delete(config.id)
     cardError = nextCardError
     try {
-      await unloadModel(conn.baseUrl, config.modelKey, conn.apiKey)
+      await unloadModel(conn.baseUrl, config.modelKey, conn.apiKey, conn.providerType)
       await fetchAllStatuses()
     } catch (e) {
       cardError = new Map(cardError).set(config.id, toAppError(e))
@@ -101,11 +103,25 @@
     }
   }
 
-  function openDetails(config: ModelConfig) {
-    const m = liveModel(config)
-    detailsData = m?.raw ?? { note: 'Model status not yet fetched. Click Refresh.' }
-    detailsTitle = `Model Details — ${config.modelDisplayName}`
-    showDetails = true
+  async function openDetails(config: ModelConfig) {
+    const conn = $lmConnections.find(c => c.id === config.connectionId)
+    if (conn?.providerType === 'ollama') {
+      detailsTitle = `Model Details — ${config.modelDisplayName}`
+      detailsData = { note: 'Loading…' }
+      showDetails = true
+      try {
+        const result = await fetchLmConnectionModelDetails(conn.baseUrl, config.modelKey, conn.providerType)
+        detailsData = result.details
+      } catch (e) {
+        const m = liveModel(config)
+        detailsData = m?.raw ?? { error: e instanceof Error ? e.message : String(e) }
+      }
+    } else {
+      const m = liveModel(config)
+      detailsData = m?.raw ?? { note: 'Model status not yet fetched. Click Refresh.' }
+      detailsTitle = `Model Details — ${config.modelDisplayName}`
+      showDetails = true
+    }
   }
 
   async function handleSave(config: ModelConfig) {
@@ -145,7 +161,7 @@
 
   function isLmStudioConnection(connectionId: string): boolean {
     const conn = $lmConnections.find(c => c.id === connectionId)
-    return conn?.providerType !== 'openrouter'
+    return conn?.providerType === 'lmstudio'
   }
 
   onMount(() => { fetchAllStatuses() })
@@ -197,6 +213,9 @@
           <div class="card-actions">
             {#if isLmStudioConnection(config.connectionId) && live?.isLoaded}
               <span class="badge-loaded">● loaded</span>
+              {#if live.loadedContextLength}
+                <span class="badge-loaded-context">{live.loadedContextLength.toLocaleString()} ctx</span>
+              {/if}
               <button class="btn btn-sm" onclick={() => handleEject(config)} disabled={!!busy}>
                 {busy === 'ejecting' ? 'Ejecting…' : 'Eject'}
               </button>
@@ -224,16 +243,9 @@
           <div class="detail-row">
             <dt>Model Key</dt><dd><code>{config.modelKey}</code></dd>
           </div>
-          {#if live?.maxContextLength}
+          {#if config.contextSize}
             <div class="detail-row">
-              <dt>Context</dt>
-              <dd>
-                {#if isLmStudioConnection(config.connectionId) && live?.isLoaded && live.loadedContextLength}
-                  {live.loadedContextLength.toLocaleString()} tokens loaded (max {live.maxContextLength.toLocaleString()})
-                {:else}
-                  {live.maxContextLength.toLocaleString()} tokens
-                {/if}
-              </dd>
+              <dt>Context Size</dt><dd>{formatContextSize(config.contextSize)}</dd>
             </div>
           {/if}
           <div class="detail-row">
@@ -319,7 +331,9 @@
   }
   .card-actions { display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
   .badge-loaded { font-size: 0.75rem; color: #4ade80; font-weight: 500; }
+  .badge-loaded-context { font-size: 0.75rem; color: #4ade80; font-weight: 500; white-space: nowrap; }
   .badge-unloaded { font-size: 0.75rem; color: var(--text-muted); }
+  .text-muted { color: var(--text-muted); }
   .card-details { margin: 0; }
   .detail-row {
     display: flex;
