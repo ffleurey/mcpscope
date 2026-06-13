@@ -127,16 +127,20 @@ export async function probeRequestPromptTokens(
     }
 
     // Fallback for providers like OpenRouter whose non-streaming
-    // responses don't include usage.  Estimate from message text.
+    // responses don't include usage.  Estimate from message text
+    // plus tool definitions when present.
     const provider = detectProvider(
       session.modelProfileSnapshot.connectionBaseUrl,
     );
     if (provider === "openrouter") {
-      return estimateTokensFromText(
-        messages
-          .map((m) => (typeof m.content === "string" ? m.content : ""))
-          .join(""),
-      );
+      const messageText = messages
+        .map((m) => (typeof m.content === "string" ? m.content : ""))
+        .join("");
+      const toolsText =
+        tools && tools.length > 0
+          ? JSON.stringify(tools.map((t) => t.function))
+          : "";
+      return estimateTokensFromText(messageText + toolsText);
     }
 
     return null;
