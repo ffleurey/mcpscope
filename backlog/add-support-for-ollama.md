@@ -83,7 +83,9 @@ As we have decided before (backlog/completed/support-openrouter-provider.md), we
 
 **Status: COMPLETE — no changes needed**
 
-**Finding:** The `exchangeKindValues` (`lmstudio-request`, `lmstudio-response`, `lmstudio-probe-request`, `lmstudio-probe-response`, `mcp-request`, `mcp-response`) are set by the probe origin (the shared OAI functions in `openai/client.ts`) not by the provider type. Since Ollama goes through the same shared OAI functions for chat completions, streaming, and token probing, the same exchange kind values apply. The replay harness matches exchanges by comparing request/response body shapes, not by provider labels.
+**Finding:** The `exchangeKindValues` (`lmstudio-request`, `lmstudio-response`, `lmstudio-probe-request`, `lmstudio-probe-response`, `mcp-request`, `mcp-response`) are set by the probe origin (the shared OAI functions in `openai/client.ts`) not by the provider type. Since Ollama goes through the same shared OAI functions for chat completions, streaming, and token probing, the same underlying mechanism applies regardless of provider.
+
+**Note (post-implementation):** The exchange kind values were later generalized from `lmstudio-*` to `llm-*` / `llm-probe-*` to be semantically provider-agnostic. Old `lmstudio-*` values are kept in the enum for backward compatibility with stored data.
 
 **Acceptance criteria (verified):**
 - ✅ `npm test` passes (187/187) — existing replay fixtures unaffected
