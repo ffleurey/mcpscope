@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { McpServerProfile } from '../types'
+  import { mcpProfiles } from '../connectionStore'
 
   interface Props {
     profile?: McpServerProfile | null
@@ -35,8 +36,18 @@
   let isNew = $derived(!profile)
   $effect(() => {
     if (isNew && name) {
-      const slug = slugify(name)
-      if (slug) customId = slug
+      let slug = slugify(name)
+      if (!slug) slug = 'untitled'
+      // Check for collision with existing MCP profiles
+      const existing = $mcpProfiles
+      if (existing.some(p => p.id === slug)) {
+        let counter = 2
+        while (existing.some(p => p.id === `${slug}-${counter}`)) {
+          counter++
+        }
+        slug = `${slug}-${counter}`
+      }
+      customId = slug
     }
   })
 

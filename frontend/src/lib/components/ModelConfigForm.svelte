@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { lmConnections } from '../connectionStore'
+  import { lmConnections, modelConfigs } from '../connectionStore'
   import { listModels, loadModel } from '../services/lmstudio'
   import type { LmStudioModel } from '../services/lmstudio'
   import type { ModelConfig } from '../types'
@@ -39,8 +39,18 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   let isNew = $derived(!modelConfig)
   $effect(() => {
     if (isNew && name) {
-      const slug = slugify(name)
-      if (slug) customId = slug
+      let slug = slugify(name)
+      if (!slug) slug = 'untitled'
+      // Check for collision with existing model configs
+      const existing = $modelConfigs
+      if (existing.some(mc => mc.id === slug)) {
+        let counter = 2
+        while (existing.some(mc => mc.id === `${slug}-${counter}`)) {
+          counter++
+        }
+        slug = `${slug}-${counter}`
+      }
+      customId = slug
     }
   })
 
