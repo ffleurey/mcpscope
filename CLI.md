@@ -38,15 +38,17 @@ Lists all sessions. Alias for `sessions list`.
 Text output is a columnar table (ID, title, status, model, updated).  
 `--json` → `{ api_version: 1, sessions: [...] }`.
 
-### `mcpscope create <title> [--id <session-id>] [--compaction <strategy>] [--json]`
+### `mcpscope create <title> [--id <session-id>] [--compaction <strategy>] [--model-config <id>] [--mcp-profile <id>...] [--json]`
 
-Creates a session using backend-owned defaults (set via the UI).
+Creates a session using backend-owned defaults (set via the UI) or explicit model/MCP selection.
 
 - `<title>` — session title (required, positional)
 - `--id <session-id>` — optional 4-char explicit session ID (A-Z 2-9, no O/I/0/1)
 - `--compaction <strategy>` — `strip-reasoning` (default) or `none`
+- `--model-config <id>` — optional model config ID; uses the configured default if omitted
+- `--mcp-profile <id>` — repeatable; zero or one selects specific MCP profiles instead of the default-enabled set
 
-The backend resolves the default model config, its LM connection, and any MCP server profiles with `defaultEnabled` set, then builds snapshots and starts initialization in the background.  
+When `--model-config` and `--mcp-profile` are omitted, the backend resolves the default model config, its LM connection, and any MCP server profiles with `defaultEnabled` set, then builds snapshots and starts initialization in the background.  
 Returns as soon as the session record exists — initialization may still be in progress.
 
 **Text output** — prints session ID and summary, then suggests the next step.  
@@ -56,7 +58,9 @@ Returns as soon as the session record exists — initialization may still be in 
 | code | meaning |
 |------|---------|
 | `default_model_not_configured` | no default model has been set in the UI |
-| `default_model_config_not_found` | default model config was deleted after the default was set |
+| `model_config_not_found` | `--model-config` value does not match any existing model config |
+| `lm_connection_not_found` | the selected model config references an LM connection that no longer exists |
+| `mcp_profile_not_found` | one or more `--mcp-profile` values do not match any existing MCP profile |
 | `default_lm_connection_not_found` | LM connection referenced by the default model config was deleted |
 | `invalid_session_id` | `--id` value is not a valid session ID format |
 | `duplicate_session_id` | `--id` value is already in use |
@@ -142,6 +146,30 @@ Stripped parts: `(N tokens - stripped)`.
 
 **JSON output** passes through the raw lookup response: `{ id, type, mode, data }`.
 
+### `mcpscope list_model_configs [--json]`
+
+Lists all model configs with their ID, name, connection, model key, and provider type.
+
+```
+$ mcpscope list_model_configs
+home-assistant   Home Assistant    http://host:8123/mcp   enabled
+weather-mcp      Weather MCP       http://host:8000/mcp   disabled
+```
+
+`--json` returns the full list: `{ model_configs: [...] }`.
+
+### `mcpscope list_mcp_profiles [--json]`
+
+Lists all MCP server profiles with their ID, name, URL, and default-enabled status.
+
+```
+$ mcpscope list_mcp_profiles
+home-assistant   Home Assistant    http://host:8123/mcp   enabled
+weather-mcp      Weather MCP       http://host:8000/mcp   disabled
+```
+
+`--json` returns the full list: `{ mcp_profiles: [...] }`.
+
 ### `mcpscope sessions list [--json]`
 
 Legacy form of `list`. Kept for backward compatibility.
@@ -169,11 +197,13 @@ mcpscope inspect ABCD.1T
 
 ## Flags
 
-| Flag          | Applies to  | Effect                              |
-|---------------|-------------|-------------------------------------|
-| `--json`      | all         | emit JSON instead of text           |
-| `--short`     | `inspect`   | token counts only, no content       |
-| `--url <url>` | all         | backend URL (overrides MCPSCOPE_URL)|
+| Flag               | Applies to         | Effect                              |
+|--------------------|--------------------|-------------------------------------|
+| `--json`           | all                | emit JSON instead of text           |
+| `--short`          | `inspect`          | token counts only, no content       |
+| `--url <url>`      | all                | backend URL (overrides MCPSCOPE_URL)|
+| `--model-config <id>` | `create`        | model config ID (instead of default)|
+| `--mcp-profile <id>` | `create`        | repeatable; MCP profile IDs (instead of default-enabled) |
 
 ## Exit codes
 

@@ -3061,7 +3061,7 @@ describe("CLI session lifecycle endpoints", () => {
       payload: { title: "Test" },
     });
     expect(response.statusCode).toBe(422);
-    expect(response.json().error.code).toBe("default_lm_connection_not_found");
+    expect(response.json().error.code).toBe("lm_connection_not_found");
   });
 
   it("POST /api/sessions/from-defaults creates session with model and optional MCP", async () => {

@@ -14,9 +14,17 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
 
   let { modelConfig = null, onSave, onCancel }: Props = $props()
 
-
+  // Slugify: lowercase, replace spaces with hyphens, remove non-alphanum except - _
+  function slugify(text: string): string {
+    return text.toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9_-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+  }
 
   let name = $state('')
+  let customId = $state('')
   let connectionId = $state('')
   let modelKey = $state('')
   let modelDisplayName = $state('')
@@ -27,10 +35,20 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   let customContextSize = $state('')
   let seededModelConfig = $state<ModelConfig | null | undefined>(undefined)
 
+  // Auto-generate ID from name, but only when creating (not editing existing)
+  let isNew = $derived(!modelConfig)
+  $effect(() => {
+    if (isNew && name) {
+      const slug = slugify(name)
+      if (slug) customId = slug
+    }
+  })
+
   $effect(() => {
     if (modelConfig === seededModelConfig) return
     seededModelConfig = modelConfig
     name = modelConfig?.name ?? ''
+    customId = modelConfig?.id ?? slugify(modelConfig?.name ?? '')
     connectionId = modelConfig?.connectionId ?? ''
     modelKey = modelConfig?.modelKey ?? ''
     modelDisplayName = modelConfig?.modelDisplayName ?? ''
@@ -157,6 +175,11 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   function validate(): boolean {
     const e: Record<string, string> = {}
     if (!name.trim()) e.name = 'Name is required'
+    if (!isNew && !customId.trim()) e.customId = 'ID is required'
+    if (isNew && !customId.trim()) e.customId = 'ID is required'
+    if (customId.trim() && !/^[a-zA-Z0-9_-]+$/.test(customId.trim())) {
+      e.customId = 'ID must only contain letters, numbers, hyphens, and underscores'
+    }
     if (!connectionId) e.connectionId = 'Connection is required'
     if (!modelKey) e.modelKey = 'Model is required'
     if (isNaN(temperature) || temperature < 0 || temperature > 2) {
@@ -173,7 +196,7 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
       ? (customContextSize ? parseInt(customContextSize, 10) : undefined)
       : contextSize
     onSave({
-      id: modelConfig?.id ?? crypto.randomUUID(),
+      id: customId.trim(),
       name: name.trim(),
       connectionId,
       modelKey,
@@ -195,6 +218,17 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
     <label for="mc-name">Name</label>
     <input id="mc-name" type="text" bind:value={name} placeholder="e.g. Qwen3 · Creative" />
     {#if errors.name}<span class="field-error">{errors.name}</span>{/if}
+  </div>
+
+  <div class="field">
+    <label for="mc-id">ID</label>
+    {#if modelConfig}
+      <input id="mc-id" type="text" value={customId} disabled class="readonly-field" />
+    {:else}
+      <input id="mc-id" type="text" bind:value={customId} placeholder="auto-generated from name" />
+    {/if}
+    {#if errors.customId}<span class="field-error">{errors.customId}</span>{/if}
+    {#if !modelConfig}<span class="field-hint">Set once at creation, cannot be changed later.</span>{/if}
   </div>
 
   <div class="field">
