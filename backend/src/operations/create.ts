@@ -93,7 +93,7 @@ export const createOperation = {
 
     const result: TransactionResult = db.connection.transaction(
       (): TransactionResult => {
-        const defaults = getSessionCreationDefaults(db.connection);
+        const defaults = getSessionCreationDefaults();
 
         if (!defaults.defaultModelConfigId) {
           return {
@@ -103,7 +103,7 @@ export const createOperation = {
           };
         }
 
-        const modelConfigs = listModelConfigs(db.connection);
+        const modelConfigs = listModelConfigs();
         const modelConfig = modelConfigs.find(
           (c) => c.id === defaults.defaultModelConfigId,
         );
@@ -115,7 +115,7 @@ export const createOperation = {
           };
         }
 
-        const lmConnections = listLmConnections(db.connection);
+        const lmConnections = listLmConnections();
         const lmConnection = lmConnections.find(
           (c) => c.id === modelConfig.connectionId,
         );
@@ -128,7 +128,7 @@ export const createOperation = {
         }
 
         // Use all profiles with defaultEnabled = true
-        const mcpProfiles = listMcpServerProfiles(db.connection);
+        const mcpProfiles = listMcpServerProfiles();
         const mcpProfileSnapshots: McpProfileSnapshot[] = mcpProfiles
           .filter((p) => p.defaultEnabled)
           .map((p) => ({

@@ -17,12 +17,11 @@
  * No backward migration is required for the current implementation increment.
  */
 
-import type Database from 'better-sqlite3'
+import type Database from "better-sqlite3";
 import {
   compactionStrategyValues,
   contextStateValues,
   displayStateValues,
-  exchangeKindValues,
   partTypeValues,
   roundFinishReasonValues,
   roundStatusValues,
@@ -31,16 +30,16 @@ import {
   tokenConfidenceValues,
   tokenSourceValues,
   turnStatusValues,
-} from '../domain/model.js'
-import { ARTIFACT_TYPE } from '../domain/executionModel.js'
+} from "../domain/model.js";
+import { ARTIFACT_TYPE } from "../domain/executionModel.js";
 
-const NEW_SCHEMA_VERSION = 2
+const NEW_SCHEMA_VERSION = 3;
 
 function sqlEnum(values: readonly string[]): string {
-  return values.map(v => `'${v}'`).join(', ')
+  return values.map((v) => `'${v}'`).join(", ");
 }
 
-const artifactTypeValues = Object.values(ARTIFACT_TYPE) as string[]
+const artifactTypeValues = Object.values(ARTIFACT_TYPE) as string[];
 
 export function initializeNewSchema(connection: Database.Database): void {
   connection.exec(`
@@ -192,7 +191,7 @@ export function initializeNewSchema(connection: Database.Database): void {
       session_id TEXT NOT NULL REFERENCES v2_sessions(id) ON DELETE CASCADE,
       turn_id TEXT REFERENCES v2_turns(id) ON DELETE CASCADE,
       round_id TEXT REFERENCES v2_rounds(id) ON DELETE CASCADE,
-      kind TEXT NOT NULL CHECK (kind IN (${sqlEnum(exchangeKindValues)})),
+      kind TEXT NOT NULL,
       request_url TEXT NOT NULL,
       request_method TEXT NOT NULL,
       request_headers_json TEXT,
@@ -225,81 +224,187 @@ export function initializeNewSchema(connection: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_artifacts_session_id ON artifacts(session_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_step_id ON artifacts(step_id);
-  `)
+  `);
+
+  // V2 → V3: remove CHECK constraint from v2_raw_exchanges.kind that was
+  // too restrictive when exchange kinds grew from lmstudio-* to llm-*.
+  // Only migrate if the old CHECK constraint still exists.
+  try {
+    const def = connection
+      .prepare(
+        `SELECT sql FROM sqlite_master WHERE type='table' AND name='v2_raw_exchanges'`,
+      )
+      .get() as { sql: string } | undefined;
+    if (def && def.sql.includes("CHECK")) {
+      connection.exec(`
+        ALTER TABLE v2_raw_exchanges RENAME TO v2_raw_exchanges_old;
+        CREATE TABLE v2_raw_exchanges (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL REFERENCES v2_sessions(id) ON DELETE CASCADE,
+          turn_id TEXT REFERENCES v2_turns(id) ON DELETE CASCADE,
+          round_id TEXT REFERENCES v2_rounds(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL,
+          request_url TEXT NOT NULL,
+          request_method TEXT NOT NULL,
+          request_headers_json TEXT,
+          request_body TEXT,
+          response_status INTEGER,
+          response_headers_json TEXT,
+          response_body TEXT,
+          created_at INTEGER NOT NULL
+        );
+        INSERT INTO v2_raw_exchanges SELECT * FROM v2_raw_exchanges_old;
+        DROP TABLE v2_raw_exchanges_old;
+      `);
+    }
+  } catch {
+    // Migration not needed or already applied
+  }
 
   const upsertMeta = connection.prepare(`
     INSERT INTO schema_meta (key, value)
     VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `)
-  upsertMeta.run('new_schema_version', String(NEW_SCHEMA_VERSION))
+  `);
+  upsertMeta.run("new_schema_version", String(NEW_SCHEMA_VERSION));
 }
 
 export function validateNewSchema(connection: Database.Database): void {
   const getColumns = (table: string): Set<string> => {
     const rows = connection
       .prepare<[], { name: string }>(`PRAGMA table_info(${table})`)
-      .all()
-    return new Set(rows.map(r => r.name))
-  }
+      .all();
+    return new Set(rows.map((r) => r.name));
+  };
 
   const required: Record<string, string[]> = {
     v2_sessions: [
-      'id', 'title', 'session_type_key',
-      'parent_container_type_key', 'parent_container_id',
-      'status', 'init_status', 'params_json', 'state_json',
-      'analysis_state_json',
-      'created_at', 'updated_at',
+      "id",
+      "title",
+      "session_type_key",
+      "parent_container_type_key",
+      "parent_container_id",
+      "status",
+      "init_status",
+      "params_json",
+      "state_json",
+      "analysis_state_json",
+      "created_at",
+      "updated_at",
     ],
     v2_steps: [
-      'id', 'session_id', 'step_type_key', 'parent_step_id', 'child_index',
-      'status', 'params_json', 'state_json', 'created_at', 'completed_at',
+      "id",
+      "session_id",
+      "step_type_key",
+      "parent_step_id",
+      "child_index",
+      "status",
+      "params_json",
+      "state_json",
+      "created_at",
+      "completed_at",
     ],
     v2_turns: [
-      'id', 'session_id', 'owner_step_id', 'turn_number', 'status', 'outcome',
-      'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'total_tokens',
-      'context_tokens_at_turn_end', 'context_tokens_after_compaction',
-      'compaction_applied', 'compaction_tokens_removed',
-      'created_at', 'completed_at',
+      "id",
+      "session_id",
+      "owner_step_id",
+      "turn_number",
+      "status",
+      "outcome",
+      "prompt_tokens",
+      "completion_tokens",
+      "reasoning_tokens",
+      "total_tokens",
+      "context_tokens_at_turn_end",
+      "context_tokens_after_compaction",
+      "compaction_applied",
+      "compaction_tokens_removed",
+      "created_at",
+      "completed_at",
     ],
     v2_rounds: [
-      'id', 'turn_id', 'session_id', 'round_index', 'status', 'finish_reason',
-      'prompt_tokens', 'completion_tokens', 'reasoning_tokens', 'total_tokens',
-      'request_payload_json', 'response_trace_json', 'started_at', 'completed_at',
+      "id",
+      "turn_id",
+      "session_id",
+      "round_index",
+      "status",
+      "finish_reason",
+      "prompt_tokens",
+      "completion_tokens",
+      "reasoning_tokens",
+      "total_tokens",
+      "request_payload_json",
+      "response_trace_json",
+      "started_at",
+      "completed_at",
     ],
     v2_parts: [
-      'id', 'session_id', 'turn_id', 'round_id', 'parent_part_id',
-      'ordinal', 'part_type', 'role_label',
-      'payload_text', 'payload_json', 'payload_mime_type', 'payload_summary',
-      'display_state', 'collapsed_by_default',
-      'context_state', 'context_note', 'stripped_by_compaction_at_step_id',
-      'token_count', 'token_source', 'token_confidence', 'token_note',
-      'provenance_json', 'created_at', 'updated_at',
+      "id",
+      "session_id",
+      "turn_id",
+      "round_id",
+      "parent_part_id",
+      "ordinal",
+      "part_type",
+      "role_label",
+      "payload_text",
+      "payload_json",
+      "payload_mime_type",
+      "payload_summary",
+      "display_state",
+      "collapsed_by_default",
+      "context_state",
+      "context_note",
+      "stripped_by_compaction_at_step_id",
+      "token_count",
+      "token_source",
+      "token_confidence",
+      "token_note",
+      "provenance_json",
+      "created_at",
+      "updated_at",
     ],
     v2_raw_exchanges: [
-      'id', 'session_id', 'turn_id', 'round_id', 'kind',
-      'request_url', 'request_method', 'request_headers_json', 'request_body',
-      'response_status', 'response_headers_json', 'response_body', 'created_at',
+      "id",
+      "session_id",
+      "turn_id",
+      "round_id",
+      "kind",
+      "request_url",
+      "request_method",
+      "request_headers_json",
+      "request_body",
+      "response_status",
+      "response_headers_json",
+      "response_body",
+      "created_at",
     ],
     artifacts: [
-      'id', 'session_id', 'step_id', 'artifact_type_key',
-      'content_text', 'content_json', 'content_data', 'mime_type',
-      'metadata_json', 'created_at',
+      "id",
+      "session_id",
+      "step_id",
+      "artifact_type_key",
+      "content_text",
+      "content_json",
+      "content_data",
+      "mime_type",
+      "metadata_json",
+      "created_at",
     ],
-  }
+  };
 
-  const missing: string[] = []
+  const missing: string[] = [];
   for (const [table, columns] of Object.entries(required)) {
-    const existing = getColumns(table)
+    const existing = getColumns(table);
     for (const col of columns) {
-      if (!existing.has(col)) missing.push(`${table}.${col}`)
+      if (!existing.has(col)) missing.push(`${table}.${col}`);
     }
   }
 
   if (missing.length > 0) {
     throw new Error(
-      `New schema validation failed — missing columns:\n  ${missing.join('\n  ')}\n` +
-      `This indicates a failed or incomplete new-schema initialization.`,
-    )
+      `New schema validation failed — missing columns:\n  ${missing.join("\n  ")}\n` +
+        `This indicates a failed or incomplete new-schema initialization.`,
+    );
   }
 }

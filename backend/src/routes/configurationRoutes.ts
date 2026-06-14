@@ -44,12 +44,9 @@ function providerLabel(providerType?: string): string {
   }
 }
 
-export function registerConfigurationRoutes({
-  app,
-  database,
-}: RouteDeps): void {
+export function registerConfigurationRoutes({ app }: RouteDeps): void {
   app.get("/api/lm-connections", async () => ({
-    lmConnections: listLmConnections(database.connection),
+    lmConnections: listLmConnections(),
   }));
 
   app.put("/api/lm-connections/:connectionId", async (request, reply) => {
@@ -61,7 +58,7 @@ export function registerConfigurationRoutes({
       reply.code(400);
       return apiError("validation", "Connection ID mismatch");
     }
-    upsertLmConnection(database.connection, record);
+    upsertLmConnection(record);
     return { lmConnection: record };
   });
 
@@ -69,7 +66,7 @@ export function registerConfigurationRoutes({
     const { connectionId } = z
       .object({ connectionId: z.string() })
       .parse(request.params);
-    const referencedByModelConfig = listModelConfigs(database.connection).some(
+    const referencedByModelConfig = listModelConfigs().some(
       (modelConfig) => modelConfig.connectionId === connectionId,
     );
     if (referencedByModelConfig) {
@@ -82,7 +79,7 @@ export function registerConfigurationRoutes({
         },
       );
     }
-    const deleted = deleteLmConnection(database.connection, connectionId);
+    const deleted = deleteLmConnection(connectionId);
     if (!deleted) {
       reply.code(404);
       return apiError("not_found", "LM connection not found");
@@ -92,7 +89,7 @@ export function registerConfigurationRoutes({
   });
 
   app.get("/api/model-configs", async () => ({
-    modelConfigs: listModelConfigs(database.connection),
+    modelConfigs: listModelConfigs(),
   }));
 
   app.put("/api/model-configs/:modelConfigId", async (request, reply) => {
@@ -104,7 +101,7 @@ export function registerConfigurationRoutes({
       reply.code(400);
       return apiError("validation", "Model config ID mismatch");
     }
-    upsertModelConfig(database.connection, record);
+    upsertModelConfig(record);
     return { modelConfig: record };
   });
 
@@ -112,7 +109,7 @@ export function registerConfigurationRoutes({
     const { modelConfigId } = z
       .object({ modelConfigId: z.string() })
       .parse(request.params);
-    const defaults = getSessionCreationDefaults(database.connection);
+    const defaults = getSessionCreationDefaults();
     if (defaults.defaultModelConfigId === modelConfigId) {
       reply.code(409);
       return apiError(
@@ -123,7 +120,7 @@ export function registerConfigurationRoutes({
         },
       );
     }
-    const deleted = deleteModelConfig(database.connection, modelConfigId);
+    const deleted = deleteModelConfig(modelConfigId);
     if (!deleted) {
       reply.code(404);
       return apiError("not_found", "Model config not found");
@@ -133,7 +130,7 @@ export function registerConfigurationRoutes({
   });
 
   app.get("/api/mcp-profiles", async () => ({
-    mcpProfiles: listMcpServerProfiles(database.connection),
+    mcpProfiles: listMcpServerProfiles(),
   }));
 
   app.put("/api/mcp-profiles/:mcpProfileId", async (request, reply) => {
@@ -145,7 +142,7 @@ export function registerConfigurationRoutes({
       reply.code(400);
       return apiError("validation", "MCP profile ID mismatch");
     }
-    upsertMcpServerProfile(database.connection, record);
+    upsertMcpServerProfile(record);
     return { mcpProfile: record };
   });
 
@@ -153,7 +150,7 @@ export function registerConfigurationRoutes({
     const { mcpProfileId } = z
       .object({ mcpProfileId: z.string() })
       .parse(request.params);
-    const deleted = deleteMcpServerProfile(database.connection, mcpProfileId);
+    const deleted = deleteMcpServerProfile(mcpProfileId);
     if (!deleted) {
       reply.code(404);
       return apiError("not_found", "MCP profile not found");
@@ -164,7 +161,7 @@ export function registerConfigurationRoutes({
 
   app.get("/api/session-creation-defaults", async () => {
     return {
-      sessionCreationDefaults: getSessionCreationDefaults(database.connection),
+      sessionCreationDefaults: getSessionCreationDefaults(),
     };
   });
 
@@ -179,9 +176,7 @@ export function registerConfigurationRoutes({
 
     if (
       defaultModelConfigId !== null &&
-      !listModelConfigs(database.connection).some(
-        (c) => c.id === defaultModelConfigId,
-      )
+      !listModelConfigs().some((c) => c.id === defaultModelConfigId)
     ) {
       reply.code(422);
       return apiError(
@@ -192,7 +187,7 @@ export function registerConfigurationRoutes({
     }
 
     const updatedDefaults = { defaultModelConfigId, updatedAt: Date.now() };
-    upsertSessionCreationDefaults(database.connection, updatedDefaults);
+    upsertSessionCreationDefaults(updatedDefaults);
     return { sessionCreationDefaults: updatedDefaults };
   });
 

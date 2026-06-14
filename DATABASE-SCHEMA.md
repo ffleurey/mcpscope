@@ -4,21 +4,21 @@ This document describes the current SQLite storage layout used by mcpscope.
 
 Source of truth:
 
-- shared config/default table initialization lives in `backend/src/persistence/schema.ts`
+- shared table initialization lives in `backend/src/persistence/schema.ts`
 - canonical runtime table initialization lives in `backend/src/persistence/schemaV2.ts`
 - runtime record read/write behavior lives in `backend/src/persistence/repositoryRuntime.ts`
-- config/default record read/write behavior lives in `backend/src/persistence/repository.ts`
+- configuration (LM connections, model configs, MCP profiles) is stored in a JSON file at `backend-data/mcpscope.config.json`, not in SQLite — see [move-config-from-db-to-json.md](backlog/move-config-from-db-to-json.md)
 
 This is intentionally separate from [DATA-MODEL.md](DATA-MODEL.md):
 
 - [DATA-MODEL.md](DATA-MODEL.md) describes the canonical runtime tree exposed across the product
-- this file describes the backing SQL tables, foreign keys, singleton defaults tables, and snapshot/config catalogs
+- this file describes the backing SQL tables, foreign keys, snapshot catalogs, and config/default tables
 
 ## Startup ownership
 
 Normal startup creates:
 
-- shared tables from `schema.ts`: `schema_meta`, config catalogs, snapshot catalogs, and singleton default tables
+- shared tables from `schema.ts`: `schema_meta`, snapshot catalogs (`model_profiles`, `mcp_profiles`)
 - canonical runtime tables from `schemaV2.ts`: `v2_sessions`, `v2_steps`, `v2_turns`, `v2_rounds`, `v2_parts`, `v2_raw_exchanges`, and `artifacts`
 
 Normal startup does **not** create the obsolete legacy runtime tables `sessions`, `turns`, `rounds`, `parts`, or `raw_exchanges`.
@@ -46,36 +46,6 @@ erDiagram
     TEXT name
     TEXT snapshot_json
     INTEGER created_at
-    INTEGER updated_at
-  }
-
-  lm_connections {
-    TEXT id PK
-    TEXT name
-    TEXT record_json
-    INTEGER created_at
-    INTEGER updated_at
-  }
-
-  model_configs {
-    TEXT id PK
-    TEXT name
-    TEXT record_json
-    INTEGER created_at
-    INTEGER updated_at
-  }
-
-  mcp_server_profiles {
-    TEXT id PK
-    TEXT name
-    TEXT record_json
-    INTEGER created_at
-    INTEGER updated_at
-  }
-
-  session_creation_defaults {
-    INTEGER id PK
-    TEXT default_model_config_id
     INTEGER updated_at
   }
 
@@ -226,15 +196,8 @@ erDiagram
 - `v2_parts.stripped_by_compaction_at_step_id` points at the step that removed a part from active context and also uses `ON DELETE SET NULL`.
 - `artifacts` may belong to a session, a step, or both, depending on how a workflow persists them.
 
-## Singleton Tables
+## Snapshot Tables
 
-- `session_creation_defaults` is a one-row table enforced by `CHECK (id = 1)`.
-
-That table stores selected default IDs, but the schema does not currently enforce foreign keys from it to `model_configs` or `mcp_server_profiles`.
-
-## Snapshot and Catalog Tables
-
-- `model_configs`, `mcp_server_profiles`, and `lm_connections` are editable configuration catalogs.
 - `model_profiles` and `mcp_profiles` are snapshot catalogs written alongside session creation for historical inspectability.
 - session runtime rows persist model/MCP snapshots inside `v2_sessions.params_json`; they do not foreign-key to snapshot catalogs.
 

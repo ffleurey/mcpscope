@@ -149,8 +149,6 @@ describe("backend foundation", () => {
     });
     expect(body.schema.tables).toEqual(
       expect.arrayContaining([
-        // Shared config/default tables
-        "session_creation_defaults",
         // Canonical execution-model tables
         "v2_sessions",
         "v2_steps",
@@ -164,7 +162,7 @@ describe("backend foundation", () => {
     expect(body.schema.meta).toMatchObject({
       domain_model_version: "2",
       sqlite_schema_version: "8",
-      new_schema_version: "2",
+      new_schema_version: "3",
     });
   });
 
