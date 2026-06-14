@@ -1,8 +1,10 @@
-import { listOperation } from './list.js'
-import { createOperation } from './create.js'
-import { sendOperation } from './send.js'
-import { statusOperation } from './status.js'
-import { inspectOperation } from './inspect.js'
+import { listOperation } from "./list.js";
+import { createOperation } from "./create.js";
+import { sendOperation } from "./send.js";
+import { statusOperation } from "./status.js";
+import { inspectOperation } from "./inspect.js";
+import { listModelConfigsOperation } from "./listConfigs.js";
+import { listMcpProfilesOperation } from "./listConfigs.js";
 
 export const operationCatalog = {
   list: listOperation,
@@ -10,9 +12,11 @@ export const operationCatalog = {
   send: sendOperation,
   status: statusOperation,
   inspect: inspectOperation,
-} as const
+  list_model_configs: listModelConfigsOperation,
+  list_mcp_profiles: listMcpProfilesOperation,
+} as const;
 
-export type BackendOperationId = keyof typeof operationCatalog
+export type BackendOperationId = keyof typeof operationCatalog;
 
 export const operationList = [
   listOperation,
@@ -20,4 +24,6 @@ export const operationList = [
   sendOperation,
   statusOperation,
   inspectOperation,
-] as const
+  listModelConfigsOperation,
+  listMcpProfilesOperation,
+] as const;

@@ -149,8 +149,6 @@ describe("backend foundation", () => {
     });
     expect(body.schema.tables).toEqual(
       expect.arrayContaining([
-        // Shared config/default tables
-        "session_creation_defaults",
         // Canonical execution-model tables
         "v2_sessions",
         "v2_steps",
@@ -164,7 +162,7 @@ describe("backend foundation", () => {
     expect(body.schema.meta).toMatchObject({
       domain_model_version: "2",
       sqlite_schema_version: "8",
-      new_schema_version: "2",
+      new_schema_version: "3",
     });
   });
 
@@ -337,6 +335,7 @@ describe("backend foundation", () => {
       id: "model-config-1",
       name: "Primary model",
       connectionId: "lm-1",
+      connectionName: "Local LM Studio",
       modelKey: "qwen-1",
       modelDisplayName: "Qwen 1",
       systemPrompt: "Reply exactly.",
@@ -3063,7 +3062,7 @@ describe("CLI session lifecycle endpoints", () => {
       payload: { title: "Test" },
     });
     expect(response.statusCode).toBe(422);
-    expect(response.json().error.code).toBe("default_lm_connection_not_found");
+    expect(response.json().error.code).toBe("lm_connection_not_found");
   });
 
   it("POST /api/sessions/from-defaults creates session with model and optional MCP", async () => {

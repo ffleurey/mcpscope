@@ -6,14 +6,15 @@ import {
   listMcpServerProfiles,
   listModelConfigs,
 } from "../persistence/repository.js";
+import type { McpProfileSnapshot } from "../domain/model.js";
+import type { OperationContext } from "./context.js";
+import { type McpServerProfile } from "../domain/configuration.js";
 import {
   createSession,
   SessionIdConflictError,
   SessionIdGenerationError,
   SessionIdInputError,
 } from "../runtime/modelTurns.js";
-import type { McpProfileSnapshot } from "../domain/model.js";
-import type { OperationContext } from "./context.js";
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
@@ -28,6 +29,16 @@ export const createInputSchema = z.object({
     .optional()
     .describe(
       "Compaction strategy applied after each turn. Defaults to strip-reasoning.",
+    ),
+  model_config_id: z
+    .string()
+    .optional()
+    .describe("Optional model config ID to use instead of the default"),
+  mcp_profile_ids: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Optional list of MCP profile IDs. When provided, replaces the default-enabled selection.",
     ),
 });
 
@@ -64,6 +75,19 @@ export const createOutputSchema = {
   }),
 };
 
+function buildMcpSnapshot(mcpProfile: McpServerProfile): McpProfileSnapshot {
+  return {
+    id: mcpProfile.id,
+    name: mcpProfile.name,
+    url: mcpProfile.url,
+    transport: mcpProfile.transport,
+    authType: mcpProfile.authType ?? null,
+    authValue: mcpProfile.authValue ?? null,
+    createdAt: mcpProfile.createdAt,
+    updatedAt: mcpProfile.updatedAt,
+  };
+}
+
 export const createOperation = {
   id: "create" as const,
   description:
@@ -81,9 +105,12 @@ export const createOperation = {
 
     type TransactionResult =
       | { kind: "validation_error"; message: string; code: string }
-      | { kind: "id_input_error"; error: SessionIdInputError }
-      | { kind: "id_conflict_error"; error: SessionIdConflictError }
-      | { kind: "id_generation_error"; error: SessionIdGenerationError }
+      | { kind: "model_config_not_found"; modelConfigId: string }
+      | { kind: "lm_connection_not_found"; connectionId: string }
+      | { kind: "mcp_profile_not_found"; mcpProfileIds: string[] }
+      | { kind: "id_input_error"; error: Error }
+      | { kind: "id_conflict_error"; error: Error }
+      | { kind: "id_generation_error"; error: Error }
       | {
           kind: "created";
           session: ReturnType<typeof createSession>;
@@ -93,9 +120,12 @@ export const createOperation = {
 
     const result: TransactionResult = db.connection.transaction(
       (): TransactionResult => {
-        const defaults = getSessionCreationDefaults(db.connection);
+        // Resolve model config: explicit ID or default
+        const defaults = getSessionCreationDefaults();
+        const resolvedModelConfigId =
+          input.model_config_id ?? defaults.defaultModelConfigId;
 
-        if (!defaults.defaultModelConfigId) {
+        if (!resolvedModelConfigId) {
           return {
             kind: "validation_error",
             message: "No default model config is configured for new sessions.",
@@ -103,44 +133,50 @@ export const createOperation = {
           };
         }
 
-        const modelConfigs = listModelConfigs(db.connection);
+        const modelConfigs = listModelConfigs();
         const modelConfig = modelConfigs.find(
-          (c) => c.id === defaults.defaultModelConfigId,
+          (c) => c.id === resolvedModelConfigId,
         );
         if (!modelConfig) {
           return {
-            kind: "validation_error",
-            message: `Default model config "${defaults.defaultModelConfigId}" no longer exists.`,
-            code: "default_model_config_not_found",
+            kind: "model_config_not_found",
+            modelConfigId: resolvedModelConfigId,
           };
         }
 
-        const lmConnections = listLmConnections(db.connection);
+        const lmConnections = listLmConnections();
         const lmConnection = lmConnections.find(
           (c) => c.id === modelConfig.connectionId,
         );
         if (!lmConnection) {
           return {
-            kind: "validation_error",
-            message: `LM connection "${modelConfig.connectionId}" referenced by the default model config no longer exists.`,
-            code: "default_lm_connection_not_found",
+            kind: "lm_connection_not_found",
+            connectionId: modelConfig.connectionId,
           };
         }
 
-        // Use all profiles with defaultEnabled = true
-        const mcpProfiles = listMcpServerProfiles(db.connection);
-        const mcpProfileSnapshots: McpProfileSnapshot[] = mcpProfiles
-          .filter((p) => p.defaultEnabled)
-          .map((p) => ({
-            id: p.id,
-            name: p.name,
-            url: p.url,
-            transport: p.transport,
-            authType: p.authType ?? null,
-            authValue: p.authValue ?? null,
-            createdAt: p.createdAt,
-            updatedAt: p.updatedAt,
-          }));
+        // Resolve MCP profiles: explicit list or default-enabled
+        const allProfiles = listMcpServerProfiles();
+        const resolvedMcpIds =
+          input.mcp_profile_ids ??
+          allProfiles.filter((p) => p.defaultEnabled).map((p) => p.id);
+
+        const mcpProfileSnapshots: McpProfileSnapshot[] = [];
+        const notFoundIds: string[] = [];
+        for (const profileId of resolvedMcpIds) {
+          const mcpProfile = allProfiles.find((p) => p.id === profileId);
+          if (!mcpProfile) {
+            notFoundIds.push(profileId);
+          } else {
+            mcpProfileSnapshots.push(buildMcpSnapshot(mcpProfile));
+          }
+        }
+        if (notFoundIds.length > 0) {
+          return {
+            kind: "mcp_profile_not_found",
+            mcpProfileIds: notFoundIds,
+          };
+        }
 
         const modelProfileSnapshot = {
           id: modelConfig.id,
@@ -187,6 +223,24 @@ export const createOperation = {
 
     if (result.kind === "validation_error") {
       throw new OperationError(result.message, result.code);
+    }
+    if (result.kind === "model_config_not_found") {
+      throw new OperationError(
+        `Model config "${result.modelConfigId}" not found.`,
+        "model_config_not_found",
+      );
+    }
+    if (result.kind === "lm_connection_not_found") {
+      throw new OperationError(
+        `LM connection "${result.connectionId}" referenced by the selected model config no longer exists.`,
+        "lm_connection_not_found",
+      );
+    }
+    if (result.kind === "mcp_profile_not_found") {
+      throw new OperationError(
+        `MCP profile(s) not found: ${result.mcpProfileIds.join(", ")}`,
+        "mcp_profile_not_found",
+      );
     }
     if (result.kind === "id_input_error") {
       throw new OperationError(result.error.message, "invalid_session_id");

@@ -16,15 +16,17 @@ The transport operates in **stateless mode** — no server-side session is maint
 
 ## Tool surface
 
-Five tools mirror the shipped CLI surface exactly. Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
+Seven tools mirror the shipped CLI surface exactly. Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
 
-| MCP tool name         | CLI command                | Description |
-|-----------------------|----------------------------|-------------|
-| `mcpscope_list`       | `mcpscope list`            | List all sessions |
-| `mcpscope_create`     | `mcpscope create`          | Create a session from defaults |
-| `mcpscope_send`       | `mcpscope send`            | Start a user turn |
-| `mcpscope_status`     | `mcpscope status`          | Get session lifecycle state |
-| `mcpscope_inspect`    | `mcpscope inspect`         | Inspect any object by hierarchical ID; use parent objects to map IDs, then inspect parts directly for detailed evidence |
+| MCP tool name               | CLI command                        | Description |
+|-----------------------------|------------------------------------|-------------|
+| `mcpscope_list`             | `mcpscope list`                    | List all sessions |
+| `mcpscope_create`           | `mcpscope create`                  | Create a session from defaults or explicit model/MCP selection |
+| `mcpscope_send`             | `mcpscope send`                    | Start a user turn |
+| `mcpscope_status`           | `mcpscope status`                  | Get session lifecycle state |
+| `mcpscope_inspect`          | `mcpscope inspect`                 | Inspect any object by hierarchical ID |
+| `mcpscope_list_model_configs` | `mcpscope list_model_configs`    | List all model configs |
+| `mcpscope_list_mcp_profiles`  | `mcpscope list_mcp_profiles`     | List all MCP server profiles |
 
 ## Tool inputs
 
@@ -36,11 +38,13 @@ No inputs.
 
 ### `mcpscope_create`
 
-| Field        | Type                              | Required | Description |
-|--------------|-----------------------------------|----------|-------------|
-| `title`      | string                            | ✓        | Session title |
-| `id`         | string                            |          | Optional 4-char session ID |
-| `compaction` | `"none"` \| `"strip-reasoning"`   |          | Compaction strategy |
+| Field            | Type                              | Required | Description |
+|------------------|-----------------------------------|----------|-------------|
+| `title`          | string                            | ✓        | Session title |
+| `id`             | string                            |          | Optional 4-char session ID |
+| `compaction`     | `"none"` \| `"strip-reasoning"`   |          | Compaction strategy |
+| `model_config_id`| string                            |          | Optional model config ID to use instead of the default |
+| `mcp_profile_ids`| string[]                          |          | Optional list of MCP profile IDs; when provided, replaces the default-enabled selection |
 
 ### `mcpscope_send`
 
@@ -61,6 +65,14 @@ No inputs.
 |--------|---------|----------|-------------|
 | `id`   | string  | ✓        | Hierarchical ID (e.g. `ABCD`, `ABCD.S`, `ABCD.1T`, `ABCD.4W.1T.2`, `ABCD.4W.1T.2.3-R`). Inspecting a session, setup, step, turn, or round is useful for finding child IDs; inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content. |
 | `short`| boolean |          | Token counts only, no part content |
+
+### `mcpscope_list_model_configs`
+
+No inputs. Returns a list of all model configs with id, name, connection name, model key, and provider type.
+
+### `mcpscope_list_mcp_profiles`
+
+No inputs. Returns a list of all MCP server profiles with id, name, URL, and default-enabled status.
 
 ## Tool results
 

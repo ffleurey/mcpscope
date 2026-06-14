@@ -44,6 +44,39 @@ We need to ship V1 with a couple of different analysis strategies which can be u
 
 The UI is very basic at this point, no effort has been put in it. It works but visually we should do some improvements and we should choose a color palette and make a basic icon. for the colors we will go with a dark mode, some shades of grey and amber and green as the main colors (colors of text CRT monitors of the 80s). We should try to make sure that we use a few colors consistently so that we do not run into advanced design issues. We need the readability to be good and the user experience to be efficient. We are not trying to be fancy and should use the underlying libs as much as possible to avoid too much custom CSS and alike. We need to do something about the dialogs and modals to make them consistent and decent looking. It is not the case for now but that should not be too hard to fix.
 
+### Explicit model and MCP profile selection from CLI and MCP
+
+The `mcpscope create` command and `mcpscope_create` MCP tool currently accept a title and optional session ID and compaction strategy, but resolve the model config and MCP server profiles entirely from UI-configured defaults:
+
+- the model config is always the configured default
+- the MCP profiles are always the profiles with `defaultEnabled = true`
+
+This is too restrictive for the Use Case 2 development workflow. A coding agent driving mcpscope through the CLI or MCP interface needs to be able to select different model configs and MCP profiles without going through the GUI. Concrete scenarios:
+
+- *Test the same MCP server with different models* — create sessions with model configs for DeepSeek V4 Flash, Qwen 3.6, Gemma 4 4b, etc. to compare tool selection and reasoning quality under different models.
+- *Compare two versions of an MCP server* — create sessions with the same model but different MCP server profiles pointing to different server instances or configurations, then compare traces.
+- *Automated regression loops* — a script or agent runs the same prompt against multiple model+MCP combinations, inspects the results, and reports differences.
+
+**Required change:** Add optional `model_config_id` and `mcp_profile_ids` parameters to the shared `create` operation in the backend catalog. When provided, these override the defaults. When omitted, the current default-resolving behavior is preserved. The parameters select from the existing pool of model configs and MCP server profiles — configuration remains GUI-only, selection becomes available everywhere.
+
+The CLI flags would be:
+
+- `--model-config <id>` — explicit model config ID
+- `--mcp-profile <id>` — repeatable MCP profile ID (one per flag, e.g. `--mcp-profile ha --mcp-profile weather`)
+
+The MCP tool inputs would be:
+
+- `model_config_id` — optional string
+- `mcp_profile_ids` — optional string array
+
+Model config IDs and MCP profile IDs are visible through the UI and documented in existing model/MCP configuration surfaces.
+
+**Required backend changes:**
+- Accept optional `model_config_id` and `mcp_profile_ids` in the `create` operation input schema
+- When `model_config_id` is present, use that model config instead of the default (validating it exists and the connection is reachable)
+- When `mcp_profile_ids` is present, use those profiles (with `defaultEnabled` ignored) instead of the default-enabled set
+- Preserve full backward compatibility when both are omitted
+
 ## What is already in place
 
 ### UC1 — Web UI
@@ -70,3 +103,23 @@ The UI is very basic at this point, no effort has been put in it. It works but v
 - Trace bundle export and import via the backend API
 - Docker multi-stage build, docker-compose single-service deployment, and GitHub Actions release pipeline to GHCR
 - Replay harness for deterministic comparison of exported traces across model and MCP server changes
+
+## V1 readiness summary
+
+| Area | State | v1 Gap |
+|---|---|---|
+| Architecture & data model | ✅ Solid | None |
+| Provider support (LM Studio, OpenRouter, Ollama) | ✅ Complete | Minor: generic OpenAI-compatible option |
+| Execution model & scheduler | ✅ Solid | None (step enqueue is deferred) |
+| Session management (CRUD, lifecycle) | ✅ Complete | None |
+| CLI 5 commands | ✅ Complete | Minor: follow mode, help UX |
+| MCP 5 tools | ✅ Complete | None |
+| Docker packaging & tutorial | ✅ Complete | None |
+| Replay harness & test infrastructure | ✅ Strong | None |
+| **Session analysis quality** | ⚠️ Shipped but weak | **Major** — needs hybrid + autonomous workflows |
+| **Analysis launch ownership** | ⚠️ Partially frontend-owned | **Medium** — needs backend-owned launch + CLI/MCP trigger |
+| **Model/MCP selection on CLI and MCP** | ❌ Not implemented | **Medium** — needs `model_config_id` / `mcp_profile_ids` on create |
+| **UI design & polish** | ❌ Basic/functional | **Medium** — needs color palette, icons, consistent modals |
+| **Evidence protocol** | ⚠️ Research phase | **Medium** — needs to settle before analysis workflow freezes |
+| Trace export/import | ✅ Complete | None |
+| Configuration management | ✅ Complete | None |

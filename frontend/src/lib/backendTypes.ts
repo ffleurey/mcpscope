@@ -16,6 +16,7 @@ export const modelConfigSchema = z.object({
   id: z.string(),
   name: z.string(),
   connectionId: z.string(),
+  connectionName: z.string().optional(),
   modelKey: z.string(),
   modelDisplayName: z.string(),
   systemPrompt: z.string(),
@@ -127,12 +128,16 @@ export const tokenConfidenceSchema = z.enum([
   "unknown",
 ]);
 export const exchangeKindSchema = z.enum([
+  "llm-request",
+  "llm-response",
+  "llm-probe-request",
+  "llm-probe-response",
+  "mcp-request",
+  "mcp-response",
   "lmstudio-request",
   "lmstudio-response",
   "lmstudio-probe-request",
   "lmstudio-probe-response",
-  "mcp-request",
-  "mcp-response",
 ]);
 export const lmStudioStreamDeltaSchema = z.discriminatedUnion("kind", [
   z.object({

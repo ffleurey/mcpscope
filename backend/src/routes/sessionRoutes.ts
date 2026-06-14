@@ -277,6 +277,8 @@ export function registerSessionRoutes(deps: RouteDeps): void {
         title: z.string().min(1).max(200),
         sessionId: z.string().optional(),
         compactionStrategy: z.enum(["none", "strip-reasoning"]).optional(),
+        modelConfigId: z.string().optional(),
+        mcpProfileIds: z.array(z.string()).optional(),
       })
       .parse(request.body);
     try {
@@ -285,6 +287,12 @@ export function registerSessionRoutes(deps: RouteDeps): void {
         ...(body.sessionId !== undefined ? { id: body.sessionId } : {}),
         ...(body.compactionStrategy !== undefined
           ? { compaction: body.compactionStrategy }
+          : {}),
+        ...(body.modelConfigId !== undefined
+          ? { model_config_id: body.modelConfigId }
+          : {}),
+        ...(body.mcpProfileIds !== undefined
+          ? { mcp_profile_ids: body.mcpProfileIds }
           : {}),
       });
       reply.code(201);

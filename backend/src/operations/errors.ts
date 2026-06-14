@@ -9,8 +9,8 @@ export class OperationError extends Error {
     public readonly code?: string | undefined,
     public readonly active_session?: { id: string; state: string } | undefined,
   ) {
-    super(message)
-    this.name = 'OperationError'
+    super(message);
+    this.name = "OperationError";
   }
 }
 
@@ -18,43 +18,52 @@ export class OperationError extends Error {
  * Build an HTTP-compatible error body from an OperationError.
  * Preserves the active_session field so the CLI can extract the blocking session.
  */
-export function operationErrorResponse(err: OperationError): { error: Record<string, unknown> } {
-  const body: Record<string, unknown> = { type: 'validation', message: err.message }
-  if (err.code !== undefined) body.code = err.code
-  if (err.active_session !== undefined) body.active_session = err.active_session
-  return { error: body }
+export function operationErrorResponse(err: OperationError): {
+  error: Record<string, unknown>;
+} {
+  const body: Record<string, unknown> = {
+    type: "validation",
+    message: err.message,
+  };
+  if (err.code !== undefined) body.code = err.code;
+  if (err.active_session !== undefined)
+    body.active_session = err.active_session;
+  return { error: body };
 }
 
 /** Map a canonical error code to an HTTP status code. */
 export function operationErrorToHttpStatus(code: string | undefined): number {
   switch (code) {
-    case 'session_not_found':
-    case 'hierarchical_id_not_found':
-    case 'not_found':
-    case 'step_not_found':
-      return 404
-    case 'invalid_session_id':
-    case 'invalid_hierarchical_id':
-      return 400
-    case 'another_session_active':
-    case 'turn_in_progress':
-    case 'session_not_initialized':
-    case 'session_already_queued':
-    case 'step_not_ready':
-    case 'duplicate_session_id':
-    case 'session_id_generation_failed':
-      return 409
-    case 'default_model_not_configured':
-    case 'default_model_config_not_found':
-    case 'default_lm_connection_not_found':
-    case 'default_mcp_profile_not_found':
-    case 'target_session_not_eligible':
-    case 'target_turn_not_found':
-    case 'target_turn_not_complete':
-    case 'analysis_model_config_not_found':
-    case 'analysis_lm_connection_not_found':
-      return 422
+    case "session_not_found":
+    case "hierarchical_id_not_found":
+    case "not_found":
+    case "step_not_found":
+      return 404;
+    case "invalid_session_id":
+    case "invalid_hierarchical_id":
+      return 400;
+    case "another_session_active":
+    case "turn_in_progress":
+    case "session_not_initialized":
+    case "session_already_queued":
+    case "step_not_ready":
+    case "duplicate_session_id":
+    case "session_id_generation_failed":
+      return 409;
+    case "default_model_not_configured":
+    case "default_model_config_not_found":
+    case "default_lm_connection_not_found":
+    case "default_mcp_profile_not_found":
+    case "model_config_not_found":
+    case "lm_connection_not_found":
+    case "mcp_profile_not_found":
+    case "target_session_not_eligible":
+    case "target_turn_not_found":
+    case "target_turn_not_complete":
+    case "analysis_model_config_not_found":
+    case "analysis_lm_connection_not_found":
+      return 422;
     default:
-      return 500
+      return 500;
   }
 }
