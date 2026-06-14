@@ -313,3 +313,24 @@ resources via the UI forms. Existing UUIDs continue to work without any migratio
 - Configuring models, providers, or MCP servers from CLI/MCP — remains GUI-only
 - Deleting or editing model configs or MCP profiles from CLI/MCP
 - Analysis launch from CLI/MCP (separate work)
+
+## Status
+
+### ✅ Completed
+
+| Area | Details |
+|---|---|
+| Backend `list_model_configs` operation | `listConfigs.ts` — returns ID, name, connection, model key, provider type |
+| Backend `list_mcp_profiles` operation | `listConfigs.ts` — returns ID, name, URL, default-enabled |
+| Backend `create` operation | Extended with optional `model_config_id` and `mcp_profile_ids` |
+| Route `/api/sessions/from-defaults` | Accepts `modelConfigId` and `mcpProfileIds` |
+| Error codes | `model_config_not_found`, `lm_connection_not_found`, `mcp_profile_not_found` → 422 |
+| MCP tools | `mcpscope_list_model_configs`, `mcpscope_list_mcp_profiles`, extended `mcpscope_create` |
+| CLI `list_model_configs` | Text + `--json` output |
+| CLI `list_mcp_profiles` | Text + `--json` output |
+| CLI `create` | Extended with `--model-config <id>` and `--mcp-profile <id>` (repeatable) |
+| Frontend `ModelConfigForm.svelte` | ID field with auto-slugify from name, collision detection (`-2`, `-3`), read-only on edit |
+| Frontend `McpProfileForm.svelte` | Same pattern |
+| CLI test | Updated `commandCatalog.test.ts` for 7 operations |
+| MCP test | Updated `mcp.test.ts` for 7 tools |
+| Documentation | `CLI.md` and `MCP.md` updated with new commands, flags, inputs |
