@@ -46,6 +46,10 @@ The UI is very basic at this point, no effort has been put in it. It works but v
 
 ### Explicit model and MCP profile selection from CLI and MCP
 
+**Status: ✅ Implemented (PR #32).** The `mcpscope create` command and `mcpscope_create` MCP tool now accept `model_config_id` and `mcp_profile_ids` to override defaults. Two new list commands/tools expose available configs and profiles. See `CLI.md` and `MCP.md` for the full reference.
+
+The original specification (preserved below) was shipped as described:
+
 The `mcpscope create` command and `mcpscope_create` MCP tool currently accept a title and optional session ID and compaction strategy, but resolve the model config and MCP server profiles entirely from UI-configured defaults:
 
 - the model config is always the configured default
@@ -76,6 +80,14 @@ Model config IDs and MCP profile IDs are visible through the UI and documented i
 - When `model_config_id` is present, use that model config instead of the default (validating it exists and the connection is reachable)
 - When `mcp_profile_ids` is present, use those profiles (with `defaultEnabled` ignored) instead of the default-enabled set
 - Preserve full backward compatibility when both are omitted
+
+### Distribution and developer onboarding
+
+The current distribution options — Docker and git clone — both require pre-installed tooling. Adding a `mcpscope serve` CLI command would let developers get started with just `npm install -g mcpscope && mcpscope serve`.
+
+See [improve-distribution.md](improve-distribution.md) for the full analysis of packaging options (npm, SEA, Electron) and trade-offs.
+
+**Required change:** Add a `serve` command that starts the backend, serves the compiled frontend, and opens the browser.
 
 ## What is already in place
 
@@ -115,10 +127,11 @@ Model config IDs and MCP profile IDs are visible through the UI and documented i
 | CLI 5 commands | ✅ Complete | Minor: follow mode, help UX |
 | MCP 5 tools | ✅ Complete | None |
 | Docker packaging & tutorial | ✅ Complete | None |
+| **npm distribution + `serve` command** | ❌ Not implemented | **Medium** — needs CLI `serve` command with bundled frontend |
 | Replay harness & test infrastructure | ✅ Strong | None |
 | **Session analysis quality** | ⚠️ Shipped but weak | **Major** — needs hybrid + autonomous workflows |
 | **Analysis launch ownership** | ⚠️ Partially frontend-owned | **Medium** — needs backend-owned launch + CLI/MCP trigger |
-| **Model/MCP selection on CLI and MCP** | ❌ Not implemented | **Medium** — needs `model_config_id` / `mcp_profile_ids` on create |
+| **Model/MCP selection on CLI and MCP** | ✅ Complete | None |
 | **UI design & polish** | ❌ Basic/functional | **Medium** — needs color palette, icons, consistent modals |
 | **Evidence protocol** | ⚠️ Research phase | **Medium** — needs to settle before analysis workflow freezes |
 | Trace export/import | ✅ Complete | None |
