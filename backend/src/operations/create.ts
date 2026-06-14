@@ -9,6 +9,12 @@ import {
 import type { McpProfileSnapshot } from "../domain/model.js";
 import type { OperationContext } from "./context.js";
 import { type McpServerProfile } from "../domain/configuration.js";
+import {
+  createSession,
+  SessionIdConflictError,
+  SessionIdGenerationError,
+  SessionIdInputError,
+} from "../runtime/modelTurns.js";
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
@@ -281,11 +287,3 @@ export const createOperation = {
     };
   },
 };
-
-// Imported at the bottom to avoid circular dependency with the types above
-import {
-  createSession,
-  SessionIdConflictError,
-  SessionIdGenerationError,
-  SessionIdInputError,
-} from "../runtime/modelTurns.js";

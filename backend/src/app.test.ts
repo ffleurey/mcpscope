@@ -335,6 +335,7 @@ describe("backend foundation", () => {
       id: "model-config-1",
       name: "Primary model",
       connectionId: "lm-1",
+      connectionName: "Local LM Studio",
       modelKey: "qwen-1",
       modelDisplayName: "Qwen 1",
       systemPrompt: "Reply exactly.",
