@@ -2,8 +2,15 @@ import { z } from "zod";
 
 export const providerTypeValues = ["lmstudio", "openrouter", "ollama"] as const;
 
+const idPattern = /^[a-zA-Z0-9_-]+$/;
+
 export const providerConnectionSchema = z.object({
-  id: z.string(),
+  id: z
+    .string()
+    .regex(
+      idPattern,
+      "ID must only contain letters, numbers, hyphens, and underscores",
+    ),
   name: z.string(),
   baseUrl: z.string().url(),
   apiKey: z.string().optional(),
@@ -26,7 +33,12 @@ export const providerConnectionSchema = z.object({
 export const lmStudioConnectionSchema = providerConnectionSchema;
 
 export const modelConfigSchemaBase = z.object({
-  id: z.string(),
+  id: z
+    .string()
+    .regex(
+      idPattern,
+      "ID must only contain letters, numbers, hyphens, and underscores",
+    ),
   name: z.string(),
   connectionId: z.string(),
   modelKey: z.string(),
@@ -56,7 +68,12 @@ export const modelConfigSchema = modelConfigSchemaBase.transform((data) => ({
 }));
 
 export const mcpServerProfileSchema = z.object({
-  id: z.string(),
+  id: z
+    .string()
+    .regex(
+      idPattern,
+      "ID must only contain letters, numbers, hyphens, and underscores",
+    ),
   name: z.string(),
   url: z.string().url(),
   transport: z.literal("streamable-http").optional().default("streamable-http"),

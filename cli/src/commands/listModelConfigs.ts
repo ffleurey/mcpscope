@@ -28,7 +28,7 @@ function renderListModelConfigsText(result: ListModelConfigsResult): void {
 
   for (const mc of configs) {
     process.stdout.write(
-      `${mc.id}  ${mc.name}  ${mc.connectionId}  ${mc.modelKey}  ${mc.providerType ?? ""}\n`,
+      `${mc.id}  ${mc.name}  ${mc.connectionName}  ${mc.modelKey}  ${mc.providerType ?? ""}\n`,
     );
   }
 }

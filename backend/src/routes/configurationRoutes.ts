@@ -88,9 +88,18 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
     return null;
   });
 
-  app.get("/api/model-configs", async () => ({
-    modelConfigs: listModelConfigs(),
-  }));
+  app.get("/api/model-configs", async () => {
+    const configs = listModelConfigs();
+    const connections = listLmConnections();
+    return {
+      modelConfigs: configs.map((mc) => ({
+        ...mc,
+        connectionName:
+          connections.find((c) => c.id === mc.connectionId)?.name ??
+          mc.connectionId,
+      })),
+    };
+  });
 
   app.put("/api/model-configs/:modelConfigId", async (request, reply) => {
     const { modelConfigId } = z

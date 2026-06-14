@@ -16,6 +16,7 @@ export const modelConfigSchema = z.object({
   id: z.string(),
   name: z.string(),
   connectionId: z.string(),
+  connectionName: z.string().optional(),
   modelKey: z.string(),
   modelDisplayName: z.string(),
   systemPrompt: z.string(),

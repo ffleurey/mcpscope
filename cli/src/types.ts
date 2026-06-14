@@ -88,6 +88,7 @@ export interface ModelConfigSummary {
   id: string;
   name: string;
   connectionId: string;
+  connectionName: string;
   modelKey: string;
   providerType: string | null;
 }
