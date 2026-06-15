@@ -171,9 +171,8 @@
     <h2>Form Fields</h2>
     <p class="ref-note">
       Fully monochrome — no accent outline on focus.
-      Checkboxes and radios use standard OS controls with
-      <code class="mono">accent-color: var(--amber-bright)</code> and
-      <code class="mono">color-scheme: dark</code> on the root element.
+      Checkboxes and radios use <code class="mono">appearance: none</code>
+      with a solid amber fill when checked — no SVGs, no gradients.
       The select dropdown uses <code class="mono">accent-color</code>
       for the highlight, with <code class="mono">appearance: base-select</code>
       + <code class="mono">::picker()</code> as progressive enhancement.
@@ -660,14 +659,37 @@
 
   /* Checked state: accent only on the check/radio indicator, no colored border */
 
-  /* Standard checkboxes & radios — dark theme via color-scheme,
-     amber accent via accent-color. No appearance: none, no custom SVGs. */
+  /* Checkboxes & radios — dark background via appearance: none,
+     amber fill on checked. No SVGs, no gradients, solid color only. */
   .check-option input[type="checkbox"],
   .radio-opt input[type="radio"] {
-    accent-color: var(--amber-bright);
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1rem;
+    height: 1rem;
+    border: 1px solid var(--border);
+    background: var(--bg-base);
     margin: 0;
     flex-shrink: 0;
     cursor: pointer;
+  }
+
+  .check-option input[type="checkbox"] {
+    border-radius: 3px;
+  }
+
+  .check-option input[type="checkbox"]:checked {
+    background: var(--amber-bright);
+    border-color: var(--amber-bright);
+  }
+
+  .radio-opt input[type="radio"] {
+    border-radius: 50%;
+  }
+
+  .radio-opt input[type="radio"]:checked {
+    border-color: var(--amber-bright);
+    background: var(--amber-bright);
   }
 
   /* ── Select dropdown: progressive enhancement ────────────────────
