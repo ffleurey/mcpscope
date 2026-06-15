@@ -171,11 +171,12 @@
     <h2>Form Fields</h2>
     <p class="ref-note">
       Fully monochrome — no accent outline on focus.
-      Checkboxes and radios use <code class="mono">appearance: none</code>
-      with custom dark styling. The select dropdown uses progressive
-      enhancement: <code class="mono">@supports (appearance: base-select)</code>
-      enables custom option hover in amber where supported, with an
-      <code class="mono">accent-color</code> fallback everywhere else.
+      Checkboxes and radios use standard OS controls with
+      <code class="mono">accent-color: var(--amber-bright)</code> and
+      <code class="mono">color-scheme: dark</code> on the root element.
+      The select dropdown uses <code class="mono">accent-color</code>
+      for the highlight, with <code class="mono">appearance: base-select</code>
+      + <code class="mono">::picker()</code> as progressive enhancement.
     </p>
 
     <div class="form-demo">
@@ -659,36 +660,14 @@
 
   /* Checked state: accent only on the check/radio indicator, no colored border */
 
-  /* ── Custom-styled checkboxes & radios (appearance: none) ─────────── */
+  /* Standard checkboxes & radios — dark theme via color-scheme,
+     amber accent via accent-color. No appearance: none, no custom SVGs. */
   .check-option input[type="checkbox"],
   .radio-opt input[type="radio"] {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 1rem;
-    height: 1rem;
-    border: 1px solid var(--border);
-    background: var(--bg-base);
+    accent-color: var(--amber-bright);
     margin: 0;
     flex-shrink: 0;
     cursor: pointer;
-  }
-
-  .check-option input[type="checkbox"] {
-    border-radius: 3px;
-  }
-
-  .check-option input[type="checkbox"]:checked {
-    background:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23e8a83d' d='M12.7 4.3L6.7 11 4 8.3l-.7.7 3.4 3.4 6.7-7.1-.7-.7z'/%3E%3C/svg%3E")
-      center / 0.85em no-repeat;
-  }
-
-  .radio-opt input[type="radio"] {
-    border-radius: 50%;
-  }
-
-  .radio-opt input[type="radio"]:checked {
-    background: radial-gradient(circle, var(--amber-bright) 40%, var(--bg-base) 40%);
   }
 
   /* ── Select dropdown: progressive enhancement ────────────────────
