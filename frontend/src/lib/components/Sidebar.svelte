@@ -101,6 +101,12 @@
       </button>
     </div>
 
+    <div class="design-section">
+      <button class="nav-item" class:active={$currentView === 'design'} onclick={() => navigate('design')}>
+        Design
+      </button>
+    </div>
+
     <button
       type="button"
       class="resize-handle"
@@ -198,6 +204,17 @@
   .config-section {
     border-top: 1px solid var(--border-subtle);
     padding-bottom: 0.25rem;
+  }
+
+  .design-section {
+    border-top: 1px solid var(--border-subtle);
+  }
+  .design-section .nav-item {
+    font-size: 0.75rem;
+    opacity: 0.5;
+  }
+  .design-section .nav-item.active {
+    opacity: 1;
   }
   .config-label {
     font-size: 0.68rem;

@@ -141,7 +141,7 @@
     </div>
 
     <div class="actions">
-      <button class="btn-secondary" onclick={closePrimaryLaunchDialog} disabled={$isStartingSession}>Cancel</button>
+      <button class="btn" onclick={closePrimaryLaunchDialog} disabled={$isStartingSession}>Cancel</button>
       <button class="btn-primary" onclick={handleStart} disabled={!selectedConfigId || $isStartingSession || $modelConfigs.length === 0}>
         {$isStartingSession ? 'Starting…' : 'Start session'}
       </button>
@@ -329,26 +329,5 @@
     display: flex;
     justify-content: flex-end;
     gap: 0.5rem;
-  }
-
-  .btn-primary,
-  .btn-secondary {
-    border-radius: 4px;
-    border: 1px solid var(--border);
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.85rem;
-    padding: 0.4rem 0.9rem;
-  }
-
-  .btn-primary {
-    background: var(--color-accent, #7c3aed);
-    border-color: var(--color-accent, #7c3aed);
-    color: #fff;
-  }
-
-  .btn-secondary {
-    background: var(--bg);
-    color: var(--text);
   }
 </style>

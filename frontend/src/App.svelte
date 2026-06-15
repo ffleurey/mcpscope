@@ -9,6 +9,7 @@
   import ModelConfigs from './lib/components/ModelConfigs.svelte'
   import McpProfiles from './lib/components/McpProfiles.svelte'
   import ChatView from './lib/components/ChatView.svelte'
+  import DesignReference from './lib/components/DesignReference.svelte'
   import ErrorDialog from './lib/components/ErrorDialog.svelte'
   import ExecutionBar from './lib/components/ExecutionBar.svelte'
 
@@ -43,6 +44,8 @@
       <LmConnections />
     {:else if $currentView === 'mcp-profiles'}
       <McpProfiles />
+    {:else if $currentView === 'design'}
+      <DesignReference />
     {/if}
   </main>
 </div>

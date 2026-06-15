@@ -45,4 +45,5 @@ export type NavView =
   | "chats"
   | "connections"
   | "model-configs"
-  | "mcp-profiles";
+  | "mcp-profiles"
+  | "design";
