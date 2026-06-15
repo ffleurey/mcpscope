@@ -171,9 +171,11 @@
     <h2>Form Fields</h2>
     <p class="ref-note">
       Fully monochrome — no accent outline on focus.
-      <code class="mono">accent-color</code> controls the native select
-      dropdown highlight to match the selection color (Chrome/Edge).
-      Options use dark theme; checked option is styled to match.
+      Checkboxes and radios use <code class="mono">appearance: none</code>
+      with custom dark styling. The select dropdown uses progressive
+      enhancement: <code class="mono">@supports (appearance: base-select)</code>
+      enables custom option hover in amber where supported, with an
+      <code class="mono">accent-color</code> fallback everywhere else.
     </p>
 
     <div class="form-demo">
@@ -691,6 +693,11 @@
     background: radial-gradient(circle, var(--amber-bright) 40%, var(--bg-base) 40%);
   }
 
+  /* ── Select dropdown: progressive enhancement ────────────────────
+     Fallback: accent-color + styled options (works everywhere).
+     Modern: appearance: base-select + ::picker() gives full control
+     over the dropdown background and option hover highlight.  */
+
   select {
     accent-color: var(--amber-bright);
   }
@@ -702,6 +709,27 @@
 
   select option:checked {
     background: color-mix(in srgb, var(--amber-bright) 30%, var(--bg-base));
+    color: var(--text-bright);
+  }
+
+  /* appearance: base-select + ::picker() are progressively supported.
+     Browsers that don't recognise them simply ignore the rules. */
+  select {
+    appearance: base-select;
+  }
+
+  select::picker(select) {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  select option {
+    padding: 0.25rem 0.5rem;
+  }
+
+  select option:hover {
+    background: color-mix(in srgb, var(--amber-bright) 25%, var(--bg-surface));
     color: var(--text-bright);
   }
 
