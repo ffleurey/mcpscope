@@ -171,11 +171,10 @@
     <h2>Form Fields</h2>
     <p class="ref-note">
       Fully monochrome — no accent outline on focus.
-      Checkboxes and radios use <code class="mono">appearance: none</code>
-      with a solid amber fill when checked — no SVGs, no gradients.
-      The select dropdown uses <code class="mono">accent-color</code>
-      for the highlight, with <code class="mono">appearance: base-select</code>
-      + <code class="mono">::picker()</code> as progressive enhancement.
+      Checkboxes, radios and selects use standard OS rendering with
+      <code class="mono">accent-color: var(--amber-bright)</code>.
+      The dark theme comes from <code class="mono">color-scheme: dark</code>
+      on the root element.
     </p>
 
     <div class="form-demo">
@@ -649,87 +648,19 @@
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    padding: 0.35rem 0.5rem;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--bg-base);
     cursor: pointer;
     user-select: none;
   }
 
-  /* Checked state: accent only on the check/radio indicator, no colored border */
-
-  /* Checkboxes & radios — dark background via appearance: none,
-     amber fill on checked. No SVGs, no gradients, solid color only. */
   .check-option input[type="checkbox"],
   .radio-opt input[type="radio"] {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 1rem;
-    height: 1rem;
-    border: 1px solid var(--border);
-    background: var(--bg-base);
+    accent-color: var(--amber-bright);
     margin: 0;
     flex-shrink: 0;
-    cursor: pointer;
   }
-
-  .check-option input[type="checkbox"] {
-    border-radius: 3px;
-  }
-
-  .check-option input[type="checkbox"]:checked {
-    background: var(--amber-bright);
-    border-color: var(--amber-bright);
-  }
-
-  .radio-opt input[type="radio"] {
-    border-radius: 50%;
-  }
-
-  .radio-opt input[type="radio"]:checked {
-    border-color: var(--amber-bright);
-    background: var(--amber-bright);
-  }
-
-  /* ── Select dropdown: progressive enhancement ────────────────────
-     Fallback: accent-color + styled options (works everywhere).
-     Modern: appearance: base-select + ::picker() gives full control
-     over the dropdown background and option hover highlight.  */
 
   select {
     accent-color: var(--amber-bright);
-  }
-
-  select option {
-    background: var(--bg-surface);
-    color: var(--text-bright);
-  }
-
-  select option:checked {
-    background: color-mix(in srgb, var(--amber-bright) 30%, var(--bg-base));
-    color: var(--text-bright);
-  }
-
-  /* appearance: base-select + ::picker() are progressively supported.
-     Browsers that don't recognise them simply ignore the rules. */
-  select {
-    appearance: base-select;
-  }
-
-  select::picker(select) {
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-  }
-
-  select option {
-    padding: 0.25rem 0.5rem;
-  }
-
-  select option:hover {
-    background: color-mix(in srgb, var(--amber-bright) 25%, var(--bg-surface));
-    color: var(--text-bright);
   }
 
   .check-label,
@@ -739,27 +670,18 @@
   }
 
   .radio-opt {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    grid-template-rows: auto auto;
-    column-gap: 0.45rem;
-    row-gap: 0.05rem;
-    align-items: baseline;
-  }
-
-  .radio-opt input[type="radio"] {
-    grid-row: 1;
-    grid-column: 1;
-  }
-
-  .radio-opt-label {
-    grid-row: 1;
-    grid-column: 2;
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    user-select: none;
   }
 
   .radio-opt-hint {
-    grid-row: 2;
-    grid-column: 2;
+    width: 100%;
+    margin-top: -0.2rem;
+    padding-left: 1.5rem;
     font-size: 0.75rem;
     color: var(--text-dim);
   }
