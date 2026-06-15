@@ -678,10 +678,9 @@
   }
 
   .check-option input[type="checkbox"]:checked {
-    background: var(--amber-bright)
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%230a0a0a' d='M13 3.3L6 11l-3-3-1 1 4 4 8-9z'/%3E%3C/svg%3E")
-      center / 0.75em no-repeat;
-    border-color: var(--amber-bright);
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23e8a83d' stroke-width='2.2' stroke-linecap='round' d='M4 8l3 3 5-5'/%3E%3C/svg%3E")
+      center / 0.65em no-repeat;
   }
 
   .radio-opt input[type="radio"] {
@@ -689,8 +688,7 @@
   }
 
   .radio-opt input[type="radio"]:checked {
-    border-color: var(--amber-bright);
-    background: radial-gradient(circle, var(--amber-bright) 40%, var(--bg-base) 40%);
+    background: radial-gradient(circle, var(--amber-bright) 45%, var(--bg-base) 45%);
   }
 
   /* ── Select dropdown: progressive enhancement ────────────────────
