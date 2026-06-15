@@ -679,8 +679,8 @@
 
   .check-option input[type="checkbox"]:checked {
     background:
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23e8a83d' stroke-width='2.2' stroke-linecap='round' d='M4 8l3 3 5-5'/%3E%3C/svg%3E")
-      center / 0.65em no-repeat;
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23e8a83d' d='M12.7 4.3L6.7 11 4 8.3l-.7.7 3.4 3.4 6.7-7.1-.7-.7z'/%3E%3C/svg%3E")
+      center / 0.85em no-repeat;
   }
 
   .radio-opt input[type="radio"] {
@@ -688,7 +688,7 @@
   }
 
   .radio-opt input[type="radio"]:checked {
-    background: radial-gradient(circle, var(--amber-bright) 45%, var(--bg-base) 45%);
+    background: radial-gradient(circle, var(--amber-bright) 40%, var(--bg-base) 40%);
   }
 
   /* ── Select dropdown: progressive enhancement ────────────────────
