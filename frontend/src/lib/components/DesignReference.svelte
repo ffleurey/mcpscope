@@ -317,6 +317,43 @@
     </p>
   </section>
 
+  <!-- ─── SESSION PATTERNS ────────────────────────────────────────────── -->
+  <section class="ref-section" id="session">
+    <h2>Session content</h2>
+    <p class="ref-note">
+      Green phosphor text distinguishes session data from UI chrome.
+      All text inside a session trace uses <code class="mono">--green-bright</code>.
+      See <code class="mono">backlog/design-system.md</code> for the full rationale.
+    </p>
+
+    <h3 class="group-title">Session text samples</h3>
+    <div class="session-demo">
+      <div class="session-part" style="color: var(--green-bright);">
+        <span class="session-part-label">User prompt</span>
+        <p>What tools are available for weather data?</p>
+      </div>
+      <div class="session-part" style="color: var(--green-bright);">
+        <span class="session-part-label">Reasoning</span>
+        <p class="session-reasoning">The user is asking about weather tools. I should list the available MCP tools and their capabilities.</p>
+      </div>
+      <div class="session-part" style="color: var(--green-bright);">
+        <span class="session-part-label">Tool call</span>
+        <p class="session-mono">get_forecast(latitude: 48.85, longitude: 2.35)</p>
+      </div>
+      <div class="session-part" style="color: var(--green-bright);">
+        <span class="session-part-label">Assistant answer</span>
+        <p>The current temperature in Paris is 18°C with partly cloudy skies. The forecast shows a high of 22°C tomorrow.</p>
+      </div>
+    </div>
+
+    <div class="demo-row" style="margin-top: 0.75rem;">
+      <span class="token-pill" style="border-color: var(--border); color: var(--green-bright);">1,234 tokens</span>
+      <span class="token-pill" style="border-color: var(--border); color: var(--green-bright);">~500 tokens</span>
+      <span class="session-badge">Round 3</span>
+      <span class="session-badge">AB12.4T</span>
+    </div>
+  </section>
+
   <!-- ─── ICON SET ────────────────────────────────────────────────────── -->
   <section class="ref-section" id="icons">
     <h2>Icon set</h2>
@@ -792,6 +829,58 @@
     border: 1px solid var(--border);
     border-radius: 999px;
     color: var(--text-dim);
+    font-size: 0.68rem;
+    font-family: var(--mono);
+    padding: 0.08rem 0.45rem;
+  }
+
+  /* ── Session patterns ──────────────────────────────────────────── */
+  .session-demo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  .session-part {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .session-part p {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .session-part-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--green-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .session-reasoning {
+    font-style: italic;
+    opacity: 0.85;
+  }
+
+  .session-mono {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+  }
+
+  .session-badge {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--green-bright);
     font-size: 0.68rem;
     font-family: var(--mono);
     padding: 0.08rem 0.45rem;

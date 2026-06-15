@@ -11,9 +11,10 @@
 
 ## Color palette
 
-### Neutral greys (cover ~90% of the UI)
+### Neutral greys — UI chrome (~90% of the surface)
 
-These are the workhorse colors. Forms, dialogs, navigation, text — almost everything uses greys by default. Color is added only where it provides signal.
+These are the workhorse colors. Forms, dialogs, navigation, sidebar, labels — almost everything
+uses greys by default. Color is added only where it provides signal.
 
 | Token | Value | Usage |
 |---|---|---|
@@ -27,8 +28,9 @@ These are the workhorse colors. Forms, dialogs, navigation, text — almost ever
 **Rules:**
 - `--bg-base` is the outermost background; everything sits on it
 - `--bg-surface` is one step lighter — used for any container that needs distinction from the base
-- `--text-bright` is the default text color; `--text-dim` for supporting information
+- `--text-bright` is the default UI text color; `--text-dim` for supporting information
 - No color-on-color: accent colors are placed on `--bg-base` or `--bg-surface` backgrounds only (never on another color)
+- **Green is for data, grey is for chrome** — see the green section below
 
 ### Amber — Primary accent (minimal use)
 
@@ -40,14 +42,18 @@ Reserved for the logo and the single primary action in any view/dialog. Most of 
 | `--amber-bright` | `oklch(72% 0.18 75)` | Primary action buttons, active tab underline, key highlights |
 | `--amber-glow` | `oklch(78% 0.20 75)` | Hover/enhanced state for primary elements |
 
-### Green — Secondary accent (status, success)
+### Green — Session content
 
-Used for "all good" indicators, success feedback, and running/complete status.
+Green is the **data color**. All text that is part of a session — user prompts, assistant answers,
+reasoning blocks, tool calls, tool results — uses green text. This creates an immediate visual
+boundary between the tool UI (monochrome grey, amber accents) and the session data being inspected.
+
+Think of it like an oscilloscope: the UI chrome and controls are neutral, the signal trace is green.
 
 | Token | Value | Usage |
 |---|---|---|
 | `--green-dim` | `oklch(50% 0.14 145)` | Dim status indicators, offline/dormant states |
-| `--green-bright` | `oklch(65% 0.18 145)` | Active status dots, success confirmations |
+| `--green-bright` | `oklch(65% 0.18 145)` | Session content text: prompts, answers, reasoning, tool calls, results |
 | `--green-glow` | `oklch(72% 0.22 145)` | Bright status, pulsed indicators |
 
 ### Red — Destructive actions, errors
@@ -140,6 +146,33 @@ See `SessionTurnBlock.svelte` and `SessionPreludeBlock.svelte` for the existing 
 - **Warning / attention:** `--amber-bright` dot
 - **Error / failed:** `--red-bright` dot
 - No glow effects — flat dots keep it clean
+
+### Session content (green phosphor)
+
+All text that is part of a session trace — user prompts, assistant answers, reasoning blocks,
+tool calls, tool results, and their metadata — uses `--green-bright` as the text color.
+
+This is the core visual metaphor: the UI chrome is neutral grey with amber accents, while the
+session data reads like a green phosphor trace on an oscilloscope. The boundary between
+the tool and the data is immediately visible.
+
+**What gets green:**
+- User prompts and assistant answers in the transcript
+- Reasoning blocks and chain-of-thought
+- Tool call names, parameters, and results
+- Token counts and context bar labels within the session view
+- Round headers, turn metadata
+
+**What stays grey:**
+- All UI chrome: sidebar, navigation, buttons, dialogs, form labels
+- Configuration views and settings
+- Session list in the sidebar
+- Dialog titles and action labels
+
+### Context bar colors (unchanged, kept separate)
+
+The context-window visualization bar uses its own palette for part-type distinction.
+See `partColors.ts`. It is unrelated to the grey-chrome / green-data split.
 
 ### Tables
 
