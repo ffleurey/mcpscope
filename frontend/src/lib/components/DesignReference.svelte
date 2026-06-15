@@ -346,11 +346,12 @@
       </div>
     </div>
 
-    <div class="demo-row" style="margin-top: 0.75rem;">
-      <span class="token-pill" style="border-color: var(--border); color: var(--green-bright);">1,234 tokens</span>
-      <span class="token-pill" style="border-color: var(--border); color: var(--green-bright);">~500 tokens</span>
-      <span class="session-badge">Round 3</span>
-      <span class="session-badge">AB12.4T</span>
+    <h3 class="group-title">Metadata (stays grey)</h3>
+    <div class="demo-row">
+      <span class="token-pill">1,234 tokens</span>
+      <span class="token-pill">~500 tokens</span>
+      <span class="id-pill-demo">AB12.4T</span>
+      <span class="id-pill-demo">AB12.S</span>
     </div>
   </section>
 
@@ -875,15 +876,6 @@
   .session-mono {
     font-family: var(--mono);
     font-size: 0.82rem;
-  }
-
-  .session-badge {
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    color: var(--green-bright);
-    font-size: 0.68rem;
-    font-family: var(--mono);
-    padding: 0.08rem 0.45rem;
   }
 
   /* ── Principles list ──────────────────────────────────────────────── */

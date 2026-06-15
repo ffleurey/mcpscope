@@ -160,14 +160,14 @@ the tool and the data is immediately visible.
 - User prompts and assistant answers in the transcript
 - Reasoning blocks and chain-of-thought
 - Tool call names, parameters, and results
-- Token counts and context bar labels within the session view
-- Round headers, turn metadata
+- Round headers and turn labels within the session view
 
 **What stays grey:**
 - All UI chrome: sidebar, navigation, buttons, dialogs, form labels
 - Configuration views and settings
 - Session list in the sidebar
 - Dialog titles and action labels
+- **Token counts, ID badges, timestamps** — these are tool metadata, not session content
 
 ### Context bar colors (unchanged, kept separate)
 
