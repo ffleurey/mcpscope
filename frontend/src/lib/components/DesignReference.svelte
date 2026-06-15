@@ -169,6 +169,12 @@
   <!-- ─── FORM FIELDS ────────────────────────────────────────────────── -->
   <section class="ref-section" id="forms">
     <h2>Form Fields</h2>
+    <p class="ref-note">
+      Fully monochrome — no accent outline on focus.
+      <code class="mono">accent-color</code> controls the native select
+      dropdown highlight to match the selection color (Chrome/Edge).
+      Options use dark theme; checked option is styled to match.
+    </p>
 
     <div class="form-demo">
       <div class="field">
@@ -620,9 +626,7 @@
     outline: none;
   }
 
-  .field-input:focus {
-    border-color: var(--amber-bright, var(--color-accent));
-  }
+  /* Monochrome: no accent outline on focus */
 
   .field-input.field-error {
     border-color: var(--red-bright, var(--color-error));
@@ -651,16 +655,54 @@
     user-select: none;
   }
 
-  .check-option:has(input:checked),
-  .radio-opt:has(input:checked) {
-    border-color: var(--amber-bright, var(--color-accent));
-    background: color-mix(in srgb, var(--amber-bright, var(--color-accent)) 7%, var(--bg-base));
-  }
+  /* Checked state: accent only on the check/radio indicator, no colored border */
 
+  /* ── Custom-styled checkboxes & radios (appearance: none) ─────────── */
   .check-option input[type="checkbox"],
   .radio-opt input[type="radio"] {
-    accent-color: var(--amber-bright, var(--color-accent));
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1rem;
+    height: 1rem;
+    border: 1px solid var(--border);
+    background: var(--bg-base);
     margin: 0;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .check-option input[type="checkbox"] {
+    border-radius: 3px;
+  }
+
+  .check-option input[type="checkbox"]:checked {
+    background: var(--amber-bright)
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%230a0a0a' d='M13 3.3L6 11l-3-3-1 1 4 4 8-9z'/%3E%3C/svg%3E")
+      center / 0.75em no-repeat;
+    border-color: var(--amber-bright);
+  }
+
+  .radio-opt input[type="radio"] {
+    border-radius: 50%;
+  }
+
+  .radio-opt input[type="radio"]:checked {
+    border-color: var(--amber-bright);
+    background: radial-gradient(circle, var(--amber-bright) 40%, var(--bg-base) 40%);
+  }
+
+  select {
+    accent-color: var(--amber-bright);
+  }
+
+  select option {
+    background: var(--bg-surface);
+    color: var(--text-bright);
+  }
+
+  select option:checked {
+    background: color-mix(in srgb, var(--amber-bright) 30%, var(--bg-base));
+    color: var(--text-bright);
   }
 
   .check-label,
