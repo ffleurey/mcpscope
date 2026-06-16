@@ -130,7 +130,7 @@
     <h1>Design System Reference</h1>
     <p class="ref-subtitle">
       Living style guide — colors, fonts and components are rendered from live CSS and real
-      components, not copied. See <span class="mono">backlog/design-system.md</span>
+      components, not copied. See <span class="mono">DESIGN-SYSTEM.md</span>
       for rationale and decisions.
     </p>
   </header>
