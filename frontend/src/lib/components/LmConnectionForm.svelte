@@ -55,7 +55,6 @@
 </script>
 
 <form class="profile-form" onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>
-  <h3>{connection ? 'Edit Connection' : 'New Connection'}</h3>
 
   <div class="field">
     <label for="lc-name">Name</label>
@@ -111,22 +110,18 @@
 
 <style>
   .profile-form {
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
   }
-  h3 {
-    margin: 0 0 1.1rem;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text);
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
   }
-  .field { margin-bottom: 0.9rem; }
   .field-hint {
-    font-weight: 400;
-    opacity: 0.7;
+    font-size: 0.75rem;
+    color: var(--text-dim);
   }
   .api-key-row {
     display: flex;
@@ -140,36 +135,36 @@
     white-space: nowrap;
   }
   label {
-    display: block;
-    font-size: 0.82rem;
-    color: var(--text-muted);
-    margin-bottom: 0.3rem;
-    font-weight: 500;
-    letter-spacing: 0.02em;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
-  input {
+  input, select {
     width: 100%;
     box-sizing: border-box;
-    background: var(--bg-input);
+    background: var(--bg-base);
     border: 1px solid var(--border);
     border-radius: 4px;
-    color: var(--text);
-    padding: 0.45rem 0.6rem;
-    font-size: 0.9rem;
+    color: var(--text-bright);
+    padding: 0.4rem 0.6rem;
+    font-size: 0.875rem;
     font-family: inherit;
     outline: none;
-    transition: border-color 0.15s;
   }
-  input:focus { border-color: var(--color-accent); }
+  input:disabled, select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
   .field-error {
-    display: block;
-    color: var(--color-error);
-    font-size: 0.78rem;
-    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--red-bright);
   }
   .form-actions {
     display: flex;
-    gap: 0.6rem;
-    margin-top: 1.1rem;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding-top: 0.25rem;
   }
 </style>

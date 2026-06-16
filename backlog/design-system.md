@@ -107,10 +107,10 @@ See `SessionTurnBlock.svelte` and `SessionPreludeBlock.svelte` for the existing 
 
 | Variant | Style |
 |---|---|
-| Default `.btn` | Grey on `--bg-surface`, `--border`, hover lifts to `--bg-hover` |
-| Primary `.btn-primary` | `--amber-bright` background, near-black text (`#0a0a0a`). Use **only one** per view/dialog. |
+| Default `.btn` | Transparent background, dim border + text. Hover lifts to `--bg-hover`, brighter text. |
+| Primary `.btn-primary` | Transparent background, `--amber-bright` border and text. Hover adds subtle amber-tinted background. Use **only one** per view/dialog. |
 | Danger `.btn-danger` | No background; `--red-bright` border and text, subtle red tint on hover |
-| Icon `.icon-btn` | No border, `--text-dim`, hover becomes `--text-bright` with `--bg-hover` background |
+| Icon `.icon-btn` | No border, `--text-bright`, hover adds `--bg-hover` background |
 
 - Border-radius: **4px** consistently
 - Focus-visible outline: 2px solid `--amber-bright`, 2px offset

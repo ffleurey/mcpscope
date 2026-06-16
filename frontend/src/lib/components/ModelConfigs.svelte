@@ -6,6 +6,7 @@
   import type { LmStudioModel } from '../services/lmstudio'
   import type { ModelConfig } from '../types'
   import ModelConfigForm from './ModelConfigForm.svelte'
+  import DialogShell from './DialogShell.svelte'
 import { formatContextSize } from '../modelConfigHelpers'
   import InlineAppError from './InlineAppError.svelte'
   import JsonDialog from './JsonDialog.svelte'
@@ -184,7 +185,9 @@ import { formatContextSize } from '../modelConfigHelpers'
   <InlineAppError error={statusError} />
 
   {#if showNew}
-    <ModelConfigForm onSave={handleSave} onCancel={cancelNew} />
+    <DialogShell title="New Model Config" onClose={cancelNew}>
+      <ModelConfigForm onSave={handleSave} onCancel={cancelNew} />
+    </DialogShell>
   {/if}
 
   {#if $modelConfigs.length === 0 && !showNew}
@@ -193,7 +196,9 @@ import { formatContextSize } from '../modelConfigHelpers'
 
   {#each $modelConfigs as config (config.id)}
     {#if editingId === config.id}
-      <ModelConfigForm modelConfig={config} onSave={handleSave} onCancel={cancelEdit} />
+      <DialogShell title="Edit Model Config" onClose={cancelEdit}>
+        <ModelConfigForm modelConfig={config} onSave={handleSave} onCancel={cancelEdit} />
+      </DialogShell>
     {:else}
       {@const live = liveModel(config)}
       {@const busy = cardBusy.get(config.id)}
@@ -227,7 +232,7 @@ import { formatContextSize } from '../modelConfigHelpers'
             {/if}
             <button class="btn btn-sm" onclick={() => openDetails(config)}>Details</button>
             {#if !isDefault}
-              <button class="btn btn-sm btn-accent" onclick={() => handleSetDefault(config.id)}>Set as default</button>
+              <button class="btn btn-primary btn-sm" onclick={() => handleSetDefault(config.id)}>Set as default</button>
             {/if}
             <button class="btn btn-sm" onclick={() => startEdit(config.id)}>Edit</button>
             <button class="btn btn-sm btn-danger" onclick={() => handleDelete(config.id)}>Delete</button>
@@ -330,8 +335,8 @@ import { formatContextSize } from '../modelConfigHelpers'
     white-space: nowrap;
   }
   .card-actions { display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
-  .badge-loaded { font-size: 0.75rem; color: #4ade80; font-weight: 500; }
-  .badge-loaded-context { font-size: 0.75rem; color: #4ade80; font-weight: 500; white-space: nowrap; }
+  .badge-loaded { font-size: 0.75rem; color: var(--green-bright); font-weight: 500; }
+  .badge-loaded-context { font-size: 0.75rem; color: var(--green-bright); font-weight: 500; white-space: nowrap; }
   .badge-unloaded { font-size: 0.75rem; color: var(--text-muted); }
   .text-muted { color: var(--text-muted); }
   .card-details { margin: 0; }
@@ -354,14 +359,6 @@ import { formatContextSize } from '../modelConfigHelpers'
     padding: 0 0.3rem;
     font-size: 0.78rem;
     color: var(--text-muted);
-  }
-  .btn-accent {
-    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
-    border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
-    color: var(--color-accent);
-  }
-  .btn-accent:hover {
-    background: color-mix(in srgb, var(--color-accent) 25%, transparent);
   }
   code { font-family: var(--mono); font-size: 0.8rem; }
 </style>

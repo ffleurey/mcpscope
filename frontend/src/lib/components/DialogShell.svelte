@@ -25,17 +25,53 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') onClose()
   }
+
+  // ── Drag ────────────────────────────────────────────────────────────
+
+  let dragging = $state(false)
+  let dragX = $state(0)
+  let dragY = $state(0)
+  let dragStartX = 0
+  let dragStartY = 0
+  let offsetStartX = 0
+  let offsetStartY = 0
+
+  function startDrag(e: MouseEvent) {
+    // Only drag from the header itself, not the close button
+    if ((e.target as HTMLElement).closest('.close-btn')) return
+    dragging = true
+    dragStartX = e.clientX
+    dragStartY = e.clientY
+    offsetStartX = dragX
+    offsetStartY = dragY
+    e.preventDefault()
+  }
+
+  function onDrag(e: MouseEvent) {
+    if (!dragging) return
+    dragX = offsetStartX + e.clientX - dragStartX
+    dragY = offsetStartY + e.clientY - dragStartY
+  }
+
+  function endDrag() {
+    dragging = false
+  }
 </script>
+
+<svelte:window onmousemove={onDrag} onmouseup={endDrag} />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <dialog
   bind:this={dialogEl}
   class="shell-dialog {dialogClass}"
+  class:dragging
+  style="transform: translate({dragX}px, {dragY}px)"
   onclick={handleBackdropClick}
   onkeydown={handleKeydown}
 >
   <div class="dialog-inner">
-    <div class="dialog-header">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="dialog-header" onmousedown={startDrag}>
       <span class="dialog-title">{title}</span>
       <button class="close-btn" onclick={onClose} aria-label="Close">✕</button>
     </div>
@@ -53,6 +89,11 @@
     max-width: min(720px, 95vw);
     width: 100%;
     max-height: 85vh;
+    transition: none;
+  }
+
+  .shell-dialog.dragging {
+    transition: none;
   }
 
   .shell-dialog::backdrop {
@@ -76,6 +117,16 @@
     padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+    cursor: grab;
+    user-select: none;
+  }
+
+  .dialog-header:active {
+    cursor: grabbing;
+  }
+
+  .dragging .dialog-header {
+    cursor: grabbing;
   }
 
   .dialog-title {
@@ -86,6 +137,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    pointer-events: none;
   }
 
   .close-btn {
@@ -98,6 +150,8 @@
     border-radius: 3px;
     line-height: 1;
     flex-shrink: 0;
+    position: relative;
+    z-index: 1;
   }
 
   .close-btn:hover { color: var(--text); background: var(--bg); }
@@ -106,5 +160,6 @@
     flex: 1;
     overflow: auto;
     min-height: 0;
+    padding: 0.75rem 1rem;
   }
 </style>

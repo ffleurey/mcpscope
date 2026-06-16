@@ -142,7 +142,7 @@
 
     <div class="actions">
       <button class="btn" onclick={closePrimaryLaunchDialog} disabled={$isStartingSession}>Cancel</button>
-      <button class="btn-primary" onclick={handleStart} disabled={!selectedConfigId || $isStartingSession || $modelConfigs.length === 0}>
+      <button class="btn btn-primary" onclick={handleStart} disabled={!selectedConfigId || $isStartingSession || $modelConfigs.length === 0}>
         {$isStartingSession ? 'Starting…' : 'Start session'}
       </button>
     </div>
@@ -154,7 +154,6 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    padding: 1rem;
   }
 
   .error-banner {
@@ -175,7 +174,7 @@
   .error-details {
     margin-top: 0.45rem;
     font-size: 0.78rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .error-details summary {
@@ -198,16 +197,20 @@
     overflow-y: auto;
   }
 
+  .mcp-checkbox-hint {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
   .field {
     display: flex;
     flex-direction: column;
-    gap: 0.45rem;
+    gap: 0.3rem;
   }
 
   .field-label {
     font-size: 0.78rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -220,21 +223,21 @@
   }
 
   .field-select {
-    background: var(--bg-input);
+    background: var(--bg-base);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
+    border-radius: 4px;
+    color: var(--text-bright);
     font-family: inherit;
     font-size: 0.875rem;
-    padding: 0.45rem 0.65rem;
+    padding: 0.4rem 0.6rem;
     outline: none;
-    cursor: pointer;
-    appearance: auto;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .field-hint {
-    font-size: 0.8rem;
-    color: var(--text-muted);
+    font-size: 0.75rem;
+    color: var(--text-dim);
     margin: 0;
   }
 
@@ -257,8 +260,7 @@
   }
 
   .mcp-checkbox-option:has(input:checked) {
-    border-color: var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 7%, var(--bg));
+    border-color: var(--border);
   }
 
   .mcp-checkbox-option input[type="checkbox"] {
@@ -270,11 +272,6 @@
     font-size: 0.875rem;
     font-weight: 500;
     color: var(--text);
-  }
-
-  .mcp-checkbox-hint {
-    font-size: 0.75rem;
-    color: var(--text-muted);
   }
 
   .radio-group {
@@ -298,8 +295,7 @@
   }
 
   .radio-option:has(input:checked) {
-    border-color: var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 7%, var(--bg));
+    border-color: var(--border);
   }
 
   .radio-option input[type="radio"] {
@@ -321,8 +317,7 @@
     grid-row: 2;
     grid-column: 2;
     font-size: 0.75rem;
-    color: var(--text-muted);
-    line-height: 1.3;
+    color: var(--text-dim);
   }
 
   .actions {

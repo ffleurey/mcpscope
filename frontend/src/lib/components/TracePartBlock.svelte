@@ -201,7 +201,7 @@
       {/each}
     </div>
   {:else if part.payload.text}
-    <pre class="part-text">{part.payload.text}</pre>
+    <pre class="part-text part-{part.partType}">{part.payload.text}</pre>
   {/if}
 
   {#if hasJsonPayload}
@@ -304,7 +304,7 @@
   .part-preview {
     min-width: 0;
     flex: 1;
-    color: var(--text);
+    color: var(--green-bright);
     font-size: 0.82rem;
     white-space: nowrap;
     overflow: hidden;
@@ -313,7 +313,7 @@
 
   .part-subtitle {
     font-size: 0.8rem;
-    color: var(--text);
+    color: var(--green-bright);
   }
 
   .token-pill {
@@ -338,27 +338,45 @@
       var(--compact-detail-bottom-pad, 0.42rem);
   }
 
-  .part-text,
+  /* ── Content text: all 1rem, differentiate only by font family/style ─ */
   .part-text-block {
     margin: 0;
     min-width: 0;
     white-space: pre-wrap;
     word-break: break-word;
-    line-height: var(--compact-line-height, 1.4);
-    color: var(--text);
+    line-height: 1.5;
+    color: var(--green-bright);
     font-family: inherit;
-    font-size: 0.9rem;
+    font-size: 1rem;
   }
 
   .part-text {
+    margin: 0;
+    min-width: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--green-bright);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  /* Reasoning: sans, italic, same size */
+  .part-assistant-reasoning {
     font-style: italic;
-    color: var(--text-muted);
+    font-family: inherit;
+  }
+
+  /* Tool calls / results: mono, same size */
+  .part-tool-call,
+  .part-tool-result {
+    font-family: var(--mono);
+    font-style: normal;
   }
 
   .part-block.compact .part-text,
   .part-block.compact .part-text-block {
-    font-size: 0.84rem;
-    line-height: var(--compact-line-height, 1.4);
+    font-size: 1rem;
+    line-height: 1.5;
   }
 
   .user-bubble {
@@ -375,7 +393,7 @@
   .part-note {
     margin-top: 0.45rem;
     font-size: 0.76rem;
-    color: var(--text-muted);
+    color: var(--green-bright);
   }
 
   .message-meta {
@@ -444,9 +462,9 @@
 
   .tool-name {
     font-family: var(--mono);
-    font-size: 0.8rem;
+    font-size: 1rem;
     font-weight: 600;
-    color: var(--text);
+    color: var(--green-bright);
     flex-shrink: 0;
   }
 
@@ -465,10 +483,9 @@
   }
 
   .tool-description {
-    font-size: 0.84rem;
-    color: var(--text-muted);
-    font-style: italic;
-    line-height: 1.45;
+    font-size: 1rem;
+    color: var(--green-bright);
+    line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
   }
@@ -493,23 +510,22 @@
 
   .param-name {
     font-family: var(--mono);
-    font-size: 0.78rem;
-    color: var(--text);
+    font-size: 1rem;
+    color: var(--green-bright);
     font-weight: 600;
   }
 
   .param-meta {
     font-family: var(--mono);
-    font-size: 0.75rem;
-    color: var(--text);
+    font-size: 1rem;
+    color: var(--green-bright);
   }
 
   .param-desc {
-    font-size: 0.84rem;
-    color: var(--text-muted);
-    font-style: italic;
+    font-size: 1rem;
+    color: var(--green-bright);
     padding-left: 0.6rem;
-    line-height: 1.4;
+    line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
   }

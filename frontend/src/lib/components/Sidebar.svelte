@@ -244,7 +244,7 @@
   }
   .nav-item.active {
     color: var(--text);
-    background: var(--bg-active);
+    border-bottom: 2px solid var(--amber-bright);
     font-weight: 500;
   }
 

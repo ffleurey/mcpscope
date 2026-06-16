@@ -622,7 +622,7 @@
     font-weight: 500;
     color: var(--text);
     background: var(--bg-panel);
-    border: 1px solid var(--color-accent, #60a5fa);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.1rem 0.35rem;
     min-width: 0;
@@ -648,9 +648,8 @@
   }
 
   .view-mode-btn.active {
-    color: var(--text);
-    border-color: var(--border);
-    background: color-mix(in srgb, var(--bg-panel) 85%, transparent);
+    color: var(--text-bright);
+    border-color: var(--amber-bright);
   }
 
   .export-btn {
@@ -727,7 +726,7 @@
   }
 
   .composer-bubble:focus-within {
-    border-color: color-mix(in srgb, var(--color-accent) 60%, var(--border));
+    border-color: var(--green-bright);
   }
 
   .composer-bubble.is-disabled {
@@ -741,17 +740,16 @@
     resize: none;
     background: transparent;
     border: none;
-    color: var(--text);
+    color: var(--green-bright);
     font-family: inherit;
-    font-size: 0.9rem;
+    font-size: 1rem;
     line-height: 1.5;
     outline: none;
     overflow-y: auto;
   }
 
   .composer-bubble textarea::placeholder {
-    color: var(--text-muted);
-    opacity: 0.7;
+    color: color-mix(in srgb, var(--green-bright) 40%, transparent);
   }
 
   .composer-footer {

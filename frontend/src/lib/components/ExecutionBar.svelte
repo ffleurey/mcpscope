@@ -141,19 +141,13 @@
     flex-shrink: 0;
   }
   .status-dot.running {
-    background: #3fb950;
-    animation: pulse 1.5s infinite;
+    background: var(--green-bright);
   }
   .status-dot.paused {
-    background: #d29922;
+    background: var(--amber-bright);
   }
   .status-dot.idle {
-    background: #484f58;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    background: var(--green-dim);
   }
 
   .status-label {

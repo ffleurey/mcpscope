@@ -4,6 +4,7 @@
   import type { LmStudioConnection } from '../types'
   import LmConnectionForm from './LmConnectionForm.svelte'
   import ConnectionTestDialog from './ConnectionTestDialog.svelte'
+  import DialogShell from './DialogShell.svelte'
   import { testLmConnection } from '../api/backendClient'
   import { toAppError, type AppError } from '../errors'
 
@@ -72,7 +73,9 @@
   <InlineAppError error={saveError} />
 
   {#if showNew}
-    <LmConnectionForm onSave={handleSave} onCancel={cancelNew} />
+    <DialogShell title="New Connection" onClose={cancelNew}>
+      <LmConnectionForm onSave={handleSave} onCancel={cancelNew} />
+    </DialogShell>
   {/if}
 
   {#if $lmConnections.length === 0 && !showNew}
@@ -81,7 +84,9 @@
 
   {#each $lmConnections as conn (conn.id)}
     {#if editingId === conn.id}
-      <LmConnectionForm connection={conn} onSave={handleSave} onCancel={cancelEdit} />
+      <DialogShell title="Edit Connection" onClose={cancelEdit}>
+        <LmConnectionForm connection={conn} onSave={handleSave} onCancel={cancelEdit} />
+      </DialogShell>
     {:else}
       <div class="profile-card">
         <div class="card-header">

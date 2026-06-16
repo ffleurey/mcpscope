@@ -301,11 +301,11 @@
     {/if}
 
     <div class="actions">
-      <button class="btn-secondary" onclick={onClose} disabled={$isLaunchingAnalysis}>
+      <button class="btn" onclick={onClose} disabled={$isLaunchingAnalysis}>
         Cancel
       </button>
       <button
-        class="btn-primary"
+        class="btn btn-primary"
         onclick={handleLaunch}
         disabled={$isLaunchingAnalysis || !selectedModelConfigId || !selectedTurnId.trim() || !Number.isFinite(temperature)}
       >
@@ -320,32 +320,31 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    padding: 0.25rem 0;
   }
 
   .target-label {
     font-size: 0.8rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     margin: 0;
   }
 
   .target-title {
-    color: var(--text);
+    color: var(--text-bright);
     font-weight: 500;
   }
 
   .field {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 0.3rem;
   }
 
   .field-label {
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
   }
 
   .optional {
@@ -355,34 +354,26 @@
   }
 
   .field-hint {
-    font-size: 0.78rem;
-    color: var(--text-muted);
+    font-size: 0.75rem;
+    color: var(--text-dim);
     margin: 0;
     line-height: 1.4;
   }
 
-  .field-select {
-    background: var(--bg-input, var(--bg));
+  .field-select, .field-textarea {
+    background: var(--bg-base);
     border: 1px solid var(--border);
     border-radius: 4px;
-    color: var(--text);
+    color: var(--text-bright);
     font: inherit;
-    font-size: 0.85rem;
-    padding: 0.45rem 0.6rem;
+    font-size: 0.875rem;
+    padding: 0.4rem 0.6rem;
     width: 100%;
     box-sizing: border-box;
+    outline: none;
   }
 
   .field-textarea {
-    background: var(--bg-input, var(--bg));
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text);
-    font: inherit;
-    font-size: 0.85rem;
-    padding: 0.45rem 0.6rem;
-    width: 100%;
-    box-sizing: border-box;
     resize: vertical;
     min-height: 90px;
   }
@@ -404,23 +395,28 @@
     display: flex;
     align-items: flex-start;
     gap: 0.55rem;
-    color: var(--text);
+    color: var(--text-bright);
     font-size: 0.84rem;
   }
 
   .checkbox-option input {
     margin-top: 0.15rem;
+    accent-color: var(--amber-bright);
   }
 
   .standalone-checkbox {
     padding: 0.1rem 0;
   }
 
+  .standalone-checkbox input {
+    accent-color: var(--amber-bright);
+  }
+
   .error-banner {
-    background: color-mix(in srgb, var(--color-error, #f87171) 15%, transparent);
-    border: 1px solid var(--color-error, #f87171);
+    background: color-mix(in srgb, var(--red-bright) 15%, transparent);
+    border: 1px solid var(--red-bright);
     border-radius: 4px;
-    color: var(--color-error, #f87171);
+    color: var(--red-bright);
     font-size: 0.82rem;
     padding: 0.5rem 0.75rem;
   }
@@ -430,47 +426,6 @@
     justify-content: flex-end;
     gap: 0.5rem;
     padding-top: 0.25rem;
-  }
-
-  .btn-primary,
-  .btn-secondary {
-    border-radius: 4px;
-    border: 1px solid var(--border);
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.85rem;
-    padding: 0.4rem 0.9rem;
-    transition: background 0.1s;
-  }
-
-  .btn-primary {
-    background: var(--color-accent, #7c3aed);
-    border-color: var(--color-accent, #7c3aed);
-    color: #fff;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    filter: brightness(1.1);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary {
-    background: transparent;
-    color: var(--text-muted);
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: var(--bg-hover);
-    color: var(--text);
-  }
-
-  .btn-secondary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   :global(.analysis-launch-dialog) {

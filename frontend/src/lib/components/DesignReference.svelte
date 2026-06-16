@@ -8,6 +8,7 @@
   } from '../design/icons'
 
   let showDialog = $state(false)
+  let showFormDialog = $state(false)
 
   // ── Color tokens (keep in sync with app.css :root) ────────────────
   const colors = [
@@ -26,9 +27,9 @@
       { token: '--amber-bright',  value: 'oklch(72% 0.18 75)', use: 'Primary buttons, active tab underline, links' },
       { token: '--amber-glow',    value: 'oklch(78% 0.20 75)', use: 'Hover/enhanced state for primary elements' },
     ]},
-    { category: 'Green — Secondary accent (status, success)', items: [
+    { category: 'Green — Session content (data color)', items: [
       { token: '--green-dim',     value: 'oklch(50% 0.14 145)', use: 'Dim status, offline/dormant' },
-      { token: '--green-bright',  value: 'oklch(65% 0.18 145)', use: 'Active status dots, success feedback' },
+      { token: '--green-bright',  value: 'oklch(65% 0.18 145)', use: 'Session content: prompts, answers, reasoning, tool calls/results' },
       { token: '--green-glow',    value: 'oklch(72% 0.22 145)', use: 'Bright status, pulsed indicators' },
     ]},
     { category: 'Red — Destructive actions, errors', items: [
@@ -45,6 +46,7 @@
     'Amber is reserved for the logo and the single primary action per view/dialog. Most of the UI has no amber at all.',
     'Most of the UI is monochrome grey. Color is added only where it provides signal.',
     'color-scheme: dark on :root to force neutral system colors on native controls.',
+    'Green is for session data, grey is for chrome — session content text uses --green-bright to create the oscilloscope metaphor.',
   ]
 </script>
 
@@ -98,12 +100,12 @@
       <div class="type-card">
         <code class="type-token">--sans</code>
         <p class="type-sample sans">The quick brown fox jumps over the lazy dog 123</p>
-        <p class="type-stack">system-ui, 'Segoe UI', Roboto, sans-serif</p>
+        <p class="type-stack">-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif</p>
       </div>
       <div class="type-card">
         <code class="type-token">--mono</code>
         <p class="type-sample mono">The quick brown fox jumps over the lazy dog 123</p>
-        <p class="type-stack">ui-monospace, 'Cascadia Code', Consolas, monospace</p>
+        <p class="type-stack">ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace</p>
       </div>
     </div>
 
@@ -240,16 +242,59 @@
   <section class="ref-section" id="dialogs">
     <h2>Dialog</h2>
 
-    <button class="btn btn-primary" onclick={() => showDialog = true}>Open demo dialog</button>
+    <div class="demo-row" style="gap: 0.75rem;">
+      <button class="btn btn-primary" onclick={() => showDialog = true}>Open demo dialog</button>
+      <button class="btn" onclick={() => showFormDialog = true}>Open form dialog</button>
+    </div>
 
     {#if showDialog}
       <DialogShell title="Demo dialog" onClose={() => showDialog = false}>
-        <div class="dialog-demo-body">
-          <p>DialogShell with header, body, and action buttons.</p>
-          <div class="dialog-demo-actions">
-            <button class="btn" onclick={() => showDialog = false}>Cancel</button>
-            <button class="btn btn-primary" onclick={() => showDialog = false}>Confirm</button>
+        <p style="margin: 0 0 0.75rem; font-size: 0.875rem; color: var(--text-bright);">DialogShell with header, body, and action buttons.</p>
+        <div class="dialog-actions">
+          <button class="btn" onclick={() => showDialog = false}>Cancel</button>
+          <button class="btn btn-primary" onclick={() => showDialog = false}>Confirm</button>
+        </div>
+      </DialogShell>
+    {/if}
+
+    {#if showFormDialog}
+      <DialogShell title="Form dialog" onClose={() => showFormDialog = false} dialogClass="form-test-dialog">
+        <div class="form-stack">
+          <div class="field">
+            <label class="field-label" for="fd-name">Name</label>
+            <input id="fd-name" class="field-input" type="text" placeholder="e.g. Production server" />
           </div>
+          <div class="field">
+            <label class="field-label" for="fd-url">URL</label>
+            <input id="fd-url" class="field-input" type="text" placeholder="https://example.com/api" />
+          </div>
+          <div class="field">
+            <label class="field-label" for="fd-type">Type</label>
+            <select id="fd-type" class="field-input">
+              <option>Standard</option>
+              <option>Premium</option>
+            </select>
+            <span class="field-hinttext">Select the service tier for this endpoint.</span>
+          </div>
+          <div class="field">
+            <label class="field-label" for="fd-notes">Notes</label>
+            <textarea id="fd-notes" class="field-input" rows="3" placeholder="Optional notes…"></textarea>
+          </div>
+          <div class="field">
+            <span class="field-label">Options</span>
+            <label class="check-option">
+              <input type="checkbox" checked />
+              <span class="check-label">Enable verbose logging</span>
+            </label>
+            <label class="check-option">
+              <input type="checkbox" />
+              <span class="check-label">Auto-reconnect on failure</span>
+            </label>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn" onclick={() => showFormDialog = false}>Cancel</button>
+          <button class="btn btn-primary" onclick={() => showFormDialog = false}>Save</button>
         </div>
       </DialogShell>
     {/if}
@@ -321,28 +366,30 @@
   <section class="ref-section" id="session">
     <h2>Session content</h2>
     <p class="ref-note">
-      Green phosphor text distinguishes session data from UI chrome.
-      All text inside a session trace uses <code class="mono">--green-bright</code>.
-      See <code class="mono">backlog/design-system.md</code> for the full rationale.
+      Green phosphor text distinguishes LLM content from UI labels.
+      All content text at <strong>1rem</strong>. Differentiated by font:
+      <strong>sans</strong> for prompts/answers,
+      <strong>sans italic</strong> for reasoning,
+      <strong>mono</strong> for tool content.
     </p>
 
     <h3 class="group-title">Session text samples</h3>
     <div class="session-demo">
-      <div class="session-part" style="color: var(--green-bright);">
-        <span class="session-part-label">User prompt</span>
-        <p>What tools are available for weather data?</p>
+      <div class="session-part">
+        <span class="session-part-label">User prompt (sans)</span>
+        <p style="color: var(--green-bright); font-size: 1rem; line-height: 1.5;">What tools are available for weather data?</p>
       </div>
-      <div class="session-part" style="color: var(--green-bright);">
-        <span class="session-part-label">Reasoning</span>
-        <p class="session-reasoning">The user is asking about weather tools. I should list the available MCP tools and their capabilities.</p>
+      <div class="session-part">
+        <span class="session-part-label">Reasoning (sans italic)</span>
+        <p style="color: var(--green-bright); font-size: 1rem; line-height: 1.5; font-style: italic;">The user is asking about weather tools. I should list the available MCP tools and their capabilities.</p>
       </div>
-      <div class="session-part" style="color: var(--green-bright);">
-        <span class="session-part-label">Tool call</span>
-        <p class="session-mono">get_forecast(latitude: 48.85, longitude: 2.35)</p>
+      <div class="session-part">
+        <span class="session-part-label">Tool call (mono)</span>
+        <p style="color: var(--green-bright); font-size: 1rem; line-height: 1.5; font-family: var(--mono);">get_forecast(latitude: 48.85, longitude: 2.35)</p>
       </div>
-      <div class="session-part" style="color: var(--green-bright);">
-        <span class="session-part-label">Assistant answer</span>
-        <p>The current temperature in Paris is 18°C with partly cloudy skies. The forecast shows a high of 22°C tomorrow.</p>
+      <div class="session-part">
+        <span class="session-part-label">Assistant answer (sans)</span>
+        <p style="color: var(--green-bright); font-size: 1rem; line-height: 1.5;">The current temperature in Paris is 18°C with partly cloudy skies. The forecast shows a high of 22°C tomorrow.</p>
       </div>
     </div>
 
@@ -640,108 +687,19 @@
     max-width: 480px;
   }
 
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-  }
-
-  .field-label {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .field-input {
-    background: var(--bg-base);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-bright);
-    font-family: inherit;
-    font-size: 0.875rem;
-    padding: 0.4rem 0.6rem;
-    outline: none;
-  }
-
-  /* Monochrome: no accent outline on focus */
-
-  .field-input.field-error {
-    border-color: var(--red-bright, var(--color-error));
-  }
-
-  .field-errortext {
-    font-size: 0.75rem;
-    color: var(--red-bright, var(--color-error));
-  }
-
-  .field-hinttext {
-    font-size: 0.75rem;
-    color: var(--text-dim);
-  }
-
-  .check-option,
-  .radio-opt {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .check-option input[type="checkbox"],
-  .radio-opt input[type="radio"] {
-    accent-color: var(--amber-bright);
-    margin: 0;
-    flex-shrink: 0;
-  }
-
-  select {
-    accent-color: var(--amber-bright);
-  }
-
-  .check-label,
-  .radio-opt-label {
-    font-size: 0.875rem;
-    color: var(--text-bright);
-  }
-
-  .radio-opt {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.45rem;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .radio-opt-hint {
-    width: 100%;
-    margin-top: -0.2rem;
-    padding-left: 1.5rem;
-    font-size: 0.75rem;
-    color: var(--text-dim);
-  }
-
   /* ── Dialog demo ──────────────────────────────────────────────────── */
-  .dialog-demo-body {
-    padding: 0.75rem 1rem;
-    font-size: 0.875rem;
-    color: var(--text-bright);
+  .form-stack {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 1rem;
   }
 
-  .dialog-demo-body p {
-    margin: 0;
-  }
-
-  .dialog-demo-actions {
+  .dialog-actions {
     display: flex;
     justify-content: flex-end;
     gap: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
   }
 
   /* ── Status dots ──────────────────────────────────────────────────── */
@@ -863,19 +821,9 @@
   .session-part-label {
     font-size: 0.68rem;
     font-weight: 600;
-    color: var(--green-dim);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.05em;
-  }
-
-  .session-reasoning {
-    font-style: italic;
-    opacity: 0.85;
-  }
-
-  .session-mono {
-    font-family: var(--mono);
-    font-size: 0.82rem;
   }
 
   /* ── Principles list ──────────────────────────────────────────────── */

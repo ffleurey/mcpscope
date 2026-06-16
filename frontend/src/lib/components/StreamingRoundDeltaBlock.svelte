@@ -106,28 +106,43 @@
     padding: 0.1rem 0.45rem;
   }
 
-  .stream-content,
-  .stream-text,
-  .stream-tool-name {
+  .stream-content {
     margin-top: var(--compact-meta-gap, 0.14rem);
     white-space: pre-wrap;
     word-break: break-word;
-    line-height: var(--compact-line-height, 1.4);
-    color: var(--text);
-    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--green-bright);
+    font-size: 1rem;
+    font-family: inherit;
   }
 
   .stream-reasoning {
     margin: var(--compact-meta-gap, 0.14rem) 0 0;
     font-style: italic;
-    color: var(--text-muted);
+    color: var(--green-bright);
     font-family: inherit;
+    font-size: 1rem;
+    line-height: 1.5;
   }
 
   .stream-text {
     margin: var(--compact-meta-gap, 0.14rem) 0 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+    color: var(--green-bright);
     font-family: var(--mono, monospace);
-    font-size: 0.78rem;
+    font-size: 1rem;
+  }
+
+  .stream-tool-name {
+    margin-top: var(--compact-meta-gap, 0.14rem);
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+    color: var(--green-bright);
+    font-family: var(--mono, monospace);
+    font-size: 1rem;
   }
 
   .stream-tool-row {

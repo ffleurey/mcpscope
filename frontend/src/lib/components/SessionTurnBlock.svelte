@@ -12,7 +12,6 @@
   import MarkdownPreviewDialog from './MarkdownPreviewDialog.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
   import { looksLikeMarkdown } from '../markdownRender'
-  import { highlightStructuredText } from '../textHighlight'
 
   interface Props {
     turn: TurnRecord
@@ -147,11 +146,9 @@
       {#each assistantContentParts as part (part.id)}
         {@const text = normalizeText(part.payload.text)}
         {#if text}
-          {@const rendered = highlightStructuredText(text)}
           <div class="chat-answer-block">
-            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-            <pre class="chat-answer-text" class:is-json={rendered.format === 'json'}>{@html rendered.html}</pre>
-            {#if rendered.format === 'markdown' && looksLikeMarkdown(text)}
+            <pre class="chat-answer-text">{text}</pre>
+            {#if looksLikeMarkdown(text)}
               <button class="preview-btn" onclick={() => openMarkdownPreview(text)} aria-label="Render preview" title="Render preview">
                 <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
@@ -365,17 +362,13 @@
   }
 
   .chat-answer-text {
-    font-size: 0.88rem;
+    font-size: 1rem;
     font-family: inherit;
-    line-height: 1.65;
-    color: var(--text);
+    line-height: 1.5;
+    color: var(--green-bright);
     white-space: pre-wrap;
     word-break: break-word;
     margin: 0;
-  }
-
-  .chat-answer-text.is-json {
-    font-family: var(--font-mono, monospace);
   }
 
   .preview-btn {
@@ -404,36 +397,6 @@
     border-color: var(--border-subtle);
     background: var(--bg-panel);
     opacity: 1;
-  }
-
-  /* hljs markdown token colours — semantic palette */
-  .chat-answer-text :global(.hljs-section) {
-    color: var(--color-accent, #60a5fa);
-    font-weight: 600;
-  }
-  .chat-answer-text :global(.hljs-strong) {
-    color: var(--text);
-    font-weight: 700;
-  }
-  .chat-answer-text :global(.hljs-emphasis) {
-    color: var(--text);
-    font-style: italic;
-  }
-  .chat-answer-text :global(.hljs-code) {
-    color: var(--color-success, #4ade80);
-    font-family: var(--font-mono, monospace);
-  }
-  .chat-answer-text :global(.hljs-quote) {
-    color: var(--text-muted);
-    font-style: italic;
-  }
-  .chat-answer-text :global(.hljs-bullet) {
-    color: var(--color-accent, #60a5fa);
-    font-weight: 700;
-  }
-  .chat-answer-text :global(.hljs-link) {
-    color: var(--color-accent, #60a5fa);
-    text-decoration: underline;
   }
 
   /* ── Chat mode: toggle row ──────────────────────────────────────────── */

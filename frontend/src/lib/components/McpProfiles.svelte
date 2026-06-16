@@ -4,6 +4,7 @@
   import type { McpServerProfile } from '../types'
   import McpProfileForm from './McpProfileForm.svelte'
   import ConnectionTestDialog from './ConnectionTestDialog.svelte'
+  import DialogShell from './DialogShell.svelte'
   import { testMcpProfile } from '../api/backendClient'
   import { toAppError, type AppError } from '../errors'
 
@@ -85,7 +86,9 @@
   <InlineAppError error={saveError} />
 
   {#if showNew}
-    <McpProfileForm onSave={handleSave} onCancel={cancelNew} />
+    <DialogShell title="New MCP Server Profile" onClose={cancelNew}>
+      <McpProfileForm onSave={handleSave} onCancel={cancelNew} />
+    </DialogShell>
   {/if}
 
   {#if $mcpProfiles.length === 0 && !showNew}
@@ -94,7 +97,9 @@
 
   {#each $mcpProfiles as profile (profile.id)}
     {#if editingId === profile.id}
-      <McpProfileForm profile={profile} onSave={handleSave} onCancel={cancelEdit} />
+      <DialogShell title="Edit MCP Server Profile" onClose={cancelEdit}>
+        <McpProfileForm profile={profile} onSave={handleSave} onCancel={cancelEdit} />
+      </DialogShell>
     {:else}
       <div class="profile-card">
         <div class="card-header">
