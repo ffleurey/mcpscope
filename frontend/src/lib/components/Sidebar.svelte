@@ -120,7 +120,7 @@
 <style>
   .sidebar {
     flex-shrink: 0;
-    background: var(--bg-base);
+    background: var(--bg-surface);
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;

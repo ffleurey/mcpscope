@@ -187,20 +187,34 @@ This is a multi-author repo; conventions need teeth, ideally a cheap lint rule:
 
 ---
 
-## Open decisions / deferred
+## Status — A–F essentially complete
 
-- **Spacing scale** — keep "no scale" vs. adopt a tiny xs/sm/md/lg scale. The doc contradiction is
-  resolved (literal values); the strategic choice is still open. Needs a decision.
-- **Logo / wordmark** — still unimplemented. Sidebar header shows "Sessions". Add a 2-tone amber
-  wordmark (`--amber-bright` + `--amber-dim`), optional oscilloscope-waveform SVG. *(rescued from prior plan)*
-- **Tables** — no production table exists; pattern is documented as a target only. Build with the
-  first real table. *(rescued from prior plan)*
-- **Sidebar background** — `--bg-sidebar` aliases to `--bg-base`, but `design-system.md` lists the
-  sidebar under `--bg-surface`. Reconcile when Phase D2 touches the sidebar.
-- **Green phosphor session content** — *largely landed* since the prior plan: the trace renderers
-  (`TracePartBlock`, `CompactRoundContent`, `StreamingRoundDeltaBlock`, `SessionTurnBlock`) correctly
-  use `--green-bright` for content with grey chrome. Verify coverage during Phase D rather than as a
-  separate push.
+Pass 1 (reconcile) and Pass 2 phases **A, B, C, D, E** are done; **F** is done except F3. The codebase
+now runs on shared primitives with no legacy aliases. Remaining items below are small or strategic.
+
+### Decisions made (2026-06-17)
+
+- **Spacing scale → keep "no scale".** The consistency a scale would buy is already delivered by the
+  shared primitives; a 4-step scale adds ceremony for marginal gain and retrofitting is churn.
+- **Formatter → adopt Prettier** (F3). `.prettierrc.json` (2-space, single quotes, no semicolons,
+  trailing commas, printWidth 100) + `prettier-plugin-svelte`; `npm run format` / `format:check`,
+  scoped to `frontend/src`. One-time reformat applied as its own commit. *(backend/cli can adopt later.)*
+
+### Done (2026-06-17)
+
+- **Logo / favicon** — replaced the off-brand purple glyph with an amber oscilloscope-waveform `favicon.svg`.
+- **Sidebar background** — now `--bg-surface` (matches the doc; reads as elevated chrome).
+- **`--text-dim`** brightened `#888888 → #a8a8a8` (still dim vs `--text-bright`, more legible).
+
+### Intentional keeps (not debt)
+
+- `ContextSnapshotBar` `.csb-mode-btn` (tight context-bar toggle), `TracePartBlock` `.tool-summary`
+  (specialised nested disclosure), the context-bar multi-colour palette (documented exception).
+
+### Done since prior plan
+
+- **Tables** — the `.data-table` primitive is built and used by all 3 config pages + the reference.
+- **Green phosphor** — verified: trace renderers use `--green-bright` for content, grey chrome.
 
 ---
 

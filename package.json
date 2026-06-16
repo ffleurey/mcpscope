@@ -26,6 +26,8 @@
     "lint:backend": "eslint backend/src --ext .ts",
     "lint:cli": "eslint cli/src",
     "lint:fix": "eslint frontend/src --fix",
+    "format": "prettier --write \"frontend/src/**/*.{ts,svelte,css}\"",
+    "format:check": "prettier --check \"frontend/src/**/*.{ts,svelte,css}\"",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest"
@@ -45,6 +47,8 @@
     "eslint-plugin-svelte": "^3.17.1",
     "fastify": "^5.6.1",
     "globals": "^17.6.0",
+    "prettier": "^3.8.4",
+    "prettier-plugin-svelte": "^4.1.1",
     "svelte": "^5.55.4",
     "svelte-check": "^4.4.6",
     "tsx": "^4.20.6",

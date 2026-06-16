@@ -22,7 +22,7 @@ uses greys by default. Color is added only where it provides signal.
 | `--bg-surface` | `#1e1e1e` | Elevated surfaces: panels, dialogs, sidebar, inputs, cards |
 | `--bg-hover` | `#282828` | Hover state for interactive elements |
 | `--border` | `#333333` | Borders, dividers, separators |
-| `--text-dim` | `#888888` | Labels, metadata, muted/secondary text |
+| `--text-dim` | `#a8a8a8` | Labels, metadata, muted/secondary text |
 | `--text-bright` | `#e8e8e8` | Primary body text — near-white |
 
 **Rules:**
