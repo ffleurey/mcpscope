@@ -62,27 +62,49 @@
   }
 </script>
 
-<nav class="sidebar" class:collapsed class:resizing={isResizing}
+<nav
+  class="sidebar"
+  class:collapsed
+  class:resizing={isResizing}
   style="width: {collapsed ? '40px' : sidebarWidth + 'px'}"
 >
   {#if $isPrimaryLaunchDialogOpen}
     <PrimarySessionLaunchModal />
   {/if}
   {#if collapsed}
-    <button class="collapse-toggle" onclick={() => collapsed = false} title="Expand sidebar">›</button>
+    <button class="icon-btn icon-btn-dim" onclick={() => (collapsed = false)} title="Expand sidebar"
+      >›</button
+    >
   {:else}
     <div class="section-header">
       <span class="section-label">Sessions</span>
       <div class="header-actions">
         {#if $modelConfigs.length > 0}
-          <button class="icon-btn" onclick={handleNewChat} title="New session">+</button>
+          <button class="icon-btn icon-btn-dim" onclick={handleNewChat} title="New session"
+            >+</button
+          >
         {/if}
-        <button class="icon-btn" onclick={handleImportClick} disabled={$isImportingTrace} title={$isImportingTrace ? 'Importing…' : 'Import trace'}>↑</button>
-        <button class="icon-btn" onclick={() => collapsed = true} title="Collapse sidebar">‹</button>
+        <button
+          class="icon-btn icon-btn-dim"
+          onclick={handleImportClick}
+          disabled={$isImportingTrace}
+          title={$isImportingTrace ? 'Importing…' : 'Import trace'}>↑</button
+        >
+        <button
+          class="icon-btn icon-btn-dim"
+          onclick={() => (collapsed = true)}
+          title="Collapse sidebar">‹</button
+        >
       </div>
     </div>
 
-    <input bind:this={importInput} type="file" accept="application/json" hidden onchange={handleImportChange} />
+    <input
+      bind:this={importInput}
+      type="file"
+      accept="application/json"
+      hidden
+      onchange={handleImportChange}
+    />
 
     <div class="session-list-area">
       <ChatList />
@@ -90,14 +112,36 @@
 
     <div class="config-section">
       <div class="config-label">Configuration</div>
-      <button class="nav-item" class:active={$currentView === 'model-configs'} onclick={() => navigate('model-configs')}>
+      <button
+        class="nav-item"
+        class:active={$currentView === 'model-configs'}
+        onclick={() => navigate('model-configs')}
+      >
         Model Configs
       </button>
-      <button class="nav-item" class:active={$currentView === 'connections'} onclick={() => navigate('connections')}>
+      <button
+        class="nav-item"
+        class:active={$currentView === 'connections'}
+        onclick={() => navigate('connections')}
+      >
         Connections
       </button>
-      <button class="nav-item" class:active={$currentView === 'mcp-profiles'} onclick={() => navigate('mcp-profiles')}>
+      <button
+        class="nav-item"
+        class:active={$currentView === 'mcp-profiles'}
+        onclick={() => navigate('mcp-profiles')}
+      >
         MCP Servers
+      </button>
+    </div>
+
+    <div class="design-section">
+      <button
+        class="nav-item"
+        class:active={$currentView === 'design'}
+        onclick={() => navigate('design')}
+      >
+        Design
       </button>
     </div>
 
@@ -114,7 +158,7 @@
 <style>
   .sidebar {
     flex-shrink: 0;
-    background: var(--bg-sidebar);
+    background: var(--bg-surface);
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
@@ -130,34 +174,18 @@
     padding-top: 0.5rem;
   }
 
-  .collapse-toggle {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--text-muted);
-    font-size: 1.3rem;
-    padding: 0.35rem 0.5rem;
-    border-radius: 4px;
-    line-height: 1;
-    font-family: inherit;
-  }
-  .collapse-toggle:hover {
-    background: var(--bg-hover);
-    color: var(--text);
-  }
-
   .section-header {
     display: flex;
     align-items: center;
     padding: 0.55rem 0.5rem 0.4rem 0.75rem;
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border);
     gap: 0.15rem;
   }
   .section-label {
     flex: 1;
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
@@ -166,28 +194,6 @@
     gap: 0.1rem;
     align-items: center;
   }
-  .icon-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--text-muted);
-    font-size: 0.95rem;
-    padding: 0.2rem 0.42rem;
-    border-radius: 3px;
-    line-height: 1;
-    opacity: 0.65;
-    font-family: inherit;
-  }
-  .icon-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text);
-    opacity: 1;
-  }
-  .icon-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-  }
-
   .session-list-area {
     flex: 1;
     overflow: hidden;
@@ -196,13 +202,24 @@
   }
 
   .config-section {
-    border-top: 1px solid var(--border-subtle);
+    border-top: 1px solid var(--border);
     padding-bottom: 0.25rem;
+  }
+
+  .design-section {
+    border-top: 1px solid var(--border);
+  }
+  .design-section .nav-item {
+    font-size: 0.75rem;
+    opacity: 0.5;
+  }
+  .design-section .nav-item.active {
+    opacity: 1;
   }
   .config-label {
     font-size: 0.68rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.07em;
     padding: 0.5rem 0.75rem 0.2rem;
@@ -217,17 +234,19 @@
     cursor: pointer;
     padding: 0.4rem 0.75rem;
     font-size: 0.83rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-family: inherit;
-    transition: background 0.1s, color 0.1s;
+    transition:
+      background 0.1s,
+      color 0.1s;
   }
   .nav-item:hover {
     background: var(--bg-hover);
-    color: var(--text);
+    color: var(--text-bright);
   }
   .nav-item.active {
-    color: var(--text);
-    background: var(--bg-active);
+    color: var(--text-bright);
+    border-bottom: 2px solid var(--amber-bright);
     font-weight: 500;
   }
 
@@ -245,7 +264,7 @@
   }
   .resize-handle:hover,
   .resize-handle.dragging {
-    background: var(--color-accent);
+    background: var(--amber-bright);
     opacity: 0.35;
   }
 </style>

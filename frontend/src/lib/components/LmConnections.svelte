@@ -4,19 +4,56 @@
   import type { LmStudioConnection } from '../types'
   import LmConnectionForm from './LmConnectionForm.svelte'
   import ConnectionTestDialog from './ConnectionTestDialog.svelte'
+  import DialogShell from './DialogShell.svelte'
   import { testLmConnection } from '../api/backendClient'
   import { toAppError, type AppError } from '../errors'
+  import { iconPlus, iconEdit, iconTrash, iconTest } from '../design/icons'
+  import Icon from './Icon.svelte'
+  import { columnResize } from '../actions/columnResize'
+
+  // Ephemeral, per-page test results — reset when the view unmounts (navigating away).
+  type TestEntry = {
+    status: 'testing' | 'ok' | 'error'
+    message: string
+    details?: Record<string, unknown>
+    rawDetails?: unknown
+  }
 
   let editingId = $state<string | null>(null)
   let showNew = $state(false)
   let saveError = $state<AppError | null>(null)
-  let testDialogConn = $state<LmStudioConnection | null>(null)
-  let testDialogResult = $state<{ ok: boolean; message: string; details?: Record<string, unknown>; rawDetails?: unknown } | null>(null)
+  let testState = $state<Record<string, TestEntry>>({})
+  let detailId = $state<string | null>(null)
 
-  function startNew() { showNew = true; editingId = null }
-  function cancelNew() { showNew = false }
-  function startEdit(id: string) { editingId = id; showNew = false }
-  function cancelEdit() { editingId = null }
+  let editingConn = $derived(
+    editingId ? ($lmConnections.find((c) => c.id === editingId) ?? null) : null,
+  )
+  let detailConn = $derived(
+    detailId ? ($lmConnections.find((c) => c.id === detailId) ?? null) : null,
+  )
+
+  function providerLabel(p: LmStudioConnection['providerType']): string {
+    return p === 'openrouter' ? 'OpenRouter' : p === 'ollama' ? 'Ollama' : 'LM Studio'
+  }
+
+  function dotClass(status: TestEntry['status']): string {
+    return status === 'ok' ? 'running' : status === 'error' ? 'error' : 'warn'
+  }
+
+  function startNew() {
+    showNew = true
+    editingId = null
+  }
+  function cancelNew() {
+    showNew = false
+  }
+  function startEdit(id: string) {
+    editingId = id
+    showNew = false
+  }
+  function cancelEdit() {
+    editingId = null
+  }
 
   async function handleSave(conn: LmStudioConnection) {
     try {
@@ -34,129 +71,143 @@
       await removeConnection(id)
       saveError = null
       if (editingId === id) editingId = null
+      delete testState[id]
     } catch (e) {
       saveError = toAppError(e)
     }
   }
 
   async function handleTest(conn: LmStudioConnection) {
-    testDialogConn = conn
-    testDialogResult = { ok: false, message: 'Testing…' }
+    testState[conn.id] = { status: 'testing', message: 'Testing…' }
     try {
       const result = await testLmConnection(conn.baseUrl, conn.apiKey, conn.providerType)
-      testDialogResult = {
-        ok: true,
-        message: 'Connected',
+      testState[conn.id] = {
+        status: 'ok',
+        message: `Connected · ${result.models.length} model${result.models.length === 1 ? '' : 's'}`,
         details: { Models: result.models.length > 0 ? result.models.join(', ') : 'none' },
       }
     } catch (e) {
       const error = toAppError(e)
-      testDialogResult = { ok: false, message: error.message, rawDetails: error.details }
+      testState[conn.id] = { status: 'error', message: error.message, rawDetails: error.details }
     }
   }
 
-  function closeTestDialog() {
-    testDialogConn = null
-    testDialogResult = null
+  function openDetail(id: string) {
+    if (testState[id]?.status !== 'testing') detailId = id
   }
 </script>
 
-<div class="view">
-  <div class="view-header">
+<div class="config-view">
+  <div class="config-view-header">
     <h2>Connections</h2>
-    {#if !showNew}
-      <button class="btn btn-primary" onclick={startNew}>+ New Connection</button>
-    {/if}
+    <button class="btn btn-primary" onclick={startNew}>
+      <span class="btn-icon"><Icon path={iconPlus} /></span> New connection
+    </button>
   </div>
 
   <InlineAppError error={saveError} />
 
-  {#if showNew}
-    <LmConnectionForm onSave={handleSave} onCancel={cancelNew} />
+  {#if $lmConnections.length === 0}
+    <p class="config-empty">No connections yet. Add one to get started.</p>
+  {:else}
+    <div class="table-scroll">
+      <table class="data-table" use:columnResize>
+        <colgroup>
+          <col style="width: 12rem" />
+          <col style="width: 7.5rem" />
+          <col style="width: 18rem" />
+          <col style="width: 6.5rem" />
+          <col style="width: 16rem" />
+          <col style="width: 8.5rem" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Provider</th>
+            <th>Base URL</th>
+            <th>Auth</th>
+            <th>Test</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each $lmConnections as conn (conn.id)}
+            <tr>
+              <td title={conn.name}>{conn.name}</td>
+              <td>{providerLabel(conn.providerType)}</td>
+              <td class="col-mono" title={conn.baseUrl}>{conn.baseUrl}</td>
+              <td>{conn.apiKey ? 'Key set' : '—'}</td>
+              <td>
+                {#if testState[conn.id]}
+                  {@const t = testState[conn.id]}
+                  <button
+                    class="status-cell"
+                    disabled={t.status === 'testing'}
+                    title={t.message}
+                    onclick={() => openDetail(conn.id)}
+                  >
+                    <span class="status-dot {dotClass(t.status)}"></span>
+                    <span class="status-text">{t.message}</span>
+                  </button>
+                {:else}
+                  <span class="status-muted">—</span>
+                {/if}
+              </td>
+              <td class="col-actions">
+                <span class="row-actions">
+                  <button
+                    class="icon-btn"
+                    title="Test connection"
+                    aria-label="Test connection"
+                    onclick={() => handleTest(conn)}><Icon path={iconTest} /></button
+                  >
+                  <button
+                    class="icon-btn"
+                    title="Edit"
+                    aria-label="Edit"
+                    onclick={() => startEdit(conn.id)}><Icon path={iconEdit} /></button
+                  >
+                  <button
+                    class="icon-btn icon-btn-danger"
+                    title="Delete"
+                    aria-label="Delete"
+                    onclick={() => handleDelete(conn.id)}><Icon path={iconTrash} /></button
+                  >
+                </span>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
   {/if}
-
-  {#if $lmConnections.length === 0 && !showNew}
-    <p class="empty-state">No connections yet. Add one to get started.</p>
-  {/if}
-
-  {#each $lmConnections as conn (conn.id)}
-    {#if editingId === conn.id}
-      <LmConnectionForm connection={conn} onSave={handleSave} onCancel={cancelEdit} />
-    {:else}
-      <div class="profile-card">
-        <div class="card-header">
-          <span class="card-name">{conn.name}</span>
-          <div class="card-actions">
-            <button class="btn btn-sm" onclick={() => handleTest(conn)}>Test Connection</button>
-            <button class="btn btn-sm" onclick={() => startEdit(conn.id)}>Edit</button>
-            <button class="btn btn-sm btn-danger" onclick={() => handleDelete(conn.id)}>Delete</button>
-          </div>
-        </div>
-        <dl class="card-details">
-          <div class="detail-row">
-            <dt>Provider</dt><dd>{conn.providerType === 'openrouter' ? 'OpenRouter' : conn.providerType === 'ollama' ? 'Ollama' : 'LM Studio'}</dd>
-          </div>
-          <div class="detail-row">
-            <dt>Base URL</dt><dd><code>{conn.baseUrl}</code></dd>
-          </div>
-          <div class="detail-row">
-            <dt>API Key</dt><dd>{conn.apiKey ? '••••••••' : 'none'}</dd>
-          </div>
-        </dl>
-      </div>
-    {/if}
-  {/each}
 </div>
 
-{#if testDialogConn && testDialogResult}
-  <ConnectionTestDialog
-    title="{testDialogConn.providerType === 'openrouter' ? 'OpenRouter' : testDialogConn.providerType === 'ollama' ? 'Ollama' : 'LM Studio'} Connection Test"
-    target={testDialogConn.baseUrl}
-    result={testDialogResult}
-    onClose={closeTestDialog}
-  />
+{#if showNew}
+  <DialogShell title="New connection" onClose={cancelNew}>
+    <LmConnectionForm onSave={handleSave} onCancel={cancelNew} />
+  </DialogShell>
 {/if}
 
-<style>
-  .view { padding: 1.5rem 2rem; }
-  .view-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1.5rem;
-  }
-  h2 {
-    margin: 0;
-    font-size: 1.15rem;
-    font-weight: 600;
-    color: var(--text);
-  }
-  .empty-state { color: var(--text-muted); font-size: 0.9rem; }
-  .profile-card {
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1rem 1.25rem;
-    margin-bottom: 1rem;
-  }
-  .card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 0.75rem;
-  }
-  .card-name { font-weight: 600; font-size: 0.95rem; color: var(--text); }
-  .card-actions { display: flex; gap: 0.5rem; }
-  .card-details { margin: 0; }
-  .detail-row {
-    display: flex;
-    gap: 0.75rem;
-    font-size: 0.82rem;
-    padding: 0.2rem 0;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-  .detail-row:last-child { border-bottom: none; }
-  dt { color: var(--text-muted); min-width: 80px; flex-shrink: 0; }
-  dd { margin: 0; color: var(--text); word-break: break-all; }
-  code { font-family: var(--mono); font-size: 0.8rem; }
-</style>
+{#if editingConn}
+  <DialogShell title="Edit connection" onClose={cancelEdit}>
+    <LmConnectionForm connection={editingConn} onSave={handleSave} onCancel={cancelEdit} />
+  </DialogShell>
+{/if}
+
+{#if detailConn && testState[detailConn.id]}
+  {@const t = testState[detailConn.id]}
+  <ConnectionTestDialog
+    title="{providerLabel(detailConn.providerType)} Connection Test"
+    target={detailConn.baseUrl}
+    result={{
+      ok: t.status === 'ok',
+      message: t.message,
+      details: t.details,
+      rawDetails: t.rawDetails,
+    }}
+    onClose={() => {
+      detailId = null
+    }}
+  />
+{/if}

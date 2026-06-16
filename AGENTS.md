@@ -11,6 +11,7 @@ Read only what the task needs:
 - [DATA-MODEL.md](DATA-MODEL.md) for sessions, turns, rounds, parts, and canonical IDs
 - [TESTING.md](TESTING.md) for regression strategy and test selection
 - [CLI.md](CLI.md) and [MCP.md](MCP.md) for command and tool behavior
+- [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) **before any frontend visual change** — tokens, shared primitives, and patterns. Reuse the primitives; keep `DESIGN-SYSTEM.md`, `frontend/src/app.css`, and the live Design System Reference (`DesignReference.svelte`) in sync.
 
 The docs above are references, not pre-read requirements. Keep context lean and open only the specific files needed for the task at hand.
 
@@ -48,7 +49,7 @@ Choose the smallest check that matches the change:
 - `npm test` for deterministic backend and replay regressions
 - `npm run check:backend` for backend TypeScript changes
 - `npm run check:cli` for CLI changes
-- `npm run check` for frontend changes
+- `npm run check` for frontend changes; `npm run lint` and `npm run format:check` for frontend style (ESLint + Prettier)
 - `npm run test:integration` only when the change needs live LM Studio or MCP validation
 
 ## High-Value References

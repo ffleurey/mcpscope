@@ -33,7 +33,11 @@ export interface TurnStreamingState {
   rounds: StreamingRoundState[]
 }
 
-function sortByIdOrder<T extends { id: string }>(records: T[], nextRecord: T, compare: (left: T, right: T) => number): T[] {
+function sortByIdOrder<T extends { id: string }>(
+  records: T[],
+  nextRecord: T,
+  compare: (left: T, right: T) => number,
+): T[] {
   const withoutCurrent = records.filter((record) => record.id !== nextRecord.id)
   return [...withoutCurrent, nextRecord].sort(compare)
 }
@@ -201,12 +205,15 @@ export function insertStreamingUserPart(
     createdAt: number
   },
 ): SessionTraceBundle {
-  const alreadyPresent = trace.parts.some((part) => part.turnId === input.turnId && part.partType === 'user-message')
+  const alreadyPresent = trace.parts.some(
+    (part) => part.turnId === input.turnId && part.partType === 'user-message',
+  )
   if (alreadyPresent) {
     return trace
   }
 
-  const nextOrdinal = trace.parts.reduce((maxOrdinal, part) => Math.max(maxOrdinal, part.ordinal), -1) + 1
+  const nextOrdinal =
+    trace.parts.reduce((maxOrdinal, part) => Math.max(maxOrdinal, part.ordinal), -1) + 1
   const userPart: PartRecord = {
     id: `stream-user-${input.turnId}`,
     sessionId: trace.session.id,
@@ -247,7 +254,10 @@ export function insertStreamingUserPart(
   return upsertPart(trace, userPart)
 }
 
-export function createTurnStreamingState(sessionId: string, userContent: string): TurnStreamingState {
+export function createTurnStreamingState(
+  sessionId: string,
+  userContent: string,
+): TurnStreamingState {
   return {
     sessionId,
     userContent,
@@ -275,19 +285,20 @@ export function applyStreamingDelta(
 
   const roundStates = [...state.rounds]
   const currentIndex = roundStates.findIndex((round) => round.roundId === roundId)
-  const currentRound = currentIndex >= 0
-    ? {
-        ...roundStates[currentIndex],
-        toolCalls: [...(roundStates[currentIndex]?.toolCalls ?? [])],
-      }
-    : {
-        turnId,
-        roundId,
-        reasoningText: '',
-        completedReasoningText: '',
-        contentText: '',
-        toolCalls: [],
-      }
+  const currentRound =
+    currentIndex >= 0
+      ? {
+          ...roundStates[currentIndex],
+          toolCalls: [...(roundStates[currentIndex]?.toolCalls ?? [])],
+        }
+      : {
+          turnId,
+          roundId,
+          reasoningText: '',
+          completedReasoningText: '',
+          contentText: '',
+          toolCalls: [],
+        }
 
   if (delta.kind === 'reasoning') {
     currentRound.reasoningText = `${currentRound.reasoningText}${delta.textDelta}`
@@ -297,15 +308,18 @@ export function applyStreamingDelta(
   } else {
     closeLiveReasoning(currentRound)
     const nextToolCalls = [...currentRound.toolCalls]
-    const toolCallIndex = nextToolCalls.findIndex((toolCall) => toolCall.toolCallIndex === delta.toolCallIndex)
-    const currentToolCall = toolCallIndex >= 0
-      ? { ...nextToolCalls[toolCallIndex] }
-      : {
-          toolCallIndex: delta.toolCallIndex,
-          id: '',
-          name: '',
-          arguments: '',
-        }
+    const toolCallIndex = nextToolCalls.findIndex(
+      (toolCall) => toolCall.toolCallIndex === delta.toolCallIndex,
+    )
+    const currentToolCall =
+      toolCallIndex >= 0
+        ? { ...nextToolCalls[toolCallIndex] }
+        : {
+            toolCallIndex: delta.toolCallIndex,
+            id: '',
+            name: '',
+            arguments: '',
+          }
 
     currentToolCall.id = `${currentToolCall.id}${delta.idDelta ?? ''}`
     currentToolCall.name = `${currentToolCall.name}${delta.nameDelta ?? ''}`
@@ -379,12 +393,13 @@ export function clearCommittedStreamingDelta(
 
       return roundState
     })
-    .filter((roundState) => (
-      roundState.reasoningText.length > 0
-      || roundState.completedReasoningText.length > 0
-      || roundState.contentText.length > 0
-      || roundState.toolCalls.length > 0
-    ))
+    .filter(
+      (roundState) =>
+        roundState.reasoningText.length > 0 ||
+        roundState.completedReasoningText.length > 0 ||
+        roundState.contentText.length > 0 ||
+        roundState.toolCalls.length > 0,
+    )
 
   return {
     ...state,

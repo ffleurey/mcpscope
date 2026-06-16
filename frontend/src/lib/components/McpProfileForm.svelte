@@ -12,7 +12,8 @@
 
   // Slugify: lowercase, replace spaces with hyphens, remove non-alphanum except - _
   function slugify(text: string): string {
-    return text.toLowerCase()
+    return text
+      .toLowerCase()
       .replace(/\s+/g, '-')
       .replace(/[^a-z0-9_-]/g, '')
       .replace(/-+/g, '-')
@@ -40,9 +41,9 @@
       if (!slug) slug = 'untitled'
       // Check for collision with existing MCP profiles
       const existing = $mcpProfiles
-      if (existing.some(p => p.id === slug)) {
+      if (existing.some((p) => p.id === slug)) {
         let counter = 2
-        while (existing.some(p => p.id === `${slug}-${counter}`)) {
+        while (existing.some((p) => p.id === `${slug}-${counter}`)) {
           counter++
         }
         slug = `${slug}-${counter}`
@@ -63,7 +64,11 @@
     if (!url.trim()) {
       e.url = 'URL is required'
     } else {
-      try { new URL(url) } catch { e.url = 'Must be a valid URL' }
+      try {
+        new URL(url)
+      } catch {
+        e.url = 'Must be a valid URL'
+      }
     }
     errors = e
     return Object.keys(e).length === 0
@@ -86,35 +91,58 @@
   }
 </script>
 
-<form class="profile-form" onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>
-  <h3>{profile ? 'Edit MCP Server Profile' : 'New MCP Server Profile'}</h3>
-
+<form
+  class="form-stack"
+  onsubmit={(e) => {
+    e.preventDefault()
+    handleSubmit()
+  }}
+>
   <div class="field">
-    <label for="mcp-name">Name</label>
-    <input id="mcp-name" type="text" bind:value={name} placeholder="e.g. Local MCP Server" />
-    {#if errors.name}<span class="field-error">{errors.name}</span>{/if}
+    <label class="field-label" for="mcp-name">Name</label>
+    <input
+      id="mcp-name"
+      class="field-input"
+      type="text"
+      bind:value={name}
+      placeholder="e.g. Local MCP Server"
+    />
+    {#if errors.name}<span class="field-errortext">{errors.name}</span>{/if}
   </div>
 
   <div class="field">
-    <label for="mcp-id">ID</label>
+    <label class="field-label" for="mcp-id">ID</label>
     {#if profile}
-      <input id="mcp-id" type="text" value={customId} disabled class="readonly-field" />
+      <span class="field-static">{customId}</span>
     {:else}
-      <input id="mcp-id" type="text" bind:value={customId} placeholder="auto-generated from name" />
+      <input
+        id="mcp-id"
+        class="field-input"
+        type="text"
+        bind:value={customId}
+        placeholder="auto-generated from name"
+      />
     {/if}
-    {#if errors.customId}<span class="field-error">{errors.customId}</span>{/if}
-    {#if !profile}<span class="field-hint">Set once at creation, cannot be changed later.</span>{/if}
+    {#if errors.customId}<span class="field-errortext">{errors.customId}</span>{/if}
+    {#if !profile}<span class="field-hinttext">Set once at creation, cannot be changed later.</span
+      >{/if}
   </div>
 
   <div class="field">
-    <label for="mcp-url">Server URL</label>
-    <input id="mcp-url" type="text" bind:value={url} placeholder="http://localhost:3000/mcp" />
-    {#if errors.url}<span class="field-error">{errors.url}</span>{/if}
+    <label class="field-label" for="mcp-url">Server URL</label>
+    <input
+      id="mcp-url"
+      class="field-input"
+      type="text"
+      bind:value={url}
+      placeholder="http://localhost:3000/mcp"
+    />
+    {#if errors.url}<span class="field-errortext">{errors.url}</span>{/if}
   </div>
 
   <div class="field">
-    <label for="mcp-transport">Transport</label>
-    <input id="mcp-transport" type="text" value="streamable-http" disabled />
+    <span class="field-label">Transport</span>
+    <span class="field-static">streamable-http</span>
   </div>
 
   <div class="form-actions">
@@ -122,60 +150,3 @@
     <button type="button" class="btn" onclick={onCancel}>Cancel</button>
   </div>
 </form>
-
-<style>
-  .profile-form {
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 1.5rem;
-  }
-  h3 {
-    margin: 0 0 1.1rem;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text);
-  }
-  .field { margin-bottom: 0.9rem; }
-  label {
-    display: block;
-    font-size: 0.82rem;
-    color: var(--text-muted);
-    margin-bottom: 0.3rem;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-  }
-  input {
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text);
-    padding: 0.45rem 0.6rem;
-    font-size: 0.9rem;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  input:focus { border-color: var(--color-accent); }
-  input:disabled { opacity: 0.5; cursor: not-allowed; }
-  .field-error {
-    display: block;
-    color: var(--color-error);
-    font-size: 0.78rem;
-    margin-top: 0.25rem;
-  }
-  .field-hint {
-    display: block;
-    color: var(--text-muted);
-    font-size: 0.78rem;
-    margin-top: 0.2rem;
-  }
-  .form-actions {
-    display: flex;
-    gap: 0.6rem;
-    margin-top: 1.1rem;
-  }
-</style>

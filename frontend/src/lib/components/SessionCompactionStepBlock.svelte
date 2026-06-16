@@ -11,12 +11,30 @@
 
   const { step, parts, mode = 'chat' }: Props = $props()
 
-  const strategy = $derived(typeof step.params.strategy === 'string' ? step.params.strategy : 'unknown')
-  const sourceTurnNumber = $derived(typeof step.params.sourceTurnSequenceNumber === 'number' ? step.params.sourceTurnSequenceNumber : null)
-  const strippedPartCount = $derived(typeof step.state.strippedPartCount === 'number' ? step.state.strippedPartCount : 0)
-  const tokensRemoved = $derived(typeof step.state.compactionTokensRemoved === 'number' ? step.state.compactionTokensRemoved : 0)
-  const beforeTokens = $derived(typeof step.state.contextTokensAtTurnEnd === 'number' ? step.state.contextTokensAtTurnEnd : null)
-  const afterTokens = $derived(typeof step.state.contextTokensAfterCompaction === 'number' ? step.state.contextTokensAfterCompaction : null)
+  const strategy = $derived(
+    typeof step.params.strategy === 'string' ? step.params.strategy : 'unknown',
+  )
+  const sourceTurnNumber = $derived(
+    typeof step.params.sourceTurnSequenceNumber === 'number'
+      ? step.params.sourceTurnSequenceNumber
+      : null,
+  )
+  const strippedPartCount = $derived(
+    typeof step.state.strippedPartCount === 'number' ? step.state.strippedPartCount : 0,
+  )
+  const tokensRemoved = $derived(
+    typeof step.state.compactionTokensRemoved === 'number' ? step.state.compactionTokensRemoved : 0,
+  )
+  const beforeTokens = $derived(
+    typeof step.state.contextTokensAtTurnEnd === 'number'
+      ? step.state.contextTokensAtTurnEnd
+      : null,
+  )
+  const afterTokens = $derived(
+    typeof step.state.contextTokensAfterCompaction === 'number'
+      ? step.state.contextTokensAfterCompaction
+      : null,
+  )
   const sortedParts = $derived([...parts].sort((left, right) => left.ordinal - right.ordinal))
 </script>
 
@@ -38,7 +56,9 @@
         <span class="compaction-step-detail">{strippedPartCount} parts</span>
       {/if}
       {#if beforeTokens !== null && afterTokens !== null}
-        <span class="compaction-step-detail">{beforeTokens.toLocaleString()} → {afterTokens.toLocaleString()}</span>
+        <span class="compaction-step-detail"
+          >{beforeTokens.toLocaleString()} → {afterTokens.toLocaleString()}</span
+        >
       {/if}
     </div>
     <div class="compaction-step-actions">
@@ -57,9 +77,9 @@
   .compaction-step {
     margin: 0.5rem 0 0.9rem;
     padding: 0.75rem 0.9rem;
-    border: 1px solid var(--border-subtle);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--bg-panel) 92%, var(--accent) 8%);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-surface);
   }
 
   .compaction-step-meta {
@@ -80,14 +100,14 @@
   .compaction-step-label {
     font-size: 0.82rem;
     font-weight: 700;
-    color: var(--text);
+    color: var(--text-bright);
   }
 
   .compaction-step-status,
   .compaction-step-strategy,
   .compaction-step-detail {
     font-size: 0.76rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .compaction-step-parts {

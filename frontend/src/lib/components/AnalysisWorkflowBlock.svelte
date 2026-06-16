@@ -1,10 +1,5 @@
 <script lang="ts">
-  import type {
-    ContextEntry,
-    PartRecord,
-    RoundRecord,
-    WorkflowStepTrace,
-  } from '../backendTypes'
+  import type { ContextEntry, PartRecord, RoundRecord, WorkflowStepTrace } from '../backendTypes'
   import type { StreamingRoundState } from '../traceStreaming'
   import IdBadge from './IdBadge.svelte'
   import SessionCompactionStepBlock from './SessionCompactionStepBlock.svelte'
@@ -50,17 +45,23 @@
   const label = $derived(STEP_TYPE_LABELS[step.stepTypeKey] ?? humanizeStepType(step.stepTypeKey))
   const toolCallPartId = $derived(
     step.stepTypeKey === 'analysis_tool_call_assessment'
-      ? (typeof step.params.tool_call_part_id === 'string' ? step.params.tool_call_part_id : null)
+      ? typeof step.params.tool_call_part_id === 'string'
+        ? step.params.tool_call_part_id
+        : null
       : null,
   )
   const workUnitId = $derived(
     step.stepTypeKey === 'analysis_tool_group_assessment'
-      ? (typeof step.params.work_unit_id === 'string' ? step.params.work_unit_id : null)
+      ? typeof step.params.work_unit_id === 'string'
+        ? step.params.work_unit_id
+        : null
       : null,
   )
   const turnId = $derived(
     step.stepTypeKey === 'analysis_turn_summary'
-      ? (typeof step.params.turn_id === 'string' ? step.params.turn_id : null)
+      ? typeof step.params.turn_id === 'string'
+        ? step.params.turn_id
+        : null
       : null,
   )
   const detailBadges = $derived.by(() => {
@@ -68,20 +69,35 @@
     if (turnId !== null) details.push(`turn: ${turnId}`)
     if (toolCallPartId !== null) details.push(`tool call: ${toolCallPartId}`)
     if (workUnitId !== null) details.push(`work unit: ${workUnitId}`)
-    if (workflowStep.ownedTurns.length > 0) details.push(`${workflowStep.ownedTurns.length} turn${workflowStep.ownedTurns.length === 1 ? '' : 's'}`)
-    if (workflowStep.artifacts.length > 0) details.push(`${workflowStep.artifacts.length} artifact${workflowStep.artifacts.length === 1 ? '' : 's'}`)
+    if (workflowStep.ownedTurns.length > 0)
+      details.push(
+        `${workflowStep.ownedTurns.length} turn${workflowStep.ownedTurns.length === 1 ? '' : 's'}`,
+      )
+    if (workflowStep.artifacts.length > 0)
+      details.push(
+        `${workflowStep.artifacts.length} artifact${workflowStep.artifacts.length === 1 ? '' : 's'}`,
+      )
     return details
   })
   const artifactLabels = $derived(
     workflowStep.artifacts
-      .map((artifact) => typeof artifact.metadata.schema_key === 'string' ? artifact.metadata.schema_key : artifact.id)
+      .map((artifact) =>
+        typeof artifact.metadata.schema_key === 'string'
+          ? artifact.metadata.schema_key
+          : artifact.id,
+      )
       .filter((value, index, all) => all.indexOf(value) === index),
   )
   const latestDiagnostic = $derived.by(() => {
     const diagnostic = [...workflowStep.artifacts]
       .filter((artifact) => artifact.metadata.schema_key === 'analysis.diagnostic.v1')
       .sort((left, right) => right.createdAt - left.createdAt)[0]
-    if (!diagnostic || typeof diagnostic.content !== 'object' || diagnostic.content === null || Array.isArray(diagnostic.content)) {
+    if (
+      !diagnostic ||
+      typeof diagnostic.content !== 'object' ||
+      diagnostic.content === null ||
+      Array.isArray(diagnostic.content)
+    ) {
       return null
     }
     const content = diagnostic.content as { message?: string; error_kind?: string }
@@ -119,10 +135,18 @@
 
     for (const turn of workflowStep.ownedTurns) {
       const parts = partsByTurn.get(turn.id) ?? []
-      const toolCallsExcluded = parts.filter((part) => part.partType === 'tool-call' && part.context.state === 'excluded').length
-      const toolResultsExcluded = parts.filter((part) => part.partType === 'tool-result' && part.context.state === 'excluded').length
-      const promptsHistorical = parts.filter((part) => part.partType === 'user-message' && part.context.state === 'historical-only').length
-      const reasoningExcluded = parts.filter((part) => part.partType === 'assistant-reasoning' && part.context.state === 'excluded').length
+      const toolCallsExcluded = parts.filter(
+        (part) => part.partType === 'tool-call' && part.context.state === 'excluded',
+      ).length
+      const toolResultsExcluded = parts.filter(
+        (part) => part.partType === 'tool-result' && part.context.state === 'excluded',
+      ).length
+      const promptsHistorical = parts.filter(
+        (part) => part.partType === 'user-message' && part.context.state === 'historical-only',
+      ).length
+      const reasoningExcluded = parts.filter(
+        (part) => part.partType === 'assistant-reasoning' && part.context.state === 'excluded',
+      ).length
 
       if (toolCallsExcluded > 0 || toolResultsExcluded > 0) {
         const totalEvidenceParts = toolCallsExcluded + toolResultsExcluded
@@ -158,7 +182,11 @@
   <div class="analysis-workflow-meta">
     <div class="analysis-workflow-line">
       <span class="analysis-workflow-label">{label}</span>
-      <span class="analysis-workflow-status" class:status-complete={step.status === 'complete'} class:status-error={step.status === 'error'}>{step.status}</span>
+      <span
+        class="analysis-workflow-status"
+        class:status-complete={step.status === 'complete'}
+        class:status-error={step.status === 'error'}>{step.status}</span
+      >
       {#each detailBadges as detail (detail)}
         <span class="analysis-workflow-detail">{detail}</span>
       {/each}
@@ -172,7 +200,7 @@
     {#if artifactLabels.length > 0}
       <div class="analysis-workflow-artifacts">
         {#each artifactLabels as label (label)}
-          <span class="analysis-workflow-artifact">{label}</span>
+          <span class="status-pill soft">{label}</span>
         {/each}
       </div>
     {/if}
@@ -192,7 +220,7 @@
         <div class="analysis-workflow-section-title">Context changes</div>
         <div class="analysis-workflow-retirement-list">
           {#each contextRetirementNotes as note (note)}
-            <span class="analysis-workflow-retirement-note">{note}</span>
+            <span class="status-pill soft">{note}</span>
           {/each}
         </div>
       </div>
@@ -208,7 +236,7 @@
           roundStreams={roundStreamsByTurn.get(turn.id) ?? []}
           {mode}
           {contextSnapshotsByRound}
-          loadedContextLength={loadedContextLength}
+          {loadedContextLength}
         />
       </div>
     {/each}
@@ -216,11 +244,7 @@
     {#each workflowStep.postambleSteps as postamble (postamble.id)}
       <div class="analysis-workflow-section">
         <div class="analysis-workflow-section-title">Regular compaction</div>
-        <SessionCompactionStepBlock
-          step={postamble}
-          parts={[]}
-          mode={mode}
-        />
+        <SessionCompactionStepBlock step={postamble} parts={[]} {mode} />
       </div>
     {/each}
 
@@ -240,9 +264,9 @@
   .analysis-workflow-block {
     margin: 0.6rem 0 0.9rem;
     padding: 0.8rem 0.95rem;
-    border: 1px solid var(--border-subtle);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--bg-panel) 95%, var(--accent) 5%);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-surface);
   }
 
   .analysis-workflow-meta {
@@ -263,21 +287,21 @@
   .analysis-workflow-label {
     font-size: 0.84rem;
     font-weight: 700;
-    color: var(--text);
+    color: var(--text-bright);
   }
 
   .analysis-workflow-status,
   .analysis-workflow-detail {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-workflow-status.status-complete {
-    color: var(--color-success, #4caf50);
+    color: var(--green-bright);
   }
 
   .analysis-workflow-status.status-error {
-    color: var(--color-error, #f44336);
+    color: var(--red-bright);
   }
 
   .analysis-workflow-content {
@@ -290,9 +314,9 @@
     flex-wrap: wrap;
     gap: 0.45rem;
     padding: 0.55rem 0.7rem;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--bg-panel) 78%, #b43b25 22%);
-    color: var(--text);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-surface) 78%, var(--red-bright) 22%);
+    color: var(--text-bright);
   }
 
   .analysis-workflow-error-label {
@@ -308,7 +332,7 @@
   }
 
   .analysis-workflow-error-kind {
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-workflow-section {
@@ -321,21 +345,13 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-workflow-artifacts {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
-  }
-
-  .analysis-workflow-artifact {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    background: var(--bg-input);
-    border-radius: 999px;
-    padding: 0.15rem 0.45rem;
   }
 
   .analysis-workflow-retirement {
@@ -349,16 +365,8 @@
     gap: 0.35rem;
   }
 
-  .analysis-workflow-retirement-note {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    background: color-mix(in srgb, var(--bg-panel) 86%, var(--accent) 14%);
-    border-radius: 999px;
-    padding: 0.15rem 0.45rem;
-  }
-
   .analysis-workflow-empty {
     font-size: 0.78rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 </style>

@@ -42,9 +42,14 @@
     }
   }
 
-  function formatTarget(job: { target: { kind: string; sessionId: string; stepId?: string }; prompt?: string }) {
+  function formatTarget(job: {
+    target: { kind: string; sessionId: string; stepId?: string }
+    prompt?: string
+  }) {
     if (job.target.kind === 'session') {
-      return job.prompt ? `"${job.prompt.slice(0, 40)}${job.prompt.length > 40 ? '…' : ''}"` : `Session ${job.target.sessionId.slice(0, 8)}`
+      return job.prompt
+        ? `"${job.prompt.slice(0, 40)}${job.prompt.length > 40 ? '…' : ''}"`
+        : `Session ${job.target.sessionId.slice(0, 8)}`
     }
     return `Step ${job.target.stepId?.slice(0, 8) ?? '?'}`
   }
@@ -61,7 +66,7 @@
         </span>
         <span class="job-label">{formatTarget(currentActiveJob)}</span>
       {:else if snapshot.controlState === 'paused'}
-        <span class="status-dot paused"></span>
+        <span class="status-dot warn"></span>
         <span class="status-label">Paused</span>
       {:else}
         <span class="status-dot idle"></span>
@@ -72,21 +77,19 @@
     <!-- Controls -->
     <div class="exec-controls">
       <button
-        class="exec-btn"
+        class="btn btn-sm"
         onclick={handlePauseResume}
         disabled={isActioning}
-        title={snapshot.controlState === 'running' ? 'Pause after current step' : 'Resume execution'}
+        title={snapshot.controlState === 'running'
+          ? 'Pause after current step'
+          : 'Resume execution'}
       >
         {snapshot.controlState === 'running' ? '⏸' : '▶'}
       </button>
 
       <!-- Queue button -->
       {#if queuedJobs.length > 0}
-        <button
-          class="exec-btn queue-btn"
-          onclick={() => showQueue = !showQueue}
-          title="Show queue"
-        >
+        <button class="btn btn-sm" onclick={() => (showQueue = !showQueue)} title="Show queue">
           Queue ({$queueLength})
           <span class="chevron">{showQueue ? '▲' : '▼'}</span>
         </button>
@@ -103,10 +106,10 @@
       <div class="queue-item">
         <span class="queue-item-label">{formatTarget(job)}</span>
         <button
-          class="queue-remove-btn"
+          class="icon-btn icon-btn-danger"
           onclick={() => handleRemoveJob(job.jobId)}
-          title="Remove from queue"
-        >✕</button>
+          title="Remove from queue">✕</button
+        >
       </div>
     {/each}
   </div>
@@ -118,8 +121,8 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.35rem 1rem;
-    background: var(--bg-panel, #1e2229);
-    border-bottom: 1px solid var(--border, #30363d);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
     font-size: 0.8rem;
     min-height: 2rem;
     position: relative;
@@ -134,35 +137,13 @@
     min-width: 0;
   }
 
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-  .status-dot.running {
-    background: #3fb950;
-    animation: pulse 1.5s infinite;
-  }
-  .status-dot.paused {
-    background: #d29922;
-  }
-  .status-dot.idle {
-    background: #484f58;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-
   .status-label {
-    color: var(--text-muted, #8b949e);
+    color: var(--text-dim);
     flex-shrink: 0;
   }
 
   .job-label {
-    color: var(--text, #e6edf3);
+    color: var(--text-bright);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -175,39 +156,19 @@
     flex-shrink: 0;
   }
 
-  .exec-btn {
-    background: var(--bg-input, #21262d);
-    border: 1px solid var(--border, #30363d);
-    border-radius: 4px;
-    color: var(--text, #e6edf3);
-    cursor: pointer;
-    padding: 0.2rem 0.5rem;
-    font-size: 0.75rem;
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-  }
-  .exec-btn:hover:not(:disabled) {
-    background: var(--bg-hover, #30363d);
-  }
-  .exec-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
   .chevron {
     font-size: 0.6rem;
   }
 
   .queue-panel {
-    background: var(--bg-panel, #1e2229);
-    border-bottom: 1px solid var(--border, #30363d);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
     padding: 0.5rem 1rem;
     font-size: 0.8rem;
   }
 
   .queue-header {
-    color: var(--text-muted, #8b949e);
+    color: var(--text-dim);
     font-weight: 600;
     margin-bottom: 0.4rem;
     font-size: 0.75rem;
@@ -228,21 +189,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--text, #e6edf3);
-  }
-
-  .queue-remove-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted, #8b949e);
-    cursor: pointer;
-    padding: 0.1rem 0.3rem;
-    border-radius: 3px;
-    font-size: 0.75rem;
-    flex-shrink: 0;
-  }
-  .queue-remove-btn:hover {
-    background: var(--bg-hover, #30363d);
-    color: var(--color-error, #f85149);
+    color: var(--text-bright);
   }
 </style>

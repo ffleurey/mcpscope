@@ -69,29 +69,35 @@ describe('sessionStore.startSession', () => {
     vi.clearAllMocks()
     vi.resetModules()
 
-    const { lmConnections, modelConfigs, mcpProfiles, sessionCreationDefaults } = await import('./connectionStore')
-    const { isPrimaryLaunchDialogOpen, activeChatId, activeTrace, chatSessions } = await import('./sessionStore')
+    const { lmConnections, modelConfigs, mcpProfiles, sessionCreationDefaults } =
+      await import('./connectionStore')
+    const { isPrimaryLaunchDialogOpen, activeChatId, activeTrace, chatSessions } =
+      await import('./sessionStore')
 
-    lmConnections.set([{
-      id: 'lm-1',
-      name: 'Local LM',
-      baseUrl: 'http://localhost:1234',
-      apiKey: undefined,
-      providerType: 'lmstudio',
-      createdAt: 1,
-      updatedAt: 1,
-    }])
-    modelConfigs.set([{
-      id: 'mc-1',
-      name: 'Model Config',
-      connectionId: 'lm-1',
-      modelKey: 'model-key',
-      modelDisplayName: 'Model',
-      systemPrompt: 'Prompt',
-      temperature: 0,
-      createdAt: 1,
-      updatedAt: 1,
-    }])
+    lmConnections.set([
+      {
+        id: 'lm-1',
+        name: 'Local LM',
+        baseUrl: 'http://localhost:1234',
+        apiKey: undefined,
+        providerType: 'lmstudio',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
+    modelConfigs.set([
+      {
+        id: 'mc-1',
+        name: 'Model Config',
+        connectionId: 'lm-1',
+        modelKey: 'model-key',
+        modelDisplayName: 'Model',
+        systemPrompt: 'Prompt',
+        temperature: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
     mcpProfiles.set([])
     sessionCreationDefaults.set({
       defaultModelConfigId: 'mc-1',
@@ -113,7 +119,8 @@ describe('sessionStore.startSession', () => {
       initJobId: 'job-1',
     })
 
-    const { startSession, isPrimaryLaunchDialogOpen, isStartingSession, activeChatId } = await import('./sessionStore')
+    const { startSession, isPrimaryLaunchDialogOpen, isStartingSession, activeChatId } =
+      await import('./sessionStore')
 
     const startPromise = startSession({
       modelConfigId: 'mc-1',

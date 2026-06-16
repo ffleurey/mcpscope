@@ -11,7 +11,7 @@ export const CONTEXT_SIZE_PRESETS = [
 
 export function formatContextSize(value: number | undefined): string | null {
   if (value == null) return null
-  const preset = CONTEXT_SIZE_PRESETS.find(p => p.value === value)
+  const preset = CONTEXT_SIZE_PRESETS.find((p) => p.value === value)
   if (preset) return preset.label
   return value.toLocaleString()
 }

@@ -4,7 +4,7 @@
   import { listModels, loadModel } from '../services/lmstudio'
   import type { LmStudioModel } from '../services/lmstudio'
   import type { ModelConfig } from '../types'
-import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
+  import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
 
   interface Props {
     modelConfig?: ModelConfig | null
@@ -16,7 +16,8 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
 
   // Slugify: lowercase, replace spaces with hyphens, remove non-alphanum except - _
   function slugify(text: string): string {
-    return text.toLowerCase()
+    return text
+      .toLowerCase()
       .replace(/\s+/g, '-')
       .replace(/[^a-z0-9_-]/g, '')
       .replace(/-+/g, '-')
@@ -43,9 +44,9 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
       if (!slug) slug = 'untitled'
       // Check for collision with existing model configs
       const existing = $modelConfigs
-      if (existing.some(mc => mc.id === slug)) {
+      if (existing.some((mc) => mc.id === slug)) {
         let counter = 2
-        while (existing.some(mc => mc.id === `${slug}-${counter}`)) {
+        while (existing.some((mc) => mc.id === `${slug}-${counter}`)) {
           counter++
         }
         slug = `${slug}-${counter}`
@@ -77,19 +78,17 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
 
   let sortedFilteredModels = $derived(
     (modelSearch
-      ? availableModels.filter(m =>
-          m.displayName.toLowerCase().includes(modelSearch.toLowerCase()) ||
-          m.key.toLowerCase().includes(modelSearch.toLowerCase()))
+      ? availableModels.filter(
+          (m) =>
+            m.displayName.toLowerCase().includes(modelSearch.toLowerCase()) ||
+            m.key.toLowerCase().includes(modelSearch.toLowerCase()),
+        )
       : [...availableModels]
-    ).sort((a, b) => a.displayName.localeCompare(b.displayName))
+    ).sort((a, b) => a.displayName.localeCompare(b.displayName)),
   )
 
-  let selectedConnection = $derived(
-    $lmConnections.find(c => c.id === connectionId) ?? null,
-  )
-  let isLmStudio = $derived(
-    selectedConnection?.providerType === 'lmstudio',
-  )
+  let selectedConnection = $derived($lmConnections.find((c) => c.id === connectionId) ?? null)
+  let isLmStudio = $derived(selectedConnection?.providerType === 'lmstudio')
 
   let errors = $state<Record<string, string>>({})
 
@@ -106,9 +105,17 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   }
 
   async function fetchModels(connId: string) {
-    if (!connId) { availableModels = []; selectedModelMeta = null; return }
-    const conn = $lmConnections.find(c => c.id === connId)
-    if (!conn) { availableModels = []; selectedModelMeta = null; return }
+    if (!connId) {
+      availableModels = []
+      selectedModelMeta = null
+      return
+    }
+    const conn = $lmConnections.find((c) => c.id === connId)
+    if (!conn) {
+      availableModels = []
+      selectedModelMeta = null
+      return
+    }
     modelsLoading = true
     modelsError = null
     availableModels = []
@@ -119,14 +126,14 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
       const models = await listModels(conn.baseUrl, conn.apiKey, conn.providerType)
       availableModels = models
       if (modelConfig?.connectionId === connId && modelConfig.modelKey) {
-        const existing = models.find(m => m.key === modelConfig.modelKey)
+        const existing = models.find((m) => m.key === modelConfig.modelKey)
         if (existing) {
           applyModelSelection(existing)
         } else if (models.length > 0) {
           applyModelSelection(models[0])
         }
       } else {
-        const first = isLmStudio ? (models.find(m => m.isLoaded) ?? models[0]) : models[0]
+        const first = isLmStudio ? (models.find((m) => m.isLoaded) ?? models[0]) : models[0]
         if (first) applyModelSelection(first)
       }
     } catch (e) {
@@ -142,7 +149,7 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   }
 
   function handleModelChange() {
-    const m = availableModels.find(x => x.key === modelKey)
+    const m = availableModels.find((x) => x.key === modelKey)
     if (m) {
       modelDisplayName = m.displayName
       selectedModelMeta = m
@@ -165,11 +172,14 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   let modelLoadError = $state<string | null>(null)
 
   async function handleLoadModel() {
-    const conn = $lmConnections.find(c => c.id === connectionId)
+    const conn = $lmConnections.find((c) => c.id === connectionId)
     if (!conn || !modelKey) return
-    const resolvedContextSize = contextSize === -1
-      ? (customContextSize ? parseInt(customContextSize, 10) : undefined)
-      : contextSize
+    const resolvedContextSize =
+      contextSize === -1
+        ? customContextSize
+          ? parseInt(customContextSize, 10)
+          : undefined
+        : contextSize
     modelLoading = true
     modelLoadError = null
     try {
@@ -185,8 +195,7 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   function validate(): boolean {
     const e: Record<string, string> = {}
     if (!name.trim()) e.name = 'Name is required'
-    if (!isNew && !customId.trim()) e.customId = 'ID is required'
-    if (isNew && !customId.trim()) e.customId = 'ID is required'
+    if (!customId.trim()) e.customId = 'ID is required'
     if (customId.trim() && !/^[a-zA-Z0-9_-]+$/.test(customId.trim())) {
       e.customId = 'ID must only contain letters, numbers, hyphens, and underscores'
     }
@@ -202,9 +211,12 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   function handleSubmit() {
     if (!validate()) return
     const now = Date.now()
-    const resolvedContextSize = contextSize === -1
-      ? (customContextSize ? parseInt(customContextSize, 10) : undefined)
-      : contextSize
+    const resolvedContextSize =
+      contextSize === -1
+        ? customContextSize
+          ? parseInt(customContextSize, 10)
+          : undefined
+        : contextSize
     onSave({
       id: customId.trim(),
       name: name.trim(),
@@ -221,42 +233,36 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   }
 </script>
 
-<form class="profile-form" onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>
-  <h3>{modelConfig ? 'Edit Model Config' : 'New Model Config'}</h3>
-
+<form
+  class="form-stack"
+  onsubmit={(e) => {
+    e.preventDefault()
+    handleSubmit()
+  }}
+>
   <div class="field">
-    <label for="mc-name">Name</label>
-    <input id="mc-name" type="text" bind:value={name} placeholder="e.g. Qwen3 · Creative" />
-    {#if errors.name}<span class="field-error">{errors.name}</span>{/if}
-  </div>
-
-  <div class="field">
-    <label for="mc-id">ID</label>
-    {#if modelConfig}
-      <input id="mc-id" type="text" value={customId} disabled class="readonly-field" />
-    {:else}
-      <input id="mc-id" type="text" bind:value={customId} placeholder="auto-generated from name" />
-    {/if}
-    {#if errors.customId}<span class="field-error">{errors.customId}</span>{/if}
-    {#if !modelConfig}<span class="field-hint">Set once at creation, cannot be changed later.</span>{/if}
-  </div>
-
-  <div class="field">
-    <label for="mc-connection">Connection</label>
+    <label class="field-label" for="mc-connection">Connection</label>
     {#if $lmConnections.length === 0}
-      <p class="no-connections">No connections configured. Add one in the Connections view first.</p>
+      <p class="no-connections">
+        No connections configured. Add one in the Connections view first.
+      </p>
     {:else}
-      <select id="mc-connection" bind:value={connectionId} onchange={handleConnectionChange}>
+      <select
+        id="mc-connection"
+        class="field-input"
+        bind:value={connectionId}
+        onchange={handleConnectionChange}
+      >
         {#each $lmConnections as conn (conn.id)}
           <option value={conn.id}>{conn.name}</option>
         {/each}
       </select>
     {/if}
-    {#if errors.connectionId}<span class="field-error">{errors.connectionId}</span>{/if}
+    {#if errors.connectionId}<span class="field-errortext">{errors.connectionId}</span>{/if}
   </div>
 
   <div class="field">
-    <label for="mc-model">Model</label>
+    <label class="field-label" for="mc-model">Model</label>
     {#if modelsLoading}
       <p class="loading-hint">Loading models…</p>
     {:else if modelsError}
@@ -268,26 +274,39 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
     {:else if sortedFilteredModels.length > 0}
       <input
         id="mc-model-filter"
+        class="field-input"
         type="text"
         bind:value={modelSearch}
         placeholder="Search models…"
       />
       <div class="model-select-row">
-        <select id="mc-model" bind:value={modelKey} onchange={handleModelChange}>
+        <select
+          id="mc-model"
+          class="field-input"
+          bind:value={modelKey}
+          onchange={handleModelChange}
+        >
           {#each sortedFilteredModels as m (m.uid)}
             <option value={m.key}>{m.displayName}{isLmStudio && m.isLoaded ? ' ●' : ''}</option>
           {/each}
         </select>
         {#if isLmStudio && selectedModelMeta && !selectedModelMeta.isLoaded}
-          <button type="button" class="btn btn-sm" onclick={handleLoadModel} disabled={modelLoading}>
+          <button
+            type="button"
+            class="btn btn-sm"
+            onclick={handleLoadModel}
+            disabled={modelLoading}
+          >
             {modelLoading ? 'Loading…' : 'Load'}
           </button>
         {/if}
       </div>
       {#if selectedModelMeta}
-        <span class="field-hint">
+        <span class="field-hinttext">
           {#if isLmStudio && selectedModelMeta.isLoaded && selectedModelMeta.loadedContextLength}
-            ● Loaded · Context: {selectedModelMeta.loadedContextLength.toLocaleString()} tokens (max {(selectedModelMeta.maxContextLength ?? 0).toLocaleString()})
+            ● Loaded · Context: {selectedModelMeta.loadedContextLength.toLocaleString()} tokens (max {(
+              selectedModelMeta.maxContextLength ?? 0
+            ).toLocaleString()})
           {:else if isLmStudio && selectedModelMeta.maxContextLength}
             ○ Not loaded · Max context: {selectedModelMeta.maxContextLength.toLocaleString()} tokens
           {:else if isLmStudio}
@@ -299,32 +318,76 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
           {/if}
         </span>
       {/if}
-      {#if modelLoadError}<span class="field-error">{modelLoadError}</span>{/if}
+      {#if modelLoadError}<span class="field-errortext">{modelLoadError}</span>{/if}
     {/if}
-    {#if errors.modelKey}<span class="field-error">{errors.modelKey}</span>{/if}
+    {#if errors.modelKey}<span class="field-errortext">{errors.modelKey}</span>{/if}
   </div>
 
   <div class="field">
-    <label for="mc-temperature">Temperature</label>
-    <input id="mc-temperature" type="number" step="0.1" min="0" max="2" bind:value={temperature} />
-    {#if errors.temperature}<span class="field-error">{errors.temperature}</span>{/if}
+    <label class="field-label" for="mc-name">Name</label>
+    <input
+      id="mc-name"
+      class="field-input"
+      type="text"
+      bind:value={name}
+      placeholder="e.g. Qwen3 · Creative"
+    />
+    {#if errors.name}<span class="field-errortext">{errors.name}</span>{/if}
+  </div>
+
+  <div class="field">
+    <label class="field-label" for="mc-id">ID</label>
+    {#if modelConfig}
+      <span class="field-static">{customId}</span>
+    {:else}
+      <input
+        id="mc-id"
+        class="field-input"
+        type="text"
+        bind:value={customId}
+        placeholder="auto-generated from name"
+      />
+    {/if}
+    {#if errors.customId}<span class="field-errortext">{errors.customId}</span>{/if}
+    {#if !modelConfig}<span class="field-hinttext"
+        >Set once at creation, cannot be changed later.</span
+      >{/if}
+  </div>
+
+  <div class="field">
+    <label class="field-label" for="mc-temperature">Temperature</label>
+    <input
+      id="mc-temperature"
+      class="field-input"
+      type="number"
+      step="0.1"
+      min="0"
+      max="2"
+      bind:value={temperature}
+    />
+    {#if errors.temperature}<span class="field-errortext">{errors.temperature}</span>{/if}
   </div>
 
   {#if selectedModelMeta?.supportsReasoning}
-  <div class="field">
-    <label for="mc-reasoning">Reasoning</label>
-    <select id="mc-reasoning" bind:value={reasoning}>
-      <option value="on">On</option>
-      <option value="off">Off</option>
-    </select>
-    <span class="field-hint">This model supports extended reasoning (chain-of-thought).</span>
-  </div>
+    <div class="field">
+      <label class="field-label" for="mc-reasoning">Reasoning</label>
+      <select id="mc-reasoning" class="field-input" bind:value={reasoning}>
+        <option value="on">On</option>
+        <option value="off">Off</option>
+      </select>
+      <span class="field-hinttext">This model supports extended reasoning (chain-of-thought).</span>
+    </div>
   {/if}
 
   <div class="field">
-    <label for="mc-context-size">Context Size <span class="field-hint">(leave empty for provider default){#if selectedModelMeta?.maxContextLength} — max {selectedModelMeta.maxContextLength.toLocaleString()}{/if}</span></label>
+    <label class="field-label" for="mc-context-size"
+      >Context Size <span class="field-hinttext"
+        >(leave empty for provider default){#if selectedModelMeta?.maxContextLength}
+          — max {selectedModelMeta.maxContextLength.toLocaleString()}{/if}</span
+      ></label
+    >
     <div class="context-size-row">
-      <select id="mc-context-size" bind:value={contextSize}>
+      <select id="mc-context-size" class="field-input" bind:value={contextSize}>
         <option value={undefined}>Auto (provider default)</option>
         {#each CONTEXT_SIZE_PRESETS as preset (preset.value)}
           <option value={preset.value}>{preset.label}</option>
@@ -333,6 +396,7 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
       </select>
       {#if contextSize === -1}
         <input
+          class="field-input"
           type="number"
           min="1"
           bind:value={customContextSize}
@@ -340,14 +404,21 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
         />
       {/if}
       {#if isLmStudio && selectedModelMeta?.isLoaded && selectedModelMeta.loadedContextLength}
-        <span class="loaded-context-indicator">● Loaded: {selectedModelMeta.loadedContextLength.toLocaleString()} tokens</span>
+        <span class="loaded-context-indicator"
+          >● Loaded: {selectedModelMeta.loadedContextLength.toLocaleString()} tokens</span
+        >
       {/if}
     </div>
   </div>
 
   <div class="field">
-    <label for="mc-system-prompt">System Prompt</label>
-    <textarea id="mc-system-prompt" bind:value={systemPrompt} rows="4" placeholder="Optional system prompt"></textarea>
+    <label class="field-label" for="mc-system-prompt">System Prompt</label>
+    <textarea
+      id="mc-system-prompt"
+      class="field-input"
+      bind:value={systemPrompt}
+      rows="4"
+      placeholder="Optional system prompt"></textarea>
   </div>
 
   <div class="form-actions">
@@ -357,81 +428,36 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
 </form>
 
 <style>
-  .profile-form {
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 1.5rem;
-  }
-  h3 {
-    margin: 0 0 1.1rem;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text);
-  }
-  .field { margin-bottom: 0.9rem; }
-  label {
-    display: block;
-    font-size: 0.82rem;
-    color: var(--text-muted);
-    margin-bottom: 0.3rem;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-  }
-  input, select, textarea {
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text);
-    padding: 0.45rem 0.6rem;
-    font-size: 0.9rem;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  input:focus, select:focus, textarea:focus { border-color: var(--color-accent); }
-  textarea { resize: vertical; }
-  .field-error {
-    display: block;
-    color: var(--color-error);
-    font-size: 0.78rem;
-    margin-top: 0.25rem;
-  }
-  .model-select-row, .context-size-row {
+  .model-select-row,
+  .context-size-row {
     display: flex;
     gap: 0.5rem;
     align-items: center;
   }
-  .model-select-row select { flex: 1; }
-  .context-size-row input { width: 160px; }
-  .context-size-row select { flex: 1; }
+  .model-select-row select {
+    flex: 1;
+  }
+  .context-size-row input {
+    width: 160px;
+  }
+  .context-size-row select {
+    flex: 1;
+  }
   .loaded-context-indicator {
     font-size: 0.78rem;
-    color: #4ade80;
+    color: var(--green-bright);
     font-weight: 500;
     white-space: nowrap;
   }
-  .loading-hint, .no-connections {    font-size: 0.82rem;
-    color: var(--text-muted);
+  .loading-hint,
+  .no-connections {
+    font-size: 0.82rem;
+    color: var(--text-dim);
     margin: 0.25rem 0 0;
-  }
-  .field-hint {
-    display: block;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-top: 0.2rem;
   }
   .error-hint {
     font-size: 0.82rem;
-    color: var(--color-error);
+    color: var(--red-bright);
     margin: 0.25rem 0 0;
-  }
-  .form-actions {
-    display: flex;
-    gap: 0.6rem;
-    margin-top: 1.1rem;
   }
 </style>

@@ -44,10 +44,12 @@
     {#if canCollapse}
       <button
         class="setup-toggle-btn"
-        onclick={() => { chatCollapsed = !chatCollapsed }}
+        onclick={() => {
+          chatCollapsed = !chatCollapsed
+        }}
         aria-expanded={!chatCollapsed}
       >
-        <span class="setup-toggle-arrow" class:open={!chatCollapsed}>▶</span>
+        <span class="disclosure-arrow" class:open={!chatCollapsed}>▶</span>
         <span class="compact-setup-label">Session Setup</span>
         <span class="compact-setup-status">{statusLabel}</span>
         {#if totalTokens > 0}
@@ -116,30 +118,19 @@
   }
 
   .setup-toggle-btn:hover .compact-setup-label {
-    color: var(--text);
-  }
-
-  .setup-toggle-arrow {
-    font-size: 0.55rem;
-    color: var(--text-muted);
-    transition: transform 0.12s;
-    flex-shrink: 0;
-  }
-
-  .setup-toggle-arrow.open {
-    transform: rotate(90deg);
+    color: var(--text-bright);
   }
 
   .compact-setup-label {
     font-size: 0.7rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .compact-setup-status,
   .compact-setup-tokens {
     font-size: 0.68rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .compact-setup-parts {
@@ -148,31 +139,36 @@
     gap: 0.14rem;
     margin-left: 0.82rem;
     padding-left: 0.72rem;
-    border-left: 2px solid var(--border-subtle);
+    border-left: 2px solid var(--border);
   }
 
   .compact-ctx-bar {
     margin-top: 0.28rem;
     margin-left: 0.82rem;
     padding-left: 0.72rem;
-    border-left: 2px solid var(--border-subtle);
+    border-left: 2px solid var(--border);
   }
 
   .setup-spinner {
     font-size: 1.1rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     animation: blink 1.2s ease-in-out infinite;
   }
 
   @keyframes blink {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 1; }
+    0%,
+    100% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 
   .setup-empty-hint {
     padding: 0.5rem 0;
     font-size: 0.78rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-style: italic;
   }
 </style>

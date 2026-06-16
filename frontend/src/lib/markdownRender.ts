@@ -25,12 +25,14 @@ export function renderMarkdown(text: string): string {
  * Deliberately lenient — false positives are fine; false negatives are not.
  */
 export function looksLikeMarkdown(text: string): boolean {
-  return /^#{1,6} /m.test(text)          // headings
-    || /\*\*\S/.test(text)               // bold
-    || /\[.+\]\(https?:\/\//.test(text)  // links
-    || /^[-*+] \S/m.test(text)           // unordered lists
-    || /^\d+\. \S/m.test(text)           // ordered lists
-    || /^```/m.test(text)                // fenced code blocks
-    || /^>/m.test(text)                  // blockquotes
-    || /\|.*\|.*\|/.test(text)           // tables
+  return (
+    /^#{1,6} /m.test(text) || // headings
+    /\*\*\S/.test(text) || // bold
+    /\[.+\]\(https?:\/\//.test(text) || // links
+    /^[-*+] \S/m.test(text) || // unordered lists
+    /^\d+\. \S/m.test(text) || // ordered lists
+    /^```/m.test(text) || // fenced code blocks
+    /^>/m.test(text) || // blockquotes
+    /\|.*\|.*\|/.test(text)
+  ) // tables
 }

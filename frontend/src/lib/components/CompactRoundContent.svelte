@@ -93,15 +93,16 @@
       return null
     }
 
-    const normalized = text
-      .replace(/^(?:[ \t]*\n)+/, '')
-      .replace(/(?:\n[ \t]*)+$/, '')
+    const normalized = text.replace(/^(?:[ \t]*\n)+/, '').replace(/(?:\n[ \t]*)+$/, '')
 
     return normalized.length > 0 ? normalized : null
   }
 
   function isEstimated(part: PartRecord | null): boolean {
-    return part !== null && (part.tokens.confidence === 'estimated' || part.tokens.confidence === 'unknown')
+    return (
+      part !== null &&
+      (part.tokens.confidence === 'estimated' || part.tokens.confidence === 'unknown')
+    )
   }
 
   const sortedParts = $derived([...parts].sort((left, right) => left.ordinal - right.ordinal))
@@ -113,9 +114,7 @@
       ? normalizeCompactMessageText(roundStream?.completedReasoningText)
       : null,
   )
-  const visibleStreamingContent = $derived(
-    normalizeCompactMessageText(roundStream?.contentText),
-  )
+  const visibleStreamingContent = $derived(normalizeCompactMessageText(roundStream?.contentText))
   const compactItems = $derived.by(() => {
     const items: CompactItem[] = []
     const groupedResultIds = new Set<string>()
@@ -144,7 +143,9 @@
       }
 
       if (part.partType === 'tool-call') {
-        const results = sortedParts.filter((candidate) => candidate.partType === 'tool-result' && candidate.parentPartId === part.id)
+        const results = sortedParts.filter(
+          (candidate) => candidate.partType === 'tool-result' && candidate.parentPartId === part.id,
+        )
         results.forEach((result) => groupedResultIds.add(result.id))
         items.push({
           kind: 'tool-group',
@@ -178,8 +179,8 @@
 
 <div class="compact-stack">
   {#if pendingReasoningText}
-    <details class="collapsed-row">
-      <summary class="collapsed-summary">
+    <details class="disclosure-boxed">
+      <summary class="disclosure-summary">
         <span class="row-label">Reasoning</span>
         <span class="summary-meta"></span>
       </summary>
@@ -192,39 +193,61 @@
   {#each compactItems as item (item.key)}
     {#if item.kind === 'assistant-content'}
       {@const assistantText = normalizeCompactMessageText(item.part.payload.text)}
-      <section class="assistant-block">
+      <section class="assistant-block has-reveal">
         {#if assistantText}
           {@const rendered = highlightStructuredText(assistantText)}
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-          <pre class="assistant-text" class:is-json={rendered.format === 'json'}>{@html rendered.html}</pre>
+          <pre class="assistant-text">{@html rendered.html}</pre>
         {/if}
         <div class="message-meta">
           {#if inspectMode}
             <IdBadge id={item.part.id} />
           {/if}
           {#if item.part.tokens.count !== null}
-            <span class="token-pill">{fmtTokenCount(item.part.tokens.count, isEstimated(item.part))}</span>
+            <span class="token-pill"
+              >{fmtTokenCount(item.part.tokens.count, isEstimated(item.part))}</span
+            >
           {/if}
         </div>
-        {#if assistantText}
-          {@const rendered = highlightStructuredText(assistantText)}
-          {#if rendered.format === 'markdown' && looksLikeMarkdown(assistantText)}
-          <button class="preview-btn" onclick={() => openMarkdownPreview(assistantText)} aria-label="Render preview" title="Render preview">
-            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        {#if assistantText && looksLikeMarkdown(assistantText)}
+          <button
+            class="icon-btn icon-btn-reveal"
+            onclick={() => openMarkdownPreview(assistantText)}
+            aria-label="Render preview"
+            title="Render preview"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              ><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle
+                cx="12"
+                cy="12"
+                r="3"
+              /></svg
+            >
           </button>
-          {/if}
         {/if}
       </section>
     {:else if item.kind === 'reasoning'}
-      <details class="collapsed-row">
-        <summary class="collapsed-summary">
+      <details class="disclosure-boxed">
+        <summary class="disclosure-summary">
           <span class="row-label">Reasoning</span>
           <span class="summary-meta">
             {#if inspectMode}
               <IdBadge id={item.part.id} />
             {/if}
             {#if item.part.tokens.count !== null}
-              <span class="token-pill">{fmtTokenCount(item.part.tokens.count, isEstimated(item.part))}</span>
+              <span class="token-pill"
+                >{fmtTokenCount(item.part.tokens.count, isEstimated(item.part))}</span
+              >
             {/if}
           </span>
         </summary>
@@ -233,7 +256,10 @@
             <pre class="row-text">{item.part.payload.text}</pre>
           {/if}
           {#if item.part.payload.json !== null}
-            <button class="meta-btn" onclick={() => openDialog('Reasoning JSON', item.part.payload.json)}>
+            <button
+              class="btn btn-xs"
+              onclick={() => openDialog('Reasoning JSON', item.part.payload.json)}
+            >
               View JSON
             </button>
           {/if}
@@ -242,8 +268,8 @@
     {:else if item.kind === 'tool-group'}
       {@const toolName = normalizeToolName(item.toolCall)}
       {@const totalTokens = toolGroupTokens(item.toolCall, item.results)}
-      <details class="collapsed-row">
-        <summary class="collapsed-summary">
+      <details class="disclosure-boxed">
+        <summary class="disclosure-summary">
           <span class="row-label">Tool · {toolName}</span>
           <span class="summary-meta">
             {#if inspectMode && item.toolCall}
@@ -253,7 +279,12 @@
               <span class="status-pill">waiting</span>
             {/if}
             {#if totalTokens !== null}
-              <span class="token-pill">{fmtTokenCount(totalTokens, isEstimated(item.toolCall) || item.results.some(r => isEstimated(r)))}</span>
+              <span class="token-pill"
+                >{fmtTokenCount(
+                  totalTokens,
+                  isEstimated(item.toolCall) || item.results.some((r) => isEstimated(r)),
+                )}</span
+              >
             {/if}
           </span>
         </summary>
@@ -263,7 +294,11 @@
               <div class="tool-section-header">
                 <span class="tool-section-label">Call</span>
                 {#if item.toolCall.payload.json !== null}
-                  <button class="meta-btn" onclick={() => openDialog(`Tool call · ${toolName}`, item.toolCall?.payload.json)}>
+                  <button
+                    class="btn btn-xs"
+                    onclick={() =>
+                      openDialog(`Tool call · ${toolName}`, item.toolCall?.payload.json)}
+                  >
                     JSON
                   </button>
                 {/if}
@@ -279,7 +314,10 @@
               <div class="tool-section-header">
                 <span class="tool-section-label">Result</span>
                 {#if result.payload.json !== null}
-                  <button class="meta-btn" onclick={() => openDialog(`Tool result · ${toolName}`, result.payload.json)}>
+                  <button
+                    class="btn btn-xs"
+                    onclick={() => openDialog(`Tool result · ${toolName}`, result.payload.json)}
+                  >
                     JSON
                   </button>
                 {/if}
@@ -297,10 +335,8 @@
   {/each}
 
   {#if visibleStreamingContent}
-    {@const renderedStreamingContent = highlightStructuredText(visibleStreamingContent)}
-    <section class="assistant-block">
-      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-      <pre class="assistant-text" class:is-json={renderedStreamingContent.format === 'json'}>{@html renderedStreamingContent.html}</pre>
+    <section class="assistant-block has-reveal">
+      <pre class="assistant-text">{visibleStreamingContent}</pre>
       <div class="message-meta">
         <span class="status-pill">streaming</span>
       </div>
@@ -313,11 +349,22 @@
 </div>
 
 {#if showDialog}
-  <JsonDialog title={dialogTitle} data={dialogData} onClose={() => { showDialog = false }} />
+  <JsonDialog
+    title={dialogTitle}
+    data={dialogData}
+    onClose={() => {
+      showDialog = false
+    }}
+  />
 {/if}
 
 {#if showMarkdownPreview}
-  <MarkdownPreviewDialog source={markdownPreviewSource} onClose={() => { showMarkdownPreview = false }} />
+  <MarkdownPreviewDialog
+    source={markdownPreviewSource}
+    onClose={() => {
+      showMarkdownPreview = false
+    }}
+  />
 {/if}
 
 <style>
@@ -327,7 +374,7 @@
     gap: var(--compact-stack-gap, 0.14rem);
   }
 
-  .collapsed-summary,
+  .disclosure-summary,
   .tool-section-header {
     display: flex;
     align-items: center;
@@ -345,23 +392,21 @@
   .tool-section-label {
     font-size: 0.7rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
 
+  /* ── Content text: all 1rem, differentiate by family/style ────────── */
   .assistant-text {
     margin: 0;
     min-width: 0;
     white-space: pre-wrap;
     word-break: break-word;
-    line-height: var(--compact-line-height, 1.4);
-    color: var(--text);
-    font-size: 0.9rem;
-  }
-
-  .assistant-text.is-json {
-    font-family: var(--font-mono, monospace);
+    line-height: 1.5;
+    color: var(--green-bright);
+    font-size: 1rem;
+    font-family: inherit;
   }
 
   .assistant-block {
@@ -377,47 +422,8 @@
     align-items: end;
   }
 
-  .collapsed-row {
-    border: 1px solid transparent;
-    border-radius: 6px;
-  }
-
-  .collapsed-row[open] {
-    border-color: var(--border-subtle);
-    background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
-  }
-
-  .collapsed-summary {
-    cursor: pointer;
-    list-style: none;
-    padding: var(--compact-summary-pad-y, 0.18rem) var(--compact-summary-pad-x, 0.38rem);
-    border-radius: 6px;
-  }
-
-  .collapsed-summary:hover {
-    background: color-mix(in srgb, var(--bg-panel) 62%, transparent);
-  }
-
-  .collapsed-summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .collapsed-summary::before {
-    content: '\25B6';
-    font-size: 0.6rem;
-    color: var(--text-muted);
-    transition: transform 0.15s;
-  }
-
-  details[open] > .collapsed-summary::before {
-    transform: rotate(90deg);
-  }
-
   .row-body {
-    padding:
-      0
-      var(--compact-summary-pad-x, 0.38rem)
-      var(--compact-detail-bottom-pad, 0.42rem)
+    padding: 0 var(--compact-summary-pad-x, 0.38rem) var(--compact-detail-bottom-pad, 0.42rem)
       var(--compact-detail-indent, 1.15rem);
   }
 
@@ -431,68 +437,38 @@
     margin: var(--compact-meta-gap, 0.14rem) 0 0;
     white-space: pre-wrap;
     word-break: break-word;
-    line-height: var(--compact-line-height, 1.4);
-    color: var(--text);
+    line-height: 1.5;
+    color: var(--green-bright);
+    font-size: 1rem;
+  }
+
+  /* Reasoning: sans, italic */
+  .row-body > .row-text {
     font-family: inherit;
-    font-size: 0.84rem;
+    font-style: italic;
   }
 
-  .token-pill {
-    font-size: 0.68rem;
-    color: var(--text-muted);
-    border: 1px solid var(--border-subtle);
-    border-radius: 999px;
-    padding: 0.1rem 0.45rem;
+  /* Tool calls / results: mono */
+  .tool-body .row-text {
+    font-family: var(--mono);
+    font-style: normal;
   }
 
-  .status-pill {
-    font-size: 0.68rem;
-    color: var(--accent, var(--text));
-    border: 1px solid var(--border-subtle);
-    border-radius: 999px;
-    padding: 0.1rem 0.45rem;
+  /* Monochrome green markdown highlighting */
+  /* Structural emphasis (was amber): glow + bold */
+  .assistant-text :global(.hljs-strong),
+  .assistant-text :global(.hljs-section),
+  .assistant-text :global(.hljs-bullet) {
+    font-weight: 700;
+    color: var(--green-glow);
   }
-
-  .meta-btn {
-    background: none;
-    border: 1px solid var(--border-subtle);
-    border-radius: 4px;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 0.72rem;
-    padding: 0.15rem 0.45rem;
+  /* Inline elements (was blue): glow only */
+  .assistant-text :global(.hljs-code),
+  .assistant-text :global(.hljs-link) {
+    color: var(--green-glow);
   }
-
-  .meta-btn:hover {
-    color: var(--text);
-    border-color: var(--border);
-  }
-
-  .preview-btn {
-    position: absolute;
-    top: 0;
-    right: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: none;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 0.15rem;
-    opacity: 0;
-    transition: opacity 0.1s;
-  }
-
-  .assistant-block:hover .preview-btn {
-    opacity: 1;
-  }
-
-  .preview-btn:hover {
-    color: var(--text);
-    border-color: var(--border-subtle);
-    background: var(--bg-panel);
-    opacity: 1;
+  .assistant-text :global(.hljs-emphasis),
+  .assistant-text :global(.hljs-quote) {
+    font-style: italic;
   }
 </style>

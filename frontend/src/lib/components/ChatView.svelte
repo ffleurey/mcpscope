@@ -58,7 +58,9 @@
   let titleDraft = $state('')
   let titleInputEl = $state<HTMLInputElement | null>(null)
   let session = $derived($activeSession)
-  let traceSteps = $derived([...($activeTrace?.steps ?? [])].sort((a, b) => a.childIndex - b.childIndex))
+  let traceSteps = $derived(
+    [...($activeTrace?.steps ?? [])].sort((a, b) => a.childIndex - b.childIndex),
+  )
   let visibleParts = $derived.by(() =>
     ($activeTrace?.parts ?? [])
       .filter((p) => p.display.state !== 'hidden')
@@ -75,15 +77,22 @@
     const postambleStepsByTurn = new Map<string, StepRecord[]>()
     for (const step of traceSteps) {
       if (step.stepTypeKey !== 'compaction') continue
-      const sourceTurnId = typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null
+      const sourceTurnId =
+        typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null
       if (!sourceTurnId) continue
-      postambleStepsByTurn.set(sourceTurnId, [...(postambleStepsByTurn.get(sourceTurnId) ?? []), step])
+      postambleStepsByTurn.set(sourceTurnId, [
+        ...(postambleStepsByTurn.get(sourceTurnId) ?? []),
+        step,
+      ])
     }
 
     const artifactsByStep = new Map<string, typeof traceArtifacts>()
     for (const artifact of traceArtifacts) {
       if (!artifact.stepId) continue
-      artifactsByStep.set(artifact.stepId, [...(artifactsByStep.get(artifact.stepId) ?? []), artifact])
+      artifactsByStep.set(artifact.stepId, [
+        ...(artifactsByStep.get(artifact.stepId) ?? []),
+        artifact,
+      ])
     }
 
     return traceSteps
@@ -100,9 +109,7 @@
       })
   })
   let analysisLooseTurns = $derived.by(() =>
-    isAnalysisSession
-      ? traceTurns.filter((turn) => turn.ownerStepId === null)
-      : [],
+    isAnalysisSession ? traceTurns.filter((turn) => turn.ownerStepId === null) : [],
   )
   let traceRounds = $derived.by(() => {
     const turnSeq = new Map(($activeTrace?.turns ?? []).map((t) => [t.id, t.turnNumber]))
@@ -130,7 +137,7 @@
   })
   let roundStreamsByTurn = $derived.by(() => {
     const m = new Map<string, StreamingRoundState[]>()
-    for (const rs of ($activeTurnStream?.rounds ?? [])) {
+    for (const rs of $activeTurnStream?.rounds ?? []) {
       m.set(rs.turnId, [...(m.get(rs.turnId) ?? []), rs])
     }
     return m
@@ -195,13 +202,18 @@
           rs.reasoningText.length,
           rs.completedReasoningText.length,
           rs.contentText.length,
-          ...rs.toolCalls.map((tc) => `${tc.toolCallIndex}:${tc.id.length}:${tc.name.length}:${tc.arguments.length}`),
+          ...rs.toolCalls.map(
+            (tc) => `${tc.toolCallIndex}:${tc.id.length}:${tc.name.length}:${tc.arguments.length}`,
+          ),
         ].join(':'),
       )
       .join('|'),
   )
 
-  let isInitializing = $derived(session != null && (session.init_status === 'pending' || session.init_status === 'initializing'))
+  let isInitializing = $derived(
+    session != null &&
+      (session.init_status === 'pending' || session.init_status === 'initializing'),
+  )
   let isInitError = $derived(session != null && session.init_status === 'error')
   let isAnalysisSession = $derived(session?.session_type === 'session_analysis')
   let analysisPhase = $derived.by(() => {
@@ -229,16 +241,16 @@
   let analysisComplete = $derived(analysisPhase === 'complete')
   let analysisFailed = $derived(analysisPhase === 'error' || session?.status === 'error')
   let hasTraceContent = $derived(
-    isInitializing
-      || sessionPreludeParts.length > 0
-      || sessionPreludeRawExchanges.length > 0
-      || timelineItems.length > 0
-      || analysisWorkflowSteps.length > 0
-      || analysisLooseTurns.length > 0,
+    isInitializing ||
+      sessionPreludeParts.length > 0 ||
+      sessionPreludeRawExchanges.length > 0 ||
+      timelineItems.length > 0 ||
+      analysisWorkflowSteps.length > 0 ||
+      analysisLooseTurns.length > 0,
   )
   let isExhausted = $derived(session?.is_context_exhausted === true)
   let displayModelName = $derived(session?.model_profile_snapshot?.name ?? '')
-  let displayMcpNames = $derived(session?.mcp_profile_snapshots?.map(s => s.name) ?? [])
+  let displayMcpNames = $derived(session?.mcp_profile_snapshots?.map((s) => s.name) ?? [])
   let displayCompaction = $derived(session?.compaction_strategy ?? null)
 
   async function startEditTitle() {
@@ -256,7 +268,7 @@
     if (trimmed && trimmed !== session.title) {
       await patchSessionTitle(session.id, trimmed)
       chatSessions.update((sessions) =>
-        sessions.map((s) => (s.id === session!.id ? { ...s, title: trimmed } : s))
+        sessions.map((s) => (s.id === session!.id ? { ...s, title: trimmed } : s)),
       )
     }
   }
@@ -266,7 +278,10 @@
   }
 
   function handleTitleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter') { e.preventDefault(); void commitTitleEdit() }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      void commitTitleEdit()
+    }
     if (e.key === 'Escape') cancelTitleEdit()
   }
 
@@ -332,7 +347,6 @@
       handleSend()
     }
   }
-
 </script>
 
 <div class="chat-view">
@@ -360,19 +374,27 @@
         <button
           class="view-mode-btn"
           class:active={viewMode === 'chat'}
-          onclick={() => { viewMode = 'chat' }}
-          title="Chat view"
-        >Chat</button>
+          onclick={() => {
+            viewMode = 'chat'
+          }}
+          title="Chat view">Chat</button
+        >
         <button
           class="view-mode-btn"
           class:active={viewMode === 'inspect'}
-          onclick={() => { viewMode = 'inspect' }}
-          title="Detailed inspection layout"
-        >Inspect</button>
+          onclick={() => {
+            viewMode = 'inspect'
+          }}
+          title="Detailed inspection layout">Inspect</button
+        >
       </div>
 
       {#if $activeTrace}
-        <button class="btn btn-ghost export-btn" onclick={exportActiveTrace} title="Export session trace as JSON">
+        <button
+          class="btn export-btn"
+          onclick={exportActiveTrace}
+          title="Export session trace as JSON"
+        >
           ⬇ Export
         </button>
       {/if}
@@ -384,7 +406,9 @@
       {:else if !hasTraceContent}
         <div class="empty-state">
           {#if isAnalysisSession}
-            <span class="empty-hint">{analysisWorkflowLabel} ready — click Run Analysis to start</span>
+            <span class="empty-hint"
+              >{analysisWorkflowLabel} ready — click Run Analysis to start</span
+            >
           {:else}
             <span class="empty-hint">Session ready — type your first message below</span>
           {/if}
@@ -401,7 +425,9 @@
         {#if isInitError}
           <div class="init-error-banner">
             Session initialization failed.
-            <button class="btn btn-sm" onclick={() => retryInit(session.id)}>↻ Retry initialization</button>
+            <button class="btn btn-sm" onclick={() => retryInit(session.id)}
+              >↻ Retry initialization</button
+            >
           </div>
         {/if}
         {#if isAnalysisSession}
@@ -441,11 +467,7 @@
                 loadedContextLength={session.loaded_context_length ?? null}
               />
             {:else if item.step.stepTypeKey === 'compaction'}
-              <SessionCompactionStepBlock
-                step={item.step}
-                parts={[]}
-                mode={viewMode}
-              />
+              <SessionCompactionStepBlock step={item.step} parts={[]} mode={viewMode} />
             {/if}
           {/each}
         {/if}
@@ -486,7 +508,9 @@
               <div class="analysis-bar-progress-bar">
                 <div
                   class="analysis-bar-progress-fill"
-                  style="width: {Math.round(analysisPlanProgress.completed / analysisPlanProgress.total * 100)}%"
+                  style="width: {Math.round(
+                    (analysisPlanProgress.completed / analysisPlanProgress.total) * 100,
+                  )}%"
                 ></div>
               </div>
             {/if}
@@ -509,7 +533,7 @@
             </button>
             {#if analysisFailed}
               <button
-                class="btn btn-secondary"
+                class="btn"
                 disabled={analysisRunDisabled}
                 onclick={() => void retryFailedAnalysisStep()}
                 title="Reset the failed cursor phase and rerun the failed step once"
@@ -519,7 +543,7 @@
             {/if}
             {#if viewMode === 'inspect'}
               <button
-                class="btn btn-secondary"
+                class="btn"
                 disabled={analysisRunDisabled}
                 onclick={() => void executeAnalysisStep()}
                 title="Advance one workflow step (debug)"
@@ -537,25 +561,26 @@
             <textarea
               bind:this={textareaEl}
               bind:value={composerText}
-              placeholder={
-                isExhausted
-                  ? 'Context window full — start a new session'
-                  : sessionHasExecutionJob
+              placeholder={isExhausted
+                ? 'Context window full — start a new session'
+                : sessionHasExecutionJob
                   ? 'Queued or running for this session…'
-                  : 'Message… (Ctrl+Enter to send)'
-              }
+                  : 'Message… (Ctrl+Enter to send)'}
               rows="2"
               disabled={sessionHasExecutionJob || isExhausted}
               oninput={resizeTextarea}
-              onkeydown={handleKeydown}
-            ></textarea>
+              onkeydown={handleKeydown}></textarea>
           </div>
           <div class="composer-footer">
             <div class="composer-config">
               <span class="config-label">
                 Model: {displayModelName || '—'}
-                {#if displayMcpNames.length > 0} · MCP: {displayMcpNames.join(', ')}{:else} · MCP: none{/if}
-                {#if displayCompaction && displayCompaction !== 'none'} · Compaction: {displayCompaction}{:else} · Compaction: none{/if}
+                {#if displayMcpNames.length > 0}
+                  · MCP: {displayMcpNames.join(', ')}{:else}
+                  · MCP: none{/if}
+                {#if displayCompaction && displayCompaction !== 'none'}
+                  · Compaction: {displayCompaction}{:else}
+                  · Compaction: none{/if}
               </span>
             </div>
             <span class="composer-hint">v{$appVersion} · Ctrl+Enter to send</span>
@@ -592,13 +617,13 @@
     gap: 0.75rem;
     padding: 0 1.25rem;
     border-bottom: 1px solid var(--border);
-    background: var(--bg);
+    background: var(--bg-base);
   }
 
   .chat-title {
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--text);
+    color: var(--text-bright);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -614,15 +639,15 @@
   }
 
   .chat-title:hover {
-    background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+    background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
   }
 
   .chat-title-input {
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--text);
-    background: var(--bg-panel);
-    border: 1px solid var(--color-accent, #60a5fa);
+    color: var(--text-bright);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.1rem 0.35rem;
     min-width: 0;
@@ -639,18 +664,17 @@
 
   .view-mode-btn {
     background: none;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border);
     border-radius: 999px;
-    color: var(--text-muted);
+    color: var(--text-dim);
     cursor: pointer;
     font-size: 0.7rem;
     padding: 0.18rem 0.5rem;
   }
 
   .view-mode-btn.active {
-    color: var(--text);
-    border-color: var(--border);
-    background: color-mix(in srgb, var(--bg-panel) 85%, transparent);
+    color: var(--text-bright);
+    border-color: var(--amber-bright);
   }
 
   .export-btn {
@@ -659,7 +683,9 @@
     opacity: 0.6;
     flex-shrink: 0;
   }
-  .export-btn:hover { opacity: 1; }
+  .export-btn:hover {
+    opacity: 1;
+  }
 
   /* ── Transcript ───────────────────────────────────────────────────────── */
   .transcript {
@@ -673,22 +699,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-size: 0.875rem;
   }
 
   .empty-hint {
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-size: 0.82rem;
   }
 
   /* ── Init error banner ────────────────────────────────────────────────── */
   .init-error-banner {
     flex-shrink: 0;
-    background: color-mix(in srgb, var(--color-error) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-error) 35%, transparent);
+    background: color-mix(in srgb, var(--red-bright) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--red-bright) 35%, transparent);
     border-radius: 6px;
-    color: var(--text);
+    color: var(--text-bright);
     font-size: 0.82rem;
     padding: 0.75rem 1rem;
     margin: 0.5rem 0;
@@ -696,14 +722,16 @@
     align-items: center;
     gap: 0.75rem;
   }
-  .init-error-banner .btn { flex-shrink: 0; }
+  .init-error-banner .btn {
+    flex-shrink: 0;
+  }
 
   /* ── Exhausted banner ─────────────────────────────────────────────────── */
   .exhausted-banner {
     flex-shrink: 0;
-    background: color-mix(in srgb, var(--color-error) 10%, transparent);
-    border-top: 1px solid color-mix(in srgb, var(--color-error) 35%, transparent);
-    color: var(--text);
+    background: color-mix(in srgb, var(--red-bright) 10%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--red-bright) 35%, transparent);
+    color: var(--text-bright);
     font-size: 0.8rem;
     padding: 0.5rem 1.25rem;
     text-align: center;
@@ -714,20 +742,20 @@
     flex-shrink: 0;
     padding: 0.6rem 1.25rem 0.75rem;
     border-top: none; /* Context bar provides the visual separator */
-    background: var(--bg);
+    background: var(--bg-base);
   }
 
   /* Bubble styled to match the user message in the transcript */
   .composer-bubble {
-    background: var(--bg-active);
+    background: var(--bg-hover);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 0.38rem 0.72rem;
     transition: border-color 0.15s;
   }
 
   .composer-bubble:focus-within {
-    border-color: color-mix(in srgb, var(--color-accent) 60%, var(--border));
+    border-color: var(--green-bright);
   }
 
   .composer-bubble.is-disabled {
@@ -741,17 +769,16 @@
     resize: none;
     background: transparent;
     border: none;
-    color: var(--text);
+    color: var(--green-bright);
     font-family: inherit;
-    font-size: 0.9rem;
+    font-size: 1rem;
     line-height: 1.5;
     outline: none;
     overflow-y: auto;
   }
 
   .composer-bubble textarea::placeholder {
-    color: var(--text-muted);
-    opacity: 0.7;
+    color: color-mix(in srgb, var(--green-bright) 40%, transparent);
   }
 
   .composer-footer {
@@ -771,7 +798,7 @@
 
   .config-label {
     font-size: 0.68rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     opacity: 0.75;
     white-space: nowrap;
     overflow: hidden;
@@ -780,7 +807,7 @@
 
   .composer-hint {
     font-size: 0.7rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     opacity: 0.55;
     flex-shrink: 0;
   }
@@ -794,7 +821,7 @@
     gap: 1rem;
     padding: 0.6rem 1.25rem;
     border-top: 1px solid var(--border);
-    background: var(--bg);
+    background: var(--bg-base);
   }
 
   .analysis-bar-info {
@@ -806,27 +833,27 @@
   .analysis-bar-label {
     font-size: 0.82rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-bar-phase {
     font-size: 0.82rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-bar-error {
     font-size: 0.8rem;
-    color: color-mix(in srgb, var(--text) 88%, #b43b25 12%);
+    color: color-mix(in srgb, var(--text-bright) 88%, var(--red-bright) 12%);
   }
 
   .analysis-bar-error em {
     font-style: normal;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-bar-progress {
     font-size: 0.78rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     margin-left: 0.25rem;
   }
   .analysis-bar-command {
@@ -836,21 +863,21 @@
   .analysis-bar-progress-bar {
     width: 100%;
     height: 4px;
-    background: var(--bg-subtle, #e0e0e0);
+    background: var(--border);
     border-radius: 2px;
     margin-top: 0.35rem;
     overflow: hidden;
   }
   .analysis-bar-progress-fill {
     height: 100%;
-    background: var(--color-primary, #5b9bd5);
+    background: var(--amber-bright);
     border-radius: 2px;
     transition: width 0.3s ease;
   }
 
   .analysis-bar-done {
     font-size: 0.82rem;
-    color: var(--color-success, #4caf50);
+    color: var(--green-bright);
     font-weight: 600;
   }
 </style>

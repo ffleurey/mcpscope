@@ -35,10 +35,10 @@
 
 <style>
   .inline-error {
-    background: color-mix(in srgb, var(--color-error) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-error) 35%, transparent);
+    background: color-mix(in srgb, var(--red-bright) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--red-bright) 35%, transparent);
     border-radius: 6px;
-    color: var(--color-error);
+    color: var(--red-bright);
     padding: 0.5rem 0.75rem;
     margin-bottom: 1rem;
   }
@@ -53,7 +53,7 @@
   .inline-error-details {
     margin-top: 0.45rem;
     font-size: 0.78rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .inline-error-details summary {
@@ -63,8 +63,8 @@
 
   .inline-error-details-body {
     margin: 0.45rem 0 0;
-    background: var(--bg);
-    border: 1px solid var(--border-subtle);
+    background: var(--bg-base);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.45rem 0.6rem;
     font-family: var(--mono);

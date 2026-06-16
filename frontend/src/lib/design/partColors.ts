@@ -61,26 +61,26 @@ export type PartType = PartRecord['partType']
 
 /** Hex color for each part type.  Use in inline styles on the context bar. */
 export const PART_COLORS: Record<PartType, string> = {
-  'system-prompt':       '#ef4444',  // red-500
-  'mcp-instructions':    '#f472b6',  // pink-400
-  'tool-definitions':    '#a855f7',  // purple-500
-  'user-message':        '#64748b',  // slate-500
-  'assistant-content':   '#94a3b8',  // slate-400
-  'assistant-reasoning': '#fb923c',  // orange-400
-  'tool-call':           '#3b82f6',  // blue-500
-  'tool-result':         '#93c5fd',  // blue-300
-  'diagnostic-note':     '#6b7280',  // gray-500
+  'system-prompt': '#ef4444', // red-500
+  'mcp-instructions': '#f472b6', // pink-400
+  'tool-definitions': '#a855f7', // purple-500
+  'user-message': '#64748b', // slate-500
+  'assistant-content': '#94a3b8', // slate-400
+  'assistant-reasoning': '#fb923c', // orange-400
+  'tool-call': '#3b82f6', // blue-500
+  'tool-result': '#93c5fd', // blue-300
+  'diagnostic-note': '#6b7280', // gray-500
 }
 
 /** Human-readable label for each part type. */
 export const PART_LABELS: Record<PartType, string> = {
-  'system-prompt':       'System prompt',
-  'mcp-instructions':    'MCP instructions',
-  'tool-definitions':    'Tool definitions',
-  'user-message':        'User message',
-  'assistant-content':   'Assistant response',
+  'system-prompt': 'System prompt',
+  'mcp-instructions': 'MCP instructions',
+  'tool-definitions': 'Tool definitions',
+  'user-message': 'User message',
+  'assistant-content': 'Assistant response',
   'assistant-reasoning': 'Reasoning',
-  'tool-call':           'Tool call',
-  'tool-result':         'Tool result',
-  'diagnostic-note':     'Diagnostic',
+  'tool-call': 'Tool call',
+  'tool-result': 'Tool result',
+  'diagnostic-note': 'Diagnostic',
 }

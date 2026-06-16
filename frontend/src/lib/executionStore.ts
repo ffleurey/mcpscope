@@ -45,34 +45,21 @@ export const schedulerError = writable<string | null>(null)
 // was executing. This allows the session transcript view to update from events
 // that arrived while the user had a different session selected.
 
-export const sessionStreamCache = writable<Map<string, (TurnStreamEvent | AnalysisStreamEvent | PreludeStreamEvent)[]>>(new Map())
+export const sessionStreamCache = writable<
+  Map<string, (TurnStreamEvent | AnalysisStreamEvent | PreludeStreamEvent)[]>
+>(new Map())
 
 // ── Derived helpers ──────────────────────────────────────────────────────────
 
-export const schedulerControlState = derived(
-  schedulerSnapshot,
-  $snap => $snap.controlState,
-)
+export const schedulerControlState = derived(schedulerSnapshot, ($snap) => $snap.controlState)
 
-export const activeJob = derived(
-  schedulerSnapshot,
-  $snap => $snap.activeJob,
-)
+export const activeJob = derived(schedulerSnapshot, ($snap) => $snap.activeJob)
 
-export const pendingJobs = derived(
-  schedulerSnapshot,
-  $snap => $snap.pendingJobs,
-)
+export const pendingJobs = derived(schedulerSnapshot, ($snap) => $snap.pendingJobs)
 
-export const isExecuting = derived(
-  schedulerSnapshot,
-  $snap => $snap.activeJob !== null,
-)
+export const isExecuting = derived(schedulerSnapshot, ($snap) => $snap.activeJob !== null)
 
-export const queueLength = derived(
-  schedulerSnapshot,
-  $snap => $snap.pendingJobs.length,
-)
+export const queueLength = derived(schedulerSnapshot, ($snap) => $snap.pendingJobs.length)
 
 // ── Terminal job tracking ────────────────────────────────────────────────────
 // Keeps a bounded record of terminal job IDs so awaitJob can resolve
@@ -90,8 +77,6 @@ function recordTerminalJobId(jobId: string): void {
   terminalJobIds.add(jobId)
 }
 
-
-
 let streamAbort: AbortController | null = null
 
 function applySchedulerEvent(event: SchedulerEvent): void {
@@ -107,9 +92,9 @@ function applySchedulerEvent(event: SchedulerEvent): void {
   }
 
   if (event.type === 'scheduler-job-enqueued') {
-    schedulerSnapshot.update(snap => ({
+    schedulerSnapshot.update((snap) => ({
       ...snap,
-      pendingJobs: snap.pendingJobs.some(job => job.jobId === event.job.jobId)
+      pendingJobs: snap.pendingJobs.some((job) => job.jobId === event.job.jobId)
         ? snap.pendingJobs
         : [...snap.pendingJobs, event.job],
     }))
@@ -117,15 +102,15 @@ function applySchedulerEvent(event: SchedulerEvent): void {
   }
 
   if (event.type === 'scheduler-job-started') {
-    schedulerSnapshot.update(snap => ({
+    schedulerSnapshot.update((snap) => ({
       ...snap,
       activeJob: event.job,
-      pendingJobs: snap.pendingJobs.filter(j => j.jobId !== event.job.jobId),
+      pendingJobs: snap.pendingJobs.filter((j) => j.jobId !== event.job.jobId),
     }))
     const sessionId = event.job.target.sessionId
     const prompt = event.job.prompt ?? ''
     import('./sessionStore').then(({ chatSessions, refreshSessions, initExternalTurnStream }) => {
-      const known = get(chatSessions).some(s => s.id === sessionId)
+      const known = get(chatSessions).some((s) => s.id === sessionId)
       if (!known) refreshSessions().catch(() => {})
       initExternalTurnStream(sessionId, prompt)
     })
@@ -134,10 +119,10 @@ function applySchedulerEvent(event: SchedulerEvent): void {
 
   if (event.type === 'scheduler-job-completed' || event.type === 'scheduler-job-failed') {
     recordTerminalJobId(event.job.jobId)
-    schedulerSnapshot.update(snap => ({
+    schedulerSnapshot.update((snap) => ({
       ...snap,
       activeJob: snap.activeJob?.jobId === event.job.jobId ? null : snap.activeJob,
-      pendingJobs: snap.pendingJobs.filter(job => job.jobId !== event.job.jobId),
+      pendingJobs: snap.pendingJobs.filter((job) => job.jobId !== event.job.jobId),
       lastTerminalJob: event.job,
     }))
     const sessionId = event.job.target.sessionId
@@ -152,26 +137,26 @@ function applySchedulerEvent(event: SchedulerEvent): void {
 
   if (event.type === 'scheduler-job-removed') {
     recordTerminalJobId(event.jobId)
-    schedulerSnapshot.update(snap => ({
+    schedulerSnapshot.update((snap) => ({
       ...snap,
-      pendingJobs: snap.pendingJobs.filter(j => j.jobId !== event.jobId),
+      pendingJobs: snap.pendingJobs.filter((j) => j.jobId !== event.jobId),
     }))
     return
   }
 
   if (event.type === 'scheduler-paused') {
-    schedulerSnapshot.update(snap => ({ ...snap, controlState: 'paused' }))
+    schedulerSnapshot.update((snap) => ({ ...snap, controlState: 'paused' }))
     return
   }
 
   if (event.type === 'scheduler-resumed') {
-    schedulerSnapshot.update(snap => ({ ...snap, controlState: 'running' }))
+    schedulerSnapshot.update((snap) => ({ ...snap, controlState: 'running' }))
     return
   }
 
   if (event.type === 'scheduler-execution-event') {
     const { sessionId, event: execEvent } = event
-    sessionStreamCache.update(cache => {
+    sessionStreamCache.update((cache) => {
       const updated = new Map(cache)
       const existing = updated.get(sessionId) ?? []
       updated.set(sessionId, [...existing, execEvent])
@@ -179,9 +164,9 @@ function applySchedulerEvent(event: SchedulerEvent): void {
     })
     // Route prelude events to the prelude handler; all other events to the turn/analysis handler.
     if (
-      execEvent.type === 'part-committed'
-      || execEvent.type === 'prelude-complete'
-      || execEvent.type === 'prelude-failed'
+      execEvent.type === 'part-committed' ||
+      execEvent.type === 'prelude-complete' ||
+      execEvent.type === 'prelude-failed'
     ) {
       import('./sessionStore').then(({ applyExternalPreludeEvent }) => {
         applyExternalPreludeEvent(sessionId, execEvent as PreludeStreamEvent)
@@ -189,19 +174,25 @@ function applySchedulerEvent(event: SchedulerEvent): void {
     } else {
       const prompt = get(schedulerSnapshot).activeJob?.prompt ?? ''
       import('./sessionStore').then(({ applyExternalStreamEvent }) => {
-        applyExternalStreamEvent(sessionId, prompt, execEvent as TurnStreamEvent | AnalysisStreamEvent)
+        applyExternalStreamEvent(
+          sessionId,
+          prompt,
+          execEvent as TurnStreamEvent | AnalysisStreamEvent,
+        )
       })
     }
     return
   }
 }
 
-export function getSessionStreamEvents(sessionId: string): (TurnStreamEvent | AnalysisStreamEvent | PreludeStreamEvent)[] {
+export function getSessionStreamEvents(
+  sessionId: string,
+): (TurnStreamEvent | AnalysisStreamEvent | PreludeStreamEvent)[] {
   return get(sessionStreamCache).get(sessionId) ?? []
 }
 
 export function clearSessionStreamCache(sessionId: string): void {
-  sessionStreamCache.update(cache => {
+  sessionStreamCache.update((cache) => {
     const updated = new Map(cache)
     updated.delete(sessionId)
     return updated
@@ -220,12 +211,9 @@ async function connectSchedulerStream(): Promise<void> {
     schedulerConnected.set(true)
 
     // Then subscribe to SSE stream
-    await streamSchedulerEvents(
-      (event) => {
-        applySchedulerEvent(event)
-      },
-      streamAbort.signal,
-    )
+    await streamSchedulerEvents((event) => {
+      applySchedulerEvent(event)
+    }, streamAbort.signal)
   } catch (err) {
     if (streamAbort?.signal.aborted) return
     const message = err instanceof Error ? err.message : 'Scheduler stream error'
@@ -233,7 +221,7 @@ async function connectSchedulerStream(): Promise<void> {
     schedulerConnected.set(false)
 
     // Reconnect after a short delay
-    await new Promise(resolve => setTimeout(resolve, 3000))
+    await new Promise((resolve) => setTimeout(resolve, 3000))
     if (!streamAbort?.signal.aborted) {
       await connectSchedulerStream()
     }
@@ -270,7 +258,10 @@ export async function removePendingJob(jobId: string): Promise<void> {
   await removeSchedulerJob(jobId)
 }
 
-export async function enqueueSessionExecution(sessionId: string, prompt: string): Promise<ExecutionJob> {
+export async function enqueueSessionExecution(
+  sessionId: string,
+  prompt: string,
+): Promise<ExecutionJob> {
   const result = await enqueueSession(sessionId, prompt)
   return result.job
 }
@@ -301,7 +292,10 @@ export function awaitJob(sessionId: string, jobId?: string, timeoutMs = 600000):
     let timer: ReturnType<typeof setTimeout> | null = null
 
     const done = () => {
-      if (timer !== null) { clearTimeout(timer); timer = null }
+      if (timer !== null) {
+        clearTimeout(timer)
+        timer = null
+      }
       unsub()
       resolve()
     }
@@ -311,26 +305,40 @@ export function awaitJob(sessionId: string, jobId?: string, timeoutMs = 600000):
       reject(new Error(`awaitJob(${sessionId}) timed out after ${timeoutMs}ms`))
     }, timeoutMs)
 
-    const unsub = schedulerSnapshot.subscribe($snap => {
+    const unsub = schedulerSnapshot.subscribe(($snap) => {
       if (jobId) {
         // Precise jobId matching — check terminalJobIds first (handles reconnect gaps)
-        if (terminalJobIds.has(jobId)) { done(); return }
+        if (terminalJobIds.has(jobId)) {
+          done()
+          return
+        }
 
         const hasActive = $snap.activeJob?.jobId === jobId
-        const hasPending = $snap.pendingJobs.some(j => j.jobId === jobId)
-        if (hasActive || hasPending) { sawJob = true; return }
+        const hasPending = $snap.pendingJobs.some((j) => j.jobId === jobId)
+        if (hasActive || hasPending) {
+          sawJob = true
+          return
+        }
 
         // Job is no longer in active/pending
-        if (sawJob || $snap.lastTerminalJob?.jobId === jobId) { done(); return }
+        if (sawJob || $snap.lastTerminalJob?.jobId === jobId) {
+          done()
+          return
+        }
         // Don't resolve yet if job hasn't appeared — it may still be queueing
         return
       }
 
       // Fallback: session-ID matching (for init job when jobId is unavailable)
       const hasActive = $snap.activeJob?.target.sessionId === sessionId
-      const hasPending = $snap.pendingJobs.some(j => j.target.sessionId === sessionId)
-      if (hasActive || hasPending) { sawJob = true; return }
-      if (sawJob || $snap.lastTerminalJob?.target.sessionId === sessionId) { done() }
+      const hasPending = $snap.pendingJobs.some((j) => j.target.sessionId === sessionId)
+      if (hasActive || hasPending) {
+        sawJob = true
+        return
+      }
+      if (sawJob || $snap.lastTerminalJob?.target.sessionId === sessionId) {
+        done()
+      }
     })
   })
 }

@@ -39,13 +39,13 @@
   type DisplayMode = 'full' | 'breakdown' | 'turn'
   const initialMode = $derived(defaultMode ?? (contextSize != null ? 'full' : 'breakdown'))
   let displayMode = $state<DisplayMode>('breakdown')
-  $effect(() => { displayMode = initialMode })
+  $effect(() => {
+    displayMode = initialMode
+  })
 
   /** Entries for the current display mode (filtered for 'turn' mode). */
   const activeEntries = $derived(
-    displayMode === 'turn' && turnId != null
-      ? entries.filter((e) => e.turnId === turnId)
-      : entries,
+    displayMode === 'turn' && turnId != null ? entries.filter((e) => e.turnId === turnId) : entries,
   )
 
   /** Cycle compact label through: breakdown → full (if contextSize) → turn (if turnId) → breakdown */
@@ -113,8 +113,8 @@
 
   // ── Token totals ─────────────────────────────────────────────────────────
   const totalUsed = $derived(activeEntries.reduce((sum, e) => sum + (e.tokens.count ?? 0), 0))
-  const ctxSize   = $derived(contextSize ?? 0)
-  const pct       = $derived(ctxSize > 0 ? Math.min(100, (totalUsed / ctxSize) * 100) : 0)
+  const ctxSize = $derived(contextSize ?? 0)
+  const pct = $derived(ctxSize > 0 ? Math.min(100, (totalUsed / ctxSize) * 100) : 0)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function segWidth(entry: ContextEntry): string {
@@ -142,7 +142,9 @@
     return approx ? `~${n}` : n
   }
 
-  function fmt(n: number): string { return n.toLocaleString() }
+  function fmt(n: number): string {
+    return n.toLocaleString()
+  }
 
   const legendTypes = $derived.by(() => {
     const seen = new Set<ContextEntry['type']>()
@@ -153,17 +155,22 @@
 
 {#if entries.length > 0 || ctxSize > 0}
   <div class="csb" class:compact>
-
     {#if !compact}
       <div class="csb-header">
         <span class="csb-label">{label}</span>
         {#if ctxSize > 0}
-          <span class="csb-counts">{fmt(totalUsed)} / {fmt(ctxSize)} tokens ({Math.round(pct)}%)</span>
+          <span class="csb-counts"
+            >{fmt(totalUsed)} / {fmt(ctxSize)} tokens ({Math.round(pct)}%)</span
+          >
           <button
             class="csb-mode-btn"
-            title={displayMode === 'full' ? 'Switch to breakdown view' : 'Switch to full context view'}
-            onclick={() => { displayMode = displayMode === 'full' ? 'breakdown' : 'full' }}
-          >{displayMode === 'full' ? '⊟' : '⊠'}</button>
+            title={displayMode === 'full'
+              ? 'Switch to breakdown view'
+              : 'Switch to full context view'}
+            onclick={() => {
+              displayMode = displayMode === 'full' ? 'breakdown' : 'full'
+            }}>{displayMode === 'full' ? '⊟' : '⊠'}</button
+          >
         {:else}
           <span class="csb-counts">{fmt(totalUsed)} tokens</span>
         {/if}
@@ -173,11 +180,7 @@
     <div class="csb-track" role="img" aria-label="{label} — token breakdown">
       {#each groups as group, i (group.turnId + '|' + group.roundId + '|' + i)}
         {#if i > 0}
-          <div
-            class="csb-sep"
-            class:turn-sep={isTurnBoundary(i)}
-            title={groupTooltip(group)}
-          ></div>
+          <div class="csb-sep" class:turn-sep={isTurnBoundary(i)} title={groupTooltip(group)}></div>
         {/if}
 
         {#each group.entries as entry (entry.id)}
@@ -195,7 +198,9 @@
         {modeCycleLabel()}
       </button>
       {#if displayMode === 'full' && ctxSize > 0}
-        <span class="csb-compact-counts">{fmt(totalUsed)} / {fmt(ctxSize)} ({Math.round(pct)}%)</span>
+        <span class="csb-compact-counts"
+          >{fmt(totalUsed)} / {fmt(ctxSize)} ({Math.round(pct)}%)</span
+        >
       {:else}
         <span class="csb-compact-counts">{fmt(totalUsed)} tokens</span>
       {/if}
@@ -211,7 +216,6 @@
         {/each}
       </div>
     {/if}
-
   </div>
 {/if}
 
@@ -219,8 +223,8 @@
   /* ── Full (non-compact) variant ────────────────────────────────────────── */
   .csb {
     padding: 0.4rem 0.75rem 0.35rem;
-    border-top: 1px solid var(--border-subtle);
-    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    background: var(--bg-surface);
     flex-shrink: 0;
   }
 
@@ -234,13 +238,13 @@
 
   .csb-label {
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
 
   .csb-counts {
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-variant-numeric: tabular-nums;
     flex: 1;
     text-align: right;
@@ -248,9 +252,9 @@
 
   .csb-mode-btn {
     background: none;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border);
     border-radius: 3px;
-    color: var(--text-muted);
+    color: var(--text-dim);
     cursor: pointer;
     font-size: 0.7rem;
     padding: 0 0.28rem;
@@ -259,16 +263,16 @@
   }
 
   .csb-mode-btn:hover {
-    color: var(--text);
+    color: var(--text-bright);
     border-color: var(--border);
   }
 
   /* ── Bar track ────────────────────────────────────────────────────────── */
   .csb-track {
     height: 8px;
-    background: color-mix(in srgb, var(--bg) 70%, #000 30%);
-    border: 1px solid var(--border-subtle);
-    border-radius: 5px;
+    background: color-mix(in srgb, var(--bg-base) 70%, #000 30%);
+    border: 1px solid var(--border);
+    border-radius: 4px;
     overflow: hidden;
     display: flex;
     flex-direction: row;
@@ -290,13 +294,13 @@
   /* ── Separators ───────────────────────────────────────────────────────── */
   .csb-sep {
     flex: 0 0 1px;
-    background: color-mix(in srgb, var(--bg) 60%, #000 40%);
+    background: color-mix(in srgb, var(--bg-base) 60%, #000 40%);
     height: 100%;
   }
 
   .csb-sep.turn-sep {
     flex: 0 0 3px;
-    background: color-mix(in srgb, var(--bg) 20%, #000 80%);
+    background: color-mix(in srgb, var(--bg-base) 20%, #000 80%);
   }
 
   /* ── Compact inline label ─────────────────────────────────────────────── */
@@ -316,7 +320,7 @@
   .csb-compact-label {
     font-size: 0.65rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     white-space: nowrap;
@@ -328,12 +332,12 @@
   }
 
   .csb-compact-label:hover {
-    color: var(--text);
+    color: var(--text-bright);
   }
 
   .csb-compact-counts {
     font-size: 0.65rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
@@ -351,7 +355,7 @@
     align-items: center;
     gap: 0.28rem;
     font-size: 0.64rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .csb-legend-dot {

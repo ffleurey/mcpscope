@@ -107,29 +107,43 @@ describe('traceStreaming', () => {
     expect(state?.rounds[0]?.contentText).toBe('Answer')
     expect(state?.rounds[0]?.toolCalls[0]?.name).toBe('search')
 
-    state = clearCommittedStreamingDelta(state, makePart({
-      id: 'reasoning-1',
-      partType: 'assistant-reasoning',
-      payload: { text: 'Think', json: null, mimeType: null, summary: null },
-      roleLabel: 'assistant',
-    }))
+    state = clearCommittedStreamingDelta(
+      state,
+      makePart({
+        id: 'reasoning-1',
+        partType: 'assistant-reasoning',
+        payload: { text: 'Think', json: null, mimeType: null, summary: null },
+        roleLabel: 'assistant',
+      }),
+    )
     expect(state?.rounds[0]?.reasoningText).toBe('')
     expect(state?.rounds[0]?.completedReasoningText).toBe('')
 
-    state = clearCommittedStreamingDelta(state, makePart({
-      id: 'tool-call-1',
-      partType: 'tool-call',
-      roleLabel: 'assistant',
-      payload: { text: null, json: { name: 'search' }, mimeType: 'application/json', summary: 'search' },
-    }))
+    state = clearCommittedStreamingDelta(
+      state,
+      makePart({
+        id: 'tool-call-1',
+        partType: 'tool-call',
+        roleLabel: 'assistant',
+        payload: {
+          text: null,
+          json: { name: 'search' },
+          mimeType: 'application/json',
+          summary: 'search',
+        },
+      }),
+    )
     expect(state?.rounds[0]?.toolCalls).toHaveLength(0)
 
-    state = clearCommittedStreamingDelta(state, makePart({
-      id: 'content-1',
-      partType: 'assistant-content',
-      payload: { text: 'Answer', json: null, mimeType: null, summary: null },
-      roleLabel: 'assistant',
-    }))
+    state = clearCommittedStreamingDelta(
+      state,
+      makePart({
+        id: 'content-1',
+        partType: 'assistant-content',
+        payload: { text: 'Answer', json: null, mimeType: null, summary: null },
+        roleLabel: 'assistant',
+      }),
+    )
     expect(state?.rounds).toHaveLength(0)
   })
 
@@ -171,10 +185,13 @@ describe('traceStreaming', () => {
   })
 
   it('recomputes transcript and context when committed parts are added', () => {
-    const trace = upsertPart(createEmptyTrace(makeSession()), makePart({
-      id: 'assistant-1',
-      payload: { text: 'Hello', json: null, mimeType: null, summary: null },
-    }))
+    const trace = upsertPart(
+      createEmptyTrace(makeSession()),
+      makePart({
+        id: 'assistant-1',
+        payload: { text: 'Hello', json: null, mimeType: null, summary: null },
+      }),
+    )
 
     expect(trace.transcript).toHaveLength(1)
     expect(trace.context).toHaveLength(1)
