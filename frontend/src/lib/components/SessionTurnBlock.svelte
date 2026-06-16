@@ -121,7 +121,7 @@
                 }}
                 title={promptCollapsed ? "Expand prompt" : "Collapse prompt"}
             >
-                <span class="toggle-arrow" class:open={!promptCollapsed}>▶</span
+                <span class="disclosure-arrow" class:open={!promptCollapsed}>▶</span
                 >
                 <span class="toggle-label">Assessment Prompt</span>
             </button>
@@ -156,12 +156,12 @@
                         chatCollapsed = !chatCollapsed;
                     }}
                 >
-                    <span class="chat-toggle-arrow" class:open={!chatCollapsed}
+                    <span class="disclosure-arrow" class:open={!chatCollapsed}
                         >▶</span
                     >
                     <span
-                        class="chat-toggle-status"
-                        class:is-error={turn.status === "error"}
+                        class="status-pill dim"
+                        class:error={turn.status === "error"}
                     >
                         {turn.status}
                     </span>
@@ -177,7 +177,7 @@
                             tokens{/if}
                     </span>
                     {#if turn.outcome && turn.outcome !== "stop"}
-                        <span class="chat-toggle-outcome">{turn.outcome}</span>
+                        <span class="status-pill dim">{turn.outcome}</span>
                     {/if}
                 </button>
             </div>
@@ -189,13 +189,13 @@
                 {@const text = normalizeText(part.payload.text)}
                 {#if text}
                     {@const rendered = highlightStructuredText(text)}
-                    <div class="chat-answer-block">
+                    <div class="chat-answer-block has-reveal">
                         <!-- eslint-disable-next-line svelte/no-at-html-tags -->
                         <pre
                             class="chat-answer-text">{@html rendered.html}</pre>
                         {#if looksLikeMarkdown(text)}
                             <button
-                                class="preview-btn"
+                                class="icon-btn icon-btn-reveal"
                                 onclick={() => openMarkdownPreview(text)}
                                 aria-label="Render preview"
                                 title="Render preview"
@@ -464,34 +464,6 @@
         margin: 0;
     }
 
-    .preview-btn {
-        position: absolute;
-        top: 0;
-        right: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: none;
-        border: 1px solid transparent;
-        border-radius: 4px;
-        color: var(--text-dim);
-        cursor: pointer;
-        padding: 0.15rem;
-        opacity: 0;
-        transition: opacity 0.1s;
-    }
-
-    .chat-answer-block:hover .preview-btn {
-        opacity: 1;
-    }
-
-    .preview-btn:hover {
-        color: var(--text-bright);
-        border-color: var(--border);
-        background: var(--bg-surface);
-        opacity: 1;
-    }
-
     /* Monochrome green markdown highlighting */
     /* Structural emphasis (was amber): glow + bold */
     .chat-answer-text :global(.hljs-strong),
@@ -534,47 +506,10 @@
         background: var(--bg-hover);
     }
 
-    .chat-toggle-arrow {
-        font-size: 0.55rem;
-        color: var(--text-dim);
-        transition: transform 0.12s;
-        flex-shrink: 0;
-    }
-
-    .chat-toggle-arrow.open {
-        transform: rotate(90deg);
-    }
-
-    .chat-toggle-status {
-        font-size: 0.7rem;
-        font-weight: 600;
-        color: var(--text-dim);
-        padding: 0.08rem 0.35rem;
-        border: 1px solid var(--border);
-        border-radius: 999px;
-    }
-
-    .chat-toggle-status.is-error {
-        color: var(--red-bright);
-        border-color: color-mix(
-            in srgb,
-            var(--red-bright) 35%,
-            transparent
-        );
-    }
-
     .chat-toggle-stats {
         font-size: 0.7rem;
         color: var(--text-dim);
         font-variant-numeric: tabular-nums;
-    }
-
-    .chat-toggle-outcome {
-        font-size: 0.68rem;
-        color: var(--text-dim);
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 0.06rem 0.35rem;
     }
 
     /* ── Assessment prompt toggle ──────────────────────────────────────── */
@@ -596,17 +531,6 @@
 
     .assessment-prompt-toggle:hover {
         background: var(--bg-hover);
-    }
-
-    .assessment-prompt-toggle .toggle-arrow {
-        font-size: 0.55rem;
-        color: var(--text-dim);
-        transition: transform 0.12s;
-        flex-shrink: 0;
-    }
-
-    .assessment-prompt-toggle .toggle-arrow.open {
-        transform: rotate(90deg);
     }
 
     .assessment-prompt-toggle .toggle-label {

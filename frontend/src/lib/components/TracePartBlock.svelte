@@ -111,8 +111,8 @@
       {/if}
     </div>
   {:else if mode === 'compact'}
-    <details class="part-details compact-row">
-      <summary class="part-summary compact-summary">
+    <details class="part-details disclosure-boxed">
+      <summary class="part-summary disclosure-summary">
         <span class="part-title">{partLabel}</span>
         {#if part.partType === 'tool-definitions'}
           <span class="part-preview">({tools.length} tool{tools.length !== 1 ? 's' : ''})</span>
@@ -130,7 +130,7 @@
     </details>
   {:else if isCollapsible}
     <details class="part-details" open={!part.display.collapsedByDefault}>
-      <summary class="part-summary">
+      <summary class="part-summary disclosure-summary">
         <span class="part-title">{partLabel}</span>
         {#if part.partType === 'tool-definitions'}
           <span class="part-subtitle">({tools.length} tool{tools.length !== 1 ? 's' : ''})</span>
@@ -205,7 +205,7 @@
   {/if}
 
   {#if hasJsonPayload}
-    <button class="raw-btn" onclick={() => { showJson = true }}>View JSON</button>
+    <button class="btn btn-xs raw-btn" onclick={() => { showJson = true }}>View JSON</button>
   {/if}
 
   {#if part.context.note && part.partType !== 'tool-definitions'}
@@ -250,26 +250,6 @@
     gap: 0.5rem;
   }
 
-  .part-summary {
-    cursor: pointer;
-    list-style: none;
-  }
-
-  .part-summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .part-summary::before {
-    content: '▶';
-    font-size: 0.6rem;
-    color: var(--text-dim);
-    transition: transform 0.15s;
-  }
-
-  details[open] .part-summary::before {
-    transform: rotate(90deg);
-  }
-
   .part-title {
     font-size: 0.75rem;
     font-weight: 600;
@@ -280,25 +260,6 @@
 
   .part-block.compact .part-title {
     font-size: 0.68rem;
-  }
-
-  .compact-row {
-    border: 1px solid transparent;
-    border-radius: 6px;
-  }
-
-  .compact-row[open] {
-    border-color: var(--border);
-    background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
-  }
-
-  .compact-summary {
-    padding: var(--compact-summary-pad-y, 0.18rem) var(--compact-summary-pad-x, 0.38rem);
-    border-radius: 6px;
-  }
-
-  .compact-summary:hover {
-    background: color-mix(in srgb, var(--bg-surface) 62%, transparent);
   }
 
   .part-preview {
@@ -397,20 +358,9 @@
     align-items: end;
   }
 
+  /* Button chrome from .btn .btn-xs; only the layout offset is local. */
   .raw-btn {
     margin-top: 0.45rem;
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    color: var(--text-dim);
-    cursor: pointer;
-    font-size: 0.72rem;
-    padding: 0.15rem 0.45rem;
-  }
-
-  .raw-btn:hover {
-    border-color: var(--border);
-    color: var(--text-bright);
   }
 
   /* ── Tool definitions list ───────────────────────────────────────────── */

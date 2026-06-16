@@ -172,7 +172,7 @@
     {#if artifactLabels.length > 0}
       <div class="analysis-workflow-artifacts">
         {#each artifactLabels as label (label)}
-          <span class="analysis-workflow-artifact">{label}</span>
+          <span class="status-pill soft">{label}</span>
         {/each}
       </div>
     {/if}
@@ -192,7 +192,7 @@
         <div class="analysis-workflow-section-title">Context changes</div>
         <div class="analysis-workflow-retirement-list">
           {#each contextRetirementNotes as note (note)}
-            <span class="analysis-workflow-retirement-note">{note}</span>
+            <span class="status-pill soft">{note}</span>
           {/each}
         </div>
       </div>
@@ -330,14 +330,6 @@
     gap: 0.35rem;
   }
 
-  .analysis-workflow-artifact {
-    font-size: 0.72rem;
-    color: var(--text-dim);
-    background: var(--bg-surface);
-    border-radius: 999px;
-    padding: 0.15rem 0.45rem;
-  }
-
   .analysis-workflow-retirement {
     display: grid;
     gap: 0.25rem;
@@ -347,14 +339,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
-  }
-
-  .analysis-workflow-retirement-note {
-    font-size: 0.72rem;
-    color: var(--text-dim);
-    background: var(--bg-surface);
-    border-radius: 999px;
-    padding: 0.15rem 0.45rem;
   }
 
   .analysis-workflow-empty {

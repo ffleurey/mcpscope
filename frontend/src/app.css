@@ -177,6 +177,12 @@ code {
     font-size: 0.78rem;
 }
 
+/* Extra-small button for dense inline contexts (e.g. "View JSON" in session rows). */
+.btn-xs {
+    padding: 0.15rem 0.45rem;
+    font-size: 0.72rem;
+}
+
 /* Icon inside a button — centered vertically, scales with button text */
 .btn-icon {
     display: inline-flex;
@@ -220,6 +226,23 @@ code {
 /* Dimmed icon button — subtle chrome actions (e.g. sidebar header), brightens on hover. */
 .icon-btn-dim {
     color: var(--text-dim);
+}
+
+/* Hover-reveal icon button — an absolute overlay shown when the parent
+   (marked .has-reveal) is hovered/focused. */
+.icon-btn-reveal {
+    position: absolute;
+    top: 0;
+    right: 0;
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+.has-reveal {
+    position: relative;
+}
+.has-reveal:hover .icon-btn-reveal,
+.icon-btn-reveal:focus-visible {
+    opacity: 1;
 }
 
 .icon-btn:disabled {
@@ -614,4 +637,87 @@ select {
     border-radius: 999px;
     padding: 0.1rem 0.45rem;
     white-space: nowrap;
+}
+
+/* ── Status pill ──────────────────────────────────────────────────── */
+
+/* Rounded status/state label. Default is a bordered pill with bright text;
+   modifiers adjust emphasis. (Distinct from .token-pill, which is dim metadata.) */
+.status-pill {
+    font-size: 0.68rem;
+    color: var(--text-bright);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.1rem 0.45rem;
+    white-space: nowrap;
+}
+
+.status-pill.dim {
+    color: var(--text-dim);
+}
+
+/* Soft (filled, borderless) variant. */
+.status-pill.soft {
+    border-color: transparent;
+    background: var(--bg-surface);
+    color: var(--text-dim);
+}
+
+.status-pill.error {
+    color: var(--red-bright);
+    border-color: color-mix(in srgb, var(--red-bright) 35%, transparent);
+}
+
+.status-pill.success {
+    color: var(--green-bright);
+    border-color: color-mix(in srgb, var(--green-bright) 35%, transparent);
+}
+
+/* ── Disclosure (details/summary marker + button-toggle arrow) ─────── */
+
+/* Native <details>/<summary>: hide default marker, add a rotating ▶. */
+.disclosure-summary {
+    cursor: pointer;
+    list-style: none;
+}
+.disclosure-summary::-webkit-details-marker {
+    display: none;
+}
+.disclosure-summary::before {
+    content: "▶";
+    display: inline-block;
+    font-size: var(--disclosure-arrow-size, 0.6rem);
+    color: var(--text-dim);
+    transition: transform 0.15s;
+}
+details[open] > .disclosure-summary::before {
+    transform: rotate(90deg);
+}
+
+/* Boxed row variant — subtle border + tinted bg when open (compact session rows). */
+.disclosure-boxed {
+    border: 1px solid transparent;
+    border-radius: 6px;
+}
+.disclosure-boxed[open] {
+    border-color: var(--border);
+    background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+}
+.disclosure-boxed > .disclosure-summary {
+    padding: var(--compact-summary-pad-y, 0.18rem) var(--compact-summary-pad-x, 0.38rem);
+    border-radius: 6px;
+}
+.disclosure-boxed > .disclosure-summary:hover {
+    background: color-mix(in srgb, var(--bg-surface) 62%, transparent);
+}
+
+/* Button-form disclosure: a rotating arrow span toggled with .open. */
+.disclosure-arrow {
+    font-size: 0.55rem;
+    color: var(--text-dim);
+    transition: transform 0.12s;
+    flex-shrink: 0;
+}
+.disclosure-arrow.open {
+    transform: rotate(90deg);
 }

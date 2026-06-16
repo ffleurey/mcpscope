@@ -42,10 +42,15 @@ which the audit caught).
       **D7** added `--syntax-*` tokens, JSON dialog off raw hex.
     - **F:** F1 off-ladder radii → ladder (5→4/6, 10–14→8); **F2 legacy-alias sweep** — all 213 usages → canonical,
       alias block deleted from `app.css`; F4 scrollbar hex → tokens.
-    - **Deferred (need a focused session-trace visual pass — they change the green-phosphor UI we haven't been reviewing):**
-      D4 (consolidate ~7 bespoke status pills → a `.status-pill` primitive), D5 (session-trace buttons `.raw-btn`/`.meta-btn`/`.preview-btn`/`.csb-mode-btn` → `.btn-sm`),
-      D6 (extract one shared disclosure primitive from the 5 `<details>`+▶ copies).
     - **F3 deferred:** no formatter is configured (no Prettier/EditorConfig); a blanket reformat is a project decision, not a cleanup.
+  - **Session-trace pass — D4/D5/D6 done (2026-06-17).** Checkpoint commit `8672675` pushed first. New shared
+    primitives in `app.css`: `.status-pill` (+`.dim/.soft/.error/.success`), `.disclosure-summary`/`.disclosure-boxed`/`.disclosure-arrow`,
+    `.btn-xs`, `.icon-btn-reveal` (+`.has-reveal`). Migrated all 7 components:
+    - **D4** bespoke pills → `.status-pill` (CompactRoundContent, StreamingRoundDeltaBlock, SessionTurnBlock ×2, AnalysisWorkflowBlock ×2 soft).
+    - **D5** `.raw-btn`/`.meta-btn` → `.btn .btn-xs`; the verbatim-duplicated `.preview-btn` (SessionTurnBlock ≡ CompactRoundContent) → `.icon-btn .icon-btn-reveal`.
+      **Kept** `.csb-mode-btn` (ContextSnapshotBar) — a deliberately tight context-bar toggle `.btn-xs` would visually break.
+    - **D6** the 5 `<details>`+▶ / button-toggle copies → shared `.disclosure-*` (TracePartBlock, CompactRoundContent boxed; SessionTurnBlock + SessionPreludeBlock arrows). Kept TracePartBlock's specialised nested `.tool-summary`.
+    - Type-check + build green (0 warnings → no orphaned selectors). **Needs user visual review of the session views.**
 
 ## Root cause (what the audit found)
 

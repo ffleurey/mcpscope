@@ -203,8 +203,8 @@
 
 <div class="compact-stack">
     {#if pendingReasoningText}
-        <details class="collapsed-row">
-            <summary class="collapsed-summary">
+        <details class="disclosure-boxed">
+            <summary class="disclosure-summary">
                 <span class="row-label">Reasoning</span>
                 <span class="summary-meta"></span>
             </summary>
@@ -219,7 +219,7 @@
             {@const assistantText = normalizeCompactMessageText(
                 item.part.payload.text,
             )}
-            <section class="assistant-block">
+            <section class="assistant-block has-reveal">
                 {#if assistantText}
                     {@const rendered = highlightStructuredText(assistantText)}
                     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -240,7 +240,7 @@
                 </div>
                 {#if assistantText && looksLikeMarkdown(assistantText)}
                     <button
-                        class="preview-btn"
+                        class="icon-btn icon-btn-reveal"
                         onclick={() => openMarkdownPreview(assistantText)}
                         aria-label="Render preview"
                         title="Render preview"
@@ -264,8 +264,8 @@
                 {/if}
             </section>
         {:else if item.kind === "reasoning"}
-            <details class="collapsed-row">
-                <summary class="collapsed-summary">
+            <details class="disclosure-boxed">
+                <summary class="disclosure-summary">
                     <span class="row-label">Reasoning</span>
                     <span class="summary-meta">
                         {#if inspectMode}
@@ -287,7 +287,7 @@
                     {/if}
                     {#if item.part.payload.json !== null}
                         <button
-                            class="meta-btn"
+                            class="btn btn-xs"
                             onclick={() =>
                                 openDialog(
                                     "Reasoning JSON",
@@ -302,8 +302,8 @@
         {:else if item.kind === "tool-group"}
             {@const toolName = normalizeToolName(item.toolCall)}
             {@const totalTokens = toolGroupTokens(item.toolCall, item.results)}
-            <details class="collapsed-row">
-                <summary class="collapsed-summary">
+            <details class="disclosure-boxed">
+                <summary class="disclosure-summary">
                     <span class="row-label">Tool · {toolName}</span>
                     <span class="summary-meta">
                         {#if inspectMode && item.toolCall}
@@ -332,7 +332,7 @@
                                 <span class="tool-section-label">Call</span>
                                 {#if item.toolCall.payload.json !== null}
                                     <button
-                                        class="meta-btn"
+                                        class="btn btn-xs"
                                         onclick={() =>
                                             openDialog(
                                                 `Tool call · ${toolName}`,
@@ -357,7 +357,7 @@
                                 <span class="tool-section-label">Result</span>
                                 {#if result.payload.json !== null}
                                     <button
-                                        class="meta-btn"
+                                        class="btn btn-xs"
                                         onclick={() =>
                                             openDialog(
                                                 `Tool result · ${toolName}`,
@@ -385,7 +385,7 @@
     {/each}
 
     {#if visibleStreamingContent}
-        <section class="assistant-block">
+        <section class="assistant-block has-reveal">
             <pre class="assistant-text">{visibleStreamingContent}</pre>
             <div class="message-meta">
                 <span class="status-pill">streaming</span>
@@ -424,7 +424,7 @@
         gap: var(--compact-stack-gap, 0.14rem);
     }
 
-    .collapsed-summary,
+    .disclosure-summary,
     .tool-section-header {
         display: flex;
         align-items: center;
@@ -472,43 +472,6 @@
         align-items: end;
     }
 
-    .collapsed-row {
-        border: 1px solid transparent;
-        border-radius: 6px;
-    }
-
-    .collapsed-row[open] {
-        border-color: var(--border);
-        background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
-    }
-
-    .collapsed-summary {
-        cursor: pointer;
-        list-style: none;
-        padding: var(--compact-summary-pad-y, 0.18rem)
-            var(--compact-summary-pad-x, 0.38rem);
-        border-radius: 6px;
-    }
-
-    .collapsed-summary:hover {
-        background: color-mix(in srgb, var(--bg-surface) 62%, transparent);
-    }
-
-    .collapsed-summary::-webkit-details-marker {
-        display: none;
-    }
-
-    .collapsed-summary::before {
-        content: "\25B6";
-        font-size: 0.6rem;
-        color: var(--text-dim);
-        transition: transform 0.15s;
-    }
-
-    details[open] > .collapsed-summary::before {
-        transform: rotate(90deg);
-    }
-
     .row-body {
         padding: 0 var(--compact-summary-pad-x, 0.38rem)
             var(--compact-detail-bottom-pad, 0.42rem)
@@ -542,56 +505,6 @@
         font-style: normal;
     }
 
-    .status-pill {
-        font-size: 0.68rem;
-        color: var(--text-bright);
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 0.1rem 0.45rem;
-    }
-
-    .meta-btn {
-        background: none;
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        color: var(--text-dim);
-        cursor: pointer;
-        font-size: 0.72rem;
-        padding: 0.15rem 0.45rem;
-    }
-
-    .meta-btn:hover {
-        color: var(--text-bright);
-        border-color: var(--border);
-    }
-
-    .preview-btn {
-        position: absolute;
-        top: 0;
-        right: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: none;
-        border: 1px solid transparent;
-        border-radius: 4px;
-        color: var(--text-dim);
-        cursor: pointer;
-        padding: 0.15rem;
-        opacity: 0;
-        transition: opacity 0.1s;
-    }
-
-    .assistant-block:hover .preview-btn {
-        opacity: 1;
-    }
-
-    .preview-btn:hover {
-        color: var(--text-bright);
-        border-color: var(--border);
-        background: var(--bg-surface);
-        opacity: 1;
-    }
 
     /* Monochrome green markdown highlighting */
     /* Structural emphasis (was amber): glow + bold */

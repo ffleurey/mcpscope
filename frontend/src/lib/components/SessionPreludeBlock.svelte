@@ -47,7 +47,7 @@
         onclick={() => { chatCollapsed = !chatCollapsed }}
         aria-expanded={!chatCollapsed}
       >
-        <span class="setup-toggle-arrow" class:open={!chatCollapsed}>▶</span>
+        <span class="disclosure-arrow" class:open={!chatCollapsed}>▶</span>
         <span class="compact-setup-label">Session Setup</span>
         <span class="compact-setup-status">{statusLabel}</span>
         {#if totalTokens > 0}
@@ -117,17 +117,6 @@
 
   .setup-toggle-btn:hover .compact-setup-label {
     color: var(--text-bright);
-  }
-
-  .setup-toggle-arrow {
-    font-size: 0.55rem;
-    color: var(--text-dim);
-    transition: transform 0.12s;
-    flex-shrink: 0;
-  }
-
-  .setup-toggle-arrow.open {
-    transform: rotate(90deg);
   }
 
   .compact-setup-label {

@@ -15,7 +15,7 @@
       <div class="stream-live-block">
         <div class="stream-header">
           <span class="stream-label">Reasoning</span>
-          <span class="stream-status">streaming</span>
+          <span class="status-pill">streaming</span>
         </div>
         <pre class="stream-text stream-reasoning">{roundState.reasoningText}</pre>
       </div>
@@ -24,7 +24,7 @@
     {#each roundState.toolCalls as toolCall (toolCall.toolCallIndex)}
       <div class="stream-tool-row">
         <span class="stream-label">Tool · {toolCall.name || 'Resolving tool name…'}</span>
-        <span class="stream-status">sending</span>
+        <span class="status-pill">sending</span>
       </div>
     {/each}
   </div>
@@ -33,7 +33,7 @@
   <div class="stream-block">
     <div class="stream-header">
       <span class="stream-label">Reasoning</span>
-      <span class="stream-status">streaming</span>
+      <span class="status-pill">streaming</span>
     </div>
     <pre class="stream-text stream-reasoning">{roundState.reasoningText}</pre>
   </div>
@@ -43,7 +43,7 @@
   <div class="stream-block">
     <div class="stream-header">
       <span class="stream-label">Tool call</span>
-      <span class="stream-status">streaming</span>
+      <span class="status-pill">streaming</span>
     </div>
     <div class="stream-tool-name">{toolCall.name || 'Resolving tool name…'}</div>
     {#if toolCall.arguments}
@@ -56,7 +56,7 @@
   <div class="stream-block">
     <div class="stream-header">
       <span class="stream-label">Assistant</span>
-      <span class="stream-status">streaming</span>
+      <span class="status-pill">streaming</span>
     </div>
     <div class="stream-content">{roundState.contentText}</div>
   </div>
@@ -97,13 +97,9 @@
     letter-spacing: 0.05em;
   }
 
-  .stream-status {
+  /* Chrome from the global .status-pill; only the layout differs here. */
+  .status-pill {
     margin-left: auto;
-    font-size: 0.68rem;
-    color: var(--text-bright);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 0.1rem 0.45rem;
   }
 
   .stream-content {
