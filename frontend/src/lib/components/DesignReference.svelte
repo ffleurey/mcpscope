@@ -35,6 +35,7 @@
     iconCheckboxMarked,
     iconCheckboxBlank,
   } from '../design/icons'
+  import Icon from './Icon.svelte'
   import { columnResize } from '../actions/columnResize'
 
   let showDialog = $state(false)
@@ -232,24 +233,29 @@
 
     <h3 class="group-title">With icon</h3>
     <div class="demo-row">
-      <button class="btn"><span class="btn-icon">{@html iconAnalysis}</span> Analyze</button>
-      <button class="btn btn-primary"
-        ><span class="btn-icon">{@html iconPlus}</span> New session</button
+      <button class="btn"><span class="btn-icon"><Icon path={iconAnalysis} /></span> Analyze</button
       >
-      <button class="btn btn-danger"><span class="btn-icon">{@html iconTrash}</span> Delete</button>
-      <button class="btn"><span class="btn-icon">{@html iconExport}</span> Export</button>
-      <button class="btn btn-sm"><span class="btn-icon">{@html iconImport}</span> Import</button>
+      <button class="btn btn-primary"
+        ><span class="btn-icon"><Icon path={iconPlus} /></span> New session</button
+      >
+      <button class="btn btn-danger"
+        ><span class="btn-icon"><Icon path={iconTrash} /></span> Delete</button
+      >
+      <button class="btn"><span class="btn-icon"><Icon path={iconExport} /></span> Export</button>
+      <button class="btn btn-sm"
+        ><span class="btn-icon"><Icon path={iconImport} /></span> Import</button
+      >
     </div>
 
     <h3 class="group-title">Icon only</h3>
     <div class="demo-row">
-      <button class="icon-btn" title="Add">{@html iconPlus}</button>
-      <button class="icon-btn" title="Close">{@html iconClose}</button>
-      <button class="icon-btn" title="Settings">{@html iconSettings}</button>
-      <button class="icon-btn icon-btn-danger" title="Delete">{@html iconTrash}</button>
-      <button class="icon-btn" title="Play">{@html iconPlay}</button>
-      <button class="icon-btn" title="Pause">{@html iconPause}</button>
-      <button class="icon-btn" title="Disabled" disabled>{@html iconPlus}</button>
+      <button class="icon-btn" title="Add"><Icon path={iconPlus} /></button>
+      <button class="icon-btn" title="Close"><Icon path={iconClose} /></button>
+      <button class="icon-btn" title="Settings"><Icon path={iconSettings} /></button>
+      <button class="icon-btn icon-btn-danger" title="Delete"><Icon path={iconTrash} /></button>
+      <button class="icon-btn" title="Play"><Icon path={iconPlay} /></button>
+      <button class="icon-btn" title="Pause"><Icon path={iconPause} /></button>
+      <button class="icon-btn" title="Disabled" disabled><Icon path={iconPlus} /></button>
     </div>
 
     <p class="ref-note">
@@ -263,25 +269,25 @@
     <h3 class="group-title">State markers (amber)</h3>
     <div class="demo-row">
       <button class="icon-btn icon-glow" title="Selected (radio)" aria-label="Selected"
-        >{@html iconRadioMarked}</button
+        ><Icon path={iconRadioMarked} /></button
       >
       <button class="icon-btn icon-off" title="Unselected (radio)" aria-label="Unselected"
-        >{@html iconRadioBlank}</button
+        ><Icon path={iconRadioBlank} /></button
       >
       <button class="icon-btn icon-glow" title="Enabled (checkbox)" aria-label="Enabled"
-        >{@html iconCheckboxMarked}</button
+        ><Icon path={iconCheckboxMarked} /></button
       >
       <button class="icon-btn icon-off" title="Disabled (checkbox)" aria-label="Disabled"
-        >{@html iconCheckboxBlank}</button
+        ><Icon path={iconCheckboxBlank} /></button
       >
       <button class="icon-btn icon-glow" title="Loaded" aria-label="Loaded"
-        >{@html iconEject}</button
+        ><Icon path={iconEject} /></button
       >
       <button class="icon-btn icon-blink" title="Loading…" aria-label="Loading"
-        >{@html iconLoad}</button
+        ><Icon path={iconLoad} /></button
       >
       <button class="icon-btn icon-btn-danger" title="Destructive" aria-label="Destructive"
-        >{@html iconTrash}</button
+        ><Icon path={iconTrash} /></button
       >
     </div>
     <p class="ref-note">
@@ -521,7 +527,9 @@
                 class:icon-off={!demoEnabled['srv-1']}
                 aria-label="Toggle default"
                 onclick={() => (demoEnabled['srv-1'] = !demoEnabled['srv-1'])}
-                >{@html demoEnabled['srv-1'] ? iconCheckboxMarked : iconCheckboxBlank}</button
+                ><Icon
+                  path={demoEnabled['srv-1'] ? iconCheckboxMarked : iconCheckboxBlank}
+                /></button
               >
             </td>
             <td title="Production">Production</td>
@@ -535,10 +543,10 @@
             </td>
             <td class="col-actions">
               <span class="row-actions">
-                <button class="icon-btn" aria-label="Test">{@html iconTest}</button>
-                <button class="icon-btn" aria-label="Edit">{@html iconEdit}</button>
+                <button class="icon-btn" aria-label="Test"><Icon path={iconTest} /></button>
+                <button class="icon-btn" aria-label="Edit"><Icon path={iconEdit} /></button>
                 <button class="icon-btn icon-btn-danger" aria-label="Delete"
-                  >{@html iconTrash}</button
+                  ><Icon path={iconTrash} /></button
                 >
               </span>
             </td>
@@ -551,7 +559,9 @@
                 class:icon-off={!demoEnabled['srv-2']}
                 aria-label="Toggle default"
                 onclick={() => (demoEnabled['srv-2'] = !demoEnabled['srv-2'])}
-                >{@html demoEnabled['srv-2'] ? iconCheckboxMarked : iconCheckboxBlank}</button
+                ><Icon
+                  path={demoEnabled['srv-2'] ? iconCheckboxMarked : iconCheckboxBlank}
+                /></button
               >
             </td>
             <td title="Staging">Staging</td>
@@ -560,10 +570,10 @@
             <td><span class="status-muted">—</span></td>
             <td class="col-actions">
               <span class="row-actions">
-                <button class="icon-btn" aria-label="Test">{@html iconTest}</button>
-                <button class="icon-btn" aria-label="Edit">{@html iconEdit}</button>
+                <button class="icon-btn" aria-label="Test"><Icon path={iconTest} /></button>
+                <button class="icon-btn" aria-label="Edit"><Icon path={iconEdit} /></button>
                 <button class="icon-btn icon-btn-danger" aria-label="Delete"
-                  >{@html iconTrash}</button
+                  ><Icon path={iconTrash} /></button
                 >
               </span>
             </td>
@@ -675,85 +685,89 @@
 
     <div class="icon-grid">
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconChevronRight}</span><code>iconChevronRight</code>
+        <span class="icon-demo"><Icon path={iconChevronRight} /></span><code>iconChevronRight</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconChevronDown}</span><code>iconChevronDown</code>
+        <span class="icon-demo"><Icon path={iconChevronDown} /></span><code>iconChevronDown</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconPlus}</span><code>iconPlus</code>
+        <span class="icon-demo"><Icon path={iconPlus} /></span><code>iconPlus</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconClose}</span><code>iconClose</code>
+        <span class="icon-demo"><Icon path={iconClose} /></span><code>iconClose</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconPlay}</span><code>iconPlay</code>
+        <span class="icon-demo"><Icon path={iconPlay} /></span><code>iconPlay</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconPause}</span><code>iconPause</code>
+        <span class="icon-demo"><Icon path={iconPause} /></span><code>iconPause</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconImport}</span><code>iconImport</code>
+        <span class="icon-demo"><Icon path={iconImport} /></span><code>iconImport</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconExport}</span><code>iconExport</code>
+        <span class="icon-demo"><Icon path={iconExport} /></span><code>iconExport</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconAnalysis}</span><code>iconAnalysis</code>
+        <span class="icon-demo"><Icon path={iconAnalysis} /></span><code>iconAnalysis</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconSettings}</span><code>iconSettings</code>
+        <span class="icon-demo"><Icon path={iconSettings} /></span><code>iconSettings</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconTrash}</span><code>iconTrash</code>
+        <span class="icon-demo"><Icon path={iconTrash} /></span><code>iconTrash</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconCollapse}</span><code>iconCollapse</code>
+        <span class="icon-demo"><Icon path={iconCollapse} /></span><code>iconCollapse</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconExpand}</span><code>iconExpand</code>
+        <span class="icon-demo"><Icon path={iconExpand} /></span><code>iconExpand</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconEdit}</span><code>iconEdit</code>
+        <span class="icon-demo"><Icon path={iconEdit} /></span><code>iconEdit</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconRefresh}</span><code>iconRefresh</code>
+        <span class="icon-demo"><Icon path={iconRefresh} /></span><code>iconRefresh</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconTest}</span><code>iconTest</code>
+        <span class="icon-demo"><Icon path={iconTest} /></span><code>iconTest</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconLoad}</span><code>iconLoad</code>
+        <span class="icon-demo"><Icon path={iconLoad} /></span><code>iconLoad</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconEject}</span><code>iconEject</code>
+        <span class="icon-demo"><Icon path={iconEject} /></span><code>iconEject</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconInfo}</span><code>iconInfo</code>
+        <span class="icon-demo"><Icon path={iconInfo} /></span><code>iconInfo</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconStar}</span><code>iconStar</code>
+        <span class="icon-demo"><Icon path={iconStar} /></span><code>iconStar</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconStarOutline}</span><code>iconStarOutline</code>
+        <span class="icon-demo"><Icon path={iconStarOutline} /></span><code>iconStarOutline</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconRadioMarked}</span><code>iconRadioMarked</code>
+        <span class="icon-demo"><Icon path={iconRadioMarked} /></span><code>iconRadioMarked</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconRadioBlank}</span><code>iconRadioBlank</code>
+        <span class="icon-demo"><Icon path={iconRadioBlank} /></span><code>iconRadioBlank</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconCheckboxMarked}</span><code>iconCheckboxMarked</code>
+        <span class="icon-demo"><Icon path={iconCheckboxMarked} /></span><code
+          >iconCheckboxMarked</code
+        >
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconCheckboxBlank}</span><code>iconCheckboxBlank</code>
+        <span class="icon-demo"><Icon path={iconCheckboxBlank} /></span><code
+          >iconCheckboxBlank</code
+        >
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconDot}</span><code>iconDot</code>
+        <span class="icon-demo"><Icon path={iconDot} /></span><code>iconDot</code>
       </div>
       <div class="icon-cell">
-        <span class="icon-demo">{@html iconSpinner}</span><code>iconSpinner</code>
+        <span class="icon-demo"><Icon path={iconSpinner} /></span><code>iconSpinner</code>
       </div>
     </div>
   </section>

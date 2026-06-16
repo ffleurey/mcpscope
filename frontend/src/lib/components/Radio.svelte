@@ -1,5 +1,6 @@
 <script lang="ts">
   import { iconRadioMarked, iconRadioBlank } from '../design/icons'
+  import Icon from './Icon.svelte'
 
   interface Props {
     group: string
@@ -24,8 +25,8 @@
     onchange={() => onselect?.(value)}
   />
   <span class="opt-mark">
-    <span class="opt-on">{@html iconRadioMarked}</span>
-    <span class="opt-off">{@html iconRadioBlank}</span>
+    <span class="opt-on"><Icon path={iconRadioMarked} /></span>
+    <span class="opt-off"><Icon path={iconRadioBlank} /></span>
   </span>
   <span class="opt-text">{label}</span>
   {#if hint}<span class="opt-hint">{hint}</span>{/if}

@@ -2,15 +2,15 @@
  * Canonical icon set for mcpscope.
  *
  * Icons are Material Design Icons (https://pictogrammers.com/library/mdi/),
- * sourced as tree-shakeable path data from `@mdi/js` — no icon font dependency.
- * Each export is a ready-to-render inline SVG string at 1em / currentColor.
+ * exposed as tree-shakeable 24×24 path data from `@mdi/js` under semantic names.
+ * Render them with the <Icon> component — never `{@html}` (no XSS surface, and
+ * `<path d={...}>` is plain SVG markup):
  *
- * Usage in Svelte:
+ *   import Icon from './Icon.svelte'
  *   import { iconPlus } from '../design/icons'
- *   <span class="icon">{@html iconPlus}</span>      // inherits font-size + color
- *   <button class="icon-btn">{@html iconEdit}</button>
+ *   <button class="icon-btn"><Icon path={iconPlus} /></button>
  *
- * To change the icon set, only this file changes — swap the mdi* path imports.
+ * To change the icon set, only this file changes.
  */
 
 import {
@@ -43,40 +43,35 @@ import {
   mdiDotsHorizontal,
 } from '@mdi/js'
 
-/** Wrap an MDI 24×24 path into an inline SVG that scales with font-size and inherits color. */
-function svg(path: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor"><path d="${path}"/></svg>`
-}
-
 // ── Navigation & layout ────────────────────────────────────────────
-export const iconChevronRight = svg(mdiChevronRight)
-export const iconChevronDown = svg(mdiChevronDown)
-export const iconCollapse = svg(mdiChevronDoubleLeft)
-export const iconExpand = svg(mdiChevronDoubleRight)
+export const iconChevronRight = mdiChevronRight
+export const iconChevronDown = mdiChevronDown
+export const iconCollapse = mdiChevronDoubleLeft
+export const iconExpand = mdiChevronDoubleRight
 
 // ── Actions ─────────────────────────────────────────────────────────
-export const iconPlus = svg(mdiPlus)
-export const iconClose = svg(mdiClose)
-export const iconEdit = svg(mdiPencilOutline)
-export const iconTrash = svg(mdiTrashCanOutline)
-export const iconTest = svg(mdiLanConnect)
-export const iconStar = svg(mdiStar)
-export const iconStarOutline = svg(mdiStarOutline)
-export const iconRefresh = svg(mdiRefresh)
-export const iconLoad = svg(mdiDownloadOutline)
-export const iconEject = svg(mdiEjectOutline)
-export const iconInfo = svg(mdiInformationOutline)
-export const iconRadioMarked = svg(mdiRadioboxMarked)
-export const iconRadioBlank = svg(mdiRadioboxBlank)
-export const iconCheckboxMarked = svg(mdiCheckboxMarked)
-export const iconCheckboxBlank = svg(mdiCheckboxBlankOutline)
-export const iconPlay = svg(mdiPlay)
-export const iconPause = svg(mdiPause)
-export const iconImport = svg(mdiImport)
-export const iconExport = svg(mdiExport)
+export const iconPlus = mdiPlus
+export const iconClose = mdiClose
+export const iconEdit = mdiPencilOutline
+export const iconTrash = mdiTrashCanOutline
+export const iconTest = mdiLanConnect
+export const iconStar = mdiStar
+export const iconStarOutline = mdiStarOutline
+export const iconRefresh = mdiRefresh
+export const iconLoad = mdiDownloadOutline
+export const iconEject = mdiEjectOutline
+export const iconInfo = mdiInformationOutline
+export const iconPlay = mdiPlay
+export const iconPause = mdiPause
+export const iconImport = mdiImport
+export const iconExport = mdiExport
+export const iconRadioMarked = mdiRadioboxMarked
+export const iconRadioBlank = mdiRadioboxBlank
+export const iconCheckboxMarked = mdiCheckboxMarked
+export const iconCheckboxBlank = mdiCheckboxBlankOutline
 
 // ── Status & content ───────────────────────────────────────────────
-export const iconAnalysis = svg(mdiChartBar)
-export const iconSettings = svg(mdiTune)
-export const iconDot = svg(mdiCircle)
-export const iconSpinner = svg(mdiDotsHorizontal)
+export const iconAnalysis = mdiChartBar
+export const iconSettings = mdiTune
+export const iconDot = mdiCircle
+export const iconSpinner = mdiDotsHorizontal

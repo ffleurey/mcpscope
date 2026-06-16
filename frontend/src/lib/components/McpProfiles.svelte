@@ -15,6 +15,7 @@
     iconCheckboxMarked,
     iconCheckboxBlank,
   } from '../design/icons'
+  import Icon from './Icon.svelte'
   import { columnResize } from '../actions/columnResize'
 
   // Ephemeral, per-page test results — reset when the view unmounts (navigating away).
@@ -112,7 +113,7 @@
   <div class="config-view-header">
     <h2>MCP Server Profiles</h2>
     <button class="btn btn-primary" onclick={startNew}>
-      <span class="btn-icon">{@html iconPlus}</span> New profile
+      <span class="btn-icon"><Icon path={iconPlus} /></span> New profile
     </button>
   </div>
 
@@ -155,7 +156,9 @@
                   aria-label="Toggle default for new sessions"
                   aria-pressed={profile.defaultEnabled}
                   onclick={() => handleToggleDefault(profile)}
-                  >{@html profile.defaultEnabled ? iconCheckboxMarked : iconCheckboxBlank}</button
+                  ><Icon
+                    path={profile.defaultEnabled ? iconCheckboxMarked : iconCheckboxBlank}
+                  /></button
                 >
               </td>
               <td title={profile.name}>{profile.name}</td>
@@ -183,19 +186,19 @@
                     class="icon-btn"
                     title="Test connection"
                     aria-label="Test connection"
-                    onclick={() => handleTest(profile)}>{@html iconTest}</button
+                    onclick={() => handleTest(profile)}><Icon path={iconTest} /></button
                   >
                   <button
                     class="icon-btn"
                     title="Edit"
                     aria-label="Edit"
-                    onclick={() => startEdit(profile.id)}>{@html iconEdit}</button
+                    onclick={() => startEdit(profile.id)}><Icon path={iconEdit} /></button
                   >
                   <button
                     class="icon-btn icon-btn-danger"
                     title="Delete"
                     aria-label="Delete"
-                    onclick={() => handleDelete(profile.id)}>{@html iconTrash}</button
+                    onclick={() => handleDelete(profile.id)}><Icon path={iconTrash} /></button
                   >
                 </span>
               </td>

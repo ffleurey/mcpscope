@@ -1,5 +1,6 @@
 <script lang="ts">
   import { iconCheckboxMarked, iconCheckboxBlank } from '../design/icons'
+  import Icon from './Icon.svelte'
 
   interface Props {
     checked: boolean
@@ -20,8 +21,8 @@
     onchange={(e) => onchange?.(e.currentTarget.checked)}
   />
   <span class="opt-mark">
-    <span class="opt-on">{@html iconCheckboxMarked}</span>
-    <span class="opt-off">{@html iconCheckboxBlank}</span>
+    <span class="opt-on"><Icon path={iconCheckboxMarked} /></span>
+    <span class="opt-off"><Icon path={iconCheckboxBlank} /></span>
   </span>
   <span class="opt-text">{label}</span>
   {#if hint}<span class="opt-hint">{hint}</span>{/if}

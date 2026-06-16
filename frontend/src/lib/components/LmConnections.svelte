@@ -8,6 +8,7 @@
   import { testLmConnection } from '../api/backendClient'
   import { toAppError, type AppError } from '../errors'
   import { iconPlus, iconEdit, iconTrash, iconTest } from '../design/icons'
+  import Icon from './Icon.svelte'
   import { columnResize } from '../actions/columnResize'
 
   // Ephemeral, per-page test results — reset when the view unmounts (navigating away).
@@ -100,7 +101,7 @@
   <div class="config-view-header">
     <h2>Connections</h2>
     <button class="btn btn-primary" onclick={startNew}>
-      <span class="btn-icon">{@html iconPlus}</span> New connection
+      <span class="btn-icon"><Icon path={iconPlus} /></span> New connection
     </button>
   </div>
 
@@ -158,19 +159,19 @@
                     class="icon-btn"
                     title="Test connection"
                     aria-label="Test connection"
-                    onclick={() => handleTest(conn)}>{@html iconTest}</button
+                    onclick={() => handleTest(conn)}><Icon path={iconTest} /></button
                   >
                   <button
                     class="icon-btn"
                     title="Edit"
                     aria-label="Edit"
-                    onclick={() => startEdit(conn.id)}>{@html iconEdit}</button
+                    onclick={() => startEdit(conn.id)}><Icon path={iconEdit} /></button
                   >
                   <button
                     class="icon-btn icon-btn-danger"
                     title="Delete"
                     aria-label="Delete"
-                    onclick={() => handleDelete(conn.id)}>{@html iconTrash}</button
+                    onclick={() => handleDelete(conn.id)}><Icon path={iconTrash} /></button
                   >
                 </span>
               </td>

@@ -29,6 +29,7 @@
     iconEject,
     iconInfo,
   } from '../design/icons'
+  import Icon from './Icon.svelte'
   import { columnResize } from '../actions/columnResize'
 
   let editingId = $state<string | null>(null)
@@ -229,11 +230,11 @@
         disabled={statusLoading}
         title="Refresh model status"
       >
-        <span class="btn-icon">{@html iconRefresh}</span>
+        <span class="btn-icon"><Icon path={iconRefresh} /></span>
         {statusLoading ? 'Refreshing…' : 'Refresh'}
       </button>
       <button class="btn btn-primary" onclick={startNew}>
-        <span class="btn-icon">{@html iconPlus}</span> New model config
+        <span class="btn-icon"><Icon path={iconPlus} /></span> New model config
       </button>
     </div>
   </div>
@@ -292,7 +293,7 @@
                   aria-pressed={isDefault}
                   onclick={() => {
                     if (!isDefault) handleSetDefault(config.id)
-                  }}>{@html isDefault ? iconRadioMarked : iconRadioBlank}</button
+                  }}><Icon path={isDefault ? iconRadioMarked : iconRadioBlank} /></button
                 >
               </td>
               <td title={config.name}>{config.name}</td>
@@ -330,26 +331,26 @@
                       aria-label={loaded ? 'Eject model' : 'Load model'}
                       disabled={!!busy}
                       onclick={() => (loaded ? handleEject(config) : handleLoad(config))}
-                      >{@html loaded ? iconEject : iconLoad}</button
+                      ><Icon path={loaded ? iconEject : iconLoad} /></button
                     >
                   {/if}
                   <button
                     class="icon-btn"
                     title="Details"
                     aria-label="Details"
-                    onclick={() => openDetails(config)}>{@html iconInfo}</button
+                    onclick={() => openDetails(config)}><Icon path={iconInfo} /></button
                   >
                   <button
                     class="icon-btn"
                     title="Edit"
                     aria-label="Edit"
-                    onclick={() => startEdit(config.id)}>{@html iconEdit}</button
+                    onclick={() => startEdit(config.id)}><Icon path={iconEdit} /></button
                   >
                   <button
                     class="icon-btn icon-btn-danger"
                     title="Delete"
                     aria-label="Delete"
-                    onclick={() => handleDelete(config.id)}>{@html iconTrash}</button
+                    onclick={() => handleDelete(config.id)}><Icon path={iconTrash} /></button
                   >
                 </span>
               </td>
