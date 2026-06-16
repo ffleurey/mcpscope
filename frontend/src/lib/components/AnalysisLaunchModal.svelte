@@ -6,7 +6,12 @@
   import { getDefaultAnalysisSystemPrompt, getSessionTrace } from '../api/backendClient'
   import DialogShell from './DialogShell.svelte'
   import Checkbox from './Checkbox.svelte'
-  import type { AnalysisWorkflowKind, PartRecord, SessionTraceBundle, TurnRecord } from '../backendTypes'
+  import type {
+    AnalysisWorkflowKind,
+    PartRecord,
+    SessionTraceBundle,
+    TurnRecord,
+  } from '../backendTypes'
 
   interface Props {
     targetSessionId: string
@@ -47,18 +52,25 @@
         .map((turn) => turn.id),
     )
 
-    return [...new Set(
-      trace.parts
-        .filter((part): part is PartRecord => part.partType === 'tool-call' && !!part.turnId && turnIdsInScope.has(part.turnId))
-        .map((part) => String((part.payload.json as { name?: string } | null)?.name ?? 'unknown')),
-    )].sort((left, right) => left.localeCompare(right))
+    return [
+      ...new Set(
+        trace.parts
+          .filter(
+            (part): part is PartRecord =>
+              part.partType === 'tool-call' && !!part.turnId && turnIdsInScope.has(part.turnId),
+          )
+          .map((part) =>
+            String((part.payload.json as { name?: string } | null)?.name ?? 'unknown'),
+          ),
+      ),
+    ].sort((left, right) => left.localeCompare(right))
   })
 
   onMount(async () => {
     try {
       const trace = await getSessionTrace(targetSessionId)
       traceBundle = trace
-      completedTurns = trace.turns.filter(t => t.status === 'complete')
+      completedTurns = trace.turns.filter((t) => t.status === 'complete')
       // Default to the last complete turn
       if (completedTurns.length > 0) {
         selectedTurnId = completedTurns[completedTurns.length - 1]!.id
@@ -107,7 +119,9 @@
 
   $effect(() => {
     const currentSelection = untrack(() => selectedToolNames)
-    const filteredSelection = currentSelection.filter((toolName) => availableToolNames.includes(toolName))
+    const filteredSelection = currentSelection.filter((toolName) =>
+      availableToolNames.includes(toolName),
+    )
 
     if (filteredSelection.length !== currentSelection.length) {
       selectedToolNames = filteredSelection
@@ -157,7 +171,9 @@
 
 <DialogShell title="Analyze session" {onClose} dialogClass="analysis-launch-dialog">
   <div class="form-stack">
-    <p class="target-label">Target: <span class="target-title">[{targetSessionId}] {targetSessionTitle}</span></p>
+    <p class="target-label">
+      Target: <span class="target-title">[{targetSessionId}] {targetSessionTitle}</span>
+    </p>
 
     <div class="field">
       <label class="field-label" for="analysis-workflow-kind">Analysis type</label>
@@ -176,7 +192,9 @@
     <div class="field">
       <label class="field-label" for="analysis-model-select">Model</label>
       {#if $modelConfigs.length === 0}
-        <p class="field-hinttext">No model configs configured. Create one in <strong>Model Configs</strong> first.</p>
+        <p class="field-hinttext">
+          No model configs configured. Create one in <strong>Model Configs</strong> first.
+        </p>
       {:else}
         <select
           id="analysis-model-select"
@@ -186,7 +204,9 @@
         >
           {#each $modelConfigs as config (config.id)}
             <option value={config.id}>
-              {config.name}{$sessionCreationDefaults?.defaultModelConfigId === config.id ? ' (default)' : ''}
+              {config.name}{$sessionCreationDefaults?.defaultModelConfigId === config.id
+                ? ' (default)'
+                : ''}
             </option>
           {/each}
         </select>
@@ -194,8 +214,12 @@
     </div>
 
     <div class="field">
-      <label class="field-label" for="analysis-temperature">Temperature <span class="optional">(optional)</span></label>
-      <p class="field-hinttext">Defaults to 0.5 for analysis runs. Adjust only when you need broader or narrower sampling.</p>
+      <label class="field-label" for="analysis-temperature"
+        >Temperature <span class="optional">(optional)</span></label
+      >
+      <p class="field-hinttext">
+        Defaults to 0.5 for analysis runs. Adjust only when you need broader or narrower sampling.
+      </p>
       <input
         id="analysis-temperature"
         class="field-input"
@@ -210,7 +234,10 @@
 
     <div class="field">
       <label class="field-label" for="analysis-system-prompt">System prompt</label>
-      <p class="field-hinttext">This is the backend-owned default analysis prompt. You can edit it for this launch before starting the analysis session.</p>
+      <p class="field-hinttext">
+        This is the backend-owned default analysis prompt. You can edit it for this launch before
+        starting the analysis session.
+      </p>
       {#if loadingSystemPrompt}
         <p class="field-hinttext">Loading default system prompt…</p>
       {/if}
@@ -220,14 +247,14 @@
         rows={12}
         bind:value={systemPromptText}
         disabled={$isLaunchingAnalysis}
-        placeholder="Loading the default analysis system prompt..."
-      ></textarea>
+        placeholder="Loading the default analysis system prompt..."></textarea>
     </div>
 
     <div class="field">
       <label class="field-label" for="analysis-turn-select">Analyze through turn</label>
       <p class="field-hinttext">
-        Select the turn to analyze up to (inclusive). The analysis will cover all tool calls from the beginning of the session.
+        Select the turn to analyze up to (inclusive). The analysis will cover all tool calls from
+        the beginning of the session.
       </p>
       {#if loadingTurns}
         <p class="field-hinttext">Loading turns…</p>
@@ -256,7 +283,9 @@
 
     <div class="field">
       <div class="field-label">Tool scope <span class="optional">(optional)</span></div>
-      <p class="field-hinttext">Leave all unchecked to analyze every tool call in scope, or select a subset of tools.</p>
+      <p class="field-hinttext">
+        Leave all unchecked to analyze every tool call in scope, or select a subset of tools.
+      </p>
       {#if availableToolNames.length === 0}
         <p class="field-hinttext">No tool calls found in the currently selected turn range.</p>
       {:else}
@@ -283,8 +312,12 @@
     </div>
 
     <div class="field">
-      <label class="field-label" for="evaluation-criteria">Evaluation criteria <span class="optional">(optional)</span></label>
-      <p class="field-hinttext">Add one criterion per line when you want this analysis run to emphasize specific checks.</p>
+      <label class="field-label" for="evaluation-criteria"
+        >Evaluation criteria <span class="optional">(optional)</span></label
+      >
+      <p class="field-hinttext">
+        Add one criterion per line when you want this analysis run to emphasize specific checks.
+      </p>
       <textarea
         id="evaluation-criteria"
         class="field-input"
@@ -292,8 +325,7 @@
         bind:value={evaluationCriteriaText}
         disabled={$isLaunchingAnalysis}
         placeholder="Example:\nCheck whether retries were justified\nPrefer direct tool use over guesswork"
-        onkeydown={handleKeydown}
-      ></textarea>
+        onkeydown={handleKeydown}></textarea>
     </div>
 
     {#if $sessionError}
@@ -301,13 +333,14 @@
     {/if}
 
     <div class="form-actions">
-      <button class="btn" onclick={onClose} disabled={$isLaunchingAnalysis}>
-        Cancel
-      </button>
+      <button class="btn" onclick={onClose} disabled={$isLaunchingAnalysis}> Cancel </button>
       <button
         class="btn btn-primary"
         onclick={handleLaunch}
-        disabled={$isLaunchingAnalysis || !selectedModelConfigId || !selectedTurnId.trim() || !Number.isFinite(temperature)}
+        disabled={$isLaunchingAnalysis ||
+          !selectedModelConfigId ||
+          !selectedTurnId.trim() ||
+          !Number.isFinite(temperature)}
       >
         {$isLaunchingAnalysis ? 'Running analysis…' : 'Launch analysis'}
       </button>

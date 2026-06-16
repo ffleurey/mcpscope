@@ -33,7 +33,11 @@
     if (!baseUrl.trim()) {
       e.baseUrl = 'Base URL is required'
     } else {
-      try { new URL(baseUrl) } catch { e.baseUrl = 'Must be a valid URL' }
+      try {
+        new URL(baseUrl)
+      } catch {
+        e.baseUrl = 'Must be a valid URL'
+      }
     }
     errors = e
     return Object.keys(e).length === 0
@@ -54,11 +58,22 @@
   }
 </script>
 
-<form class="form-stack" onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>
-
+<form
+  class="form-stack"
+  onsubmit={(e) => {
+    e.preventDefault()
+    handleSubmit()
+  }}
+>
   <div class="field">
     <label class="field-label" for="lc-name">Name</label>
-    <input id="lc-name" class="field-input" type="text" bind:value={name} placeholder="e.g. Local LM Studio" />
+    <input
+      id="lc-name"
+      class="field-input"
+      type="text"
+      bind:value={name}
+      placeholder="e.g. Local LM Studio"
+    />
     {#if errors.name}<span class="field-errortext">{errors.name}</span>{/if}
   </div>
 
@@ -82,12 +97,20 @@
 
   <div class="field">
     <label class="field-label" for="lc-base-url">Base URL</label>
-    <input id="lc-base-url" class="field-input" type="text" bind:value={baseUrl} placeholder="http://localhost:1234/v1" />
+    <input
+      id="lc-base-url"
+      class="field-input"
+      type="text"
+      bind:value={baseUrl}
+      placeholder="http://localhost:1234/v1"
+    />
     {#if errors.baseUrl}<span class="field-errortext">{errors.baseUrl}</span>{/if}
   </div>
 
   <div class="field">
-    <label class="field-label" for="lc-api-key">API Key <span class="field-hinttext">(optional — for HTTPS endpoints)</span></label>
+    <label class="field-label" for="lc-api-key"
+      >API Key <span class="field-hinttext">(optional — for HTTPS endpoints)</span></label
+    >
     <div class="api-key-row">
       <input
         id="lc-api-key"
@@ -97,7 +120,13 @@
         placeholder="Bearer token — leave blank for local servers"
         autocomplete="off"
       />
-      <button type="button" class="btn btn-sm toggle-key" onclick={() => { showApiKey = !showApiKey }}>
+      <button
+        type="button"
+        class="btn btn-sm toggle-key"
+        onclick={() => {
+          showApiKey = !showApiKey
+        }}
+      >
         {showApiKey ? 'Hide' : 'Show'}
       </button>
     </div>

@@ -38,11 +38,13 @@ describe('executionSelectors', () => {
       },
     })
     const queuedSnapshot = makeSnapshot({
-      pendingJobs: [{
-        jobId: 'job-2',
-        target: { kind: 'step', sessionId: 'session-a', stepId: 'step-1' },
-        createdAt: 3,
-      }],
+      pendingJobs: [
+        {
+          jobId: 'job-2',
+          target: { kind: 'step', sessionId: 'session-a', stepId: 'step-1' },
+          createdAt: 3,
+        },
+      ],
     })
 
     expect(sessionHasQueuedOrActiveJob(activeSnapshot, 'session-a')).toBe(true)

@@ -29,38 +29,38 @@
     {/each}
   </div>
 {:else}
-{#if roundState.reasoningText}
-  <div class="stream-block">
-    <div class="stream-header">
-      <span class="stream-label">Reasoning</span>
-      <span class="status-pill">streaming</span>
+  {#if roundState.reasoningText}
+    <div class="stream-block">
+      <div class="stream-header">
+        <span class="stream-label">Reasoning</span>
+        <span class="status-pill">streaming</span>
+      </div>
+      <pre class="stream-text stream-reasoning">{roundState.reasoningText}</pre>
     </div>
-    <pre class="stream-text stream-reasoning">{roundState.reasoningText}</pre>
-  </div>
-{/if}
+  {/if}
 
-{#each roundState.toolCalls as toolCall (toolCall.toolCallIndex)}
-  <div class="stream-block">
-    <div class="stream-header">
-      <span class="stream-label">Tool call</span>
-      <span class="status-pill">streaming</span>
+  {#each roundState.toolCalls as toolCall (toolCall.toolCallIndex)}
+    <div class="stream-block">
+      <div class="stream-header">
+        <span class="stream-label">Tool call</span>
+        <span class="status-pill">streaming</span>
+      </div>
+      <div class="stream-tool-name">{toolCall.name || 'Resolving tool name…'}</div>
+      {#if toolCall.arguments}
+        <pre class="stream-text">{toolCall.arguments}</pre>
+      {/if}
     </div>
-    <div class="stream-tool-name">{toolCall.name || 'Resolving tool name…'}</div>
-    {#if toolCall.arguments}
-      <pre class="stream-text">{toolCall.arguments}</pre>
-    {/if}
-  </div>
-{/each}
+  {/each}
 
-{#if roundState.contentText}
-  <div class="stream-block">
-    <div class="stream-header">
-      <span class="stream-label">Assistant</span>
-      <span class="status-pill">streaming</span>
+  {#if roundState.contentText}
+    <div class="stream-block">
+      <div class="stream-header">
+        <span class="stream-label">Assistant</span>
+        <span class="status-pill">streaming</span>
+      </div>
+      <div class="stream-content">{roundState.contentText}</div>
     </div>
-    <div class="stream-content">{roundState.contentText}</div>
-  </div>
-{/if}
+  {/if}
 {/if}
 
 <style>

@@ -36,7 +36,9 @@
 
   const partLabel = $derived(labels[part.partType] ?? part.partType)
   const tokenCount = $derived(part.tokens.count)
-  const isEstimated = $derived(part.tokens.confidence === 'estimated' || part.tokens.confidence === 'unknown')
+  const isEstimated = $derived(
+    part.tokens.confidence === 'estimated' || part.tokens.confidence === 'unknown',
+  )
   function fmtTokens(count: number | null): string {
     if (count === null) return ''
     const n = count.toLocaleString()
@@ -55,16 +57,16 @@
     return part.context.note ?? ''
   })
   const isCollapsible = $derived(
-    part.partType === 'assistant-reasoning'
-    || part.partType === 'tool-call'
-    || part.partType === 'tool-result'
-    || part.partType === 'tool-definitions'
-    || part.partType === 'mcp-instructions',
+    part.partType === 'assistant-reasoning' ||
+      part.partType === 'tool-call' ||
+      part.partType === 'tool-result' ||
+      part.partType === 'tool-definitions' ||
+      part.partType === 'mcp-instructions',
   )
 
   const tools = $derived.by((): McpTool[] => {
     if (part.partType !== 'tool-definitions' || !Array.isArray(part.payload.json)) return []
-    return (part.payload.json as McpTool[]).filter(t => t?.name)
+    return (part.payload.json as McpTool[]).filter((t) => t?.name)
   })
 
   const toolsCharTotal = $derived(tools.reduce((sum, t) => sum + JSON.stringify(t).length, 0))
@@ -75,7 +77,7 @@
 
   function estimateToolTokens(tool: McpTool): number | null {
     if (tokenCount === null || toolsCharTotal === 0) return null
-    return Math.round(tokenCount * JSON.stringify(tool).length / toolsCharTotal)
+    return Math.round((tokenCount * JSON.stringify(tool).length) / toolsCharTotal)
   }
 
   function normalizeCompactMessageText(text: string | null | undefined): string | null {
@@ -83,16 +85,17 @@
       return null
     }
 
-    const normalized = text
-      .replace(/^(?:[ \t]*\n)+/, '')
-      .replace(/(?:\n[ \t]*)+$/, '')
+    const normalized = text.replace(/^(?:[ \t]*\n)+/, '').replace(/(?:\n[ \t]*)+$/, '')
 
     return normalized.length > 0 ? normalized : null
   }
-
 </script>
 
-<div class="part-block" class:user={part.partType === 'user-message'} class:compact={mode === 'compact'}>
+<div
+  class="part-block"
+  class:user={part.partType === 'user-message'}
+  class:compact={mode === 'compact'}
+>
   {#if mode === 'inspect'}
     <div class="part-id-row">
       <IdBadge id={part.id} />
@@ -185,7 +188,9 @@
                   <div class="tool-param">
                     <div class="param-header">
                       <span class="param-name">{paramName}</span>
-                      <span class="param-meta">{param.type ?? 'any'}{isRequired ? ' (required)' : ''}</span>
+                      <span class="param-meta"
+                        >{param.type ?? 'any'}{isRequired ? ' (required)' : ''}</span
+                      >
                     </div>
                     {#if param.description}
                       <div class="param-desc">{param.description}</div>
@@ -205,7 +210,12 @@
   {/if}
 
   {#if hasJsonPayload}
-    <button class="btn btn-xs raw-btn" onclick={() => { showJson = true }}>View JSON</button>
+    <button
+      class="btn btn-xs raw-btn"
+      onclick={() => {
+        showJson = true
+      }}>View JSON</button
+    >
   {/if}
 
   {#if part.context.note && part.partType !== 'tool-definitions'}
@@ -217,7 +227,9 @@
   <JsonDialog
     title="{partLabel} JSON"
     data={part.payload.json}
-    onClose={() => { showJson = false }}
+    onClose={() => {
+      showJson = false
+    }}
   />
 {/if}
 
@@ -289,10 +301,7 @@
 
   .part-block.compact .part-body {
     margin-top: var(--compact-meta-gap, 0.14rem);
-    padding:
-      0
-      var(--compact-summary-pad-x, 0.38rem)
-      var(--compact-detail-bottom-pad, 0.42rem);
+    padding: 0 var(--compact-summary-pad-x, 0.38rem) var(--compact-detail-bottom-pad, 0.42rem);
   }
 
   /* ── Content text: all 1rem, differentiate only by font family/style ─ */
@@ -387,7 +396,9 @@
     border-radius: 4px;
   }
 
-  .tool-summary::-webkit-details-marker { display: none; }
+  .tool-summary::-webkit-details-marker {
+    display: none;
+  }
 
   .tool-summary::before {
     content: '▶';

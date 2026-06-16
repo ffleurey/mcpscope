@@ -6,8 +6,14 @@
 <div class="new-session">
   <div class="new-session-card">
     <h2 class="card-title">No session selected</h2>
-    <p class="empty-copy">Open the dedicated primary session constructor to start a new chat session.</p>
-    <button class="btn btn-primary start-btn" onclick={openPrimaryLaunchDialog} disabled={$modelConfigs.length === 0}>Create primary session</button>
+    <p class="empty-copy">
+      Open the dedicated primary session constructor to start a new chat session.
+    </p>
+    <button
+      class="btn btn-primary start-btn"
+      onclick={openPrimaryLaunchDialog}
+      disabled={$modelConfigs.length === 0}>Create primary session</button
+    >
     {#if $modelConfigs.length === 0}
       <p class="field-hint">No model configs — create one in the sidebar first.</p>
     {/if}
@@ -62,5 +68,4 @@
     font-size: 0.9rem;
     font-weight: 600;
   }
-
 </style>

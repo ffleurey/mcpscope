@@ -1,10 +1,5 @@
 <script lang="ts">
-  import type {
-    ContextEntry,
-    PartRecord,
-    RoundRecord,
-    WorkflowStepTrace,
-  } from '../backendTypes'
+  import type { ContextEntry, PartRecord, RoundRecord, WorkflowStepTrace } from '../backendTypes'
   import type { StreamingRoundState } from '../traceStreaming'
   import IdBadge from './IdBadge.svelte'
   import SessionCompactionStepBlock from './SessionCompactionStepBlock.svelte'
@@ -50,17 +45,23 @@
   const label = $derived(STEP_TYPE_LABELS[step.stepTypeKey] ?? humanizeStepType(step.stepTypeKey))
   const toolCallPartId = $derived(
     step.stepTypeKey === 'analysis_tool_call_assessment'
-      ? (typeof step.params.tool_call_part_id === 'string' ? step.params.tool_call_part_id : null)
+      ? typeof step.params.tool_call_part_id === 'string'
+        ? step.params.tool_call_part_id
+        : null
       : null,
   )
   const workUnitId = $derived(
     step.stepTypeKey === 'analysis_tool_group_assessment'
-      ? (typeof step.params.work_unit_id === 'string' ? step.params.work_unit_id : null)
+      ? typeof step.params.work_unit_id === 'string'
+        ? step.params.work_unit_id
+        : null
       : null,
   )
   const turnId = $derived(
     step.stepTypeKey === 'analysis_turn_summary'
-      ? (typeof step.params.turn_id === 'string' ? step.params.turn_id : null)
+      ? typeof step.params.turn_id === 'string'
+        ? step.params.turn_id
+        : null
       : null,
   )
   const detailBadges = $derived.by(() => {
@@ -68,20 +69,35 @@
     if (turnId !== null) details.push(`turn: ${turnId}`)
     if (toolCallPartId !== null) details.push(`tool call: ${toolCallPartId}`)
     if (workUnitId !== null) details.push(`work unit: ${workUnitId}`)
-    if (workflowStep.ownedTurns.length > 0) details.push(`${workflowStep.ownedTurns.length} turn${workflowStep.ownedTurns.length === 1 ? '' : 's'}`)
-    if (workflowStep.artifacts.length > 0) details.push(`${workflowStep.artifacts.length} artifact${workflowStep.artifacts.length === 1 ? '' : 's'}`)
+    if (workflowStep.ownedTurns.length > 0)
+      details.push(
+        `${workflowStep.ownedTurns.length} turn${workflowStep.ownedTurns.length === 1 ? '' : 's'}`,
+      )
+    if (workflowStep.artifacts.length > 0)
+      details.push(
+        `${workflowStep.artifacts.length} artifact${workflowStep.artifacts.length === 1 ? '' : 's'}`,
+      )
     return details
   })
   const artifactLabels = $derived(
     workflowStep.artifacts
-      .map((artifact) => typeof artifact.metadata.schema_key === 'string' ? artifact.metadata.schema_key : artifact.id)
+      .map((artifact) =>
+        typeof artifact.metadata.schema_key === 'string'
+          ? artifact.metadata.schema_key
+          : artifact.id,
+      )
       .filter((value, index, all) => all.indexOf(value) === index),
   )
   const latestDiagnostic = $derived.by(() => {
     const diagnostic = [...workflowStep.artifacts]
       .filter((artifact) => artifact.metadata.schema_key === 'analysis.diagnostic.v1')
       .sort((left, right) => right.createdAt - left.createdAt)[0]
-    if (!diagnostic || typeof diagnostic.content !== 'object' || diagnostic.content === null || Array.isArray(diagnostic.content)) {
+    if (
+      !diagnostic ||
+      typeof diagnostic.content !== 'object' ||
+      diagnostic.content === null ||
+      Array.isArray(diagnostic.content)
+    ) {
       return null
     }
     const content = diagnostic.content as { message?: string; error_kind?: string }
@@ -119,10 +135,18 @@
 
     for (const turn of workflowStep.ownedTurns) {
       const parts = partsByTurn.get(turn.id) ?? []
-      const toolCallsExcluded = parts.filter((part) => part.partType === 'tool-call' && part.context.state === 'excluded').length
-      const toolResultsExcluded = parts.filter((part) => part.partType === 'tool-result' && part.context.state === 'excluded').length
-      const promptsHistorical = parts.filter((part) => part.partType === 'user-message' && part.context.state === 'historical-only').length
-      const reasoningExcluded = parts.filter((part) => part.partType === 'assistant-reasoning' && part.context.state === 'excluded').length
+      const toolCallsExcluded = parts.filter(
+        (part) => part.partType === 'tool-call' && part.context.state === 'excluded',
+      ).length
+      const toolResultsExcluded = parts.filter(
+        (part) => part.partType === 'tool-result' && part.context.state === 'excluded',
+      ).length
+      const promptsHistorical = parts.filter(
+        (part) => part.partType === 'user-message' && part.context.state === 'historical-only',
+      ).length
+      const reasoningExcluded = parts.filter(
+        (part) => part.partType === 'assistant-reasoning' && part.context.state === 'excluded',
+      ).length
 
       if (toolCallsExcluded > 0 || toolResultsExcluded > 0) {
         const totalEvidenceParts = toolCallsExcluded + toolResultsExcluded
@@ -158,7 +182,11 @@
   <div class="analysis-workflow-meta">
     <div class="analysis-workflow-line">
       <span class="analysis-workflow-label">{label}</span>
-      <span class="analysis-workflow-status" class:status-complete={step.status === 'complete'} class:status-error={step.status === 'error'}>{step.status}</span>
+      <span
+        class="analysis-workflow-status"
+        class:status-complete={step.status === 'complete'}
+        class:status-error={step.status === 'error'}>{step.status}</span
+      >
       {#each detailBadges as detail (detail)}
         <span class="analysis-workflow-detail">{detail}</span>
       {/each}
@@ -208,7 +236,7 @@
           roundStreams={roundStreamsByTurn.get(turn.id) ?? []}
           {mode}
           {contextSnapshotsByRound}
-          loadedContextLength={loadedContextLength}
+          {loadedContextLength}
         />
       </div>
     {/each}
@@ -216,11 +244,7 @@
     {#each workflowStep.postambleSteps as postamble (postamble.id)}
       <div class="analysis-workflow-section">
         <div class="analysis-workflow-section-title">Regular compaction</div>
-        <SessionCompactionStepBlock
-          step={postamble}
-          parts={[]}
-          mode={mode}
-        />
+        <SessionCompactionStepBlock step={postamble} parts={[]} {mode} />
       </div>
     {/each}
 

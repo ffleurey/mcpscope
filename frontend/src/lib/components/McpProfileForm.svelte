@@ -12,7 +12,8 @@
 
   // Slugify: lowercase, replace spaces with hyphens, remove non-alphanum except - _
   function slugify(text: string): string {
-    return text.toLowerCase()
+    return text
+      .toLowerCase()
       .replace(/\s+/g, '-')
       .replace(/[^a-z0-9_-]/g, '')
       .replace(/-+/g, '-')
@@ -40,9 +41,9 @@
       if (!slug) slug = 'untitled'
       // Check for collision with existing MCP profiles
       const existing = $mcpProfiles
-      if (existing.some(p => p.id === slug)) {
+      if (existing.some((p) => p.id === slug)) {
         let counter = 2
-        while (existing.some(p => p.id === `${slug}-${counter}`)) {
+        while (existing.some((p) => p.id === `${slug}-${counter}`)) {
           counter++
         }
         slug = `${slug}-${counter}`
@@ -63,7 +64,11 @@
     if (!url.trim()) {
       e.url = 'URL is required'
     } else {
-      try { new URL(url) } catch { e.url = 'Must be a valid URL' }
+      try {
+        new URL(url)
+      } catch {
+        e.url = 'Must be a valid URL'
+      }
     }
     errors = e
     return Object.keys(e).length === 0
@@ -86,11 +91,22 @@
   }
 </script>
 
-<form class="form-stack" onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>
-
+<form
+  class="form-stack"
+  onsubmit={(e) => {
+    e.preventDefault()
+    handleSubmit()
+  }}
+>
   <div class="field">
     <label class="field-label" for="mcp-name">Name</label>
-    <input id="mcp-name" class="field-input" type="text" bind:value={name} placeholder="e.g. Local MCP Server" />
+    <input
+      id="mcp-name"
+      class="field-input"
+      type="text"
+      bind:value={name}
+      placeholder="e.g. Local MCP Server"
+    />
     {#if errors.name}<span class="field-errortext">{errors.name}</span>{/if}
   </div>
 
@@ -99,15 +115,28 @@
     {#if profile}
       <span class="field-static">{customId}</span>
     {:else}
-      <input id="mcp-id" class="field-input" type="text" bind:value={customId} placeholder="auto-generated from name" />
+      <input
+        id="mcp-id"
+        class="field-input"
+        type="text"
+        bind:value={customId}
+        placeholder="auto-generated from name"
+      />
     {/if}
     {#if errors.customId}<span class="field-errortext">{errors.customId}</span>{/if}
-    {#if !profile}<span class="field-hinttext">Set once at creation, cannot be changed later.</span>{/if}
+    {#if !profile}<span class="field-hinttext">Set once at creation, cannot be changed later.</span
+      >{/if}
   </div>
 
   <div class="field">
     <label class="field-label" for="mcp-url">Server URL</label>
-    <input id="mcp-url" class="field-input" type="text" bind:value={url} placeholder="http://localhost:3000/mcp" />
+    <input
+      id="mcp-url"
+      class="field-input"
+      type="text"
+      bind:value={url}
+      placeholder="http://localhost:3000/mcp"
+    />
     {#if errors.url}<span class="field-errortext">{errors.url}</span>{/if}
   </div>
 

@@ -10,7 +10,12 @@ import {
   retryFailedAnalysisStep as retryBackendFailedAnalysisStep,
   retryInitSession,
 } from './api/backendClient'
-import { lmConnections, mcpProfiles, modelConfigs, sessionCreationDefaults } from './connectionStore'
+import {
+  lmConnections,
+  mcpProfiles,
+  modelConfigs,
+  sessionCreationDefaults,
+} from './connectionStore'
 import type {
   AnalysisStreamEvent,
   PreludeStreamEvent,
@@ -34,9 +39,7 @@ import {
   upsertTurn,
   type TurnStreamingState,
 } from './traceStreaming'
-import type {
-  McpServerProfile,
-} from './types'
+import type { McpServerProfile } from './types'
 
 export const sessionError = writable<AppError | null>(null)
 export const sessionErrorSurface = writable<'dialog' | 'new-session'>('dialog')
@@ -56,7 +59,8 @@ export const isPrimaryLaunchDialogOpen = writable(false)
 
 export const activeSession = derived(
   [chatSessions, activeChatId],
-  ([$chatSessions, $activeChatId]) => $chatSessions.find((session) => session.id === $activeChatId) ?? null,
+  ([$chatSessions, $activeChatId]) =>
+    $chatSessions.find((session) => session.id === $activeChatId) ?? null,
 )
 
 export function clearSessionError(): void {
@@ -94,13 +98,14 @@ export async function refreshSessions(): Promise<SessionSummary[]> {
 }
 
 function toSessionSummary(record: SessionRecord): SessionSummary {
-  const status: SessionSummary['status'] = record.initStatus === 'error' || record.status === 'error'
-    ? 'error'
-    : record.initStatus === 'pending' || record.initStatus === 'initializing'
-      ? 'initializing'
-      : record.status === 'active'
-        ? 'running'
-        : 'ready'
+  const status: SessionSummary['status'] =
+    record.initStatus === 'error' || record.status === 'error'
+      ? 'error'
+      : record.initStatus === 'pending' || record.initStatus === 'initializing'
+        ? 'initializing'
+        : record.status === 'active'
+          ? 'running'
+          : 'ready'
 
   return {
     id: record.id,
@@ -119,7 +124,7 @@ function toSessionSummary(record: SessionRecord): SessionSummary {
     workflow_phase: undefined,
     latest_error: undefined,
     model_profile_snapshot: { name: record.modelProfileSnapshot.name },
-    mcp_profile_snapshots: record.mcpProfileSnapshots.map(s => ({ name: s.name })),
+    mcp_profile_snapshots: record.mcpProfileSnapshots.map((s) => ({ name: s.name })),
   }
 }
 
@@ -130,10 +135,9 @@ function upsertSessionSummary(record: SessionRecord): void {
     ...(existing?.workflow_kind ? { workflow_kind: existing.workflow_kind } : {}),
     ...(existing?.workflow_phase ? { workflow_phase: existing.workflow_phase } : {}),
   }
-  chatSessions.update((sessions) => sortByUpdatedAtDesc([
-    summary,
-    ...sessions.filter((existing) => existing.id !== summary.id),
-  ]))
+  chatSessions.update((sessions) =>
+    sortByUpdatedAtDesc([summary, ...sessions.filter((existing) => existing.id !== summary.id)]),
+  )
 }
 
 function currentOrEmptyTrace(session: SessionSummary): SessionTraceBundle {
@@ -194,17 +198,16 @@ export function applyExternalStreamEvent(
   event: TurnStreamEvent | AnalysisStreamEvent,
 ): void {
   if (get(activeChatId) !== sessionId) return
-  const session = get(chatSessions).find(s => s.id === sessionId) ?? null
+  const session = get(chatSessions).find((s) => s.id === sessionId) ?? null
   const isAnalysis = session?.session_type === 'session_analysis'
-  const isTurnEvent = (
-    event.type === 'turn-started'
-    || event.type === 'round-started'
-    || event.type === 'part-delta'
-    || event.type === 'part-committed'
-    || event.type === 'round-committed'
-    || event.type === 'turn-committed'
-    || event.type === 'turn-failed'
-  )
+  const isTurnEvent =
+    event.type === 'turn-started' ||
+    event.type === 'round-started' ||
+    event.type === 'part-delta' ||
+    event.type === 'part-committed' ||
+    event.type === 'round-committed' ||
+    event.type === 'turn-committed' ||
+    event.type === 'turn-failed'
   // For analysis sessions, route all events (including turn-committed) through
   // applyAnalysisStreamEvent so it can keep activeTurnStream alive between turns.
   if (isAnalysis) {
@@ -251,10 +254,15 @@ export async function selectChat(sessionId: string): Promise<void> {
     // If a scheduler job is running for this session, restore live streaming state.
     // Replay cached execution events that arrived while this session was not selected,
     // then prime activeTurnStream for any new events still in flight.
-    const { schedulerSnapshot: snap, getSessionStreamEvents, clearSessionStreamCache } = await import('./executionStore')
+    const {
+      schedulerSnapshot: snap,
+      getSessionStreamEvents,
+      clearSessionStreamCache,
+    } = await import('./executionStore')
     const currentSnap = get(snap)
-    const isJobActive = currentSnap.activeJob?.target.sessionId === sessionId
-      || currentSnap.pendingJobs.some(j => j.target.sessionId === sessionId)
+    const isJobActive =
+      currentSnap.activeJob?.target.sessionId === sessionId ||
+      currentSnap.pendingJobs.some((j) => j.target.sessionId === sessionId)
 
     if (isJobActive) {
       const cachedEvents = getSessionStreamEvents(sessionId)
@@ -274,24 +282,34 @@ export async function selectChat(sessionId: string): Promise<void> {
 
         if (eventsToReplay.length > 0) {
           // Initialize activeTurnStream so replay deltas have somewhere to land
-          activeTurnStream.set(createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''))
-          const sessionSummary = get(chatSessions).find(s => s.id === sessionId) ?? null
+          activeTurnStream.set(
+            createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''),
+          )
+          const sessionSummary = get(chatSessions).find((s) => s.id === sessionId) ?? null
           const isAnalysis = sessionSummary?.session_type === 'session_analysis'
           for (const event of eventsToReplay) {
             if (isAnalysis && sessionSummary) {
               applyAnalysisStreamEvent(sessionSummary, event as AnalysisStreamEvent)
             } else if (!isAnalysis && sessionSummary) {
-              applyTurnStreamEvent(sessionSummary, currentSnap.activeJob?.prompt ?? '', event as TurnStreamEvent)
+              applyTurnStreamEvent(
+                sessionSummary,
+                currentSnap.activeJob?.prompt ?? '',
+                event as TurnStreamEvent,
+              )
             }
           }
         } else if (get(activeTurnStream) === null) {
           // No in-flight events but job is still running — keep stream open
-          activeTurnStream.set(createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''))
+          activeTurnStream.set(
+            createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''),
+          )
         }
         // Cache served its purpose — clear it; new events come in live
         clearSessionStreamCache(sessionId)
       } else if (get(activeTurnStream) === null) {
-        activeTurnStream.set(createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''))
+        activeTurnStream.set(
+          createTurnStreamingState(sessionId, currentSnap.activeJob?.prompt ?? ''),
+        )
       }
     }
   } catch (error) {
@@ -345,10 +363,16 @@ export async function startSession(input: {
       : undefined
 
     if (!selectedModelConfig) {
-      throw new AppError('No model config is available for the primary session constructor.', 'validation', 0)
+      throw new AppError(
+        'No model config is available for the primary session constructor.',
+        'validation',
+        0,
+      )
     }
 
-    const selectedConnection = get(lmConnections).find((connection) => connection.id === selectedModelConfig.connectionId)
+    const selectedConnection = get(lmConnections).find(
+      (connection) => connection.id === selectedModelConfig.connectionId,
+    )
     if (!selectedConnection) {
       throw new AppError(
         `LM connection "${selectedModelConfig.connectionId}" referenced by the selected model config no longer exists.`,
@@ -358,16 +382,20 @@ export async function startSession(input: {
     }
 
     const allProfiles = get(mcpProfiles)
-    const resolvedMcpIds = input.mcpProfileIds ?? allProfiles.filter(p => p.defaultEnabled).map(p => p.id)
+    const resolvedMcpIds =
+      input.mcpProfileIds ?? allProfiles.filter((p) => p.defaultEnabled).map((p) => p.id)
     const selectedMcpProfiles = resolvedMcpIds
-      .map(id => allProfiles.find(p => p.id === id))
+      .map((id) => allProfiles.find((p) => p.id === id))
       .filter((p): p is NonNullable<typeof p> => p != null)
-    const mcpSnapshots = selectedMcpProfiles.map(p => buildMcpProfileSnapshot(p))
+    const mcpSnapshots = selectedMcpProfiles.map((p) => buildMcpProfileSnapshot(p))
 
     // Pre-flight: check connectivity before creating the session record
     await preflightSession({
-      lmConnectionSnapshot: { baseUrl: selectedConnection.baseUrl, apiKey: selectedConnection.apiKey ?? null },
-      mcpProfileSnapshots: mcpSnapshots.map(s => ({ url: s.url })),
+      lmConnectionSnapshot: {
+        baseUrl: selectedConnection.baseUrl,
+        apiKey: selectedConnection.apiKey ?? null,
+      },
+      mcpProfileSnapshots: mcpSnapshots.map((s) => ({ url: s.url })),
       selectedModel: {
         modelKey: selectedModelConfig.modelKey,
         modelDisplayName: selectedModelConfig.modelDisplayName,
@@ -418,12 +446,12 @@ function applyPreludeStreamEvent(event: PreludeStreamEvent): void {
   }
 
   // prelude-failed
-  setSessionError(new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0))
+  setSessionError(
+    new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0),
+  )
 }
 
-export async function sendMessage(input: {
-  userContent: string
-}): Promise<void> {
+export async function sendMessage(input: { userContent: string }): Promise<void> {
   const userContent = input.userContent.trim()
   if (!userContent) return
 
@@ -523,7 +551,9 @@ export function applyTurnStreamEvent(
   }
 
   if (event.type === 'part-delta') {
-    activeTurnStream.update((state) => applyStreamingDelta(state, event.turnId, event.roundId, event.delta))
+    activeTurnStream.update((state) =>
+      applyStreamingDelta(state, event.turnId, event.roundId, event.delta),
+    )
     return
   }
 
@@ -548,7 +578,9 @@ export function applyTurnStreamEvent(
 
   activeTurnStream.set(null)
   // turn-failed event
-  setSessionError(new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0))
+  setSessionError(
+    new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0),
+  )
 }
 
 /**
@@ -710,12 +742,12 @@ export function applyAnalysisStreamEvent(
     return
   }
   if (
-    event.type === 'turn-started'
-    || event.type === 'round-started'
-    || event.type === 'part-delta'
-    || event.type === 'part-committed'
-    || event.type === 'round-committed'
-    || event.type === 'turn-failed'
+    event.type === 'turn-started' ||
+    event.type === 'round-started' ||
+    event.type === 'part-delta' ||
+    event.type === 'part-committed' ||
+    event.type === 'round-committed' ||
+    event.type === 'turn-failed'
   ) {
     if (session) {
       applyTurnStreamEvent(session, '', event as TurnStreamEvent)
@@ -728,9 +760,10 @@ export function applyAnalysisStreamEvent(
     activeTrace.update((trace) => {
       if (!trace) return trace
       const existing = trace.steps.findIndex((s) => s.id === event.step.id)
-      const steps = existing >= 0
-        ? trace.steps.map((s, i) => (i === existing ? event.step : s))
-        : [...trace.steps, event.step]
+      const steps =
+        existing >= 0
+          ? trace.steps.map((s, i) => (i === existing ? event.step : s))
+          : [...trace.steps, event.step]
       return { ...trace, steps }
     })
     return
@@ -738,11 +771,13 @@ export function applyAnalysisStreamEvent(
 
   if (event.type === 'analysis-phase-changed') {
     // Keep the analysis phase visible through the session summary instead of a cursor node.
-    chatSessions.update((sessions) => sessions.map((existing) => (
-      existing.id === session?.id
-        ? { ...existing, workflow_phase: event.phase as SessionSummary['workflow_phase'] }
-        : existing
-    )))
+    chatSessions.update((sessions) =>
+      sessions.map((existing) =>
+        existing.id === session?.id
+          ? { ...existing, workflow_phase: event.phase as SessionSummary['workflow_phase'] }
+          : existing,
+      ),
+    )
     return
   }
 

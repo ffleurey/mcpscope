@@ -62,27 +62,49 @@
   }
 </script>
 
-<nav class="sidebar" class:collapsed class:resizing={isResizing}
+<nav
+  class="sidebar"
+  class:collapsed
+  class:resizing={isResizing}
   style="width: {collapsed ? '40px' : sidebarWidth + 'px'}"
 >
   {#if $isPrimaryLaunchDialogOpen}
     <PrimarySessionLaunchModal />
   {/if}
   {#if collapsed}
-    <button class="icon-btn icon-btn-dim" onclick={() => collapsed = false} title="Expand sidebar">›</button>
+    <button class="icon-btn icon-btn-dim" onclick={() => (collapsed = false)} title="Expand sidebar"
+      >›</button
+    >
   {:else}
     <div class="section-header">
       <span class="section-label">Sessions</span>
       <div class="header-actions">
         {#if $modelConfigs.length > 0}
-          <button class="icon-btn icon-btn-dim" onclick={handleNewChat} title="New session">+</button>
+          <button class="icon-btn icon-btn-dim" onclick={handleNewChat} title="New session"
+            >+</button
+          >
         {/if}
-        <button class="icon-btn icon-btn-dim" onclick={handleImportClick} disabled={$isImportingTrace} title={$isImportingTrace ? 'Importing…' : 'Import trace'}>↑</button>
-        <button class="icon-btn icon-btn-dim" onclick={() => collapsed = true} title="Collapse sidebar">‹</button>
+        <button
+          class="icon-btn icon-btn-dim"
+          onclick={handleImportClick}
+          disabled={$isImportingTrace}
+          title={$isImportingTrace ? 'Importing…' : 'Import trace'}>↑</button
+        >
+        <button
+          class="icon-btn icon-btn-dim"
+          onclick={() => (collapsed = true)}
+          title="Collapse sidebar">‹</button
+        >
       </div>
     </div>
 
-    <input bind:this={importInput} type="file" accept="application/json" hidden onchange={handleImportChange} />
+    <input
+      bind:this={importInput}
+      type="file"
+      accept="application/json"
+      hidden
+      onchange={handleImportChange}
+    />
 
     <div class="session-list-area">
       <ChatList />
@@ -90,19 +112,35 @@
 
     <div class="config-section">
       <div class="config-label">Configuration</div>
-      <button class="nav-item" class:active={$currentView === 'model-configs'} onclick={() => navigate('model-configs')}>
+      <button
+        class="nav-item"
+        class:active={$currentView === 'model-configs'}
+        onclick={() => navigate('model-configs')}
+      >
         Model Configs
       </button>
-      <button class="nav-item" class:active={$currentView === 'connections'} onclick={() => navigate('connections')}>
+      <button
+        class="nav-item"
+        class:active={$currentView === 'connections'}
+        onclick={() => navigate('connections')}
+      >
         Connections
       </button>
-      <button class="nav-item" class:active={$currentView === 'mcp-profiles'} onclick={() => navigate('mcp-profiles')}>
+      <button
+        class="nav-item"
+        class:active={$currentView === 'mcp-profiles'}
+        onclick={() => navigate('mcp-profiles')}
+      >
         MCP Servers
       </button>
     </div>
 
     <div class="design-section">
-      <button class="nav-item" class:active={$currentView === 'design'} onclick={() => navigate('design')}>
+      <button
+        class="nav-item"
+        class:active={$currentView === 'design'}
+        onclick={() => navigate('design')}
+      >
         Design
       </button>
     </div>
@@ -198,7 +236,9 @@
     font-size: 0.83rem;
     color: var(--text-dim);
     font-family: inherit;
-    transition: background 0.1s, color 0.1s;
+    transition:
+      background 0.1s,
+      color 0.1s;
   }
   .nav-item:hover {
     background: var(--bg-hover);

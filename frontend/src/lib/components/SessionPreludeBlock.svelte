@@ -44,7 +44,9 @@
     {#if canCollapse}
       <button
         class="setup-toggle-btn"
-        onclick={() => { chatCollapsed = !chatCollapsed }}
+        onclick={() => {
+          chatCollapsed = !chatCollapsed
+        }}
         aria-expanded={!chatCollapsed}
       >
         <span class="disclosure-arrow" class:open={!chatCollapsed}>▶</span>
@@ -154,8 +156,13 @@
   }
 
   @keyframes blink {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 1; }
+    0%,
+    100% {
+      opacity: 0.3;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 
   .setup-empty-hint {

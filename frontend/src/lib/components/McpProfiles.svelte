@@ -7,7 +7,14 @@
   import DialogShell from './DialogShell.svelte'
   import { testMcpProfile } from '../api/backendClient'
   import { toAppError, type AppError } from '../errors'
-  import { iconPlus, iconEdit, iconTrash, iconTest, iconCheckboxMarked, iconCheckboxBlank } from '../design/icons'
+  import {
+    iconPlus,
+    iconEdit,
+    iconTrash,
+    iconTest,
+    iconCheckboxMarked,
+    iconCheckboxBlank,
+  } from '../design/icons'
   import { columnResize } from '../actions/columnResize'
 
   // Ephemeral, per-page test results — reset when the view unmounts (navigating away).
@@ -35,10 +42,20 @@
     return status === 'ok' ? 'running' : status === 'error' ? 'error' : 'warn'
   }
 
-  function startNew() { showNew = true; editingId = null }
-  function cancelNew() { showNew = false }
-  function startEdit(id: string) { editingId = id; showNew = false }
-  function cancelEdit() { editingId = null }
+  function startNew() {
+    showNew = true
+    editingId = null
+  }
+  function cancelNew() {
+    showNew = false
+  }
+  function startEdit(id: string) {
+    editingId = id
+    showNew = false
+  }
+  function cancelEdit() {
+    editingId = null
+  }
 
   async function handleSave(profile: McpServerProfile) {
     try {
@@ -105,69 +122,87 @@
     <p class="config-empty">No MCP server profiles yet. Create one to get started.</p>
   {:else}
     <div class="table-scroll">
-    <table class="data-table" use:columnResize>
-      <colgroup>
-        <col style="width: 3rem" />
-        <col style="width: 13rem" />
-        <col style="width: 11rem" />
-        <col style="width: 18rem" />
-        <col style="width: 16rem" />
-        <col style="width: 8rem" />
-      </colgroup>
-      <thead>
-        <tr>
-          <th class="col-toggle" title="Default for new sessions" aria-label="Default"></th>
-          <th>Name</th>
-          <th>ID</th>
-          <th>URL</th>
-          <th>Test</th>
-          <th class="col-actions">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each $mcpProfiles as profile (profile.id)}
+      <table class="data-table" use:columnResize>
+        <colgroup>
+          <col style="width: 3rem" />
+          <col style="width: 13rem" />
+          <col style="width: 11rem" />
+          <col style="width: 18rem" />
+          <col style="width: 16rem" />
+          <col style="width: 8rem" />
+        </colgroup>
+        <thead>
           <tr>
-            <td class="col-toggle">
-              <button
-                class="icon-btn"
-                class:icon-glow={profile.defaultEnabled}
-                class:icon-off={!profile.defaultEnabled}
-                title={profile.defaultEnabled ? 'Default for new sessions — click to unset' : 'Set as default for new sessions'}
-                aria-label="Toggle default for new sessions"
-                aria-pressed={profile.defaultEnabled}
-                onclick={() => handleToggleDefault(profile)}
-              >{@html profile.defaultEnabled ? iconCheckboxMarked : iconCheckboxBlank}</button>
-            </td>
-            <td title={profile.name}>{profile.name}</td>
-            <td class="col-mono" title={profile.id}>{profile.id}</td>
-            <td class="col-mono" title={profile.url}>{profile.url}</td>
-            <td>
-              {#if testState[profile.id]}
-                {@const t = testState[profile.id]}
-                <button
-                  class="status-cell"
-                  disabled={t.status === 'testing'}
-                  title={t.message}
-                  onclick={() => openDetail(profile.id)}
-                >
-                  <span class="status-dot {dotClass(t.status)}"></span>
-                  <span class="status-text">{t.message}</span>
-                </button>
-              {:else}
-                <span class="status-muted">—</span>
-              {/if}
-            </td>
-            <td class="col-actions">
-              <span class="row-actions">
-                <button class="icon-btn" title="Test connection" aria-label="Test connection" onclick={() => handleTest(profile)}>{@html iconTest}</button>
-                <button class="icon-btn" title="Edit" aria-label="Edit" onclick={() => startEdit(profile.id)}>{@html iconEdit}</button>
-                <button class="icon-btn icon-btn-danger" title="Delete" aria-label="Delete" onclick={() => handleDelete(profile.id)}>{@html iconTrash}</button>
-              </span>
-            </td>
+            <th class="col-toggle" title="Default for new sessions" aria-label="Default"></th>
+            <th>Name</th>
+            <th>ID</th>
+            <th>URL</th>
+            <th>Test</th>
+            <th class="col-actions">Actions</th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {#each $mcpProfiles as profile (profile.id)}
+            <tr>
+              <td class="col-toggle">
+                <button
+                  class="icon-btn"
+                  class:icon-glow={profile.defaultEnabled}
+                  class:icon-off={!profile.defaultEnabled}
+                  title={profile.defaultEnabled
+                    ? 'Default for new sessions — click to unset'
+                    : 'Set as default for new sessions'}
+                  aria-label="Toggle default for new sessions"
+                  aria-pressed={profile.defaultEnabled}
+                  onclick={() => handleToggleDefault(profile)}
+                  >{@html profile.defaultEnabled ? iconCheckboxMarked : iconCheckboxBlank}</button
+                >
+              </td>
+              <td title={profile.name}>{profile.name}</td>
+              <td class="col-mono" title={profile.id}>{profile.id}</td>
+              <td class="col-mono" title={profile.url}>{profile.url}</td>
+              <td>
+                {#if testState[profile.id]}
+                  {@const t = testState[profile.id]}
+                  <button
+                    class="status-cell"
+                    disabled={t.status === 'testing'}
+                    title={t.message}
+                    onclick={() => openDetail(profile.id)}
+                  >
+                    <span class="status-dot {dotClass(t.status)}"></span>
+                    <span class="status-text">{t.message}</span>
+                  </button>
+                {:else}
+                  <span class="status-muted">—</span>
+                {/if}
+              </td>
+              <td class="col-actions">
+                <span class="row-actions">
+                  <button
+                    class="icon-btn"
+                    title="Test connection"
+                    aria-label="Test connection"
+                    onclick={() => handleTest(profile)}>{@html iconTest}</button
+                  >
+                  <button
+                    class="icon-btn"
+                    title="Edit"
+                    aria-label="Edit"
+                    onclick={() => startEdit(profile.id)}>{@html iconEdit}</button
+                  >
+                  <button
+                    class="icon-btn icon-btn-danger"
+                    title="Delete"
+                    aria-label="Delete"
+                    onclick={() => handleDelete(profile.id)}>{@html iconTrash}</button
+                  >
+                </span>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     </div>
   {/if}
 </div>
@@ -189,7 +224,14 @@
   <ConnectionTestDialog
     title="MCP Connection Test"
     target={detailProfile.url}
-    result={{ ok: t.status === 'ok', message: t.message, details: t.details, rawDetails: t.rawDetails }}
-    onClose={() => { detailId = null }}
+    result={{
+      ok: t.status === 'ok',
+      message: t.message,
+      details: t.details,
+      rawDetails: t.rawDetails,
+    }}
+    onClose={() => {
+      detailId = null
+    }}
   />
 {/if}

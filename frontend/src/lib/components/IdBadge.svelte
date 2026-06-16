@@ -31,13 +31,20 @@
   }
 </script>
 
-<svelte:document onclick={() => { if (open) open = false }} />
+<svelte:document
+  onclick={() => {
+    if (open) open = false
+  }}
+/>
 <span class="id-badge">
   <button
     class="token-pill id-pill"
     title={id}
-    onclick={(e) => { e.stopPropagation(); open = !open }}
-  >{id}</button>
+    onclick={(e) => {
+      e.stopPropagation()
+      open = !open
+    }}>{id}</button
+  >
 
   {#if open}
     <div class="id-menu" role="menu" tabindex="-1" onmousedown={(e) => e.stopPropagation()}>
@@ -53,7 +60,9 @@
   <JsonDialog
     title={lookupTitle}
     data={lookupData}
-    onClose={() => { showLookup = false }}
+    onClose={() => {
+      showLookup = false
+    }}
   />
 {/if}
 

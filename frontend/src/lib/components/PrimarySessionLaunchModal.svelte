@@ -37,7 +37,7 @@
 
   $effect(() => {
     if (!hasInitializedMcpSelection) {
-      selectedMcpProfileIds = $mcpProfiles.filter(p => p.defaultEnabled).map(p => p.id)
+      selectedMcpProfileIds = $mcpProfiles.filter((p) => p.defaultEnabled).map((p) => p.id)
       hasInitializedMcpSelection = true
     }
   })
@@ -53,14 +53,18 @@
 
   function toggleMcp(id: string) {
     if (selectedMcpProfileIds.includes(id)) {
-      selectedMcpProfileIds = selectedMcpProfileIds.filter(i => i !== id)
+      selectedMcpProfileIds = selectedMcpProfileIds.filter((i) => i !== id)
     } else {
       selectedMcpProfileIds = [...selectedMcpProfileIds, id]
     }
   }
 </script>
 
-<DialogShell title="New primary session" onClose={closePrimaryLaunchDialog} dialogClass="primary-launch-dialog">
+<DialogShell
+  title="New primary session"
+  onClose={closePrimaryLaunchDialog}
+  dialogClass="primary-launch-dialog"
+>
   <div class="form-stack">
     {#if $sessionError && $sessionErrorSurface === 'new-session'}
       <div class="error-banner">
@@ -76,7 +80,9 @@
     {/if}
 
     <div class="field">
-      <label class="field-label" for="primary-session-id">Session ID <span class="optional">(optional)</span></label>
+      <label class="field-label" for="primary-session-id"
+        >Session ID <span class="optional">(optional)</span></label
+      >
       <input
         id="primary-session-id"
         class="field-input"
@@ -84,7 +90,12 @@
         maxlength="4"
         placeholder="AB12"
         bind:value={sessionId}
-        oninput={() => { sessionId = sessionId.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4) }}
+        oninput={() => {
+          sessionId = sessionId
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '')
+            .slice(0, 4)
+        }}
         disabled={$isStartingSession}
       />
     </div>
@@ -94,9 +105,18 @@
       {#if $modelConfigs.length === 0}
         <p class="field-hinttext">No model configs — create one in the sidebar first.</p>
       {:else}
-        <select id="primary-model-select" class="field-input" bind:value={selectedConfigId} disabled={$isStartingSession}>
+        <select
+          id="primary-model-select"
+          class="field-input"
+          bind:value={selectedConfigId}
+          disabled={$isStartingSession}
+        >
           {#each $modelConfigs as config (config.id)}
-            <option value={config.id}>{config.name}{$sessionCreationDefaults?.defaultModelConfigId === config.id ? ' (default)' : ''}</option>
+            <option value={config.id}
+              >{config.name}{$sessionCreationDefaults?.defaultModelConfigId === config.id
+                ? ' (default)'
+                : ''}</option
+            >
           {/each}
         </select>
       {/if}
@@ -146,8 +166,14 @@
     </div>
 
     <div class="form-actions">
-      <button class="btn" onclick={closePrimaryLaunchDialog} disabled={$isStartingSession}>Cancel</button>
-      <button class="btn btn-primary" onclick={handleStart} disabled={!selectedConfigId || $isStartingSession || $modelConfigs.length === 0}>
+      <button class="btn" onclick={closePrimaryLaunchDialog} disabled={$isStartingSession}
+        >Cancel</button
+      >
+      <button
+        class="btn btn-primary"
+        onclick={handleStart}
+        disabled={!selectedConfigId || $isStartingSession || $modelConfigs.length === 0}
+      >
         {$isStartingSession ? 'Starting…' : 'Start session'}
       </button>
     </div>
@@ -208,7 +234,6 @@
     flex-direction: column;
     gap: 0.35rem;
   }
-
 
   .radio-group {
     display: flex;

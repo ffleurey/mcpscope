@@ -17,8 +17,12 @@
 
   onMount(() => {
     Promise.all([initConnectionStore(), initSessionStore()])
-      .then(() => { initExecutionStore() })
-      .finally(() => { loading = false })
+      .then(() => {
+        initExecutionStore()
+      })
+      .finally(() => {
+        loading = false
+      })
     return destroyExecutionStore
   })
 </script>
@@ -30,7 +34,8 @@
 
     {#if $backendError}
       <div class="backend-error">
-        <strong>Backend error:</strong> {$backendError}
+        <strong>Backend error:</strong>
+        {$backendError}
       </div>
     {/if}
 

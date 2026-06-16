@@ -42,9 +42,14 @@
     }
   }
 
-  function formatTarget(job: { target: { kind: string; sessionId: string; stepId?: string }; prompt?: string }) {
+  function formatTarget(job: {
+    target: { kind: string; sessionId: string; stepId?: string }
+    prompt?: string
+  }) {
     if (job.target.kind === 'session') {
-      return job.prompt ? `"${job.prompt.slice(0, 40)}${job.prompt.length > 40 ? '…' : ''}"` : `Session ${job.target.sessionId.slice(0, 8)}`
+      return job.prompt
+        ? `"${job.prompt.slice(0, 40)}${job.prompt.length > 40 ? '…' : ''}"`
+        : `Session ${job.target.sessionId.slice(0, 8)}`
     }
     return `Step ${job.target.stepId?.slice(0, 8) ?? '?'}`
   }
@@ -75,18 +80,16 @@
         class="btn btn-sm"
         onclick={handlePauseResume}
         disabled={isActioning}
-        title={snapshot.controlState === 'running' ? 'Pause after current step' : 'Resume execution'}
+        title={snapshot.controlState === 'running'
+          ? 'Pause after current step'
+          : 'Resume execution'}
       >
         {snapshot.controlState === 'running' ? '⏸' : '▶'}
       </button>
 
       <!-- Queue button -->
       {#if queuedJobs.length > 0}
-        <button
-          class="btn btn-sm"
-          onclick={() => showQueue = !showQueue}
-          title="Show queue"
-        >
+        <button class="btn btn-sm" onclick={() => (showQueue = !showQueue)} title="Show queue">
           Queue ({$queueLength})
           <span class="chevron">{showQueue ? '▲' : '▼'}</span>
         </button>
@@ -105,8 +108,8 @@
         <button
           class="icon-btn icon-btn-danger"
           onclick={() => handleRemoveJob(job.jobId)}
-          title="Remove from queue"
-        >✕</button>
+          title="Remove from queue">✕</button
+        >
       </div>
     {/each}
   </div>
@@ -188,5 +191,4 @@
     white-space: nowrap;
     color: var(--text-bright);
   }
-
 </style>

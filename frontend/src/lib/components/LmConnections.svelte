@@ -39,10 +39,20 @@
     return status === 'ok' ? 'running' : status === 'error' ? 'error' : 'warn'
   }
 
-  function startNew() { showNew = true; editingId = null }
-  function cancelNew() { showNew = false }
-  function startEdit(id: string) { editingId = id; showNew = false }
-  function cancelEdit() { editingId = null }
+  function startNew() {
+    showNew = true
+    editingId = null
+  }
+  function cancelNew() {
+    showNew = false
+  }
+  function startEdit(id: string) {
+    editingId = id
+    showNew = false
+  }
+  function cancelEdit() {
+    editingId = null
+  }
 
   async function handleSave(conn: LmStudioConnection) {
     try {
@@ -100,59 +110,74 @@
     <p class="config-empty">No connections yet. Add one to get started.</p>
   {:else}
     <div class="table-scroll">
-    <table class="data-table" use:columnResize>
-      <colgroup>
-        <col style="width: 12rem" />
-        <col style="width: 7.5rem" />
-        <col style="width: 18rem" />
-        <col style="width: 6.5rem" />
-        <col style="width: 16rem" />
-        <col style="width: 8.5rem" />
-      </colgroup>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Provider</th>
-          <th>Base URL</th>
-          <th>Auth</th>
-          <th>Test</th>
-          <th class="col-actions">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each $lmConnections as conn (conn.id)}
+      <table class="data-table" use:columnResize>
+        <colgroup>
+          <col style="width: 12rem" />
+          <col style="width: 7.5rem" />
+          <col style="width: 18rem" />
+          <col style="width: 6.5rem" />
+          <col style="width: 16rem" />
+          <col style="width: 8.5rem" />
+        </colgroup>
+        <thead>
           <tr>
-            <td title={conn.name}>{conn.name}</td>
-            <td>{providerLabel(conn.providerType)}</td>
-            <td class="col-mono" title={conn.baseUrl}>{conn.baseUrl}</td>
-            <td>{conn.apiKey ? 'Key set' : '—'}</td>
-            <td>
-              {#if testState[conn.id]}
-                {@const t = testState[conn.id]}
-                <button
-                  class="status-cell"
-                  disabled={t.status === 'testing'}
-                  title={t.message}
-                  onclick={() => openDetail(conn.id)}
-                >
-                  <span class="status-dot {dotClass(t.status)}"></span>
-                  <span class="status-text">{t.message}</span>
-                </button>
-              {:else}
-                <span class="status-muted">—</span>
-              {/if}
-            </td>
-            <td class="col-actions">
-              <span class="row-actions">
-                <button class="icon-btn" title="Test connection" aria-label="Test connection" onclick={() => handleTest(conn)}>{@html iconTest}</button>
-                <button class="icon-btn" title="Edit" aria-label="Edit" onclick={() => startEdit(conn.id)}>{@html iconEdit}</button>
-                <button class="icon-btn icon-btn-danger" title="Delete" aria-label="Delete" onclick={() => handleDelete(conn.id)}>{@html iconTrash}</button>
-              </span>
-            </td>
+            <th>Name</th>
+            <th>Provider</th>
+            <th>Base URL</th>
+            <th>Auth</th>
+            <th>Test</th>
+            <th class="col-actions">Actions</th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {#each $lmConnections as conn (conn.id)}
+            <tr>
+              <td title={conn.name}>{conn.name}</td>
+              <td>{providerLabel(conn.providerType)}</td>
+              <td class="col-mono" title={conn.baseUrl}>{conn.baseUrl}</td>
+              <td>{conn.apiKey ? 'Key set' : '—'}</td>
+              <td>
+                {#if testState[conn.id]}
+                  {@const t = testState[conn.id]}
+                  <button
+                    class="status-cell"
+                    disabled={t.status === 'testing'}
+                    title={t.message}
+                    onclick={() => openDetail(conn.id)}
+                  >
+                    <span class="status-dot {dotClass(t.status)}"></span>
+                    <span class="status-text">{t.message}</span>
+                  </button>
+                {:else}
+                  <span class="status-muted">—</span>
+                {/if}
+              </td>
+              <td class="col-actions">
+                <span class="row-actions">
+                  <button
+                    class="icon-btn"
+                    title="Test connection"
+                    aria-label="Test connection"
+                    onclick={() => handleTest(conn)}>{@html iconTest}</button
+                  >
+                  <button
+                    class="icon-btn"
+                    title="Edit"
+                    aria-label="Edit"
+                    onclick={() => startEdit(conn.id)}>{@html iconEdit}</button
+                  >
+                  <button
+                    class="icon-btn icon-btn-danger"
+                    title="Delete"
+                    aria-label="Delete"
+                    onclick={() => handleDelete(conn.id)}>{@html iconTrash}</button
+                  >
+                </span>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     </div>
   {/if}
 </div>
@@ -174,7 +199,14 @@
   <ConnectionTestDialog
     title="{providerLabel(detailConn.providerType)} Connection Test"
     target={detailConn.baseUrl}
-    result={{ ok: t.status === 'ok', message: t.message, details: t.details, rawDetails: t.rawDetails }}
-    onClose={() => { detailId = null }}
+    result={{
+      ok: t.status === 'ok',
+      message: t.message,
+      details: t.details,
+      rawDetails: t.rawDetails,
+    }}
+    onClose={() => {
+      detailId = null
+    }}
   />
 {/if}

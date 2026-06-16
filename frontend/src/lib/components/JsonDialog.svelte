@@ -38,10 +38,20 @@
   }
 
   /* hljs JSON token colours — see --syntax-* tokens in app.css */
-  .json-body :global(.hljs-attr)    { color: var(--syntax-key); }
-  .json-body :global(.hljs-string)  { color: var(--syntax-string); }
-  .json-body :global(.hljs-number)  { color: var(--syntax-number); }
-  .json-body :global(.hljs-literal) { color: var(--syntax-literal); }
+  .json-body :global(.hljs-attr) {
+    color: var(--syntax-key);
+  }
+  .json-body :global(.hljs-string) {
+    color: var(--syntax-string);
+  }
+  .json-body :global(.hljs-number) {
+    color: var(--syntax-number);
+  }
+  .json-body :global(.hljs-literal) {
+    color: var(--syntax-literal);
+  }
   .json-body :global(.hljs-punctuation),
-  .json-body :global(.hljs-attr + .hljs-punctuation) { color: var(--syntax-punctuation); }
+  .json-body :global(.hljs-attr + .hljs-punctuation) {
+    color: var(--syntax-punctuation);
+  }
 </style>

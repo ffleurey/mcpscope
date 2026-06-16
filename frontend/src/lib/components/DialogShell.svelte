@@ -154,7 +154,10 @@
     z-index: 1;
   }
 
-  .close-btn:hover { color: var(--text-bright); background: var(--bg-base); }
+  .close-btn:hover {
+    color: var(--text-bright);
+    background: var(--bg-base);
+  }
 
   .dialog-body {
     flex: 1;

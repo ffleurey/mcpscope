@@ -1,4 +1,10 @@
-export type AppErrorType = 'validation' | 'not_found' | 'upstream' | 'timeout' | 'internal' | 'network'
+export type AppErrorType =
+  | 'validation'
+  | 'not_found'
+  | 'upstream'
+  | 'timeout'
+  | 'internal'
+  | 'network'
 
 export class AppError extends Error {
   readonly errorType: AppErrorType

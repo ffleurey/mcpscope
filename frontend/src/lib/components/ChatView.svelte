@@ -58,7 +58,9 @@
   let titleDraft = $state('')
   let titleInputEl = $state<HTMLInputElement | null>(null)
   let session = $derived($activeSession)
-  let traceSteps = $derived([...($activeTrace?.steps ?? [])].sort((a, b) => a.childIndex - b.childIndex))
+  let traceSteps = $derived(
+    [...($activeTrace?.steps ?? [])].sort((a, b) => a.childIndex - b.childIndex),
+  )
   let visibleParts = $derived.by(() =>
     ($activeTrace?.parts ?? [])
       .filter((p) => p.display.state !== 'hidden')
@@ -75,15 +77,22 @@
     const postambleStepsByTurn = new Map<string, StepRecord[]>()
     for (const step of traceSteps) {
       if (step.stepTypeKey !== 'compaction') continue
-      const sourceTurnId = typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null
+      const sourceTurnId =
+        typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null
       if (!sourceTurnId) continue
-      postambleStepsByTurn.set(sourceTurnId, [...(postambleStepsByTurn.get(sourceTurnId) ?? []), step])
+      postambleStepsByTurn.set(sourceTurnId, [
+        ...(postambleStepsByTurn.get(sourceTurnId) ?? []),
+        step,
+      ])
     }
 
     const artifactsByStep = new Map<string, typeof traceArtifacts>()
     for (const artifact of traceArtifacts) {
       if (!artifact.stepId) continue
-      artifactsByStep.set(artifact.stepId, [...(artifactsByStep.get(artifact.stepId) ?? []), artifact])
+      artifactsByStep.set(artifact.stepId, [
+        ...(artifactsByStep.get(artifact.stepId) ?? []),
+        artifact,
+      ])
     }
 
     return traceSteps
@@ -100,9 +109,7 @@
       })
   })
   let analysisLooseTurns = $derived.by(() =>
-    isAnalysisSession
-      ? traceTurns.filter((turn) => turn.ownerStepId === null)
-      : [],
+    isAnalysisSession ? traceTurns.filter((turn) => turn.ownerStepId === null) : [],
   )
   let traceRounds = $derived.by(() => {
     const turnSeq = new Map(($activeTrace?.turns ?? []).map((t) => [t.id, t.turnNumber]))
@@ -130,7 +137,7 @@
   })
   let roundStreamsByTurn = $derived.by(() => {
     const m = new Map<string, StreamingRoundState[]>()
-    for (const rs of ($activeTurnStream?.rounds ?? [])) {
+    for (const rs of $activeTurnStream?.rounds ?? []) {
       m.set(rs.turnId, [...(m.get(rs.turnId) ?? []), rs])
     }
     return m
@@ -195,13 +202,18 @@
           rs.reasoningText.length,
           rs.completedReasoningText.length,
           rs.contentText.length,
-          ...rs.toolCalls.map((tc) => `${tc.toolCallIndex}:${tc.id.length}:${tc.name.length}:${tc.arguments.length}`),
+          ...rs.toolCalls.map(
+            (tc) => `${tc.toolCallIndex}:${tc.id.length}:${tc.name.length}:${tc.arguments.length}`,
+          ),
         ].join(':'),
       )
       .join('|'),
   )
 
-  let isInitializing = $derived(session != null && (session.init_status === 'pending' || session.init_status === 'initializing'))
+  let isInitializing = $derived(
+    session != null &&
+      (session.init_status === 'pending' || session.init_status === 'initializing'),
+  )
   let isInitError = $derived(session != null && session.init_status === 'error')
   let isAnalysisSession = $derived(session?.session_type === 'session_analysis')
   let analysisPhase = $derived.by(() => {
@@ -229,16 +241,16 @@
   let analysisComplete = $derived(analysisPhase === 'complete')
   let analysisFailed = $derived(analysisPhase === 'error' || session?.status === 'error')
   let hasTraceContent = $derived(
-    isInitializing
-      || sessionPreludeParts.length > 0
-      || sessionPreludeRawExchanges.length > 0
-      || timelineItems.length > 0
-      || analysisWorkflowSteps.length > 0
-      || analysisLooseTurns.length > 0,
+    isInitializing ||
+      sessionPreludeParts.length > 0 ||
+      sessionPreludeRawExchanges.length > 0 ||
+      timelineItems.length > 0 ||
+      analysisWorkflowSteps.length > 0 ||
+      analysisLooseTurns.length > 0,
   )
   let isExhausted = $derived(session?.is_context_exhausted === true)
   let displayModelName = $derived(session?.model_profile_snapshot?.name ?? '')
-  let displayMcpNames = $derived(session?.mcp_profile_snapshots?.map(s => s.name) ?? [])
+  let displayMcpNames = $derived(session?.mcp_profile_snapshots?.map((s) => s.name) ?? [])
   let displayCompaction = $derived(session?.compaction_strategy ?? null)
 
   async function startEditTitle() {
@@ -256,7 +268,7 @@
     if (trimmed && trimmed !== session.title) {
       await patchSessionTitle(session.id, trimmed)
       chatSessions.update((sessions) =>
-        sessions.map((s) => (s.id === session!.id ? { ...s, title: trimmed } : s))
+        sessions.map((s) => (s.id === session!.id ? { ...s, title: trimmed } : s)),
       )
     }
   }
@@ -266,7 +278,10 @@
   }
 
   function handleTitleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter') { e.preventDefault(); void commitTitleEdit() }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      void commitTitleEdit()
+    }
     if (e.key === 'Escape') cancelTitleEdit()
   }
 
@@ -332,7 +347,6 @@
       handleSend()
     }
   }
-
 </script>
 
 <div class="chat-view">
@@ -360,19 +374,27 @@
         <button
           class="view-mode-btn"
           class:active={viewMode === 'chat'}
-          onclick={() => { viewMode = 'chat' }}
-          title="Chat view"
-        >Chat</button>
+          onclick={() => {
+            viewMode = 'chat'
+          }}
+          title="Chat view">Chat</button
+        >
         <button
           class="view-mode-btn"
           class:active={viewMode === 'inspect'}
-          onclick={() => { viewMode = 'inspect' }}
-          title="Detailed inspection layout"
-        >Inspect</button>
+          onclick={() => {
+            viewMode = 'inspect'
+          }}
+          title="Detailed inspection layout">Inspect</button
+        >
       </div>
 
       {#if $activeTrace}
-        <button class="btn export-btn" onclick={exportActiveTrace} title="Export session trace as JSON">
+        <button
+          class="btn export-btn"
+          onclick={exportActiveTrace}
+          title="Export session trace as JSON"
+        >
           ⬇ Export
         </button>
       {/if}
@@ -384,7 +406,9 @@
       {:else if !hasTraceContent}
         <div class="empty-state">
           {#if isAnalysisSession}
-            <span class="empty-hint">{analysisWorkflowLabel} ready — click Run Analysis to start</span>
+            <span class="empty-hint"
+              >{analysisWorkflowLabel} ready — click Run Analysis to start</span
+            >
           {:else}
             <span class="empty-hint">Session ready — type your first message below</span>
           {/if}
@@ -401,7 +425,9 @@
         {#if isInitError}
           <div class="init-error-banner">
             Session initialization failed.
-            <button class="btn btn-sm" onclick={() => retryInit(session.id)}>↻ Retry initialization</button>
+            <button class="btn btn-sm" onclick={() => retryInit(session.id)}
+              >↻ Retry initialization</button
+            >
           </div>
         {/if}
         {#if isAnalysisSession}
@@ -441,11 +467,7 @@
                 loadedContextLength={session.loaded_context_length ?? null}
               />
             {:else if item.step.stepTypeKey === 'compaction'}
-              <SessionCompactionStepBlock
-                step={item.step}
-                parts={[]}
-                mode={viewMode}
-              />
+              <SessionCompactionStepBlock step={item.step} parts={[]} mode={viewMode} />
             {/if}
           {/each}
         {/if}
@@ -486,7 +508,9 @@
               <div class="analysis-bar-progress-bar">
                 <div
                   class="analysis-bar-progress-fill"
-                  style="width: {Math.round(analysisPlanProgress.completed / analysisPlanProgress.total * 100)}%"
+                  style="width: {Math.round(
+                    (analysisPlanProgress.completed / analysisPlanProgress.total) * 100,
+                  )}%"
                 ></div>
               </div>
             {/if}
@@ -537,25 +561,26 @@
             <textarea
               bind:this={textareaEl}
               bind:value={composerText}
-              placeholder={
-                isExhausted
-                  ? 'Context window full — start a new session'
-                  : sessionHasExecutionJob
+              placeholder={isExhausted
+                ? 'Context window full — start a new session'
+                : sessionHasExecutionJob
                   ? 'Queued or running for this session…'
-                  : 'Message… (Ctrl+Enter to send)'
-              }
+                  : 'Message… (Ctrl+Enter to send)'}
               rows="2"
               disabled={sessionHasExecutionJob || isExhausted}
               oninput={resizeTextarea}
-              onkeydown={handleKeydown}
-            ></textarea>
+              onkeydown={handleKeydown}></textarea>
           </div>
           <div class="composer-footer">
             <div class="composer-config">
               <span class="config-label">
                 Model: {displayModelName || '—'}
-                {#if displayMcpNames.length > 0} · MCP: {displayMcpNames.join(', ')}{:else} · MCP: none{/if}
-                {#if displayCompaction && displayCompaction !== 'none'} · Compaction: {displayCompaction}{:else} · Compaction: none{/if}
+                {#if displayMcpNames.length > 0}
+                  · MCP: {displayMcpNames.join(', ')}{:else}
+                  · MCP: none{/if}
+                {#if displayCompaction && displayCompaction !== 'none'}
+                  · Compaction: {displayCompaction}{:else}
+                  · Compaction: none{/if}
               </span>
             </div>
             <span class="composer-hint">v{$appVersion} · Ctrl+Enter to send</span>
@@ -658,7 +683,9 @@
     opacity: 0.6;
     flex-shrink: 0;
   }
-  .export-btn:hover { opacity: 1; }
+  .export-btn:hover {
+    opacity: 1;
+  }
 
   /* ── Transcript ───────────────────────────────────────────────────────── */
   .transcript {
@@ -695,7 +722,9 @@
     align-items: center;
     gap: 0.75rem;
   }
-  .init-error-banner .btn { flex-shrink: 0; }
+  .init-error-banner .btn {
+    flex-shrink: 0;
+  }
 
   /* ── Exhausted banner ─────────────────────────────────────────────────── */
   .exhausted-banner {

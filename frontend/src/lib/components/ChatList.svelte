@@ -1,10 +1,5 @@
 <script lang="ts">
-  import {
-    activeChatId,
-    chatSessions,
-    deleteChat,
-    selectChat,
-  } from '../sessionStore'
+  import { activeChatId, chatSessions, deleteChat, selectChat } from '../sessionStore'
   import { currentView } from '../navStore'
   import { modelConfigs } from '../connectionStore'
   import { untrack } from 'svelte'
@@ -19,13 +14,13 @@
   // session, collect its child sessions newest-first as well.
   const primarySessions = $derived(
     [...$chatSessions]
-      .filter(s => s.session_type === 'primary')
+      .filter((s) => s.session_type === 'primary')
       .sort((a, b) => b.created_at - a.created_at),
   )
 
   function childrenOf(parentId: string): SessionSummary[] {
     return [...$chatSessions]
-      .filter(s => s.parent_kind === 'session' && s.parent_id === parentId)
+      .filter((s) => s.parent_kind === 'session' && s.parent_id === parentId)
       .sort((a, b) => b.created_at - a.created_at)
   }
 
@@ -36,10 +31,10 @@
   $effect(() => {
     // Auto-expand any primary session that has children.
     // Use untrack when reading expandedIds to avoid writing to a tracked dependency.
-    const toExpand = primarySessions.filter(s => childrenOf(s.id).length > 0).map(s => s.id)
+    const toExpand = primarySessions.filter((s) => childrenOf(s.id).length > 0).map((s) => s.id)
     if (toExpand.length > 0) {
       const current = untrack(() => expandedIds)
-      if (toExpand.some(id => !current.has(id))) {
+      if (toExpand.some((id) => !current.has(id))) {
         expandedIds = new Set([...current, ...toExpand])
       }
     }
@@ -87,7 +82,9 @@
   <AnalysisLaunchModal
     targetSessionId={analysisTarget.id}
     targetSessionTitle={analysisTarget.title}
-    onClose={() => { analysisTarget = null }}
+    onClose={() => {
+      analysisTarget = null
+    }}
   />
 {/if}
 
@@ -128,14 +125,14 @@
               <button
                 class="action-btn analyze-btn"
                 title="Launch analysis"
-                onclick={(e) => openAnalysis(e, session)}
-              >∑</button>
+                onclick={(e) => openAnalysis(e, session)}>∑</button
+              >
             {/if}
             <button
               class="action-btn delete-btn"
               title="Delete session"
-              onclick={(e) => handleDelete(e, session.id)}
-            >×</button>
+              onclick={(e) => handleDelete(e, session.id)}>×</button
+            >
           </div>
         </div>
 
@@ -159,8 +156,8 @@
                     <button
                       class="action-btn delete-btn"
                       title="Delete analysis session"
-                      onclick={(e) => handleDelete(e, child.id)}
-                    >×</button>
+                      onclick={(e) => handleDelete(e, child.id)}>×</button
+                    >
                   </div>
                 </div>
               </li>
@@ -208,7 +205,9 @@
     display: flex;
     align-items: center;
     padding: 0.35rem 0.5rem 0.35rem 0.25rem;
-    transition: background 0.1s, color 0.1s;
+    transition:
+      background 0.1s,
+      color 0.1s;
   }
 
   .primary-item:hover > .session-row {
@@ -342,4 +341,3 @@
     color: var(--red-bright);
   }
 </style>
-

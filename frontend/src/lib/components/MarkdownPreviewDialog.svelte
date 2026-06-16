@@ -48,20 +48,36 @@
     margin: 1.2em 0 0.4em;
   }
 
-  .prose :global(h1) { font-size: 1.4em; }
-  .prose :global(h2) { font-size: 1.2em; }
-  .prose :global(h3) { font-size: 1.05em; }
+  .prose :global(h1) {
+    font-size: 1.4em;
+  }
+  .prose :global(h2) {
+    font-size: 1.2em;
+  }
+  .prose :global(h3) {
+    font-size: 1.05em;
+  }
   .prose :global(h4),
   .prose :global(h5),
-  .prose :global(h6) { font-size: 0.95em; }
+  .prose :global(h6) {
+    font-size: 0.95em;
+  }
 
   .prose :global(h1:first-child),
   .prose :global(h2:first-child),
-  .prose :global(h3:first-child) { margin-top: 0; }
+  .prose :global(h3:first-child) {
+    margin-top: 0;
+  }
 
-  .prose :global(p) { margin: 0.7em 0; }
-  .prose :global(p:first-child) { margin-top: 0; }
-  .prose :global(p:last-child) { margin-bottom: 0; }
+  .prose :global(p) {
+    margin: 0.7em 0;
+  }
+  .prose :global(p:first-child) {
+    margin-top: 0;
+  }
+  .prose :global(p:last-child) {
+    margin-bottom: 0;
+  }
 
   .prose :global(ul),
   .prose :global(ol) {
@@ -69,7 +85,9 @@
     margin: 0.5em 0;
   }
 
-  .prose :global(li) { margin: 0.25em 0; }
+  .prose :global(li) {
+    margin: 0.25em 0;
+  }
 
   .prose :global(code) {
     font-family: var(--mono);
@@ -146,6 +164,10 @@
     background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
   }
 
-  .prose :global(strong) { font-weight: 700; }
-  .prose :global(em) { font-style: italic; }
+  .prose :global(strong) {
+    font-weight: 700;
+  }
+  .prose :global(em) {
+    font-style: italic;
+  }
 </style>
