@@ -34,13 +34,18 @@ uses greys by default. Color is added only where it provides signal.
 
 ### Amber — Primary accent (minimal use)
 
-Reserved for the logo and the single primary action in any view/dialog. Most of the time the UI has no amber at all.
+Reserved for the logo, the single primary action in any view/dialog, and **selection/activity state markers** (below). Most of the time the UI has no amber at all.
 
 | Token | Value | Usage |
 |---|---|---|
 | `--amber-dim` | `oklch(55% 0.15 75)` | Logo, secondary amber text |
 | `--amber-bright` | `oklch(72% 0.18 75)` | Primary action buttons, active tab underline, key highlights |
-| `--amber-glow` | `oklch(78% 0.20 75)` | Hover/enhanced state for primary elements |
+| `--amber-glow` | `oklch(78% 0.20 75)` | Hover/enhanced state; selection/loaded glow on icon toggles |
+
+**Amber state markers (sanctioned exception to "flat, no-glow").** Icon toggles use amber to signal state:
+`.icon-glow` = selected / loaded (steady amber glow via `drop-shadow`), `.icon-blink` = in-progress (pulsing amber).
+Used for the default-config **radio** (single-select) and default-MCP **checkbox** (multi-select) in column 1 of the tables,
+and the model load/eject state. This is the one place glow/animation is allowed — status *dots* stay flat.
 
 ### Green — Session content
 
@@ -77,8 +82,10 @@ The CRT feel comes from the colors, not the fonts. Choose compact, highly readab
 
 | Token | Value | Usage |
 |---|---|---|
-| `--sans` | `system-ui, 'Segoe UI', Roboto, sans-serif` | UI text: labels, buttons, dialogs, prose |
-| `--mono` | `ui-monospace, 'Cascadia Code', Consolas, monospace` | Data: token counts, IDs, code blocks, table cells |
+| `--sans` | `-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif` | UI text: labels, buttons, dialogs, prose |
+| `--mono` | `ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace` | Data: token counts, IDs, code blocks, table cells |
+
+These are the standard GitHub system-font stacks — no web-font download, native on every platform.
 
 - Base size: **14px**
 - Compact line-height: **1.4** for UI elements, **1.5** for body text
@@ -91,7 +98,7 @@ The CRT feel comes from the colors, not the fonts. Choose compact, highly readab
 
 No spacing scale. The only rule is: **use the minimum spacing that makes the information legible.**
 
-- Default padding for containers, dialogs, buttons: **0.75rem** — one consistent value
+- Default padding for containers and dialogs: **0.75rem** (buttons and inputs are tighter — see their sections)
 - Default gap between related elements: **0.35rem** — tight but readable
 - Use Svelte's `style` directives and native HTML element spacing (`gap`, `padding`) directly — no CSS utility classes or abstraction layers
 - No unnecessary wrapper divs: prefer flat DOM with direct spacing over nested containers
@@ -112,26 +119,29 @@ See `SessionTurnBlock.svelte` and `SessionPreludeBlock.svelte` for the existing 
 | Danger `.btn-danger` | No background; `--red-bright` border and text, subtle red tint on hover |
 | Icon `.icon-btn` | No border, `--text-bright`, hover adds `--bg-hover` background |
 
-- Border-radius: **4px** consistently
+- Border-radius: **4px** (see the radius ladder under Implementation principles)
 - Focus-visible outline: 2px solid `--amber-bright`, 2px offset
-- Button padding: `--space-md` horizontal, `--space-sm` vertical (tight)
+- Button padding: **0.4rem** vertical, **0.85rem** horizontal (`.btn-sm`: `0.28rem 0.65rem`)
 
 ### Form elements (inputs, selects, textareas)
 
-- Background: `--bg-surface`
+- Background: `--bg-base` (inputs sit one step *darker* than the `--bg-surface` dialog/panel they live in)
 - Border: `--border`
 - Text: `--text-bright`
-- Focus: `--amber-bright` outline (not border) — optional, can stay grey for fully monochrome forms
-- Padding: `--space-md` horizontal, `--space-sm` vertical
-- Labels: `--text-dim`, 12px, above the input
+- Focus: `--amber-bright` **border** on `:focus-visible` — always shown, never suppressed (keyboard accessibility, WCAG 2.4.7)
+- Padding: **0.4rem** vertical, **0.6rem** horizontal
+- Labels: `.field-label` — `--text-dim`, 0.78rem, uppercase, above the input
+- Checkboxes/radios: the `Checkbox.svelte` / `Radio.svelte` components — a visually-hidden native input (keeps accessibility + form semantics) with an MDI glyph visual that glows amber when checked, the **same toggle look as the data tables** (`.opt-check` / `.opt-radio`)
+- Selects: native, tinted with `accent-color: var(--amber-bright)`; dark rendering from `color-scheme: dark`
 
 ### Dialogs
 
 - Backdrop: `rgba(0, 0, 0, 0.55)`
-- Surface: `--bg-surface` with `--border` outline
-- Header: 0.75rem padding, bottom border, title in 0.9rem bold
-- Body: `--space-lg` padding, compact form layout
-- Max width: 720px or 95vw, max height: 85vh
+- Surface: `--bg-surface` with `--border` outline, 8px radius
+- Header: `0.75rem 1rem` padding, bottom border, title in 0.9rem 600, draggable
+- Body: `0.75rem 1rem` padding, compact form layout
+- Max width: `min(720px, 95vw)`, max height: 85vh
+- Use the shared `DialogShell.svelte` — don't hand-roll `<dialog>` markup
 
 ### Tabs / Navigation
 
@@ -141,10 +151,12 @@ See `SessionTurnBlock.svelte` and `SessionPreludeBlock.svelte` for the existing 
 
 ### Status indicators
 
-- **Running / active:** `--green-bright` filled dot
-- **Idle / ready:** `--green-dim` dot
-- **Warning / attention:** `--amber-bright` dot
-- **Error / failed:** `--red-bright` dot
+Shared primitive `.status-dot` (8px flat circle) with a state modifier:
+
+- **Running / active:** `.status-dot.running` — `--green-bright`
+- **Idle / ready:** `.status-dot.idle` — `--green-dim`
+- **Warning / attention:** `.status-dot.warn` — `--amber-bright`
+- **Error / failed:** `.status-dot.error` — `--red-bright`
 - No glow effects — flat dots keep it clean
 
 ### Session content (green phosphor)
@@ -174,12 +186,28 @@ the tool and the data is immediately visible.
 The context-window visualization bar uses its own palette for part-type distinction.
 See `partColors.ts`. It is unrelated to the grey-chrome / green-data split.
 
+### Icons
+
+- **Material Design Icons** via `@mdi/js` (tree-shakeable path data — no icon font).
+- Exposed under **semantic names** in `src/lib/design/icons.ts` (`iconEdit`, `iconTest`, `iconRadioMarked`, …) as ready-to-render SVG strings. To change the icon set, only that file changes.
+- Render with `{@html iconX}` inside `.icon-btn` (standalone) or `.btn-icon` (icon + text); size via `font-size`, color via `currentColor`. `.icon-btn-danger` tints destructive actions red.
+
+### Token pill (metadata)
+
+Small monochrome count/label — `.token-pill`: `--text-dim` text, `--border` outline, fully rounded (999px), 0.68rem. Used for token counts and similar tool metadata; **stays grey** (it is chrome, not session data).
+
 ### Tables
 
-- Dense rows with minimal padding (`--space-xs` vertical, `--space-sm` horizontal)
-- Monospace for numeric columns, right-aligned
-- `--border` row separators (horizontal only, no vertical lines)
-- Header row: `--text-dim` 11px uppercase labels
+The shared `.data-table` primitive (used by the config admin pages). Live demo in the Design System Reference.
+
+- Wrap in `.table-scroll` (`overflow-x: auto`) so a narrow window scrolls instead of crushing columns
+- `table-layout: fixed` with a `<colgroup>` of explicit widths; `width: max-content; min-width: 100%` (never collapse, fill when there's room)
+- Header row: `--text-dim` 0.68rem uppercase labels, `--border` bottom rule
+- Dense rows (`0.4rem 0.6rem`), `--border` horizontal separators only, `--bg-hover` row hover
+- Cells truncate with ellipsis (add `title=` for the full value)
+- Column modifiers: `.col-num` (right-aligned mono numerics), `.col-mono` (IDs/URLs), `.col-actions` (trailing right-aligned), `.col-toggle` (first-column single control)
+- **Static data → state indicator → actions**, left to right. Dynamic state uses a `.status-dot` or amber icon toggle; actions are always-visible `.icon-btn`s in `.row-actions` (`.icon-btn-danger` for delete)
+- Resizable columns via `use:columnResize` (drag a header's right border; session-only)
 
 ---
 
@@ -194,10 +222,22 @@ See `partColors.ts`. It is unrelated to the grey-chrome / green-data split.
 ## Implementation principles
 
 - Use CSS custom properties defined in `:root` (`app.css`) — no ad-hoc hex values for UI chrome
-- Component styles stay co-located in `.svelte` `<style>` blocks
+- **Design tokens and shared primitive classes live globally in `app.css`** — `.btn`, `.field-*`, `.status-dot`, `.token-pill`. Component-*specific* styling stays co-located in `.svelte` `<style>` blocks
 - Leverage Svelte primitives directly — no CSS-in-JS or external styling libraries
 - Keep the number of CSS variables small enough to hold in your head
 - `color-scheme: dark` on `:root` to force neutral system colors on native controls (scrollbars, form elements)
+
+### Border-radius ladder
+
+One small ladder, applied by element role:
+
+- **4px** — controls: buttons, inputs, selects, small chips
+- **6–8px** — containers: dialogs (8px), cards, callouts, banners (6px)
+- **999px** — pills: token counts, ID badges, status labels
+
+### Migration debt
+
+`app.css` keeps a block of **legacy alias variables** (`--bg`, `--bg-sidebar`, `--bg-panel`, `--text-muted`, `--color-accent`, …) that point at the canonical tokens. They exist only so not-yet-migrated components keep working. Don't reach for them in new code — use the canonical tokens. Remove an alias once `grep` shows no remaining uses.
 
 ### Edges
 

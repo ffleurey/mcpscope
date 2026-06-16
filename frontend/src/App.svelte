@@ -57,27 +57,27 @@
     display: flex;
     height: 100vh;
     overflow: hidden;
-    background: var(--bg);
+    background: var(--bg-base);
   }
   .main-content {
     flex: 1;
     overflow: hidden;
-    background: var(--bg);
+    background: var(--bg-base);
     display: flex;
     flex-direction: column;
   }
   .backend-error {
     margin: 1rem 2rem;
     padding: 0.75rem 1rem;
-    background: var(--bg-panel);
-    border: 1px solid var(--color-error);
+    background: var(--bg-surface);
+    border: 1px solid var(--red-bright);
     border-radius: 4px;
-    color: var(--color-error);
+    color: var(--red-bright);
     font-size: 0.875rem;
   }
   .loading {
     padding: 2rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-size: 0.9rem;
   }
 </style>

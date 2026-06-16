@@ -240,9 +240,9 @@
   .analysis-workflow-block {
     margin: 0.6rem 0 0.9rem;
     padding: 0.8rem 0.95rem;
-    border: 1px solid var(--border-subtle);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--bg-panel) 95%, var(--accent) 5%);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-surface);
   }
 
   .analysis-workflow-meta {
@@ -263,21 +263,21 @@
   .analysis-workflow-label {
     font-size: 0.84rem;
     font-weight: 700;
-    color: var(--text);
+    color: var(--text-bright);
   }
 
   .analysis-workflow-status,
   .analysis-workflow-detail {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-workflow-status.status-complete {
-    color: var(--color-success, #4caf50);
+    color: var(--green-bright);
   }
 
   .analysis-workflow-status.status-error {
-    color: var(--color-error, #f44336);
+    color: var(--red-bright);
   }
 
   .analysis-workflow-content {
@@ -290,9 +290,9 @@
     flex-wrap: wrap;
     gap: 0.45rem;
     padding: 0.55rem 0.7rem;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--bg-panel) 78%, #b43b25 22%);
-    color: var(--text);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-surface) 78%, var(--red-bright) 22%);
+    color: var(--text-bright);
   }
 
   .analysis-workflow-error-label {
@@ -308,7 +308,7 @@
   }
 
   .analysis-workflow-error-kind {
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-workflow-section {
@@ -321,7 +321,7 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-workflow-artifacts {
@@ -332,8 +332,8 @@
 
   .analysis-workflow-artifact {
     font-size: 0.72rem;
-    color: var(--text-muted);
-    background: var(--bg-input);
+    color: var(--text-dim);
+    background: var(--bg-surface);
     border-radius: 999px;
     padding: 0.15rem 0.45rem;
   }
@@ -351,14 +351,14 @@
 
   .analysis-workflow-retirement-note {
     font-size: 0.72rem;
-    color: var(--text-muted);
-    background: color-mix(in srgb, var(--bg-panel) 86%, var(--accent) 14%);
+    color: var(--text-dim);
+    background: var(--bg-surface);
     border-radius: 999px;
     padding: 0.15rem 0.45rem;
   }
 
   .analysis-workflow-empty {
     font-size: 0.78rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 </style>

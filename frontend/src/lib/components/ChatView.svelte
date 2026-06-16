@@ -372,7 +372,7 @@
       </div>
 
       {#if $activeTrace}
-        <button class="btn btn-ghost export-btn" onclick={exportActiveTrace} title="Export session trace as JSON">
+        <button class="btn export-btn" onclick={exportActiveTrace} title="Export session trace as JSON">
           ⬇ Export
         </button>
       {/if}
@@ -509,7 +509,7 @@
             </button>
             {#if analysisFailed}
               <button
-                class="btn btn-secondary"
+                class="btn"
                 disabled={analysisRunDisabled}
                 onclick={() => void retryFailedAnalysisStep()}
                 title="Reset the failed cursor phase and rerun the failed step once"
@@ -519,7 +519,7 @@
             {/if}
             {#if viewMode === 'inspect'}
               <button
-                class="btn btn-secondary"
+                class="btn"
                 disabled={analysisRunDisabled}
                 onclick={() => void executeAnalysisStep()}
                 title="Advance one workflow step (debug)"
@@ -592,13 +592,13 @@
     gap: 0.75rem;
     padding: 0 1.25rem;
     border-bottom: 1px solid var(--border);
-    background: var(--bg);
+    background: var(--bg-base);
   }
 
   .chat-title {
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--text);
+    color: var(--text-bright);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -614,14 +614,14 @@
   }
 
   .chat-title:hover {
-    background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
+    background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
   }
 
   .chat-title-input {
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--text);
-    background: var(--bg-panel);
+    color: var(--text-bright);
+    background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.1rem 0.35rem;
@@ -639,9 +639,9 @@
 
   .view-mode-btn {
     background: none;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border);
     border-radius: 999px;
-    color: var(--text-muted);
+    color: var(--text-dim);
     cursor: pointer;
     font-size: 0.7rem;
     padding: 0.18rem 0.5rem;
@@ -672,22 +672,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-size: 0.875rem;
   }
 
   .empty-hint {
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-size: 0.82rem;
   }
 
   /* ── Init error banner ────────────────────────────────────────────────── */
   .init-error-banner {
     flex-shrink: 0;
-    background: color-mix(in srgb, var(--color-error) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-error) 35%, transparent);
+    background: color-mix(in srgb, var(--red-bright) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--red-bright) 35%, transparent);
     border-radius: 6px;
-    color: var(--text);
+    color: var(--text-bright);
     font-size: 0.82rem;
     padding: 0.75rem 1rem;
     margin: 0.5rem 0;
@@ -700,9 +700,9 @@
   /* ── Exhausted banner ─────────────────────────────────────────────────── */
   .exhausted-banner {
     flex-shrink: 0;
-    background: color-mix(in srgb, var(--color-error) 10%, transparent);
-    border-top: 1px solid color-mix(in srgb, var(--color-error) 35%, transparent);
-    color: var(--text);
+    background: color-mix(in srgb, var(--red-bright) 10%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--red-bright) 35%, transparent);
+    color: var(--text-bright);
     font-size: 0.8rem;
     padding: 0.5rem 1.25rem;
     text-align: center;
@@ -713,14 +713,14 @@
     flex-shrink: 0;
     padding: 0.6rem 1.25rem 0.75rem;
     border-top: none; /* Context bar provides the visual separator */
-    background: var(--bg);
+    background: var(--bg-base);
   }
 
   /* Bubble styled to match the user message in the transcript */
   .composer-bubble {
-    background: var(--bg-active);
+    background: var(--bg-hover);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 0.38rem 0.72rem;
     transition: border-color 0.15s;
   }
@@ -769,7 +769,7 @@
 
   .config-label {
     font-size: 0.68rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     opacity: 0.75;
     white-space: nowrap;
     overflow: hidden;
@@ -778,7 +778,7 @@
 
   .composer-hint {
     font-size: 0.7rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     opacity: 0.55;
     flex-shrink: 0;
   }
@@ -792,7 +792,7 @@
     gap: 1rem;
     padding: 0.6rem 1.25rem;
     border-top: 1px solid var(--border);
-    background: var(--bg);
+    background: var(--bg-base);
   }
 
   .analysis-bar-info {
@@ -804,27 +804,27 @@
   .analysis-bar-label {
     font-size: 0.82rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-bar-phase {
     font-size: 0.82rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-bar-error {
     font-size: 0.8rem;
-    color: color-mix(in srgb, var(--text) 88%, #b43b25 12%);
+    color: color-mix(in srgb, var(--text-bright) 88%, var(--red-bright) 12%);
   }
 
   .analysis-bar-error em {
     font-style: normal;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .analysis-bar-progress {
     font-size: 0.78rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     margin-left: 0.25rem;
   }
   .analysis-bar-command {
@@ -834,21 +834,21 @@
   .analysis-bar-progress-bar {
     width: 100%;
     height: 4px;
-    background: var(--bg-subtle, #e0e0e0);
+    background: var(--border);
     border-radius: 2px;
     margin-top: 0.35rem;
     overflow: hidden;
   }
   .analysis-bar-progress-fill {
     height: 100%;
-    background: var(--color-primary, #5b9bd5);
+    background: var(--amber-bright);
     border-radius: 2px;
     transition: width 0.3s ease;
   }
 
   .analysis-bar-done {
     font-size: 0.82rem;
-    color: var(--color-success, #4caf50);
+    color: var(--green-bright);
     font-weight: 600;
   }
 </style>

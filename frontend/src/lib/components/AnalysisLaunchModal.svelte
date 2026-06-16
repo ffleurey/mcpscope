@@ -5,6 +5,7 @@
   import { currentView } from '../navStore'
   import { getDefaultAnalysisSystemPrompt, getSessionTrace } from '../api/backendClient'
   import DialogShell from './DialogShell.svelte'
+  import Checkbox from './Checkbox.svelte'
   import type { AnalysisWorkflowKind, PartRecord, SessionTraceBundle, TurnRecord } from '../backendTypes'
 
   interface Props {
@@ -155,14 +156,14 @@
 </script>
 
 <DialogShell title="Analyze session" {onClose} dialogClass="analysis-launch-dialog">
-  <div class="form">
+  <div class="form-stack">
     <p class="target-label">Target: <span class="target-title">[{targetSessionId}] {targetSessionTitle}</span></p>
 
     <div class="field">
       <label class="field-label" for="analysis-workflow-kind">Analysis type</label>
       <select
         id="analysis-workflow-kind"
-        class="field-select"
+        class="field-input"
         bind:value={selectedWorkflowKind}
         disabled={$isLaunchingAnalysis}
       >
@@ -175,11 +176,11 @@
     <div class="field">
       <label class="field-label" for="analysis-model-select">Model</label>
       {#if $modelConfigs.length === 0}
-        <p class="field-hint">No model configs configured. Create one in <strong>Model Configs</strong> first.</p>
+        <p class="field-hinttext">No model configs configured. Create one in <strong>Model Configs</strong> first.</p>
       {:else}
         <select
           id="analysis-model-select"
-          class="field-select"
+          class="field-input"
           bind:value={selectedModelConfigId}
           disabled={$isLaunchingAnalysis}
         >
@@ -194,10 +195,10 @@
 
     <div class="field">
       <label class="field-label" for="analysis-temperature">Temperature <span class="optional">(optional)</span></label>
-      <p class="field-hint">Defaults to 0.5 for analysis runs. Adjust only when you need broader or narrower sampling.</p>
+      <p class="field-hinttext">Defaults to 0.5 for analysis runs. Adjust only when you need broader or narrower sampling.</p>
       <input
         id="analysis-temperature"
-        class="field-select"
+        class="field-input"
         type="number"
         min="0"
         max="2"
@@ -209,13 +210,13 @@
 
     <div class="field">
       <label class="field-label" for="analysis-system-prompt">System prompt</label>
-      <p class="field-hint">This is the backend-owned default analysis prompt. You can edit it for this launch before starting the analysis session.</p>
+      <p class="field-hinttext">This is the backend-owned default analysis prompt. You can edit it for this launch before starting the analysis session.</p>
       {#if loadingSystemPrompt}
-        <p class="field-hint">Loading default system prompt…</p>
+        <p class="field-hinttext">Loading default system prompt…</p>
       {/if}
       <textarea
         id="analysis-system-prompt"
-        class="field-textarea"
+        class="field-input"
         rows={12}
         bind:value={systemPromptText}
         disabled={$isLaunchingAnalysis}
@@ -225,15 +226,15 @@
 
     <div class="field">
       <label class="field-label" for="analysis-turn-select">Analyze through turn</label>
-      <p class="field-hint">
+      <p class="field-hinttext">
         Select the turn to analyze up to (inclusive). The analysis will cover all tool calls from the beginning of the session.
       </p>
       {#if loadingTurns}
-        <p class="field-hint">Loading turns…</p>
+        <p class="field-hinttext">Loading turns…</p>
       {:else if completedTurns.length === 0}
         <input
           id="analysis-turn-select"
-          class="field-select"
+          class="field-input"
           type="text"
           placeholder="Turn ID (e.g. ABCD-T1)"
           bind:value={selectedTurnId}
@@ -242,7 +243,7 @@
       {:else}
         <select
           id="analysis-turn-select"
-          class="field-select"
+          class="field-input"
           bind:value={selectedTurnId}
           disabled={$isLaunchingAnalysis}
         >
@@ -255,39 +256,38 @@
 
     <div class="field">
       <div class="field-label">Tool scope <span class="optional">(optional)</span></div>
-      <p class="field-hint">Leave all unchecked to analyze every tool call in scope, or select a subset of tools.</p>
+      <p class="field-hinttext">Leave all unchecked to analyze every tool call in scope, or select a subset of tools.</p>
       {#if availableToolNames.length === 0}
-        <p class="field-hint">No tool calls found in the currently selected turn range.</p>
+        <p class="field-hinttext">No tool calls found in the currently selected turn range.</p>
       {:else}
         <div class="checkbox-list">
           {#each availableToolNames as toolName (toolName)}
-            <label class="checkbox-option">
-              <input
-                type="checkbox"
-                checked={selectedToolNames.includes(toolName)}
-                disabled={$isLaunchingAnalysis}
-                onchange={(event) => toggleToolName(toolName, (event.currentTarget as HTMLInputElement).checked)}
-              />
-              <span>{toolName}</span>
-            </label>
+            <Checkbox
+              label={toolName}
+              checked={selectedToolNames.includes(toolName)}
+              disabled={$isLaunchingAnalysis}
+              onchange={(c) => toggleToolName(toolName, c)}
+            />
           {/each}
         </div>
       {/if}
     </div>
 
     <div class="field checkbox-field">
-      <label class="checkbox-option standalone-checkbox">
-        <input type="checkbox" bind:checked={onlyFailedToolCalls} disabled={$isLaunchingAnalysis} />
-        <span>Only analyze tool calls whose recorded tool result is marked as an error</span>
-      </label>
+      <Checkbox
+        label="Only analyze tool calls whose recorded tool result is marked as an error"
+        checked={onlyFailedToolCalls}
+        disabled={$isLaunchingAnalysis}
+        onchange={(c) => (onlyFailedToolCalls = c)}
+      />
     </div>
 
     <div class="field">
       <label class="field-label" for="evaluation-criteria">Evaluation criteria <span class="optional">(optional)</span></label>
-      <p class="field-hint">Add one criterion per line when you want this analysis run to emphasize specific checks.</p>
+      <p class="field-hinttext">Add one criterion per line when you want this analysis run to emphasize specific checks.</p>
       <textarea
         id="evaluation-criteria"
-        class="field-textarea"
+        class="field-input"
         rows={4}
         bind:value={evaluationCriteriaText}
         disabled={$isLaunchingAnalysis}
@@ -300,7 +300,7 @@
       <div class="error-banner">{$sessionError.message}</div>
     {/if}
 
-    <div class="actions">
+    <div class="form-actions">
       <button class="btn" onclick={onClose} disabled={$isLaunchingAnalysis}>
         Cancel
       </button>
@@ -316,12 +316,6 @@
 </DialogShell>
 
 <style>
-  .form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
   .target-label {
     font-size: 0.8rem;
     color: var(--text-dim);
@@ -333,49 +327,10 @@
     font-weight: 500;
   }
 
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-  }
-
-  .field-label {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
   .optional {
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
-  }
-
-  .field-hint {
-    font-size: 0.75rem;
-    color: var(--text-dim);
-    margin: 0;
-    line-height: 1.4;
-  }
-
-  .field-select, .field-textarea {
-    background: var(--bg-base);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-bright);
-    font: inherit;
-    font-size: 0.875rem;
-    padding: 0.4rem 0.6rem;
-    width: 100%;
-    box-sizing: border-box;
-    outline: none;
-  }
-
-  .field-textarea {
-    resize: vertical;
-    min-height: 90px;
   }
 
   .checkbox-list {
@@ -391,27 +346,6 @@
     gap: 0;
   }
 
-  .checkbox-option {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.55rem;
-    color: var(--text-bright);
-    font-size: 0.84rem;
-  }
-
-  .checkbox-option input {
-    margin-top: 0.15rem;
-    accent-color: var(--amber-bright);
-  }
-
-  .standalone-checkbox {
-    padding: 0.1rem 0;
-  }
-
-  .standalone-checkbox input {
-    accent-color: var(--amber-bright);
-  }
-
   .error-banner {
     background: color-mix(in srgb, var(--red-bright) 15%, transparent);
     border: 1px solid var(--red-bright);
@@ -419,13 +353,6 @@
     color: var(--red-bright);
     font-size: 0.82rem;
     padding: 0.5rem 0.75rem;
-  }
-
-  .actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    padding-top: 0.25rem;
   }
 
   :global(.analysis-launch-dialog) {

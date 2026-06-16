@@ -86,34 +86,34 @@
   }
 </script>
 
-<form class="profile-form" onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>
+<form class="form-stack" onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>
 
   <div class="field">
-    <label for="mcp-name">Name</label>
-    <input id="mcp-name" type="text" bind:value={name} placeholder="e.g. Local MCP Server" />
-    {#if errors.name}<span class="field-error">{errors.name}</span>{/if}
+    <label class="field-label" for="mcp-name">Name</label>
+    <input id="mcp-name" class="field-input" type="text" bind:value={name} placeholder="e.g. Local MCP Server" />
+    {#if errors.name}<span class="field-errortext">{errors.name}</span>{/if}
   </div>
 
   <div class="field">
-    <label for="mcp-id">ID</label>
+    <label class="field-label" for="mcp-id">ID</label>
     {#if profile}
-      <input id="mcp-id" type="text" value={customId} disabled class="readonly-field" />
+      <span class="field-static">{customId}</span>
     {:else}
-      <input id="mcp-id" type="text" bind:value={customId} placeholder="auto-generated from name" />
+      <input id="mcp-id" class="field-input" type="text" bind:value={customId} placeholder="auto-generated from name" />
     {/if}
-    {#if errors.customId}<span class="field-error">{errors.customId}</span>{/if}
-    {#if !profile}<span class="field-hint">Set once at creation, cannot be changed later.</span>{/if}
+    {#if errors.customId}<span class="field-errortext">{errors.customId}</span>{/if}
+    {#if !profile}<span class="field-hinttext">Set once at creation, cannot be changed later.</span>{/if}
   </div>
 
   <div class="field">
-    <label for="mcp-url">Server URL</label>
-    <input id="mcp-url" type="text" bind:value={url} placeholder="http://localhost:3000/mcp" />
-    {#if errors.url}<span class="field-error">{errors.url}</span>{/if}
+    <label class="field-label" for="mcp-url">Server URL</label>
+    <input id="mcp-url" class="field-input" type="text" bind:value={url} placeholder="http://localhost:3000/mcp" />
+    {#if errors.url}<span class="field-errortext">{errors.url}</span>{/if}
   </div>
 
   <div class="field">
-    <label for="mcp-transport">Transport</label>
-    <input id="mcp-transport" type="text" value="streamable-http" disabled />
+    <span class="field-label">Transport</span>
+    <span class="field-static">streamable-http</span>
   </div>
 
   <div class="form-actions">
@@ -121,53 +121,3 @@
     <button type="button" class="btn" onclick={onCancel}>Cancel</button>
   </div>
 </form>
-
-<style>
-  .profile-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-  }
-  label {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  input {
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--bg-base);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-bright);
-    padding: 0.4rem 0.6rem;
-    font-size: 0.875rem;
-    font-family: inherit;
-    outline: none;
-  }
-  input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .field-error {
-    font-size: 0.75rem;
-    color: var(--red-bright);
-  }
-  .field-hint {
-    font-size: 0.75rem;
-    color: var(--text-dim);
-  }
-  .form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    padding-top: 0.25rem;
-  }
-</style>

@@ -27,21 +27,21 @@
     margin: 0;
     padding: 1rem;
     overflow: auto;
-    font-family: var(--font-mono, monospace);
+    font-family: var(--mono);
     font-size: 0.78rem;
     line-height: 1.5;
-    color: var(--text);
-    background: var(--bg);
+    color: var(--text-bright);
+    background: var(--bg-base);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     flex: 1;
   }
 
-  /* hljs JSON token colours */
-  .json-body :global(.hljs-attr)    { color: var(--color-accent, #60a5fa); }
-  .json-body :global(.hljs-string)  { color: var(--color-success, #4ade80); }
-  .json-body :global(.hljs-number)  { color: #f9a825; }
-  .json-body :global(.hljs-literal) { color: #e879f9; }
+  /* hljs JSON token colours — see --syntax-* tokens in app.css */
+  .json-body :global(.hljs-attr)    { color: var(--syntax-key); }
+  .json-body :global(.hljs-string)  { color: var(--syntax-string); }
+  .json-body :global(.hljs-number)  { color: var(--syntax-number); }
+  .json-body :global(.hljs-literal) { color: var(--syntax-literal); }
   .json-body :global(.hljs-punctuation),
-  .json-body :global(.hljs-attr + .hljs-punctuation) { color: var(--text-muted); }
+  .json-body :global(.hljs-attr + .hljs-punctuation) { color: var(--syntax-punctuation); }
 </style>

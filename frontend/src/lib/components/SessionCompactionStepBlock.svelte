@@ -57,9 +57,9 @@
   .compaction-step {
     margin: 0.5rem 0 0.9rem;
     padding: 0.75rem 0.9rem;
-    border: 1px solid var(--border-subtle);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--bg-panel) 92%, var(--accent) 8%);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-surface);
   }
 
   .compaction-step-meta {
@@ -80,14 +80,14 @@
   .compaction-step-label {
     font-size: 0.82rem;
     font-weight: 700;
-    color: var(--text);
+    color: var(--text-bright);
   }
 
   .compaction-step-status,
   .compaction-step-strategy,
   .compaction-step-detail {
     font-size: 0.76rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .compaction-step-parts {

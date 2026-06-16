@@ -101,7 +101,7 @@
   }
 
   .dialog-inner {
-    background: var(--bg-panel);
+    background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: 8px;
     display: flex;
@@ -132,7 +132,7 @@
   .dialog-title {
     font-size: 0.9rem;
     font-weight: 600;
-    color: var(--text);
+    color: var(--text-bright);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -143,7 +143,7 @@
   .close-btn {
     background: none;
     border: none;
-    color: var(--text-muted);
+    color: var(--text-dim);
     cursor: pointer;
     font-size: 1rem;
     padding: 0.2rem 0.4rem;
@@ -154,7 +154,7 @@
     z-index: 1;
   }
 
-  .close-btn:hover { color: var(--text); background: var(--bg); }
+  .close-btn:hover { color: var(--text-bright); background: var(--bg-base); }
 
   .dialog-body {
     flex: 1;

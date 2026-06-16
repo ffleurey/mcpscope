@@ -31,7 +31,7 @@
   /* ── Prose styles for rendered markdown ─────────────────────────────── */
 
   .prose {
-    color: var(--text);
+    color: var(--text-bright);
     font-size: 0.9rem;
     line-height: 1.7;
   }
@@ -42,7 +42,7 @@
   .prose :global(h4),
   .prose :global(h5),
   .prose :global(h6) {
-    color: var(--text);
+    color: var(--text-bright);
     font-weight: 600;
     line-height: 1.3;
     margin: 1.2em 0 0.4em;
@@ -72,19 +72,19 @@
   .prose :global(li) { margin: 0.25em 0; }
 
   .prose :global(code) {
-    font-family: var(--font-mono, monospace);
+    font-family: var(--mono);
     font-size: 0.85em;
-    background: var(--bg);
-    border: 1px solid var(--border-subtle);
+    background: var(--bg-base);
+    border: 1px solid var(--border);
     border-radius: 3px;
     padding: 0.1em 0.35em;
-    color: var(--color-success, #4ade80);
+    color: var(--green-bright);
   }
 
   .prose :global(pre) {
-    background: var(--bg);
-    border: 1px solid var(--border-subtle);
-    border-radius: 5px;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: 6px;
     padding: 0.75rem 1rem;
     overflow-x: auto;
     margin: 0.7em 0;
@@ -95,7 +95,7 @@
     border: none;
     padding: 0;
     font-size: 0.82em;
-    color: var(--text);
+    color: var(--text-bright);
     border-radius: 0;
   }
 
@@ -103,23 +103,23 @@
     border-left: 3px solid var(--border);
     margin: 0.7em 0;
     padding: 0.1em 0.9em;
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-style: italic;
   }
 
   .prose :global(hr) {
     border: none;
-    border-top: 1px solid var(--border-subtle);
+    border-top: 1px solid var(--border);
     margin: 1em 0;
   }
 
   .prose :global(a) {
-    color: var(--color-accent, #60a5fa);
+    color: var(--amber-bright);
     text-decoration: underline;
   }
 
   .prose :global(a:hover) {
-    color: var(--text);
+    color: var(--text-bright);
   }
 
   .prose :global(table) {
@@ -131,19 +131,19 @@
 
   .prose :global(th),
   .prose :global(td) {
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border);
     padding: 0.35rem 0.65rem;
     text-align: left;
   }
 
   .prose :global(th) {
-    background: var(--bg);
+    background: var(--bg-base);
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .prose :global(tr:nth-child(even)) {
-    background: color-mix(in srgb, var(--bg-panel) 60%, transparent);
+    background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
   }
 
   .prose :global(strong) { font-weight: 700; }

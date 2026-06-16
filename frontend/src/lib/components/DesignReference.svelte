@@ -1,42 +1,69 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import DialogShell from './DialogShell.svelte'
+  import IdBadge from './IdBadge.svelte'
+  import InlineAppError from './InlineAppError.svelte'
+  import Checkbox from './Checkbox.svelte'
+  import Radio from './Radio.svelte'
+  import { AppError } from '../errors'
   import {
     iconPlus, iconClose, iconPlay, iconPause, iconImport, iconExport,
     iconAnalysis, iconSettings, iconTrash,
-    iconChevronRight, iconChevronDown,
+    iconChevronRight, iconChevronDown, iconCollapse, iconExpand,
     iconDot, iconSpinner,
+    iconEdit, iconRefresh, iconTest, iconLoad, iconEject, iconInfo,
+    iconStar, iconStarOutline, iconRadioMarked, iconRadioBlank,
+    iconCheckboxMarked, iconCheckboxBlank,
   } from '../design/icons'
+  import { columnResize } from '../actions/columnResize'
 
   let showDialog = $state(false)
   let showFormDialog = $state(false)
 
-  // ── Color tokens (keep in sync with app.css :root) ────────────────
+  // Demo state for the live data-table example (checkbox toggles).
+  let demoEnabled = $state<Record<string, boolean>>({ 'srv-1': true, 'srv-2': false })
+
+  // Demo state for the Checkbox / Radio components.
+  let demoChecks = $state({ a: true, b: false, verbose: true, reconnect: false })
+  let demoRadio = $state('one')
+
+  // ── Color tokens — values are read live from :root so this guide can
+  //    never drift from app.css. We only name the token + its purpose here.
   const colors = [
     { category: 'Grey — Backgrounds', items: [
-      { token: '--bg-base',       value: '#141414', use: 'Main app background' },
-      { token: '--bg-surface',    value: '#1e1e1e', use: 'Panels, dialogs, sidebar, inputs' },
-      { token: '--bg-hover',      value: '#282828', use: 'Hover state for interactive elements' },
-      { token: '--border',        value: '#333333', use: 'Borders, dividers, separators' },
+      { token: '--bg-base',      use: 'Main app background; inputs' },
+      { token: '--bg-surface',   use: 'Panels, dialogs, sidebar, cards' },
+      { token: '--bg-hover',     use: 'Hover state for interactive elements' },
+      { token: '--border',       use: 'Borders, dividers, separators' },
     ]},
     { category: 'Grey — Text', items: [
-      { token: '--text-dim',      value: '#888888', use: 'Labels, metadata, muted text' },
-      { token: '--text-bright',   value: '#e8e8e8', use: 'Primary body text (near-white)' },
+      { token: '--text-dim',     use: 'Labels, metadata, muted text' },
+      { token: '--text-bright',  use: 'Primary body text (near-white)' },
     ]},
     { category: 'Amber — Primary accent (minimal use)', items: [
-      { token: '--amber-dim',     value: 'oklch(55% 0.15 75)', use: 'Logo, secondary amber text' },
-      { token: '--amber-bright',  value: 'oklch(72% 0.18 75)', use: 'Primary buttons, active tab underline, links' },
-      { token: '--amber-glow',    value: 'oklch(78% 0.20 75)', use: 'Hover/enhanced state for primary elements' },
+      { token: '--amber-dim',    use: 'Logo, secondary amber text' },
+      { token: '--amber-bright', use: 'Primary buttons, active tab underline, links, input focus' },
+      { token: '--amber-glow',   use: 'Hover/enhanced state for primary elements' },
     ]},
     { category: 'Green — Session content (data color)', items: [
-      { token: '--green-dim',     value: 'oklch(50% 0.14 145)', use: 'Dim status, offline/dormant' },
-      { token: '--green-bright',  value: 'oklch(65% 0.18 145)', use: 'Session content: prompts, answers, reasoning, tool calls/results' },
-      { token: '--green-glow',    value: 'oklch(72% 0.22 145)', use: 'Bright status, pulsed indicators' },
+      { token: '--green-dim',    use: 'Dim status, offline/dormant' },
+      { token: '--green-bright', use: 'Session content: prompts, answers, reasoning, tool calls/results' },
+      { token: '--green-glow',   use: 'Bright status, pulsed indicators' },
     ]},
     { category: 'Red — Destructive actions, errors', items: [
-      { token: '--red-dim',       value: 'oklch(45% 0.12 25)', use: 'Error text, danger button borders' },
-      { token: '--red-bright',    value: 'oklch(60% 0.16 25)', use: 'Danger buttons, error states, deletion' },
+      { token: '--red-dim',      use: 'Error text, danger button borders' },
+      { token: '--red-bright',   use: 'Danger buttons, error states, deletion' },
     ]},
   ]
+
+  // Live values read from the document root — single source of truth is app.css.
+  let cssValues = $state<Record<string, string>>({})
+
+  onMount(() => {
+    const root = getComputedStyle(document.documentElement)
+    const tokens = [...colors.flatMap((g) => g.items.map((i) => i.token)), '--sans', '--mono']
+    cssValues = Object.fromEntries(tokens.map((t) => [t, root.getPropertyValue(t).trim()]))
+  })
 
   const rules = [
     '--bg-base is the outermost background; everything sits on it.',
@@ -48,14 +75,23 @@
     'color-scheme: dark on :root to force neutral system colors on native controls.',
     'Green is for session data, grey is for chrome — session content text uses --green-bright to create the oscilloscope metaphor.',
   ]
+
+  // A representative error for the live InlineAppError component.
+  const demoError = new AppError(
+    'Something went wrong processing your request.',
+    'upstream',
+    502,
+    { code: 'UPSTREAM_TIMEOUT', details: { endpoint: '/v1/chat', waitedMs: 30000 } },
+  )
 </script>
 
 <div class="ref-page">
   <header class="ref-header">
     <h1>Design System Reference</h1>
     <p class="ref-subtitle">
-      Living style guide — rendered from live CSS and components.
-      See <span class="mono">backlog/design-system.md</span> for rationale and decisions.
+      Living style guide — colors, fonts and components are rendered from live CSS and
+      real components, not copied. See <span class="mono">backlog/design-system.md</span>
+      for rationale and decisions.
     </p>
   </header>
 
@@ -70,11 +106,11 @@
           <div class="swatch-card">
             <div
               class="swatch"
-              style="background: {c.value}; outline: 1px solid var(--border); outline-offset: -1px;"
+              style="background: var({c.token}); outline: 1px solid var(--border); outline-offset: -1px;"
             ></div>
             <div class="swatch-info">
               <code class="swatch-token">{c.token}</code>
-              <code class="swatch-value">{c.value}</code>
+              <code class="swatch-value">{cssValues[c.token] ?? '…'}</code>
               <span class="swatch-use">{c.use}</span>
             </div>
           </div>
@@ -100,12 +136,12 @@
       <div class="type-card">
         <code class="type-token">--sans</code>
         <p class="type-sample sans">The quick brown fox jumps over the lazy dog 123</p>
-        <p class="type-stack">-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif</p>
+        <p class="type-stack">{cssValues['--sans'] ?? '…'}</p>
       </div>
       <div class="type-card">
         <code class="type-token">--mono</code>
         <p class="type-sample mono">The quick brown fox jumps over the lazy dog 123</p>
-        <p class="type-stack">ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace</p>
+        <p class="type-stack">{cssValues['--mono'] ?? '…'}</p>
       </div>
     </div>
 
@@ -154,16 +190,35 @@
       <button class="icon-btn" title="Add">{@html iconPlus}</button>
       <button class="icon-btn" title="Close">{@html iconClose}</button>
       <button class="icon-btn" title="Settings">{@html iconSettings}</button>
-      <button class="icon-btn" title="Delete" style="color: var(--red-bright);">{@html iconTrash}</button>
+      <button class="icon-btn icon-btn-danger" title="Delete">{@html iconTrash}</button>
       <button class="icon-btn" title="Play">{@html iconPlay}</button>
       <button class="icon-btn" title="Pause">{@html iconPause}</button>
       <button class="icon-btn" title="Disabled" disabled>{@html iconPlus}</button>
     </div>
 
     <p class="ref-note">
-      All icons are inline SVGs from <code class="mono">src/lib/design/icons.ts</code>.
-      Use <code class="mono">.icon-btn</code> for standalone icons, <code class="mono">.btn-icon</code>
-      inside <code class="mono">.btn</code> for icon+text. Tint with accent colors for meaning.
+      Icons are Material Design Icons (<code class="mono">@mdi/js</code>) exposed as semantic
+      names in <code class="mono">src/lib/design/icons.ts</code>. Use <code class="mono">.icon-btn</code>
+      for standalone icons, <code class="mono">.btn-icon</code> inside <code class="mono">.btn</code>
+      for icon+text. Tint with accent colors for meaning.
+    </p>
+
+    <h3 class="group-title">State markers (amber)</h3>
+    <div class="demo-row">
+      <button class="icon-btn icon-glow" title="Selected (radio)" aria-label="Selected">{@html iconRadioMarked}</button>
+      <button class="icon-btn icon-off" title="Unselected (radio)" aria-label="Unselected">{@html iconRadioBlank}</button>
+      <button class="icon-btn icon-glow" title="Enabled (checkbox)" aria-label="Enabled">{@html iconCheckboxMarked}</button>
+      <button class="icon-btn icon-off" title="Disabled (checkbox)" aria-label="Disabled">{@html iconCheckboxBlank}</button>
+      <button class="icon-btn icon-glow" title="Loaded" aria-label="Loaded">{@html iconEject}</button>
+      <button class="icon-btn icon-blink" title="Loading…" aria-label="Loading">{@html iconLoad}</button>
+      <button class="icon-btn icon-btn-danger" title="Destructive" aria-label="Destructive">{@html iconTrash}</button>
+    </div>
+    <p class="ref-note">
+      <code class="mono">.icon-glow</code> = selected / loaded (steady amber glow),
+      <code class="mono">.icon-blink</code> = in-progress (pulsing amber),
+      <code class="mono">.icon-btn-danger</code> = destructive. A deliberate, sanctioned use
+      of amber for single-/multi-select state and activity — radio for single-select,
+      checkbox for multi-select.
     </p>
 
   </section>
@@ -172,11 +227,12 @@
   <section class="ref-section" id="forms">
     <h2>Form Fields</h2>
     <p class="ref-note">
-      Fully monochrome — no accent outline on focus.
-      Checkboxes, radios and selects use standard OS rendering with
-      <code class="mono">accent-color: var(--amber-bright)</code>.
-      The dark theme comes from <code class="mono">color-scheme: dark</code>
-      on the root element.
+      Inputs show an <code class="mono">--amber-bright</code> border on keyboard focus.
+      Checkboxes and radios use the <code class="mono">&lt;Checkbox&gt;</code> /
+      <code class="mono">&lt;Radio&gt;</code> components — a native input for accessibility
+      with an MDI glyph + amber glow, the same toggle visual as the tables. Selects stay
+      native (<code class="mono">accent-color</code>). Dark theme from
+      <code class="mono">color-scheme: dark</code> on the root.
     </p>
 
     <div class="form-demo">
@@ -200,28 +256,20 @@
       </div>
 
       <div class="field">
+        <span class="field-label">Read-only value</span>
+        <span class="field-static">streamable-http</span>
+      </div>
+
+      <div class="field">
         <span class="field-label">Checkbox group</span>
-        <label class="check-option">
-          <input type="checkbox" checked />
-          <span class="check-label">Option A</span>
-        </label>
-        <label class="check-option">
-          <input type="checkbox" />
-          <span class="check-label">Option B</span>
-        </label>
+        <Checkbox label="Option A" checked={demoChecks.a} onchange={(v) => (demoChecks.a = v)} />
+        <Checkbox label="Option B" checked={demoChecks.b} onchange={(v) => (demoChecks.b = v)} />
       </div>
 
       <div class="field">
         <span class="field-label">Radio group</span>
-        <label class="radio-opt">
-          <input type="radio" name="demo-radio" checked />
-          <span class="radio-opt-label">Choice one</span>
-          <span class="radio-opt-hint">With a hint below</span>
-        </label>
-        <label class="radio-opt">
-          <input type="radio" name="demo-radio" />
-          <span class="radio-opt-label">Choice two</span>
-        </label>
+        <Radio group={demoRadio} value="one" name="demo-radio" label="Choice one" hint="With a hint below" onselect={(v) => (demoRadio = v)} />
+        <Radio group={demoRadio} value="two" name="demo-radio" label="Choice two" onselect={(v) => (demoRadio = v)} />
       </div>
 
       <div class="field">
@@ -282,14 +330,8 @@
           </div>
           <div class="field">
             <span class="field-label">Options</span>
-            <label class="check-option">
-              <input type="checkbox" checked />
-              <span class="check-label">Enable verbose logging</span>
-            </label>
-            <label class="check-option">
-              <input type="checkbox" />
-              <span class="check-label">Auto-reconnect on failure</span>
-            </label>
+            <Checkbox label="Enable verbose logging" checked={demoChecks.verbose} onchange={(v) => (demoChecks.verbose = v)} />
+            <Checkbox label="Auto-reconnect on failure" checked={demoChecks.reconnect} onchange={(v) => (demoChecks.reconnect = v)} />
           </div>
         </div>
         <div class="dialog-actions">
@@ -300,7 +342,8 @@
     {/if}
 
     <p class="ref-note">
-      Uses native <code class="mono">&lt;dialog&gt;</code> element with <code class="mono">::backdrop</code>.
+      Live <code class="mono">DialogShell.svelte</code> — native <code class="mono">&lt;dialog&gt;</code>
+      with <code class="mono">::backdrop</code>, draggable header.
       Max width 720px or 95vw, max height 85vh.
     </p>
   </section>
@@ -310,17 +353,93 @@
     <h2>Status indicators</h2>
 
     <div class="demo-row">
-      <span class="status-dot-demo running"></span><span class="status-label-demo">Running / active</span>
-      <span class="status-dot-demo idle"></span><span class="status-label-demo">Idle / ready</span>
-      <span class="status-dot-demo warn"></span><span class="status-label-demo">Warning / attention</span>
-      <span class="status-dot-demo error"></span><span class="status-label-demo">Error / failed</span>
+      <span class="status-dot running"></span><span class="status-label-demo">Running / active</span>
+      <span class="status-dot idle"></span><span class="status-label-demo">Idle / ready</span>
+      <span class="status-dot warn"></span><span class="status-label-demo">Warning / attention</span>
+      <span class="status-dot error"></span><span class="status-label-demo">Error / failed</span>
     </div>
 
     <p class="ref-note">
-      Flat dots, no glow effects. Colors: <code class="mono">--green-bright</code>,
-      <code class="mono">--green-dim</code>, <code class="mono">--amber-bright</code>,
-      <code class="mono">--red-bright</code>.
+      Shared <code class="mono">.status-dot</code> primitive with a state modifier
+      (<code class="mono">.running .idle .warn .error</code>). Flat dots, no glow.
     </p>
+  </section>
+
+  <!-- ─── DATA TABLES ─────────────────────────────────────────────────── -->
+  <section class="ref-section" id="tables">
+    <h2>Data tables</h2>
+    <p class="ref-note">
+      Dense admin table: <code class="mono">.data-table</code> inside a
+      <code class="mono">.table-scroll</code> wrapper, fixed layout via a
+      <code class="mono">&lt;colgroup&gt;</code>, and <code class="mono">use:columnResize</code>
+      — drag a header's right border to resize. First column is a single-control
+      <code class="mono">.col-toggle</code>; <code class="mono">.col-num</code> for numerics,
+      <code class="mono">.col-mono</code> for IDs/URLs, trailing
+      <code class="mono">.col-actions</code> holding <code class="mono">.row-actions</code> icon buttons.
+      Cells truncate with ellipsis (full value on hover).
+    </p>
+
+    <div class="table-scroll">
+      <table class="data-table" use:columnResize>
+        <colgroup>
+          <col style="width: 3rem" />
+          <col style="width: 12rem" />
+          <col style="width: 16rem" />
+          <col style="width: 6rem" />
+          <col style="width: 13rem" />
+          <col style="width: 7rem" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="col-toggle" aria-label="Default"></th>
+            <th>Name</th>
+            <th>Endpoint</th>
+            <th class="col-num">Calls</th>
+            <th>Status</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="col-toggle">
+              <button class="icon-btn" class:icon-glow={demoEnabled['srv-1']} class:icon-off={!demoEnabled['srv-1']} aria-label="Toggle default" onclick={() => (demoEnabled['srv-1'] = !demoEnabled['srv-1'])}>{@html demoEnabled['srv-1'] ? iconCheckboxMarked : iconCheckboxBlank}</button>
+            </td>
+            <td title="Production">Production</td>
+            <td class="col-mono" title="https://api.example.com/v1">https://api.example.com/v1</td>
+            <td class="col-num">1,284</td>
+            <td>
+              <span class="status-cell" title="Connected · 3 models">
+                <span class="status-dot running"></span>
+                <span class="status-text">Connected · 3 models</span>
+              </span>
+            </td>
+            <td class="col-actions">
+              <span class="row-actions">
+                <button class="icon-btn" aria-label="Test">{@html iconTest}</button>
+                <button class="icon-btn" aria-label="Edit">{@html iconEdit}</button>
+                <button class="icon-btn icon-btn-danger" aria-label="Delete">{@html iconTrash}</button>
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <td class="col-toggle">
+              <button class="icon-btn" class:icon-glow={demoEnabled['srv-2']} class:icon-off={!demoEnabled['srv-2']} aria-label="Toggle default" onclick={() => (demoEnabled['srv-2'] = !demoEnabled['srv-2'])}>{@html demoEnabled['srv-2'] ? iconCheckboxMarked : iconCheckboxBlank}</button>
+            </td>
+            <td title="Staging">Staging</td>
+            <td class="col-mono" title="http://localhost:1234/v1">http://localhost:1234/v1</td>
+            <td class="col-num">37</td>
+            <td><span class="status-muted">—</span></td>
+            <td class="col-actions">
+              <span class="row-actions">
+                <button class="icon-btn" aria-label="Test">{@html iconTest}</button>
+                <button class="icon-btn" aria-label="Edit">{@html iconEdit}</button>
+                <button class="icon-btn icon-btn-danger" aria-label="Delete">{@html iconTrash}</button>
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <!-- ─── UTILITY PATTERNS ───────────────────────────────────────────── -->
@@ -342,15 +461,15 @@
     </details>
 
     <h3 class="group-title">Error banner</h3>
-    <div class="demo-error-banner">
-      <div class="demo-error-message">Something went wrong processing your request.</div>
-    </div>
+    <InlineAppError error={demoError} />
+    <p class="ref-note">Live <code class="mono">InlineAppError.svelte</code> with an expandable details payload.</p>
 
     <h3 class="group-title">ID badge</h3>
     <div class="demo-row">
-      <span class="id-pill-demo">AB12</span>
-      <span class="id-pill-demo">AB12.3W.1T</span>
+      <IdBadge id="AB12" />
+      <IdBadge id="AB12.3W.1T" />
     </div>
+    <p class="ref-note">Live <code class="mono">IdBadge.svelte</code> — click for the copy / lookup menu.</p>
 
     <h3 class="group-title">Links</h3>
     <div class="demo-row">
@@ -377,19 +496,19 @@
     <div class="session-demo">
       <div class="session-part">
         <span class="session-part-label">User prompt (sans)</span>
-        <p style="color: var(--green-bright); font-size: 1rem; line-height: 1.5;">What tools are available for weather data?</p>
+        <p class="session-text">What tools are available for weather data?</p>
       </div>
       <div class="session-part">
         <span class="session-part-label">Reasoning (sans italic)</span>
-        <p style="color: var(--green-bright); font-size: 1rem; line-height: 1.5; font-style: italic;">The user is asking about weather tools. I should list the available MCP tools and their capabilities.</p>
+        <p class="session-text reasoning">The user is asking about weather tools. I should list the available MCP tools and their capabilities.</p>
       </div>
       <div class="session-part">
         <span class="session-part-label">Tool call (mono)</span>
-        <p style="color: var(--green-bright); font-size: 1rem; line-height: 1.5; font-family: var(--mono);">get_forecast(latitude: 48.85, longitude: 2.35)</p>
+        <p class="session-text tool">get_forecast(latitude: 48.85, longitude: 2.35)</p>
       </div>
       <div class="session-part">
         <span class="session-part-label">Assistant answer (sans)</span>
-        <p style="color: var(--green-bright); font-size: 1rem; line-height: 1.5;">The current temperature in Paris is 18°C with partly cloudy skies. The forecast shows a high of 22°C tomorrow.</p>
+        <p class="session-text">The current temperature in Paris is 18°C with partly cloudy skies. The forecast shows a high of 22°C tomorrow.</p>
       </div>
     </div>
 
@@ -397,8 +516,8 @@
     <div class="demo-row">
       <span class="token-pill">1,234 tokens</span>
       <span class="token-pill">~500 tokens</span>
-      <span class="id-pill-demo">AB12.4T</span>
-      <span class="id-pill-demo">AB12.S</span>
+      <IdBadge id="AB12.4T" />
+      <IdBadge id="AB12.S" />
     </div>
   </section>
 
@@ -423,6 +542,20 @@
       <div class="icon-cell"><span class="icon-demo">{@html iconAnalysis}</span><code>iconAnalysis</code></div>
       <div class="icon-cell"><span class="icon-demo">{@html iconSettings}</span><code>iconSettings</code></div>
       <div class="icon-cell"><span class="icon-demo">{@html iconTrash}</span><code>iconTrash</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconCollapse}</span><code>iconCollapse</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconExpand}</span><code>iconExpand</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconEdit}</span><code>iconEdit</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconRefresh}</span><code>iconRefresh</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconTest}</span><code>iconTest</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconLoad}</span><code>iconLoad</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconEject}</span><code>iconEject</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconInfo}</span><code>iconInfo</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconStar}</span><code>iconStar</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconStarOutline}</span><code>iconStarOutline</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconRadioMarked}</span><code>iconRadioMarked</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconRadioBlank}</span><code>iconRadioBlank</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconCheckboxMarked}</span><code>iconCheckboxMarked</code></div>
+      <div class="icon-cell"><span class="icon-demo">{@html iconCheckboxBlank}</span><code>iconCheckboxBlank</code></div>
       <div class="icon-cell"><span class="icon-demo">{@html iconDot}</span><code>iconDot</code></div>
       <div class="icon-cell"><span class="icon-demo">{@html iconSpinner}</span><code>iconSpinner</code></div>
     </div>
@@ -432,7 +565,7 @@
   <section class="ref-section" id="layout">
     <h2>Layout & density</h2>
     <ul class="principle-list">
-      <li><strong>Default padding</strong> for containers, dialogs, buttons: <code>0.75rem</code></li>
+      <li><strong>Default padding</strong> for containers and dialogs: <code>0.75rem</code></li>
       <li><strong>Default gap</strong> between related elements: <code>0.35rem</code></li>
       <li>Use Svelte <code>style</code> directives and native CSS gap/padding directly — no utility classes.</li>
       <li>No unnecessary wrapper divs. Prefer flat DOM with direct spacing.</li>
@@ -458,7 +591,7 @@
   .ref-header h1 {
     font-size: 1.3rem;
     font-weight: 700;
-    color: var(--amber-bright, var(--color-accent));
+    color: var(--amber-bright);
     margin: 0 0 0.35rem;
   }
 
@@ -702,35 +835,14 @@
     border-top: 1px solid var(--border);
   }
 
-  /* ── Status dots ──────────────────────────────────────────────────── */
-  .status-dot-demo {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    display: inline-block;
-    flex-shrink: 0;
-  }
-
-  .status-dot-demo.running { background: var(--green-bright, #3fb950); }
-  .status-dot-demo.idle    { background: var(--green-dim, #484f58); }
-  .status-dot-demo.warn    { background: var(--amber-bright, #d29922); }
-  .status-dot-demo.error   { background: var(--red-bright, #f85149); }
-
+  /* ── Status labels (dots come from the global .status-dot primitive) ── */
   .status-label-demo {
     font-size: 0.8rem;
     color: var(--text-bright);
     margin-right: 0.75rem;
   }
 
-  /* ── Utility patterns ─────────────────────────────────────────────── */
-  .token-pill {
-    font-size: 0.68rem;
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 0.1rem 0.45rem;
-  }
-
+  /* ── Details / summary ────────────────────────────────────────────── */
   .demo-details {
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -770,29 +882,6 @@
     line-height: 1.45;
   }
 
-  .demo-error-banner {
-    background: color-mix(in srgb, var(--red-bright, var(--color-error)) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--red-bright, var(--color-error)) 35%, transparent);
-    border-radius: 6px;
-    padding: 0.5rem 0.75rem;
-    max-width: 480px;
-  }
-
-  .demo-error-message {
-    font-size: 0.82rem;
-    color: var(--red-bright, var(--color-error));
-    line-height: 1.35;
-  }
-
-  .id-pill-demo {
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    color: var(--text-dim);
-    font-size: 0.68rem;
-    font-family: var(--mono);
-    padding: 0.08rem 0.45rem;
-  }
-
   /* ── Session patterns ──────────────────────────────────────────── */
   .session-demo {
     display: flex;
@@ -810,13 +899,17 @@
     gap: 0.15rem;
   }
 
-  .session-part p {
+  .session-text {
     margin: 0;
-    font-size: 0.88rem;
-    line-height: 1.55;
+    color: var(--green-bright);
+    font-size: 1rem;
+    line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
   }
+
+  .session-text.reasoning { font-style: italic; }
+  .session-text.tool { font-family: var(--mono); }
 
   .session-part-label {
     font-size: 0.68rem;
@@ -841,7 +934,7 @@
     color: var(--text-bright);
     line-height: 1.45;
     padding-left: 1rem;
-    border-left: 2px solid var(--amber-dim, var(--text-dim));
+    border-left: 2px solid var(--amber-dim);
   }
 
   .principle-list code {

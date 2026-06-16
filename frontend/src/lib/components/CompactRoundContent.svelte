@@ -442,7 +442,7 @@
     .tool-section-label {
         font-size: 0.7rem;
         font-weight: 600;
-        color: var(--text-muted);
+        color: var(--text-dim);
         text-transform: uppercase;
         letter-spacing: 0.05em;
     }
@@ -478,8 +478,8 @@
     }
 
     .collapsed-row[open] {
-        border-color: var(--border-subtle);
-        background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+        border-color: var(--border);
+        background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
     }
 
     .collapsed-summary {
@@ -491,7 +491,7 @@
     }
 
     .collapsed-summary:hover {
-        background: color-mix(in srgb, var(--bg-panel) 62%, transparent);
+        background: color-mix(in srgb, var(--bg-surface) 62%, transparent);
     }
 
     .collapsed-summary::-webkit-details-marker {
@@ -501,7 +501,7 @@
     .collapsed-summary::before {
         content: "\25B6";
         font-size: 0.6rem;
-        color: var(--text-muted);
+        color: var(--text-dim);
         transition: transform 0.15s;
     }
 
@@ -542,34 +542,26 @@
         font-style: normal;
     }
 
-    .token-pill {
-        font-size: 0.68rem;
-        color: var(--text-muted);
-        border: 1px solid var(--border-subtle);
-        border-radius: 999px;
-        padding: 0.1rem 0.45rem;
-    }
-
     .status-pill {
         font-size: 0.68rem;
-        color: var(--accent, var(--text));
-        border: 1px solid var(--border-subtle);
+        color: var(--text-bright);
+        border: 1px solid var(--border);
         border-radius: 999px;
         padding: 0.1rem 0.45rem;
     }
 
     .meta-btn {
         background: none;
-        border: 1px solid var(--border-subtle);
+        border: 1px solid var(--border);
         border-radius: 4px;
-        color: var(--text-muted);
+        color: var(--text-dim);
         cursor: pointer;
         font-size: 0.72rem;
         padding: 0.15rem 0.45rem;
     }
 
     .meta-btn:hover {
-        color: var(--text);
+        color: var(--text-bright);
         border-color: var(--border);
     }
 
@@ -583,7 +575,7 @@
         background: none;
         border: 1px solid transparent;
         border-radius: 4px;
-        color: var(--text-muted);
+        color: var(--text-dim);
         cursor: pointer;
         padding: 0.15rem;
         opacity: 0;
@@ -595,9 +587,9 @@
     }
 
     .preview-btn:hover {
-        color: var(--text);
-        border-color: var(--border-subtle);
-        background: var(--bg-panel);
+        color: var(--text-bright);
+        border-color: var(--border);
+        background: var(--bg-surface);
         opacity: 1;
     }
 

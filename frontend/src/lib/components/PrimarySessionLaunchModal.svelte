@@ -9,6 +9,8 @@
     startSession,
   } from '../sessionStore'
   import DialogShell from './DialogShell.svelte'
+  import Checkbox from './Checkbox.svelte'
+  import Radio from './Radio.svelte'
 
   let selectedConfigId = $state('')
   let selectedMcpProfileIds = $state<string[]>([])
@@ -59,7 +61,7 @@
 </script>
 
 <DialogShell title="New primary session" onClose={closePrimaryLaunchDialog} dialogClass="primary-launch-dialog">
-  <div class="form">
+  <div class="form-stack">
     {#if $sessionError && $sessionErrorSurface === 'new-session'}
       <div class="error-banner">
         <div class="error-message">{$sessionError.message}</div>
@@ -77,7 +79,7 @@
       <label class="field-label" for="primary-session-id">Session ID <span class="optional">(optional)</span></label>
       <input
         id="primary-session-id"
-        class="field-select"
+        class="field-input"
         type="text"
         maxlength="4"
         placeholder="AB12"
@@ -90,9 +92,9 @@
     <div class="field">
       <label class="field-label" for="primary-model-select">Model</label>
       {#if $modelConfigs.length === 0}
-        <p class="field-hint">No model configs — create one in the sidebar first.</p>
+        <p class="field-hinttext">No model configs — create one in the sidebar first.</p>
       {:else}
-        <select id="primary-model-select" class="field-select" bind:value={selectedConfigId} disabled={$isStartingSession}>
+        <select id="primary-model-select" class="field-input" bind:value={selectedConfigId} disabled={$isStartingSession}>
           {#each $modelConfigs as config (config.id)}
             <option value={config.id}>{config.name}{$sessionCreationDefaults?.defaultModelConfigId === config.id ? ' (default)' : ''}</option>
           {/each}
@@ -103,22 +105,17 @@
     <div class="field">
       <span class="field-label">MCP servers <span class="optional">(optional)</span></span>
       {#if $mcpProfiles.length === 0}
-        <p class="field-hint">No MCP server profiles — create one in the sidebar first.</p>
+        <p class="field-hinttext">No MCP server profiles — create one in the sidebar first.</p>
       {:else}
         <div class="mcp-checkbox-group">
           {#each $mcpProfiles as profile (profile.id)}
-            <label class="mcp-checkbox-option" class:checked={selectedMcpProfileIds.includes(profile.id)}>
-              <input
-                type="checkbox"
-                checked={selectedMcpProfileIds.includes(profile.id)}
-                onchange={() => toggleMcp(profile.id)}
-                disabled={$isStartingSession}
-              />
-              <span class="mcp-checkbox-label">{profile.name}</span>
-              {#if profile.defaultEnabled}
-                <span class="mcp-checkbox-hint">(default)</span>
-              {/if}
-            </label>
+            <Checkbox
+              label={profile.name}
+              hint={profile.defaultEnabled ? '(default)' : ''}
+              checked={selectedMcpProfileIds.includes(profile.id)}
+              disabled={$isStartingSession}
+              onchange={() => toggleMcp(profile.id)}
+            />
           {/each}
         </div>
       {/if}
@@ -127,20 +124,28 @@
     <div class="field">
       <span class="field-label">Context compaction</span>
       <div class="radio-group">
-        <label class="radio-option">
-          <input type="radio" name="primary-compaction" value="strip-reasoning" bind:group={compactionStrategy} disabled={$isStartingSession} />
-          <span class="radio-label">Strip reasoning</span>
-          <span class="radio-hint">Remove chain-of-thought after each turn to save context</span>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="primary-compaction" value="none" bind:group={compactionStrategy} disabled={$isStartingSession} />
-          <span class="radio-label">None</span>
-          <span class="radio-hint">Keep full context including reasoning</span>
-        </label>
+        <Radio
+          group={compactionStrategy}
+          value="strip-reasoning"
+          name="primary-compaction"
+          label="Strip reasoning"
+          hint="Remove chain-of-thought after each turn to save context"
+          disabled={$isStartingSession}
+          onselect={(v) => (compactionStrategy = v as 'strip-reasoning' | 'none')}
+        />
+        <Radio
+          group={compactionStrategy}
+          value="none"
+          name="primary-compaction"
+          label="None"
+          hint="Keep full context including reasoning"
+          disabled={$isStartingSession}
+          onselect={(v) => (compactionStrategy = v as 'strip-reasoning' | 'none')}
+        />
       </div>
     </div>
 
-    <div class="actions">
+    <div class="form-actions">
       <button class="btn" onclick={closePrimaryLaunchDialog} disabled={$isStartingSession}>Cancel</button>
       <button class="btn btn-primary" onclick={handleStart} disabled={!selectedConfigId || $isStartingSession || $modelConfigs.length === 0}>
         {$isStartingSession ? 'Starting…' : 'Start session'}
@@ -150,17 +155,11 @@
 </DialogShell>
 
 <style>
-  .form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
   .error-banner {
-    background: color-mix(in srgb, var(--color-error) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-error) 35%, transparent);
+    background: color-mix(in srgb, var(--red-bright) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--red-bright) 35%, transparent);
     border-radius: 6px;
-    color: var(--color-error);
+    color: var(--red-bright);
     padding: 0.5rem 0.75rem;
   }
 
@@ -184,35 +183,17 @@
 
   .error-details-body {
     margin: 0.45rem 0 0;
-    background: var(--bg);
-    border: 1px solid var(--border-subtle);
+    background: var(--bg-base);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.45rem 0.6rem;
-    font-family: var(--font-mono);
+    font-family: var(--mono);
     font-size: 0.76rem;
     overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-all;
     max-height: 170px;
     overflow-y: auto;
-  }
-
-  .mcp-checkbox-hint {
-    font-size: 0.75rem;
-    color: var(--text-dim);
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-  }
-
-  .field-label {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
   }
 
   .optional {
@@ -222,107 +203,16 @@
     font-size: 0.75rem;
   }
 
-  .field-select {
-    background: var(--bg-base);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-bright);
-    font-family: inherit;
-    font-size: 0.875rem;
-    padding: 0.4rem 0.6rem;
-    outline: none;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .field-hint {
-    font-size: 0.75rem;
-    color: var(--text-dim);
-    margin: 0;
-  }
-
   .mcp-checkbox-group {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
   }
 
-  .mcp-checkbox-option {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    padding: 0.5rem 0.65rem;
-    border: 1px solid var(--border-subtle);
-    border-radius: 6px;
-    background: var(--bg);
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .mcp-checkbox-option:has(input:checked) {
-    border-color: var(--border);
-  }
-
-  .mcp-checkbox-option input[type="checkbox"] {
-    margin: 0;
-    accent-color: var(--color-accent);
-  }
-
-  .mcp-checkbox-label {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--text);
-  }
 
   .radio-group {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .radio-option {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    grid-template-rows: auto auto;
-    column-gap: 0.55rem;
-    row-gap: 0.1rem;
-    align-items: baseline;
-    cursor: pointer;
-    padding: 0.55rem 0.7rem;
-    border: 1px solid var(--border-subtle);
-    border-radius: 7px;
-    background: var(--bg);
-  }
-
-  .radio-option:has(input:checked) {
-    border-color: var(--border);
-  }
-
-  .radio-option input[type="radio"] {
-    grid-row: 1;
-    grid-column: 1;
-    margin: 0;
-    accent-color: var(--color-accent);
-  }
-
-  .radio-label {
-    grid-row: 1;
-    grid-column: 2;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--text);
-  }
-
-  .radio-hint {
-    grid-row: 2;
-    grid-column: 2;
-    font-size: 0.75rem;
-    color: var(--text-dim);
-  }
-
-  .actions {
-    display: flex;
-    justify-content: flex-end;
     gap: 0.5rem;
   }
 </style>

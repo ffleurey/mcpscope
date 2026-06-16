@@ -176,7 +176,7 @@
   .empty {
     padding: 0.75rem;
     font-size: 0.8rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .sessions,
@@ -198,7 +198,7 @@
 
   .session-item {
     background: none;
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-size: 0.82rem;
     font-family: inherit;
     list-style: none;
@@ -213,17 +213,17 @@
 
   .primary-item:hover > .session-row {
     background: var(--bg-hover);
-    color: var(--text);
+    color: var(--text-bright);
   }
 
   .session-item.active > .session-row {
-    background: var(--bg-active);
-    color: var(--text);
+    background: var(--bg-hover);
+    color: var(--text-bright);
   }
 
   .child-item > .session-row {
     padding-left: 0;
-    background: color-mix(in srgb, var(--bg-panel, var(--bg)) 60%, transparent);
+    background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
   }
 
   .child-item:hover > .session-row {
@@ -231,15 +231,15 @@
   }
 
   .child-item.active > .session-row {
-    background: var(--bg-active);
-    color: var(--text);
+    background: var(--bg-hover);
+    color: var(--text-bright);
   }
 
   .expand-btn {
     flex-shrink: 0;
     background: none;
     border: none;
-    color: var(--text-muted);
+    color: var(--text-dim);
     cursor: pointer;
     font-size: 0.7rem;
     line-height: 1;
@@ -327,7 +327,7 @@
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-size: 0.9rem;
     line-height: 1;
     padding: 0.1rem 0.25rem;
@@ -335,11 +335,11 @@
   }
 
   .analyze-btn:hover {
-    color: var(--color-accent, #7c3aed);
+    color: var(--amber-bright);
   }
 
   .delete-btn:hover {
-    color: var(--color-error);
+    color: var(--red-bright);
   }
 </style>
 

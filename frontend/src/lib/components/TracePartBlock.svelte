@@ -224,7 +224,7 @@
 <style>
   .part-block {
     padding: 0.75rem 0;
-    border-top: 1px solid var(--border-subtle);
+    border-top: 1px solid var(--border);
   }
 
   .part-id-row {
@@ -262,7 +262,7 @@
   .part-summary::before {
     content: '▶';
     font-size: 0.6rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     transition: transform 0.15s;
   }
 
@@ -273,7 +273,7 @@
   .part-title {
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -288,8 +288,8 @@
   }
 
   .compact-row[open] {
-    border-color: var(--border-subtle);
-    background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+    border-color: var(--border);
+    background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
   }
 
   .compact-summary {
@@ -298,7 +298,7 @@
   }
 
   .compact-summary:hover {
-    background: color-mix(in srgb, var(--bg-panel) 62%, transparent);
+    background: color-mix(in srgb, var(--bg-surface) 62%, transparent);
   }
 
   .part-preview {
@@ -316,13 +316,9 @@
     color: var(--green-bright);
   }
 
+  /* Chrome comes from the global .token-pill; only the layout differs here. */
   .token-pill {
     margin-left: auto;
-    font-size: 0.68rem;
-    color: var(--text-muted);
-    border: 1px solid var(--border-subtle);
-    border-radius: 999px;
-    padding: 0.1rem 0.45rem;
   }
 
   .part-body {
@@ -384,9 +380,9 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: end;
     column-gap: var(--compact-inline-gap, 0.35rem);
-    background: var(--bg-active);
+    background: var(--bg-hover);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: var(--compact-message-pad-y, 0.38rem) var(--compact-message-pad-x, 0.72rem);
   }
 
@@ -404,9 +400,9 @@
   .raw-btn {
     margin-top: 0.45rem;
     background: none;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border);
     border-radius: 3px;
-    color: var(--text-muted);
+    color: var(--text-dim);
     cursor: pointer;
     font-size: 0.72rem;
     padding: 0.15rem 0.45rem;
@@ -414,7 +410,7 @@
 
   .raw-btn:hover {
     border-color: var(--border);
-    color: var(--text);
+    color: var(--text-bright);
   }
 
   /* ── Tool definitions list ───────────────────────────────────────────── */
@@ -426,8 +422,8 @@
   }
 
   .tool-item {
-    border: 1px solid var(--border-subtle);
-    border-radius: 5px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
     overflow: hidden;
   }
 
@@ -438,7 +434,7 @@
     padding: 0.28rem 0.5rem;
     cursor: pointer;
     list-style: none;
-    border-radius: 5px;
+    border-radius: 4px;
   }
 
   .tool-summary::-webkit-details-marker { display: none; }
@@ -446,7 +442,7 @@
   .tool-summary::before {
     content: '▶';
     font-size: 0.55rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     flex-shrink: 0;
     transition: transform 0.12s;
     margin-top: 0.1rem;
@@ -470,13 +466,13 @@
 
   .tool-meta {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     flex-shrink: 0;
   }
 
   .tool-detail {
     padding: 0.4rem 0.7rem 0.5rem;
-    border-top: 1px solid var(--border-subtle);
+    border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
@@ -532,7 +528,7 @@
 
   .tool-no-params {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-style: italic;
   }
 </style>

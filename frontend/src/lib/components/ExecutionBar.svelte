@@ -61,7 +61,7 @@
         </span>
         <span class="job-label">{formatTarget(currentActiveJob)}</span>
       {:else if snapshot.controlState === 'paused'}
-        <span class="status-dot paused"></span>
+        <span class="status-dot warn"></span>
         <span class="status-label">Paused</span>
       {:else}
         <span class="status-dot idle"></span>
@@ -72,7 +72,7 @@
     <!-- Controls -->
     <div class="exec-controls">
       <button
-        class="exec-btn"
+        class="btn btn-sm"
         onclick={handlePauseResume}
         disabled={isActioning}
         title={snapshot.controlState === 'running' ? 'Pause after current step' : 'Resume execution'}
@@ -83,7 +83,7 @@
       <!-- Queue button -->
       {#if queuedJobs.length > 0}
         <button
-          class="exec-btn queue-btn"
+          class="btn btn-sm"
           onclick={() => showQueue = !showQueue}
           title="Show queue"
         >
@@ -103,7 +103,7 @@
       <div class="queue-item">
         <span class="queue-item-label">{formatTarget(job)}</span>
         <button
-          class="queue-remove-btn"
+          class="icon-btn icon-btn-danger"
           onclick={() => handleRemoveJob(job.jobId)}
           title="Remove from queue"
         >✕</button>
@@ -118,8 +118,8 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.35rem 1rem;
-    background: var(--bg-panel, #1e2229);
-    border-bottom: 1px solid var(--border, #30363d);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
     font-size: 0.8rem;
     min-height: 2rem;
     position: relative;
@@ -134,29 +134,13 @@
     min-width: 0;
   }
 
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-  .status-dot.running {
-    background: var(--green-bright);
-  }
-  .status-dot.paused {
-    background: var(--amber-bright);
-  }
-  .status-dot.idle {
-    background: var(--green-dim);
-  }
-
   .status-label {
-    color: var(--text-muted, #8b949e);
+    color: var(--text-dim);
     flex-shrink: 0;
   }
 
   .job-label {
-    color: var(--text, #e6edf3);
+    color: var(--text-bright);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -169,39 +153,19 @@
     flex-shrink: 0;
   }
 
-  .exec-btn {
-    background: var(--bg-input, #21262d);
-    border: 1px solid var(--border, #30363d);
-    border-radius: 4px;
-    color: var(--text, #e6edf3);
-    cursor: pointer;
-    padding: 0.2rem 0.5rem;
-    font-size: 0.75rem;
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-  }
-  .exec-btn:hover:not(:disabled) {
-    background: var(--bg-hover, #30363d);
-  }
-  .exec-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
   .chevron {
     font-size: 0.6rem;
   }
 
   .queue-panel {
-    background: var(--bg-panel, #1e2229);
-    border-bottom: 1px solid var(--border, #30363d);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
     padding: 0.5rem 1rem;
     font-size: 0.8rem;
   }
 
   .queue-header {
-    color: var(--text-muted, #8b949e);
+    color: var(--text-dim);
     font-weight: 600;
     margin-bottom: 0.4rem;
     font-size: 0.75rem;
@@ -222,21 +186,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--text, #e6edf3);
+    color: var(--text-bright);
   }
 
-  .queue-remove-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted, #8b949e);
-    cursor: pointer;
-    padding: 0.1rem 0.3rem;
-    border-radius: 3px;
-    font-size: 0.75rem;
-    flex-shrink: 0;
-  }
-  .queue-remove-btn:hover {
-    background: var(--bg-hover, #30363d);
-    color: var(--color-error, #f85149);
-  }
 </style>

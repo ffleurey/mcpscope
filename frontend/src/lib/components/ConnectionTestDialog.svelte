@@ -93,11 +93,11 @@
   }
 
   .ok {
-    color: var(--color-success);
+    color: var(--green-bright);
   }
 
   .err {
-    color: var(--color-error);
+    color: var(--red-bright);
   }
 
   .target-row,
@@ -109,27 +109,27 @@
 
   .label {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
 
   .value {
     font-size: 0.875rem;
-    color: var(--text);
+    color: var(--text-bright);
     word-break: break-word;
   }
 
   .mono {
-    font-family: var(--font-mono);
+    font-family: var(--mono);
   }
 
   .details-list {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    background: var(--bg);
-    border: 1px solid var(--border-subtle);
+    background: var(--bg-base);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.5rem 0.75rem;
   }
@@ -142,17 +142,17 @@
   }
 
   .detail-key {
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .detail-value {
-    color: var(--text);
+    color: var(--text-bright);
     word-break: break-all;
   }
 
   .raw-details {
     font-size: 0.8rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .raw-details summary {
@@ -162,11 +162,11 @@
   }
 
   .raw-body {
-    background: var(--bg);
-    border: 1px solid var(--border-subtle);
+    background: var(--bg-base);
+    border: 1px solid var(--border);
     border-radius: 4px;
     padding: 0.5rem 0.75rem;
-    font-family: var(--font-mono);
+    font-family: var(--mono);
     font-size: 0.8rem;
     overflow-x: auto;
     white-space: pre-wrap;

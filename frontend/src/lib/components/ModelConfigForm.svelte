@@ -185,8 +185,7 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   function validate(): boolean {
     const e: Record<string, string> = {}
     if (!name.trim()) e.name = 'Name is required'
-    if (!isNew && !customId.trim()) e.customId = 'ID is required'
-    if (isNew && !customId.trim()) e.customId = 'ID is required'
+    if (!customId.trim()) e.customId = 'ID is required'
     if (customId.trim() && !/^[a-zA-Z0-9_-]+$/.test(customId.trim())) {
       e.customId = 'ID must only contain letters, numbers, hyphens, and underscores'
     }
@@ -221,41 +220,24 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   }
 </script>
 
-<form class="profile-form" onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>
+<form class="form-stack" onsubmit={(e) => { e.preventDefault(); handleSubmit() }}>
 
   <div class="field">
-    <label for="mc-name">Name</label>
-    <input id="mc-name" type="text" bind:value={name} placeholder="e.g. Qwen3 · Creative" />
-    {#if errors.name}<span class="field-error">{errors.name}</span>{/if}
-  </div>
-
-  <div class="field">
-    <label for="mc-id">ID</label>
-    {#if modelConfig}
-      <input id="mc-id" type="text" value={customId} disabled class="readonly-field" />
-    {:else}
-      <input id="mc-id" type="text" bind:value={customId} placeholder="auto-generated from name" />
-    {/if}
-    {#if errors.customId}<span class="field-error">{errors.customId}</span>{/if}
-    {#if !modelConfig}<span class="field-hint">Set once at creation, cannot be changed later.</span>{/if}
-  </div>
-
-  <div class="field">
-    <label for="mc-connection">Connection</label>
+    <label class="field-label" for="mc-connection">Connection</label>
     {#if $lmConnections.length === 0}
       <p class="no-connections">No connections configured. Add one in the Connections view first.</p>
     {:else}
-      <select id="mc-connection" bind:value={connectionId} onchange={handleConnectionChange}>
+      <select id="mc-connection" class="field-input" bind:value={connectionId} onchange={handleConnectionChange}>
         {#each $lmConnections as conn (conn.id)}
           <option value={conn.id}>{conn.name}</option>
         {/each}
       </select>
     {/if}
-    {#if errors.connectionId}<span class="field-error">{errors.connectionId}</span>{/if}
+    {#if errors.connectionId}<span class="field-errortext">{errors.connectionId}</span>{/if}
   </div>
 
   <div class="field">
-    <label for="mc-model">Model</label>
+    <label class="field-label" for="mc-model">Model</label>
     {#if modelsLoading}
       <p class="loading-hint">Loading models…</p>
     {:else if modelsError}
@@ -267,12 +249,13 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
     {:else if sortedFilteredModels.length > 0}
       <input
         id="mc-model-filter"
+        class="field-input"
         type="text"
         bind:value={modelSearch}
         placeholder="Search models…"
       />
       <div class="model-select-row">
-        <select id="mc-model" bind:value={modelKey} onchange={handleModelChange}>
+        <select id="mc-model" class="field-input" bind:value={modelKey} onchange={handleModelChange}>
           {#each sortedFilteredModels as m (m.uid)}
             <option value={m.key}>{m.displayName}{isLmStudio && m.isLoaded ? ' ●' : ''}</option>
           {/each}
@@ -284,7 +267,7 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
         {/if}
       </div>
       {#if selectedModelMeta}
-        <span class="field-hint">
+        <span class="field-hinttext">
           {#if isLmStudio && selectedModelMeta.isLoaded && selectedModelMeta.loadedContextLength}
             ● Loaded · Context: {selectedModelMeta.loadedContextLength.toLocaleString()} tokens (max {(selectedModelMeta.maxContextLength ?? 0).toLocaleString()})
           {:else if isLmStudio && selectedModelMeta.maxContextLength}
@@ -298,32 +281,49 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
           {/if}
         </span>
       {/if}
-      {#if modelLoadError}<span class="field-error">{modelLoadError}</span>{/if}
+      {#if modelLoadError}<span class="field-errortext">{modelLoadError}</span>{/if}
     {/if}
-    {#if errors.modelKey}<span class="field-error">{errors.modelKey}</span>{/if}
+    {#if errors.modelKey}<span class="field-errortext">{errors.modelKey}</span>{/if}
   </div>
 
   <div class="field">
-    <label for="mc-temperature">Temperature</label>
-    <input id="mc-temperature" type="number" step="0.1" min="0" max="2" bind:value={temperature} />
-    {#if errors.temperature}<span class="field-error">{errors.temperature}</span>{/if}
+    <label class="field-label" for="mc-name">Name</label>
+    <input id="mc-name" class="field-input" type="text" bind:value={name} placeholder="e.g. Qwen3 · Creative" />
+    {#if errors.name}<span class="field-errortext">{errors.name}</span>{/if}
+  </div>
+
+  <div class="field">
+    <label class="field-label" for="mc-id">ID</label>
+    {#if modelConfig}
+      <span class="field-static">{customId}</span>
+    {:else}
+      <input id="mc-id" class="field-input" type="text" bind:value={customId} placeholder="auto-generated from name" />
+    {/if}
+    {#if errors.customId}<span class="field-errortext">{errors.customId}</span>{/if}
+    {#if !modelConfig}<span class="field-hinttext">Set once at creation, cannot be changed later.</span>{/if}
+  </div>
+
+  <div class="field">
+    <label class="field-label" for="mc-temperature">Temperature</label>
+    <input id="mc-temperature" class="field-input" type="number" step="0.1" min="0" max="2" bind:value={temperature} />
+    {#if errors.temperature}<span class="field-errortext">{errors.temperature}</span>{/if}
   </div>
 
   {#if selectedModelMeta?.supportsReasoning}
   <div class="field">
-    <label for="mc-reasoning">Reasoning</label>
-    <select id="mc-reasoning" bind:value={reasoning}>
+    <label class="field-label" for="mc-reasoning">Reasoning</label>
+    <select id="mc-reasoning" class="field-input" bind:value={reasoning}>
       <option value="on">On</option>
       <option value="off">Off</option>
     </select>
-    <span class="field-hint">This model supports extended reasoning (chain-of-thought).</span>
+    <span class="field-hinttext">This model supports extended reasoning (chain-of-thought).</span>
   </div>
   {/if}
 
   <div class="field">
-    <label for="mc-context-size">Context Size <span class="field-hint">(leave empty for provider default){#if selectedModelMeta?.maxContextLength} — max {selectedModelMeta.maxContextLength.toLocaleString()}{/if}</span></label>
+    <label class="field-label" for="mc-context-size">Context Size <span class="field-hinttext">(leave empty for provider default){#if selectedModelMeta?.maxContextLength} — max {selectedModelMeta.maxContextLength.toLocaleString()}{/if}</span></label>
     <div class="context-size-row">
-      <select id="mc-context-size" bind:value={contextSize}>
+      <select id="mc-context-size" class="field-input" bind:value={contextSize}>
         <option value={undefined}>Auto (provider default)</option>
         {#each CONTEXT_SIZE_PRESETS as preset (preset.value)}
           <option value={preset.value}>{preset.label}</option>
@@ -332,6 +332,7 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
       </select>
       {#if contextSize === -1}
         <input
+          class="field-input"
           type="number"
           min="1"
           bind:value={customContextSize}
@@ -345,8 +346,8 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
   </div>
 
   <div class="field">
-    <label for="mc-system-prompt">System Prompt</label>
-    <textarea id="mc-system-prompt" bind:value={systemPrompt} rows="4" placeholder="Optional system prompt"></textarea>
+    <label class="field-label" for="mc-system-prompt">System Prompt</label>
+    <textarea id="mc-system-prompt" class="field-input" bind:value={systemPrompt} rows="4" placeholder="Optional system prompt"></textarea>
   </div>
 
   <div class="form-actions">
@@ -356,44 +357,6 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
 </form>
 
 <style>
-  .profile-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-  }
-  .field-hint {
-    font-size: 0.75rem;
-    color: var(--text-dim);
-  }
-  label {
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  input, select, textarea {
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--bg-base);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-bright);
-    padding: 0.4rem 0.6rem;
-    font-size: 0.875rem;
-    font-family: inherit;
-    outline: none;
-  }
-  textarea { resize: vertical; }
-  .field-error {
-    font-size: 0.75rem;
-    color: var(--red-bright);
-  }
   .model-select-row, .context-size-row {
     display: flex;
     gap: 0.5rem;
@@ -417,11 +380,5 @@ import { CONTEXT_SIZE_PRESETS } from '../modelConfigHelpers'
     font-size: 0.82rem;
     color: var(--red-bright);
     margin: 0.25rem 0 0;
-  }
-  .form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    padding-top: 0.25rem;
   }
 </style>

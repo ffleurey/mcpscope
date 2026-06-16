@@ -34,17 +34,17 @@
 <svelte:document onclick={() => { if (open) open = false }} />
 <span class="id-badge">
   <button
-    class="id-pill"
+    class="token-pill id-pill"
     title={id}
     onclick={(e) => { e.stopPropagation(); open = !open }}
   >{id}</button>
 
   {#if open}
     <div class="id-menu" role="menu" tabindex="-1" onmousedown={(e) => e.stopPropagation()}>
-      <button class="menu-item" onclick={copyId}>Copy ID</button>
+      <button class="menu-item" role="menuitem" onclick={copyId}>Copy ID</button>
       <hr class="menu-sep" />
-      <button class="menu-item" onclick={() => doLookup('summary')}>Summary</button>
-      <button class="menu-item" onclick={() => doLookup('full')}>Full</button>
+      <button class="menu-item" role="menuitem" onclick={() => doLookup('summary')}>Summary</button>
+      <button class="menu-item" role="menuitem" onclick={() => doLookup('full')}>Full</button>
     </div>
   {/if}
 </span>
@@ -63,24 +63,20 @@
     display: inline-block;
   }
 
+  /* Chrome (border/radius/colour/size) comes from .token-pill; this adds the
+     interactive button behaviour + ellipsis. */
   .id-pill {
     background: none;
-    border: 1px solid var(--border-subtle);
-    border-radius: 999px;
-    color: var(--text-muted);
     cursor: pointer;
-    font-size: 0.68rem;
     font-family: var(--mono);
-    padding: 0.08rem 0.45rem;
-    white-space: nowrap;
     max-width: 260px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .id-pill:hover {
-    border-color: var(--border);
-    color: var(--text);
+    border-color: var(--text-dim);
+    color: var(--text-bright);
   }
 
   .id-menu {
@@ -88,10 +84,9 @@
     top: calc(100% + 4px);
     left: 0;
     z-index: 200;
-    background: var(--bg-panel);
+    background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: 6px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
     min-width: 110px;
     padding: 0.18rem 0;
   }
@@ -105,7 +100,7 @@
     padding: 0.3rem 0.75rem;
     cursor: pointer;
     font-size: 0.78rem;
-    color: var(--text);
+    color: var(--text-bright);
     white-space: nowrap;
   }
 
@@ -115,7 +110,7 @@
 
   .menu-sep {
     border: none;
-    border-top: 1px solid var(--border-subtle);
+    border-top: 1px solid var(--border);
     margin: 0.15rem 0;
   }
 </style>

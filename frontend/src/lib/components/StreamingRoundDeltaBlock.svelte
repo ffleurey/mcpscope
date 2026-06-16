@@ -66,14 +66,14 @@
 <style>
   .stream-block {
     padding: 0.75rem 0;
-    border-top: 1px dashed var(--border-subtle);
+    border-top: 1px dashed var(--border);
   }
 
   .stream-live-block,
   .stream-tool-row {
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    background: color-mix(in srgb, var(--bg-panel) 78%, transparent);
+    background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
     padding: var(--compact-message-pad-y, 0.38rem) var(--compact-message-pad-x, 0.72rem);
   }
 
@@ -92,7 +92,7 @@
   .stream-label {
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -100,8 +100,8 @@
   .stream-status {
     margin-left: auto;
     font-size: 0.68rem;
-    color: var(--accent, var(--text));
-    border: 1px solid var(--border-subtle);
+    color: var(--text-bright);
+    border: 1px solid var(--border);
     border-radius: 999px;
     padding: 0.1rem 0.45rem;
   }

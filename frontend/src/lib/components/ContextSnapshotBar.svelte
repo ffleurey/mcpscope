@@ -219,8 +219,8 @@
   /* ── Full (non-compact) variant ────────────────────────────────────────── */
   .csb {
     padding: 0.4rem 0.75rem 0.35rem;
-    border-top: 1px solid var(--border-subtle);
-    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    background: var(--bg-surface);
     flex-shrink: 0;
   }
 
@@ -234,13 +234,13 @@
 
   .csb-label {
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
 
   .csb-counts {
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-variant-numeric: tabular-nums;
     flex: 1;
     text-align: right;
@@ -248,9 +248,9 @@
 
   .csb-mode-btn {
     background: none;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border);
     border-radius: 3px;
-    color: var(--text-muted);
+    color: var(--text-dim);
     cursor: pointer;
     font-size: 0.7rem;
     padding: 0 0.28rem;
@@ -259,16 +259,16 @@
   }
 
   .csb-mode-btn:hover {
-    color: var(--text);
+    color: var(--text-bright);
     border-color: var(--border);
   }
 
   /* ── Bar track ────────────────────────────────────────────────────────── */
   .csb-track {
     height: 8px;
-    background: color-mix(in srgb, var(--bg) 70%, #000 30%);
-    border: 1px solid var(--border-subtle);
-    border-radius: 5px;
+    background: color-mix(in srgb, var(--bg-base) 70%, #000 30%);
+    border: 1px solid var(--border);
+    border-radius: 4px;
     overflow: hidden;
     display: flex;
     flex-direction: row;
@@ -290,13 +290,13 @@
   /* ── Separators ───────────────────────────────────────────────────────── */
   .csb-sep {
     flex: 0 0 1px;
-    background: color-mix(in srgb, var(--bg) 60%, #000 40%);
+    background: color-mix(in srgb, var(--bg-base) 60%, #000 40%);
     height: 100%;
   }
 
   .csb-sep.turn-sep {
     flex: 0 0 3px;
-    background: color-mix(in srgb, var(--bg) 20%, #000 80%);
+    background: color-mix(in srgb, var(--bg-base) 20%, #000 80%);
   }
 
   /* ── Compact inline label ─────────────────────────────────────────────── */
@@ -316,7 +316,7 @@
   .csb-compact-label {
     font-size: 0.65rem;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     white-space: nowrap;
@@ -328,12 +328,12 @@
   }
 
   .csb-compact-label:hover {
-    color: var(--text);
+    color: var(--text-bright);
   }
 
   .csb-compact-counts {
     font-size: 0.65rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
@@ -351,7 +351,7 @@
     align-items: center;
     gap: 0.28rem;
     font-size: 0.64rem;
-    color: var(--text-muted);
+    color: var(--text-dim);
   }
 
   .csb-legend-dot {

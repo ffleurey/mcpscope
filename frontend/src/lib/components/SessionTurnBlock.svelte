@@ -384,7 +384,7 @@
         margin-top: var(--chat-gap);
         margin-left: var(--chat-indent);
         padding-left: var(--chat-pad);
-        border-left: 2px solid var(--border-subtle);
+        border-left: 2px solid var(--border);
     }
 
     .compact-round-meta {
@@ -406,7 +406,7 @@
     .compact-round-status,
     .compact-round-tokens {
         font-size: 0.7rem;
-        color: var(--text-muted);
+        color: var(--text-dim);
     }
 
     .compact-round-actions {
@@ -424,7 +424,7 @@
 
     .round-streaming-hint {
         font-size: 0.78rem;
-        color: var(--text-muted);
+        color: var(--text-dim);
         padding: 0.3rem 0;
         font-style: italic;
     }
@@ -432,7 +432,7 @@
     .round-ctx-bar {
         margin-top: var(--chat-stack);
         padding-top: 0.18rem;
-        border-top: 1px solid var(--border-subtle);
+        border-top: 1px solid var(--border);
     }
 
     /* ── Turn-level context bar (after completion) ──────────────────────── */
@@ -440,7 +440,7 @@
         margin-top: 0.28rem;
         margin-left: var(--chat-indent);
         padding-left: var(--chat-pad);
-        border-left: 2px solid var(--border-subtle);
+        border-left: 2px solid var(--border);
     }
 
     /* ── Chat mode: markdown syntax-highlighted answer text ─────────────── */
@@ -451,7 +451,7 @@
         margin-top: var(--chat-gap);
         margin-left: var(--chat-indent);
         padding-left: var(--chat-pad);
-        border-left: 2px solid var(--border-subtle);
+        border-left: 2px solid var(--border);
     }
 
     .chat-answer-text {
@@ -474,7 +474,7 @@
         background: none;
         border: 1px solid transparent;
         border-radius: 4px;
-        color: var(--text-muted);
+        color: var(--text-dim);
         cursor: pointer;
         padding: 0.15rem;
         opacity: 0;
@@ -486,9 +486,9 @@
     }
 
     .preview-btn:hover {
-        color: var(--text);
-        border-color: var(--border-subtle);
-        background: var(--bg-panel);
+        color: var(--text-bright);
+        border-color: var(--border);
+        background: var(--bg-surface);
         opacity: 1;
     }
 
@@ -524,19 +524,19 @@
         border: none;
         background: none;
         cursor: pointer;
-        border-left: 2px solid var(--border-subtle);
+        border-left: 2px solid var(--border);
         border-radius: 0 4px 4px 0;
         width: 100%;
         text-align: left;
     }
 
     .chat-toggle-btn:hover {
-        background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+        background: var(--bg-hover);
     }
 
     .chat-toggle-arrow {
         font-size: 0.55rem;
-        color: var(--text-muted);
+        color: var(--text-dim);
         transition: transform 0.12s;
         flex-shrink: 0;
     }
@@ -548,31 +548,31 @@
     .chat-toggle-status {
         font-size: 0.7rem;
         font-weight: 600;
-        color: var(--text-muted);
+        color: var(--text-dim);
         padding: 0.08rem 0.35rem;
-        border: 1px solid var(--border-subtle);
+        border: 1px solid var(--border);
         border-radius: 999px;
     }
 
     .chat-toggle-status.is-error {
-        color: var(--color-error, #dc2626);
+        color: var(--red-bright);
         border-color: color-mix(
             in srgb,
-            var(--color-error, #dc2626) 35%,
+            var(--red-bright) 35%,
             transparent
         );
     }
 
     .chat-toggle-stats {
         font-size: 0.7rem;
-        color: var(--text-muted);
+        color: var(--text-dim);
         font-variant-numeric: tabular-nums;
     }
 
     .chat-toggle-outcome {
         font-size: 0.68rem;
-        color: var(--text-muted);
-        border: 1px solid var(--border-subtle);
+        color: var(--text-dim);
+        border: 1px solid var(--border);
         border-radius: 999px;
         padding: 0.06rem 0.35rem;
     }
@@ -586,21 +586,21 @@
         border: none;
         background: none;
         cursor: pointer;
-        border-left: 2px solid var(--border-subtle);
+        border-left: 2px solid var(--border);
         border-radius: 0 4px 4px 0;
         width: 100%;
         text-align: left;
         font-size: 0.75rem;
-        color: var(--text-muted);
+        color: var(--text-dim);
     }
 
     .assessment-prompt-toggle:hover {
-        background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+        background: var(--bg-hover);
     }
 
     .assessment-prompt-toggle .toggle-arrow {
         font-size: 0.55rem;
-        color: var(--text-muted);
+        color: var(--text-dim);
         transition: transform 0.12s;
         flex-shrink: 0;
     }
@@ -621,20 +621,20 @@
         margin-top: 0.35rem;
         margin-left: var(--chat-indent);
         padding: 0.2rem 0.5rem;
-        background: var(--bg-subtle, rgba(0, 0, 0, 0.04));
+        background: var(--bg-surface);
         border-radius: 4px;
         font-size: 0.68rem;
     }
 
     .compaction-label {
-        color: var(--text-muted);
+        color: var(--text-dim);
     }
     .compaction-tokens {
-        color: var(--color-warning, #b45309);
+        color: var(--amber-bright);
         font-variant-numeric: tabular-nums;
     }
     .compaction-range {
-        color: var(--text-muted);
+        color: var(--text-dim);
         font-variant-numeric: tabular-nums;
     }
 </style>

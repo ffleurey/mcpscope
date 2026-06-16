@@ -7,10 +7,12 @@
   import type { ModelConfig } from '../types'
   import ModelConfigForm from './ModelConfigForm.svelte'
   import DialogShell from './DialogShell.svelte'
-import { formatContextSize } from '../modelConfigHelpers'
+  import { formatContextSize } from '../modelConfigHelpers'
   import InlineAppError from './InlineAppError.svelte'
   import JsonDialog from './JsonDialog.svelte'
   import { AppError, toAppError } from '../errors'
+  import { iconPlus, iconRefresh, iconEdit, iconTrash, iconRadioMarked, iconRadioBlank, iconLoad, iconEject, iconInfo } from '../design/icons'
+  import { columnResize } from '../actions/columnResize'
 
   let editingId = $state<string | null>(null)
   let showNew = $state(false)
@@ -21,14 +23,18 @@ import { formatContextSize } from '../modelConfigHelpers'
   let liveModels = $state<Map<string, Map<string, LmStudioModel>>>(new Map())
   let statusLoading = $state(false)
 
-  // Per-card action state: key = config.id
-  let cardBusy = $state<Map<string, string>>(new Map())  // value = 'loading' | 'ejecting'
+  // Per-row action state: key = config.id
+  let cardBusy = $state<Map<string, string>>(new Map()) // value = 'loading' | 'ejecting'
   let cardError = $state<Map<string, AppError>>(new Map())
 
   // Details dialog
   let detailsData = $state<unknown>(null)
   let detailsTitle = $state('')
   let showDetails = $state(false)
+
+  let editingConfig = $derived(
+    editingId ? ($modelConfigs.find((c) => c.id === editingId) ?? null) : null,
+  )
 
   function startNew() { showNew = true; editingId = null }
   function cancelNew() { showNew = false }
@@ -168,197 +174,124 @@ import { formatContextSize } from '../modelConfigHelpers'
   onMount(() => { fetchAllStatuses() })
 </script>
 
-<div class="view">
-  <div class="view-header">
+<div class="config-view">
+  <div class="config-view-header">
     <h2>Model Configs</h2>
     <div class="header-actions">
       <button class="btn btn-sm" onclick={fetchAllStatuses} disabled={statusLoading} title="Refresh model status">
-        {statusLoading ? '…' : '↻'} Refresh
+        <span class="btn-icon">{@html iconRefresh}</span> {statusLoading ? 'Refreshing…' : 'Refresh'}
       </button>
-      {#if !showNew}
-        <button class="btn btn-primary" onclick={startNew}>+ New Model Config</button>
-      {/if}
+      <button class="btn btn-primary" onclick={startNew}>
+        <span class="btn-icon">{@html iconPlus}</span> New model config
+      </button>
     </div>
   </div>
 
   <InlineAppError error={saveError} />
   <InlineAppError error={statusError} />
 
-  {#if showNew}
-    <DialogShell title="New Model Config" onClose={cancelNew}>
-      <ModelConfigForm onSave={handleSave} onCancel={cancelNew} />
-    </DialogShell>
+  {#if $modelConfigs.length === 0}
+    <p class="config-empty">No model configs yet. Create one to get started.</p>
+  {:else}
+    <div class="table-scroll">
+    <table class="data-table" use:columnResize>
+      <colgroup>
+        <col style="width: 3rem" />
+        <col style="width: 12rem" />
+        <col style="width: 9.5rem" />
+        <col style="width: 15rem" />
+        <col style="width: 5rem" />
+        <col style="width: 7rem" />
+        <col style="width: 12rem" />
+        <col style="width: 10rem" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th class="col-toggle" title="Default for new sessions" aria-label="Default"></th>
+          <th>Name</th>
+          <th>Connection</th>
+          <th>Model</th>
+          <th class="col-num">Temp</th>
+          <th>Reasoning</th>
+          <th>Context</th>
+          <th class="col-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {#each $modelConfigs as config (config.id)}
+          {@const live = liveModel(config)}
+          {@const busy = cardBusy.get(config.id)}
+          {@const err = cardError.get(config.id)}
+          {@const isDefault = $sessionCreationDefaults?.defaultModelConfigId === config.id}
+          {@const isLmStudio = isLmStudioConnection(config.connectionId)}
+          {@const loaded = !!(isLmStudio && live?.isLoaded)}
+          {@const cfgCtx = config.contextSize ? formatContextSize(config.contextSize) : 'Auto'}
+          {@const loadedCtx = loaded && live?.loadedContextLength ? formatContextSize(live.loadedContextLength) : null}
+          <tr>
+            <td class="col-toggle">
+              <button
+                class="icon-btn"
+                class:icon-glow={isDefault}
+                class:icon-off={!isDefault}
+                title={isDefault ? 'Default for new sessions' : 'Set as default for new sessions'}
+                aria-label="Default for new sessions"
+                aria-pressed={isDefault}
+                onclick={() => { if (!isDefault) handleSetDefault(config.id) }}
+              >{@html isDefault ? iconRadioMarked : iconRadioBlank}</button>
+            </td>
+            <td title={config.name}>{config.name}</td>
+            <td title={connectionName(config.connectionId)}>{connectionName(config.connectionId)}</td>
+            <td title={config.modelKey}>{config.modelDisplayName}</td>
+            <td class="col-num">{config.temperature}</td>
+            <td>{config.reasoning ?? '—'}</td>
+            <td title={loadedCtx ? `Configured ${cfgCtx} · ${loadedCtx} loaded` : `Configured ${cfgCtx}`}>
+              {cfgCtx}{#if loadedCtx} <span class="ctx-loaded">· {loadedCtx}</span>{/if}
+            </td>
+            <td class="col-actions">
+              <span class="row-actions">
+                {#if isLmStudio && live}
+                  <button
+                    class="icon-btn"
+                    class:icon-glow={loaded && !busy && !err}
+                    class:icon-blink={!!busy}
+                    class:icon-btn-danger={!!err && !busy}
+                    title={err ? err.message : loaded ? (busy ? 'Ejecting…' : 'Loaded — click to eject') : (busy ? 'Loading…' : 'Not loaded — click to load')}
+                    aria-label={loaded ? 'Eject model' : 'Load model'}
+                    disabled={!!busy}
+                    onclick={() => (loaded ? handleEject(config) : handleLoad(config))}
+                  >{@html loaded ? iconEject : iconLoad}</button>
+                {/if}
+                <button class="icon-btn" title="Details" aria-label="Details" onclick={() => openDetails(config)}>{@html iconInfo}</button>
+                <button class="icon-btn" title="Edit" aria-label="Edit" onclick={() => startEdit(config.id)}>{@html iconEdit}</button>
+                <button class="icon-btn icon-btn-danger" title="Delete" aria-label="Delete" onclick={() => handleDelete(config.id)}>{@html iconTrash}</button>
+              </span>
+            </td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+    </div>
   {/if}
-
-  {#if $modelConfigs.length === 0 && !showNew}
-    <p class="empty-state">No model configs yet. Create one to get started.</p>
-  {/if}
-
-  {#each $modelConfigs as config (config.id)}
-    {#if editingId === config.id}
-      <DialogShell title="Edit Model Config" onClose={cancelEdit}>
-        <ModelConfigForm modelConfig={config} onSave={handleSave} onCancel={cancelEdit} />
-      </DialogShell>
-    {:else}
-      {@const live = liveModel(config)}
-      {@const busy = cardBusy.get(config.id)}
-      {@const err = cardError.get(config.id)}
-      {@const isDefault = $sessionCreationDefaults?.defaultModelConfigId === config.id}
-      <div class="profile-card" class:is-default={isDefault}>
-        <div class="card-header">
-          <div class="card-title-group">
-            <div class="card-name-row">
-              <span class="card-name">{config.name}</span>
-              {#if isDefault}
-                <span class="default-badge">Default for new sessions</span>
-              {/if}
-            </div>
-            <span class="card-model">{config.modelDisplayName}</span>
-          </div>
-          <div class="card-actions">
-            {#if isLmStudioConnection(config.connectionId) && live?.isLoaded}
-              <span class="badge-loaded">● loaded</span>
-              {#if live.loadedContextLength}
-                <span class="badge-loaded-context">{live.loadedContextLength.toLocaleString()} ctx</span>
-              {/if}
-              <button class="btn btn-sm" onclick={() => handleEject(config)} disabled={!!busy}>
-                {busy === 'ejecting' ? 'Ejecting…' : 'Eject'}
-              </button>
-            {:else if isLmStudioConnection(config.connectionId) && live}
-              <span class="badge-unloaded">○ not loaded</span>
-              <button class="btn btn-sm" onclick={() => handleLoad(config)} disabled={!!busy}>
-                {busy === 'loading' ? 'Loading…' : 'Load'}
-              </button>
-            {/if}
-            <button class="btn btn-sm" onclick={() => openDetails(config)}>Details</button>
-            {#if !isDefault}
-              <button class="btn btn-primary btn-sm" onclick={() => handleSetDefault(config.id)}>Set as default</button>
-            {/if}
-            <button class="btn btn-sm" onclick={() => startEdit(config.id)}>Edit</button>
-            <button class="btn btn-sm btn-danger" onclick={() => handleDelete(config.id)}>Delete</button>
-          </div>
-        </div>
-        {#if err}
-          <InlineAppError error={err} />
-        {/if}
-        <dl class="card-details">
-          <div class="detail-row">
-            <dt>Connection</dt><dd>{connectionName(config.connectionId)}</dd>
-          </div>
-          <div class="detail-row">
-            <dt>Model Key</dt><dd><code>{config.modelKey}</code></dd>
-          </div>
-          {#if config.contextSize}
-            <div class="detail-row">
-              <dt>Context Size</dt><dd>{formatContextSize(config.contextSize)}</dd>
-            </div>
-          {/if}
-          <div class="detail-row">
-            <dt>Temperature</dt><dd><span class="badge">{config.temperature}</span></dd>
-          </div>
-          {#if config.reasoning}
-            <div class="detail-row">
-              <dt>Reasoning</dt><dd><span class="badge">{config.reasoning}</span></dd>
-            </div>
-          {/if}
-          {#if config.systemPrompt}
-            <div class="detail-row">
-              <dt>System Prompt</dt><dd class="system-prompt-preview">{config.systemPrompt.slice(0, 120)}{config.systemPrompt.length > 120 ? '…' : ''}</dd>
-            </div>
-          {/if}
-        </dl>
-      </div>
-    {/if}
-  {/each}
 </div>
+
+{#if showNew}
+  <DialogShell title="New Model Config" onClose={cancelNew}>
+    <ModelConfigForm onSave={handleSave} onCancel={cancelNew} />
+  </DialogShell>
+{/if}
+
+{#if editingConfig}
+  <DialogShell title="Edit Model Config" onClose={cancelEdit}>
+    <ModelConfigForm modelConfig={editingConfig} onSave={handleSave} onCancel={cancelEdit} />
+  </DialogShell>
+{/if}
 
 {#if showDetails}
   <JsonDialog title={detailsTitle} data={detailsData} onClose={() => { showDetails = false }} />
 {/if}
 
 <style>
-  .view { padding: 1.5rem 2rem; }
-  .view-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1.5rem;
+  .ctx-loaded {
+    color: var(--text-dim);
   }
-  .header-actions { display: flex; gap: 0.5rem; align-items: center; }
-  h2 {
-    margin: 0;
-    font-size: 1.15rem;
-    font-weight: 600;
-    color: var(--text);
-  }
-  .empty-state { color: var(--text-muted); font-size: 0.9rem; }
-  .profile-card {
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1rem 1.25rem;
-    margin-bottom: 1rem;
-  }
-  .profile-card.is-default {
-    border-color: var(--color-accent);
-  }
-  .card-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    margin-bottom: 0.75rem;
-    gap: 0.5rem;
-  }
-  .card-title-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    min-width: 0;
-  }
-  .card-name-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-  .card-name { font-weight: 600; font-size: 0.95rem; color: var(--text); }
-  .card-model { font-size: 0.8rem; color: var(--text-muted); }
-  .default-badge {
-    display: inline-block;
-    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
-    color: var(--color-accent);
-    border-radius: 3px;
-    padding: 0.1rem 0.45rem;
-    font-size: 0.72rem;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-  .card-actions { display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center; flex-wrap: wrap; }
-  .badge-loaded { font-size: 0.75rem; color: var(--green-bright); font-weight: 500; }
-  .badge-loaded-context { font-size: 0.75rem; color: var(--green-bright); font-weight: 500; white-space: nowrap; }
-  .badge-unloaded { font-size: 0.75rem; color: var(--text-muted); }
-  .text-muted { color: var(--text-muted); }
-  .card-details { margin: 0; }
-  .detail-row {
-    display: flex;
-    gap: 0.75rem;
-    font-size: 0.82rem;
-    padding: 0.2rem 0;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-  .detail-row:last-child { border-bottom: none; }
-  dt { color: var(--text-muted); min-width: 110px; flex-shrink: 0; }
-  dd { margin: 0; color: var(--text); word-break: break-all; }
-  .system-prompt-preview { color: var(--text-muted); font-style: italic; }
-  .badge {
-    display: inline-block;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    padding: 0 0.3rem;
-    font-size: 0.78rem;
-    color: var(--text-muted);
-  }
-  code { font-family: var(--mono); font-size: 0.8rem; }
 </style>
