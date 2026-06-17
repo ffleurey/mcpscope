@@ -132,17 +132,26 @@ export interface BenchmarkCaseRecord {
 
 export interface BenchmarkRunSession {
   sessionId: string;
-  caseId: string;
+  sourceCaseId: string;
   repetition: number;
+}
+
+export interface BenchmarkRunCaseSnapshot {
+  sourceCaseId: string;
+  name: string | null;
+  prompt: string;
+  expectedToolsCalled: string[];
+  expectedToolsNotCalled: string[];
 }
 
 export interface BenchmarkRunRecord {
   id: string;
   benchmarkId: string;
+  benchmarkName: string;
   status: string;
-  modelConfigId: string | null;
-  mcpProfileIds: string[] | null;
-  caseIds: string[];
+  modelConfigId: string;
+  mcpProfileIds: string[];
+  cases: BenchmarkRunCaseSnapshot[];
   repetitions: number;
   sessions: BenchmarkRunSession[];
   error: string | null;

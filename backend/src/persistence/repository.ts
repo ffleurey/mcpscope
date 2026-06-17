@@ -69,4 +69,5 @@ export {
   getBenchmarkRun,
   listBenchmarkRuns,
   updateBenchmarkRun,
+  deleteBenchmarkRun,
 } from "./benchmarkRepository.js";

@@ -327,21 +327,35 @@ export const benchmarkCaseRecordSchema = z.object({
   updatedAt: z.number().int().nonnegative(),
 });
 
-// One run-session: which case and repetition a produced session corresponds to.
+// A run is an independent snapshot spawned from a (mutable) benchmark blueprint.
+// It captures the case content + settings it ran, so editing or deleting the
+// benchmark/cases afterward never alters a past run or its report.
+export const benchmarkRunCaseSnapshotSchema = z.object({
+  sourceCaseId: z.string(),
+  name: z.string().nullable(),
+  prompt: z.string(),
+  expectedToolsCalled: z.array(z.string()),
+  expectedToolsNotCalled: z.array(z.string()),
+});
+
+// One run-session: which snapshotted case and repetition a session corresponds to.
 export const benchmarkRunSessionSchema = z.object({
   sessionId: z.string(),
-  caseId: z.string(),
+  sourceCaseId: z.string(),
   repetition: z.number().int().positive(),
 });
 
 export const benchmarkRunRecordSchema = z.object({
   id: z.string(),
   benchmarkId: z.string(),
+  // Snapshot of the source benchmark name for display (the benchmark may later be edited/deleted).
+  benchmarkName: z.string(),
   status: benchmarkRunStatusSchema,
-  // Explicit overrides; null = resolve defaults at launch (default model / default-enabled MCP).
-  modelConfigId: z.string().nullable().default(null),
-  mcpProfileIds: z.array(z.string()).nullable().default(null),
-  caseIds: z.array(z.string()),
+  // Effective model/MCP resolved and recorded at launch.
+  modelConfigId: z.string(),
+  mcpProfileIds: z.array(z.string()),
+  // Snapshot of the selected cases at launch.
+  cases: z.array(benchmarkRunCaseSnapshotSchema),
   repetitions: z.number().int().positive(),
   // Populated by the run coordinator as sessions are created.
   sessions: z.array(benchmarkRunSessionSchema).default([]),
@@ -368,6 +382,9 @@ export type PartRecord = z.infer<typeof partRecordSchema>;
 export type RawExchangeRecord = z.infer<typeof rawExchangeRecordSchema>;
 export type BenchmarkRecord = z.infer<typeof benchmarkRecordSchema>;
 export type BenchmarkCaseRecord = z.infer<typeof benchmarkCaseRecordSchema>;
+export type BenchmarkRunCaseSnapshot = z.infer<
+  typeof benchmarkRunCaseSnapshotSchema
+>;
 export type BenchmarkRunSession = z.infer<typeof benchmarkRunSessionSchema>;
 export type BenchmarkRunRecord = z.infer<typeof benchmarkRunRecordSchema>;
 

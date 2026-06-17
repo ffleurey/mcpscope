@@ -5,12 +5,12 @@
 // See backlog/specification/benchmark-v1.md.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import crypto from "node:crypto";
 import type { BackendDatabase } from "../persistence/db.js";
 import type {
   BenchmarkRecord,
   BenchmarkCaseRecord,
   BenchmarkRunRecord,
+  BenchmarkRunCaseSnapshot,
 } from "../domain/model.js";
 import {
   createBenchmark,
@@ -27,11 +27,17 @@ import {
   getBenchmarkRun,
   listBenchmarkRuns,
   updateBenchmarkRun,
+  deleteBenchmarkRun,
   getSessionRecord,
   deleteSessionRecord,
   listPartRecordsBySession,
   listTurnRecordsBySession,
 } from "../persistence/repository.js";
+import {
+  generateBenchmarkId,
+  generateRunId,
+  formatBenchmarkCaseId,
+} from "../domain/hierarchicalIds.js";
 import { createSession } from "../runtime/modelTurns.js";
 import type { OperationContext } from "./context.js";
 import { OperationError } from "./errors.js";
@@ -48,12 +54,28 @@ import {
   type SessionMetrics,
 } from "./benchmarkMetrics.js";
 
-function newId(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
-}
-
 function now(): number {
   return Date.now();
+}
+
+/** Next stable 1-based case number for a benchmark (max existing trailing number + 1). */
+function nextCaseNumber(existing: BenchmarkCaseRecord[]): number {
+  let max = 0;
+  for (const c of existing) {
+    const n = Number(c.id.split(".").pop());
+    if (Number.isInteger(n) && n > max) max = n;
+  }
+  return max + 1;
+}
+
+function requireGeneratedId(id: string | null, kind: string): string {
+  if (!id) {
+    throw new OperationError(
+      `Failed to generate a unique ${kind} id.`,
+      "benchmark_id_generation_failed",
+    );
+  }
+  return id;
 }
 
 function requireBenchmark(
@@ -75,7 +97,10 @@ export function createBenchmarkEntry(
 ): BenchmarkRecord {
   const ts = now();
   const record: BenchmarkRecord = {
-    id: newId("bm"),
+    id: requireGeneratedId(
+      generateBenchmarkId((c) => getBenchmark(db.connection, c) !== null),
+      "benchmark",
+    ),
     name: input.name,
     description: input.description ?? null,
     createdAt: ts,
@@ -135,18 +160,28 @@ export function updateBenchmarkEntry(
 
 export function deleteBenchmarkEntry(db: BackendDatabase, id: string): void {
   requireBenchmark(db, id);
-  // Run-sessions are not cascade-deleted (generic untyped parent ref), so remove
-  // them explicitly; cases and runs cascade via FK.
-  for (const run of listBenchmarkRuns(db.connection, id)) {
-    for (const session of run.sessions) {
-      try {
-        deleteSessionRecord(db.connection, session.sessionId);
-      } catch {
-        // best-effort cleanup
-      }
+  // A benchmark is an editable blueprint; its runs are independent snapshots and
+  // are intentionally NOT deleted with it (no cascade). Cases cascade via FK.
+  deleteBenchmark(db.connection, id);
+}
+
+export function deleteBenchmarkRunEntry(db: BackendDatabase, runId: string): void {
+  const run = getBenchmarkRun(db.connection, runId);
+  if (!run) {
+    throw new OperationError(
+      `Benchmark run "${runId}" not found.`,
+      "benchmark_run_not_found",
+    );
+  }
+  // Remove the produced sessions (generic untyped parent ref → no cascade), then the run.
+  for (const session of run.sessions) {
+    try {
+      deleteSessionRecord(db.connection, session.sessionId);
+    } catch {
+      // best-effort cleanup
     }
   }
-  deleteBenchmark(db.connection, id);
+  deleteBenchmarkRun(db.connection, runId);
 }
 
 // ── Case CRUD ─────────────────────────────────────────────────────────────────
@@ -165,7 +200,7 @@ export function addBenchmarkCase(
   const existing = listBenchmarkCases(db.connection, benchmarkId);
   const ts = now();
   const record: BenchmarkCaseRecord = {
-    id: newId("bc"),
+    id: formatBenchmarkCaseId(benchmarkId, nextCaseNumber(existing)),
     benchmarkId,
     name: input.name ?? null,
     prompt: input.prompt,
@@ -227,7 +262,7 @@ export function addBenchmarkCaseFromSession(
   const existing = listBenchmarkCases(db.connection, benchmarkId);
   const ts = now();
   const record: BenchmarkCaseRecord = {
-    id: newId("bc"),
+    id: formatBenchmarkCaseId(benchmarkId, nextCaseNumber(existing)),
     benchmarkId,
     name: input?.name ?? null,
     prompt,
@@ -304,7 +339,7 @@ export function launchBenchmarkRun(
   input: LaunchBenchmarkRunInput,
 ): BenchmarkRunRecord {
   const { db } = ctx;
-  requireBenchmark(db, input.benchmarkId);
+  const benchmark = requireBenchmark(db, input.benchmarkId);
   const allCases = listBenchmarkCases(db.connection, input.benchmarkId);
   if (allCases.length === 0) {
     throw new OperationError(
@@ -346,14 +381,30 @@ export function launchBenchmarkRun(
   });
   if (!resolved.ok) throw resolved.error;
 
+  // Snapshot the selected cases at launch so later edits/deletes never alter this run.
+  const caseSnapshots: BenchmarkRunCaseSnapshot[] = selectedIds.map((id) => {
+    const c = allCases.find((x) => x.id === id)!;
+    return {
+      sourceCaseId: c.id,
+      name: c.name,
+      prompt: c.prompt,
+      expectedToolsCalled: c.expectedToolsCalled,
+      expectedToolsNotCalled: c.expectedToolsNotCalled,
+    };
+  });
+
   const ts = now();
   const run: BenchmarkRunRecord = {
-    id: newId("br"),
+    id: requireGeneratedId(
+      generateRunId((c) => getBenchmarkRun(db.connection, c) !== null),
+      "run",
+    ),
     benchmarkId: input.benchmarkId,
+    benchmarkName: benchmark.name,
     status: "pending",
     modelConfigId: resolved.modelConfigId,
     mcpProfileIds: resolved.mcpProfileSnapshots.map((s) => s.id),
-    caseIds: selectedIds,
+    cases: caseSnapshots,
     repetitions,
     sessions: [],
     error: null,
@@ -392,16 +443,17 @@ async function runBenchmarkCoordinator(
   });
 
   try {
-    for (const caseId of initial.caseIds) {
-      const benchmarkCase = getBenchmarkCase(db.connection, caseId);
-      if (!benchmarkCase) continue;
+    for (const snapshot of initial.cases) {
       for (let rep = 1; rep <= initial.repetitions; rep++) {
-        const sessionId = await runOneRepetition(ctx, runId, benchmarkCase, rep);
+        const sessionId = await runOneRepetition(ctx, runId, snapshot, rep);
         const current = getBenchmarkRun(db.connection, runId);
         if (!current) return;
         updateBenchmarkRun(db.connection, {
           ...current,
-          sessions: [...current.sessions, { sessionId, caseId, repetition: rep }],
+          sessions: [
+            ...current.sessions,
+            { sessionId, sourceCaseId: snapshot.sourceCaseId, repetition: rep },
+          ],
           updatedAt: now(),
         });
       }
@@ -432,7 +484,7 @@ async function runBenchmarkCoordinator(
 async function runOneRepetition(
   ctx: OperationContext,
   runId: string,
-  benchmarkCase: BenchmarkCaseRecord,
+  snapshot: BenchmarkRunCaseSnapshot,
   rep: number,
 ): Promise<string> {
   const { db, scheduler } = ctx;
@@ -447,7 +499,7 @@ async function runOneRepetition(
     if (!resolved.ok) throw resolved.error;
     try {
       return createSession(db, {
-        title: `Benchmark case ${benchmarkCase.orderIndex + 1} (rep ${rep})`,
+        title: `${snapshot.name ?? snapshot.sourceCaseId} (rep ${rep})`,
         modelProfileSnapshot: resolved.modelProfileSnapshot,
         mcpProfileSnapshots: resolved.mcpProfileSnapshots,
         compactionStrategy: "strip-reasoning",
@@ -469,7 +521,7 @@ async function runOneRepetition(
   // still recorded and surfaces as a non-completed session in the report.
   const initialized = getSessionRecord(db.connection, session.id);
   if (initialized?.initStatus === "ready") {
-    const turnJob = scheduler.enqueueSession(ctx, session.id, benchmarkCase.prompt);
+    const turnJob = scheduler.enqueueSession(ctx, session.id, snapshot.prompt);
     await scheduler.awaitJob(turnJob.jobId);
   }
 
@@ -495,18 +547,16 @@ export function getBenchmarkRunReport(
     );
   }
 
+  // Evaluate against the run's case SNAPSHOTS (not the live, possibly-edited cases).
   const byCase = new Map<string, typeof run.sessions>();
   for (const entry of run.sessions) {
-    const list = byCase.get(entry.caseId) ?? [];
+    const list = byCase.get(entry.sourceCaseId) ?? [];
     list.push(entry);
-    byCase.set(entry.caseId, list);
+    byCase.set(entry.sourceCaseId, list);
   }
 
-  const cases: CaseReport[] = [];
-  for (const caseId of run.caseIds) {
-    const benchmarkCase = getBenchmarkCase(db.connection, caseId);
-    if (!benchmarkCase) continue;
-    const entries = (byCase.get(caseId) ?? []).sort(
+  const cases: CaseReport[] = run.cases.map((snapshot) => {
+    const entries = (byCase.get(snapshot.sourceCaseId) ?? []).sort(
       (a, b) => a.repetition - b.repetition,
     );
     const sessionMetrics: SessionMetrics[] = entries.map((entry) =>
@@ -516,19 +566,17 @@ export function getBenchmarkRunReport(
         listTurnRecordsBySession(db.connection, entry.sessionId),
       ),
     );
-    cases.push(
-      buildCaseReport(
-        benchmarkCase.id,
-        benchmarkCase.prompt,
-        {
-          expectedToolsCalled: benchmarkCase.expectedToolsCalled,
-          expectedToolsNotCalled: benchmarkCase.expectedToolsNotCalled,
-        },
-        run.repetitions,
-        sessionMetrics,
-      ),
+    return buildCaseReport(
+      snapshot.sourceCaseId,
+      snapshot.prompt,
+      {
+        expectedToolsCalled: snapshot.expectedToolsCalled,
+        expectedToolsNotCalled: snapshot.expectedToolsNotCalled,
+      },
+      run.repetitions,
+      sessionMetrics,
     );
-  }
+  });
 
   return {
     run,
@@ -537,7 +585,7 @@ export function getBenchmarkRunReport(
       benchmarkId: run.benchmarkId,
       status: run.status,
       repetitions: run.repetitions,
-      caseCount: run.caseIds.length,
+      caseCount: run.cases.length,
       sessionCount: run.sessions.length,
       cases,
       perTool: buildPerToolRollup(cases),

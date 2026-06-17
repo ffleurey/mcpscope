@@ -232,7 +232,7 @@ function renderBenchmarkShow(result: BenchmarkDetailResult): void {
   } else {
     for (const r of runs) {
       process.stdout.write(
-        `  ${r.id}  ${r.status.padEnd(9)}  reps ${r.repetitions}  cases ${r.caseIds.length}  ${formatDate(r.createdAt)}\n`,
+        `  ${r.id}  ${r.status.padEnd(9)}  reps ${r.repetitions}  cases ${r.cases.length}  ${formatDate(r.createdAt)}\n`,
       );
     }
   }

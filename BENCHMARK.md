@@ -23,20 +23,42 @@ for the evaluation-design research.
 
 Individual sessions outside a benchmark are unchanged — benchmarks are purely additive.
 
+## IDs
+
+IDs are type-tagged so the kind is always tellable, consistent with the session
+hierarchical-ID scheme (a bare 4-char code is a session):
+
+- **Benchmark**: `B-7K3M` (`B-` prefix + 4-char code).
+- **Case**: `B-7K3M.3` (case 3 of that benchmark — a dotted child).
+- **Run**: `R-9QX4` (`R-` prefix + 4-char code) — **flat / first-class**, not nested under
+  the benchmark.
+
+A run is **inspectable like a session** (its report + child sessions) and shows up in the
+left-pane tree as a container of its sessions.
+
 ## Data model
 
-- **Benchmark**: `id, name, description, createdAt, updatedAt`.
+- **Benchmark** (editable blueprint): `id, name, description, createdAt, updatedAt`.
 - **Case**: `id, benchmarkId, name, prompt, orderIndex, expectedToolsCalled[],
   expectedToolsNotCalled[], sourceSessionId, createdAt, updatedAt`.
   - `name` is an optional human label (falls back to the prompt for display).
   - `sourceSessionId` records the session a case was extracted from, if any.
-- **Run**: `id, benchmarkId, status, modelConfigId, mcpProfileIds[], caseIds[], repetitions,
-  sessions[{sessionId, caseId, repetition}], error, createdAt, updatedAt, startedAt,
-  completedAt`. The effective `modelConfigId`/`mcpProfileIds` are resolved and recorded at
-  launch, so a run is self-describing.
+- **Run** (immutable snapshot spawned from a benchmark): `id, benchmarkId, benchmarkName,
+  status, modelConfigId, mcpProfileIds[], cases[{sourceCaseId, name, prompt,
+  expectedToolsCalled[], expectedToolsNotCalled[]}], repetitions, sessions[{sessionId,
+  sourceCaseId, repetition}], error, createdAt, updatedAt, startedAt, completedAt`.
 
-Model and MCP selection are **run-level** (the point is to run the same cases against
-different model/MCP combinations); cases hold only the prompt + expectations.
+A benchmark is an **editable blueprint**; a run is a **first-class, independent snapshot** of
+the cases + settings it ran (an *association*, not composition). At launch the run resolves
+and records the effective model/MCP and snapshots the selected cases, so **editing or deleting
+the benchmark or its cases never alters a past run or its report**. Model and MCP selection
+are run-level (the point is to run the same cases against different model/MCP combinations);
+cases hold only the prompt + expectations.
+
+### Lifecycles
+- Deleting a **benchmark** cascades to its **cases** but leaves its **runs** intact.
+- Deleting a **run** removes its produced sessions.
+- Deleting a **case** removes it from the blueprint; past runs keep their snapshot.
 
 ## Authoring cases
 
@@ -59,13 +81,14 @@ CLI/MCP commands). Not part of the MCP operation catalog.
 | `POST` | `/api/benchmarks` | `{ name, description? }` | `{ benchmark }` |
 | `GET` | `/api/benchmarks/:id` | — | `{ benchmark, cases[], runs[] }` |
 | `PATCH` | `/api/benchmarks/:id` | `{ name?, description? }` | `{ benchmark }` |
-| `DELETE` | `/api/benchmarks/:id` | — | `204` (also deletes its runs' sessions) |
+| `DELETE` | `/api/benchmarks/:id` | — | `204` (cascades to cases; runs are kept) |
 | `POST` | `/api/benchmarks/:id/cases` | `{ prompt, name?, expectedToolsCalled?, expectedToolsNotCalled? }` | `201 { case }` |
 | `POST` | `/api/benchmarks/:id/cases/from-session` | `{ sessionId, name? }` | `201 { case }` |
 | `PATCH` | `/api/benchmark-cases/:caseId` | `{ name?, prompt?, orderIndex?, expectedToolsCalled?, expectedToolsNotCalled? }` | `{ case }` |
 | `DELETE` | `/api/benchmark-cases/:caseId` | — | `204` |
 | `POST` | `/api/benchmarks/:id/runs` | `{ caseIds?, repetitions?, modelConfigId?, mcpProfileIds? }` | `202 { run }` |
 | `GET` | `/api/benchmark-runs/:runId` | — | `{ run, report }` |
+| `DELETE` | `/api/benchmark-runs/:runId` | — | `204` (also deletes the run's sessions) |
 
 A run launch returns immediately (`202`); a background coordinator drives the sessions
 sequentially through the scheduler. Poll `GET /api/benchmark-runs/:runId` for `run.status`

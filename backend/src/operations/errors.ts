@@ -56,6 +56,7 @@ export function operationErrorToHttpStatus(code: string | undefined): number {
     case "step_not_ready":
     case "duplicate_session_id":
     case "session_id_generation_failed":
+    case "benchmark_id_generation_failed":
       return 409;
     case "default_model_not_configured":
     case "default_model_config_not_found":

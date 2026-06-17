@@ -208,3 +208,65 @@ export function parseHierarchicalId(raw: string): ParsedHierarchicalId | null {
 export function formatStepId(sessionId: string, childIndex: number): string {
   return `${sessionId}.${childIndex}W`
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Benchmark namespace IDs
+//
+// Type is tellable from the ID, consistent with the session scheme:
+//   - `B-7K3M`     a benchmark (suite) — `B-` namespace prefix + 4-char code
+//   - `B-7K3M.3`   case 3 of that benchmark — dotted child of a benchmark
+//   - `R-9QX4`     a run — `R-` namespace prefix + 4-char code (flat / first-class)
+// A bare 4-char code remains a session. Runs are NOT nested under benchmarks: a
+// benchmark is an editable blueprint, a run is an independent snapshot spawned
+// from it (association, not composition).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const BENCHMARK_ID_REGEX = /^B-[A-HJ-NP-Z2-9]{4}$/
+export const RUN_ID_REGEX = /^R-[A-HJ-NP-Z2-9]{4}$/
+export const BENCHMARK_CASE_ID_REGEX = /^B-[A-HJ-NP-Z2-9]{4}\.\d+$/
+
+export function isBenchmarkId(value: string): boolean {
+  return BENCHMARK_ID_REGEX.test(value)
+}
+
+export function isRunId(value: string): boolean {
+  return RUN_ID_REGEX.test(value)
+}
+
+export function isBenchmarkCaseId(value: string): boolean {
+  return BENCHMARK_CASE_ID_REGEX.test(value)
+}
+
+function generatePrefixedId(
+  prefix: string,
+  exists: (id: string) => boolean,
+  maxAttempts: number,
+  random: () => number,
+): string | null {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const candidate = `${prefix}${generateSessionIdCandidate(random)}`
+    if (!exists(candidate)) return candidate
+  }
+  return null
+}
+
+export function generateBenchmarkId(
+  exists: (id: string) => boolean,
+  maxAttempts = 5,
+  random: () => number = Math.random,
+): string | null {
+  return generatePrefixedId('B-', exists, maxAttempts, random)
+}
+
+export function generateRunId(
+  exists: (id: string) => boolean,
+  maxAttempts = 5,
+  random: () => number = Math.random,
+): string | null {
+  return generatePrefixedId('R-', exists, maxAttempts, random)
+}
+
+/** Case ID = `<benchmarkId>.<caseNumber>`; caseNumber is a stable 1-based sequence. */
+export function formatBenchmarkCaseId(benchmarkId: string, caseNumber: number): string {
+  return `${benchmarkId}.${caseNumber}`
+}

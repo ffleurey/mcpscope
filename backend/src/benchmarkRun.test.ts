@@ -197,13 +197,17 @@ describe("benchmark run", () => {
     // Both produced sessions are recorded on the run, parented to it.
     expect(body.run.sessions).toHaveLength(2);
     for (const s of body.run.sessions) {
-      expect(s.caseId).toBeTruthy();
+      expect(s.sourceCaseId).toBeTruthy();
       expect([1, 2]).toContain(s.repetition);
     }
 
-    // The run recorded the effective (resolved) model/MCP selection.
+    // The run is a self-describing snapshot: effective model/MCP + case content + benchmark name.
     expect(body.run.modelConfigId).toBe("model-config-1");
     expect(body.run.mcpProfileIds).toEqual([]);
+    expect(body.run.benchmarkName).toBe("Weather suite");
+    expect(body.run.cases).toHaveLength(1);
+    expect(body.run.cases[0].prompt).toBe("What is the weather?");
+    expect(body.run.id).toMatch(/^R-[A-HJ-NP-Z2-9]{4}$/);
 
     // A case can be extracted from a produced session (first user message).
     const sourceSessionId = body.run.sessions[0].sessionId as string;
@@ -218,5 +222,29 @@ describe("benchmark run", () => {
     expect(extracted.sourceSessionId).toBe(sourceSessionId);
     expect(extracted.name).toBe("Extracted");
     expect(extracted.expectedToolsCalled).toEqual([]); // model-only, no tools
+
+    // Snapshot independence: editing the case then deleting the whole benchmark
+    // must NOT alter the past run or its report.
+    const originalCaseId = body.run.cases[0].sourceCaseId as string;
+    await app.inject({
+      method: "PATCH",
+      url: `/api/benchmark-cases/${originalCaseId}`,
+      payload: { prompt: "EDITED PROMPT" },
+    });
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/benchmarks/${benchmarkId}`,
+    });
+    expect(del.statusCode).toBe(204);
+
+    const after = await app.inject({
+      method: "GET",
+      url: `/api/benchmark-runs/${runId}`,
+    });
+    expect(after.statusCode).toBe(200); // run survives benchmark deletion
+    const afterBody = after.json();
+    expect(afterBody.run.cases[0].prompt).toBe("What is the weather?");
+    expect(afterBody.report.cases[0].prompt).toBe("What is the weather?");
+    expect(afterBody.report.sessionCount).toBe(2);
   });
 });

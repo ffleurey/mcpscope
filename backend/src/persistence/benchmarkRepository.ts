@@ -220,10 +220,11 @@ export function deleteBenchmarkCase(
 interface BenchmarkRunRow {
   id: string;
   benchmark_id: string;
+  benchmark_name: string;
   status: string;
-  model_config_id: string | null;
-  mcp_profile_ids_json: string | null;
-  case_ids_json: string;
+  model_config_id: string;
+  mcp_profile_ids_json: string;
+  cases_json: string;
   repetitions: number;
   sessions_json: string;
   error: string | null;
@@ -237,12 +238,11 @@ function mapBenchmarkRunRow(row: BenchmarkRunRow): BenchmarkRunRecord {
   return {
     id: row.id,
     benchmarkId: row.benchmark_id,
+    benchmarkName: row.benchmark_name,
     status: row.status as BenchmarkRunRecord["status"],
     modelConfigId: row.model_config_id,
-    mcpProfileIds: row.mcp_profile_ids_json
-      ? (JSON.parse(row.mcp_profile_ids_json) as string[])
-      : null,
-    caseIds: JSON.parse(row.case_ids_json) as string[],
+    mcpProfileIds: JSON.parse(row.mcp_profile_ids_json) as string[],
+    cases: JSON.parse(row.cases_json) as BenchmarkRunRecord["cases"],
     repetitions: row.repetitions,
     sessions: JSON.parse(row.sessions_json) as BenchmarkRunSession[],
     error: row.error,
@@ -260,12 +260,12 @@ export function createBenchmarkRun(
   connection
     .prepare(
       `INSERT INTO benchmark_runs (
-         id, benchmark_id, status, model_config_id, mcp_profile_ids_json,
-         case_ids_json, repetitions, sessions_json, error,
+         id, benchmark_id, benchmark_name, status, model_config_id, mcp_profile_ids_json,
+         cases_json, repetitions, sessions_json, error,
          created_at, updated_at, started_at, completed_at
        ) VALUES (
-         @id, @benchmarkId, @status, @modelConfigId, @mcpProfileIds,
-         @caseIds, @repetitions, @sessions, @error,
+         @id, @benchmarkId, @benchmarkName, @status, @modelConfigId, @mcpProfileIds,
+         @cases, @repetitions, @sessions, @error,
          @createdAt, @updatedAt, @startedAt, @completedAt
        )`,
     )
@@ -312,14 +312,22 @@ export function updateBenchmarkRun(
     .run(serializeRun(run));
 }
 
+export function deleteBenchmarkRun(
+  connection: Database.Database,
+  id: string,
+): void {
+  connection.prepare(`DELETE FROM benchmark_runs WHERE id = ?`).run(id);
+}
+
 function serializeRun(run: BenchmarkRunRecord) {
   return {
     id: run.id,
     benchmarkId: run.benchmarkId,
+    benchmarkName: run.benchmarkName,
     status: run.status,
     modelConfigId: run.modelConfigId,
-    mcpProfileIds: run.mcpProfileIds ? JSON.stringify(run.mcpProfileIds) : null,
-    caseIds: JSON.stringify(run.caseIds),
+    mcpProfileIds: JSON.stringify(run.mcpProfileIds),
+    cases: JSON.stringify(run.cases),
     repetitions: run.repetitions,
     sessions: JSON.stringify(run.sessions),
     error: run.error,

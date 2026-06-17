@@ -280,13 +280,16 @@ export function initializeSchema(connection: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_benchmark_cases_benchmark ON benchmark_cases(benchmark_id);
 
+    -- A run is independent of its source benchmark (no cascade): a benchmark is an
+    -- editable blueprint, a run is an immutable snapshot spawned from it.
     CREATE TABLE IF NOT EXISTS benchmark_runs (
       id TEXT PRIMARY KEY,
-      benchmark_id TEXT NOT NULL REFERENCES benchmarks(id) ON DELETE CASCADE,
+      benchmark_id TEXT NOT NULL,
+      benchmark_name TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN (${sqlEnum(benchmarkRunStatusValues)})),
-      model_config_id TEXT,
-      mcp_profile_ids_json TEXT,
-      case_ids_json TEXT NOT NULL DEFAULT '[]',
+      model_config_id TEXT NOT NULL,
+      mcp_profile_ids_json TEXT NOT NULL DEFAULT '[]',
+      cases_json TEXT NOT NULL DEFAULT '[]',
       repetitions INTEGER NOT NULL,
       sessions_json TEXT NOT NULL DEFAULT '[]',
       error TEXT,
@@ -445,10 +448,11 @@ export function validateSchema(connection: Database.Database): void {
     benchmark_runs: [
       "id",
       "benchmark_id",
+      "benchmark_name",
       "status",
       "model_config_id",
       "mcp_profile_ids_json",
-      "case_ids_json",
+      "cases_json",
       "repetitions",
       "sessions_json",
       "error",

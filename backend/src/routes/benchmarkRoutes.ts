@@ -12,6 +12,7 @@ import {
   deleteBenchmarkCaseEntry,
   launchBenchmarkRun,
   getBenchmarkRunReport,
+  deleteBenchmarkRunEntry,
 } from "../operations/benchmark.js";
 
 /**
@@ -165,6 +166,17 @@ export function registerBenchmarkRoutes({
     const { runId } = z.object({ runId: z.string() }).parse(request.params);
     try {
       return getBenchmarkRunReport(database, runId);
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.delete("/api/benchmark-runs/:runId", async (request, reply) => {
+    const { runId } = z.object({ runId: z.string() }).parse(request.params);
+    try {
+      deleteBenchmarkRunEntry(database, runId);
+      reply.code(204);
+      return null;
     } catch (err) {
       return handleOperationError(err, reply);
     }
