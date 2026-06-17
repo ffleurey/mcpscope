@@ -200,5 +200,23 @@ describe("benchmark run", () => {
       expect(s.caseId).toBeTruthy();
       expect([1, 2]).toContain(s.repetition);
     }
+
+    // The run recorded the effective (resolved) model/MCP selection.
+    expect(body.run.modelConfigId).toBe("model-config-1");
+    expect(body.run.mcpProfileIds).toEqual([]);
+
+    // A case can be extracted from a produced session (first user message).
+    const sourceSessionId = body.run.sessions[0].sessionId as string;
+    const extractRes = await app.inject({
+      method: "POST",
+      url: `/api/benchmarks/${benchmarkId}/cases/from-session`,
+      payload: { sessionId: sourceSessionId, name: "Extracted" },
+    });
+    expect(extractRes.statusCode).toBe(201);
+    const extracted = extractRes.json().case;
+    expect(extracted.prompt).toBe("What is the weather?");
+    expect(extracted.sourceSessionId).toBe(sourceSessionId);
+    expect(extracted.name).toBe("Extracted");
+    expect(extracted.expectedToolsCalled).toEqual([]); // model-only, no tools
   });
 });

@@ -3,6 +3,7 @@ import {
   cliBenchmarkList,
   cliBenchmarkShow,
   cliBenchmarkAddCase,
+  cliBenchmarkAddCaseFromSession,
   cliBenchmarkRun,
   cliBenchmarkReport,
 } from "../httpClient.js";
@@ -276,6 +277,7 @@ export interface BenchmarkAddCaseOptions {
   json: boolean;
   benchmarkId: string;
   prompt: string;
+  name?: string | undefined;
   expectedToolsCalled?: string[] | undefined;
   expectedToolsNotCalled?: string[] | undefined;
 }
@@ -285,6 +287,7 @@ export async function runBenchmarkAddCase(
 ): Promise<void> {
   const result = await cliBenchmarkAddCase(opts.url, opts.benchmarkId, {
     prompt: opts.prompt,
+    ...(opts.name !== undefined ? { name: opts.name } : {}),
     ...(opts.expectedToolsCalled !== undefined
       ? { expectedToolsCalled: opts.expectedToolsCalled }
       : {}),
@@ -304,6 +307,12 @@ export async function runBenchmarkAddCase(
 function renderBenchmarkAddCase(result: BenchmarkAddCaseResult): void {
   const { case: c } = result;
   process.stdout.write(`${c.id}  #${c.orderIndex + 1}  ${truncate(c.prompt, 60)}\n`);
+  if (c.name) {
+    process.stdout.write(`  name          ${c.name}\n`);
+  }
+  if (c.sourceSessionId) {
+    process.stdout.write(`  from-session  ${c.sourceSessionId}\n`);
+  }
   if (c.expectedToolsCalled.length > 0) {
     process.stdout.write(
       `  expect-tool   ${c.expectedToolsCalled.join(", ")}\n`,
@@ -323,6 +332,7 @@ export function parseBenchmarkAddCaseArgs(
   let json = false;
   let benchmarkId: string | undefined;
   let prompt: string | undefined;
+  let name: string | undefined;
   let expectedToolsCalled: string[] | undefined;
   let expectedToolsNotCalled: string[] | undefined;
 
@@ -334,6 +344,10 @@ export function parseBenchmarkAddCaseArgs(
       if (!url) return { error: "--url requires a value" };
     } else if (arg === "--json") {
       json = true;
+    } else if (arg === "--name") {
+      const val = args[++i];
+      if (val === undefined) return { error: "--name requires a value" };
+      name = val;
     } else if (arg === "--expect-tool") {
       const val = args[++i];
       if (!val) return { error: "--expect-tool requires a value" };
@@ -370,12 +384,94 @@ export function parseBenchmarkAddCaseArgs(
     benchmarkId,
     prompt,
   };
+  if (name !== undefined) opts.name = name;
   if (expectedToolsCalled !== undefined) {
     opts.expectedToolsCalled = expectedToolsCalled;
   }
   if (expectedToolsNotCalled !== undefined) {
     opts.expectedToolsNotCalled = expectedToolsNotCalled;
   }
+  return { opts };
+}
+
+// ─── from-session ────────────────────────────────────────────────────────────
+
+export interface BenchmarkFromSessionOptions {
+  url: string;
+  json: boolean;
+  benchmarkId: string;
+  sessionId: string;
+  name?: string | undefined;
+}
+
+export async function runBenchmarkFromSession(
+  opts: BenchmarkFromSessionOptions,
+): Promise<void> {
+  const result = await cliBenchmarkAddCaseFromSession(
+    opts.url,
+    opts.benchmarkId,
+    {
+      sessionId: opts.sessionId,
+      ...(opts.name !== undefined ? { name: opts.name } : {}),
+    },
+  );
+
+  if (opts.json) {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return;
+  }
+
+  renderBenchmarkAddCase(result);
+}
+
+export function parseBenchmarkFromSessionArgs(
+  args: string[],
+): ParseResult<BenchmarkFromSessionOptions> {
+  let url: string | undefined;
+  let json = false;
+  let benchmarkId: string | undefined;
+  let sessionId: string | undefined;
+  let name: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (arg === "-h" || arg === "--help") return { help: true };
+    if (arg === "--url") {
+      url = args[++i];
+      if (!url) return { error: "--url requires a value" };
+    } else if (arg === "--json") {
+      json = true;
+    } else if (arg === "--name") {
+      const val = args[++i];
+      if (val === undefined) return { error: "--name requires a value" };
+      name = val;
+    } else if (!arg.startsWith("-")) {
+      if (benchmarkId === undefined) {
+        benchmarkId = arg;
+      } else if (sessionId === undefined) {
+        sessionId = arg;
+      } else {
+        return { error: "Too many arguments" };
+      }
+    } else {
+      return { error: `Unknown option: ${arg}` };
+    }
+  }
+
+  if (!benchmarkId) {
+    return { error: "Missing required argument: <benchmarkId>" };
+  }
+  if (!sessionId) {
+    return { error: "Missing required argument: <sessionId>" };
+  }
+
+  const opts: BenchmarkFromSessionOptions = {
+    url: url ?? "",
+    json,
+    benchmarkId,
+    sessionId,
+  };
+  if (name !== undefined) opts.name = name;
   return { opts };
 }
 

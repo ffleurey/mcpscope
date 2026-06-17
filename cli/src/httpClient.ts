@@ -230,6 +230,7 @@ export async function cliBenchmarkAddCase(
   benchmarkId: string,
   body: {
     prompt: string;
+    name?: string;
     expectedToolsCalled?: string[];
     expectedToolsNotCalled?: string[];
   },
@@ -237,6 +238,19 @@ export async function cliBenchmarkAddCase(
   return post<BenchmarkAddCaseResult>(
     baseUrl,
     `/api/benchmarks/${encodeURIComponent(benchmarkId)}/cases`,
+    body,
+  );
+}
+
+/** POST /api/benchmarks/:id/cases/from-session → BenchmarkAddCaseResult */
+export async function cliBenchmarkAddCaseFromSession(
+  baseUrl: string,
+  benchmarkId: string,
+  body: { sessionId: string; name?: string },
+): Promise<BenchmarkAddCaseResult> {
+  return post<BenchmarkAddCaseResult>(
+    baseUrl,
+    `/api/benchmarks/${encodeURIComponent(benchmarkId)}/cases/from-session`,
     body,
   );
 }

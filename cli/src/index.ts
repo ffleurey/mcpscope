@@ -26,6 +26,8 @@ import {
   runBenchmarkShow,
   parseBenchmarkAddCaseArgs,
   runBenchmarkAddCase,
+  parseBenchmarkFromSessionArgs,
+  runBenchmarkFromSession,
   parseBenchmarkRunArgs,
   runBenchmarkRun,
   parseBenchmarkReportArgs,
@@ -46,7 +48,8 @@ function printHelp(): void {
   mcpscope benchmark create <name> [--description <text>] [--json]
   mcpscope benchmark list [--json]
   mcpscope benchmark show <benchmarkId> [--json]
-  mcpscope benchmark add-case <benchmarkId> <prompt> [--expect-tool <name>]... [--forbid-tool <name>]... [--json]
+  mcpscope benchmark add-case <benchmarkId> <prompt> [--name <text>] [--expect-tool <name>]... [--forbid-tool <name>]... [--json]
+  mcpscope benchmark from-session <benchmarkId> <sessionId> [--name <text>] [--json]
   mcpscope benchmark run <benchmarkId> [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--case <id>]... [--wait] [--json]
   mcpscope benchmark report <runId> [--json]
 
@@ -223,6 +226,13 @@ export async function main(argv: string[]): Promise<void> {
     }
     if (sub === "add-case") {
       await dispatch(parseBenchmarkAddCaseArgs(rest), runBenchmarkAddCase);
+      return;
+    }
+    if (sub === "from-session") {
+      await dispatch(
+        parseBenchmarkFromSessionArgs(rest),
+        runBenchmarkFromSession,
+      );
       return;
     }
     if (sub === "run") {

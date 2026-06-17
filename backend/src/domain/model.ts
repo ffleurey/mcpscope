@@ -314,11 +314,15 @@ export const benchmarkRecordSchema = z.object({
 export const benchmarkCaseRecordSchema = z.object({
   id: z.string(),
   benchmarkId: z.string(),
+  // Optional human label; falls back to the prompt for display.
+  name: z.string().nullable().default(null),
   prompt: z.string(),
   orderIndex: z.number().int().nonnegative(),
   // Optional deterministic tool-behavior expectations (Phase B checks). Empty = none.
   expectedToolsCalled: z.array(z.string()).default([]),
   expectedToolsNotCalled: z.array(z.string()).default([]),
+  // Provenance: the session this case was extracted from, if any.
+  sourceSessionId: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 });

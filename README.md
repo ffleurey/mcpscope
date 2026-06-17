@@ -18,6 +18,7 @@ separate substrate.
 - [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) - shipped `session_analysis` workflow and evidence-loading contract
 - [MCP.md](MCP.md) - MCP interface reference: transport, tool surface, and structured results
 - [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
+- [BENCHMARK.md](BENCHMARK.md) - benchmark feature reference: suite/case/run model, HTTP API, CLI, and the metrics report
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
 - [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) - frontend design system: brand, tokens, shared primitives, patterns, and the live Design System Reference (read before any frontend visual change)
 

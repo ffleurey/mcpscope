@@ -99,10 +99,12 @@ export function deleteBenchmark(
 interface BenchmarkCaseRow {
   id: string;
   benchmark_id: string;
+  name: string | null;
   prompt: string;
   order_index: number;
   expected_tools_called_json: string;
   expected_tools_not_called_json: string;
+  source_session_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -111,12 +113,14 @@ function mapBenchmarkCaseRow(row: BenchmarkCaseRow): BenchmarkCaseRecord {
   return {
     id: row.id,
     benchmarkId: row.benchmark_id,
+    name: row.name,
     prompt: row.prompt,
     orderIndex: row.order_index,
     expectedToolsCalled: JSON.parse(row.expected_tools_called_json) as string[],
     expectedToolsNotCalled: JSON.parse(
       row.expected_tools_not_called_json,
     ) as string[],
+    sourceSessionId: row.source_session_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -129,24 +133,26 @@ export function createBenchmarkCase(
   connection
     .prepare(
       `INSERT INTO benchmark_cases (
-         id, benchmark_id, prompt, order_index,
+         id, benchmark_id, name, prompt, order_index,
          expected_tools_called_json, expected_tools_not_called_json,
-         created_at, updated_at
+         source_session_id, created_at, updated_at
        ) VALUES (
-         @id, @benchmarkId, @prompt, @orderIndex,
+         @id, @benchmarkId, @name, @prompt, @orderIndex,
          @expectedToolsCalled, @expectedToolsNotCalled,
-         @createdAt, @updatedAt
+         @sourceSessionId, @createdAt, @updatedAt
        )`,
     )
     .run({
       id: benchmarkCase.id,
       benchmarkId: benchmarkCase.benchmarkId,
+      name: benchmarkCase.name,
       prompt: benchmarkCase.prompt,
       orderIndex: benchmarkCase.orderIndex,
       expectedToolsCalled: JSON.stringify(benchmarkCase.expectedToolsCalled),
       expectedToolsNotCalled: JSON.stringify(
         benchmarkCase.expectedToolsNotCalled,
       ),
+      sourceSessionId: benchmarkCase.sourceSessionId,
       createdAt: benchmarkCase.createdAt,
       updatedAt: benchmarkCase.updatedAt,
     });
@@ -181,7 +187,8 @@ export function updateBenchmarkCase(
   connection
     .prepare(
       `UPDATE benchmark_cases
-       SET prompt = @prompt,
+       SET name = @name,
+           prompt = @prompt,
            order_index = @orderIndex,
            expected_tools_called_json = @expectedToolsCalled,
            expected_tools_not_called_json = @expectedToolsNotCalled,
@@ -190,6 +197,7 @@ export function updateBenchmarkCase(
     )
     .run({
       id: benchmarkCase.id,
+      name: benchmarkCase.name,
       prompt: benchmarkCase.prompt,
       orderIndex: benchmarkCase.orderIndex,
       expectedToolsCalled: JSON.stringify(benchmarkCase.expectedToolsCalled),

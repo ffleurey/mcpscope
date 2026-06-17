@@ -4,6 +4,14 @@ Feature 3 of `candidates/v1-analysis-and-benchmark-plan.md`. Success-criteria an
 research is in `research/benchmark-success-criteria.md` (it gates the criteria detail only,
 not the run+stats core).
 
+**Status (Phase A): backend + CLI shipped on branch `benchmark-v1`.** Suite/case/run model,
+CRUD + run coordinator, compute-on-read metrics report (with optional deterministic
+tool-behavior checks → pass@k/pass^k), HTTP routes, and the `benchmark` CLI group are
+implemented and tested. Cases can be authored manually or **extracted from a session** (first
+user message + pre-filled expected tools). Reference: [BENCHMARK.md](../../BENCHMARK.md). The
+**UI** is the remaining Phase A surface. Phase B (richer checks) and Phase C (LLM judge)
+remain future work.
+
 ## Goal / value (UC2)
 
 Let an MCP-server tester (or coding agent) build a **benchmark** — a static, growing test

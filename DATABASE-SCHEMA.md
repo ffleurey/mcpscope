@@ -223,13 +223,22 @@ The persistence-layer record types map to the canonical tables as follows:
 | `PartRecord` | `parts` |
 | `RawExchangeRecord` | `raw_exchanges` |
 
-A `Benchmark` container is not a record/table of its own; it is referenced by sessions through the `sessions.parent_container_type_key = 'benchmark'` / `parent_container_id` columns.
+A benchmark **run** acts as the container: the sessions it produces reference it via `sessions.parent_container_type_key = 'benchmark'` / `parent_container_id = <run id>`. Benchmark *definitions* (suite, case, run) have their own tables — see [Benchmark Tables](#benchmark-tables) below.
 
 Current deliberate limitations:
 
 - deterministic workflow steps currently reuse the shared `steps` model; the shipped analysis flow does not require separate subtype tables
 - parent/container relationships are still intentionally limited by the current session classification rules
-- benchmark support is still limited to the minimal container model
+
+## Benchmark Tables
+
+Benchmarks add three definition tables (see [BENCHMARK.md](BENCHMARK.md) for the feature reference). A run produces one normal primary session per case × repetition, parented to the run id via the `sessions` parent columns above.
+
+- `benchmarks` — a static suite: `id`, `name`, `description`, `created_at`, `updated_at`.
+- `benchmark_cases` — a case in a suite: `id`, `benchmark_id` (FK → `benchmarks`, `ON DELETE CASCADE`), `name` (optional), `prompt`, `order_index`, `expected_tools_called_json`, `expected_tools_not_called_json`, `source_session_id` (the session a case was extracted from, if any), `created_at`, `updated_at`.
+- `benchmark_runs` — one execution: `id`, `benchmark_id` (FK → `benchmarks`, `ON DELETE CASCADE`), `status` (`pending`/`running`/`complete`/`error`), `model_config_id`, `mcp_profile_ids_json`, `case_ids_json`, `repetitions`, `sessions_json` (the produced `{sessionId, caseId, repetition}` mapping), `error`, `created_at`, `updated_at`, `started_at`, `completed_at`.
+
+Indexes: `idx_benchmark_cases_benchmark`, `idx_benchmark_runs_benchmark`. The report is computed on read from the produced sessions; it is not stored. Deleting a benchmark cascades to its cases and runs, but the produced sessions (generic untyped parent) are removed explicitly by the delete operation.
 
 ## Constraints and Indexes
 

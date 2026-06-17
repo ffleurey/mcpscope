@@ -120,10 +120,12 @@ export interface BenchmarkRecord {
 export interface BenchmarkCaseRecord {
   id: string;
   benchmarkId: string;
+  name: string | null;
   prompt: string;
   orderIndex: number;
   expectedToolsCalled: string[];
   expectedToolsNotCalled: string[];
+  sourceSessionId: string | null;
   createdAt: number;
   updatedAt: number;
 }

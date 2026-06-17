@@ -268,10 +268,12 @@ export function initializeSchema(connection: Database.Database): void {
     CREATE TABLE IF NOT EXISTS benchmark_cases (
       id TEXT PRIMARY KEY,
       benchmark_id TEXT NOT NULL REFERENCES benchmarks(id) ON DELETE CASCADE,
+      name TEXT,
       prompt TEXT NOT NULL,
       order_index INTEGER NOT NULL,
       expected_tools_called_json TEXT NOT NULL DEFAULT '[]',
       expected_tools_not_called_json TEXT NOT NULL DEFAULT '[]',
+      source_session_id TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -431,10 +433,12 @@ export function validateSchema(connection: Database.Database): void {
     benchmark_cases: [
       "id",
       "benchmark_id",
+      "name",
       "prompt",
       "order_index",
       "expected_tools_called_json",
       "expected_tools_not_called_json",
+      "source_session_id",
       "created_at",
       "updated_at",
     ],

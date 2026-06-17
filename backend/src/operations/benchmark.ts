@@ -156,6 +156,7 @@ export function addBenchmarkCase(
   benchmarkId: string,
   input: {
     prompt: string;
+    name?: string | null | undefined;
     expectedToolsCalled?: string[] | undefined;
     expectedToolsNotCalled?: string[] | undefined;
   },
@@ -166,10 +167,74 @@ export function addBenchmarkCase(
   const record: BenchmarkCaseRecord = {
     id: newId("bc"),
     benchmarkId,
+    name: input.name ?? null,
     prompt: input.prompt,
     orderIndex: existing.length,
     expectedToolsCalled: input.expectedToolsCalled ?? [],
     expectedToolsNotCalled: input.expectedToolsNotCalled ?? [],
+    sourceSessionId: null,
+    createdAt: ts,
+    updatedAt: ts,
+  };
+  createBenchmarkCase(db.connection, record);
+  return record;
+}
+
+/**
+ * Create a case by extracting the initiating prompt from an existing session.
+ * V1: uses the first user-message part, and pre-fills expectedToolsCalled with
+ * the distinct tools that session actually called (an editable default).
+ */
+export function addBenchmarkCaseFromSession(
+  db: BackendDatabase,
+  benchmarkId: string,
+  sessionId: string,
+  input?: { name?: string | null | undefined },
+): BenchmarkCaseRecord {
+  requireBenchmark(db, benchmarkId);
+  const session = getSessionRecord(db.connection, sessionId);
+  if (!session) {
+    throw new OperationError(
+      `Session "${sessionId}" not found.`,
+      "session_not_found",
+    );
+  }
+  const parts = listPartRecordsBySession(db.connection, sessionId);
+  const prompt = parts
+    .find((p) => p.partType === "user-message")
+    ?.payload.text?.trim();
+  if (!prompt) {
+    throw new OperationError(
+      `Session "${sessionId}" has no user message to extract a case from.`,
+      "benchmark_invalid_input",
+    );
+  }
+  const expectedToolsCalled = Array.from(
+    new Set(
+      parts
+        .filter((p) => p.partType === "tool-call")
+        .map((p) => {
+          const json = p.payload.json as { name?: unknown } | null;
+          return (
+            (typeof json?.name === "string" ? json.name : null) ??
+            p.payload.summary ??
+            null
+          );
+        })
+        .filter((n): n is string => typeof n === "string"),
+    ),
+  );
+  const existing = listBenchmarkCases(db.connection, benchmarkId);
+  const ts = now();
+  const record: BenchmarkCaseRecord = {
+    id: newId("bc"),
+    benchmarkId,
+    name: input?.name ?? null,
+    prompt,
+    orderIndex: existing.length,
+    expectedToolsCalled,
+    expectedToolsNotCalled: [],
+    sourceSessionId: sessionId,
     createdAt: ts,
     updatedAt: ts,
   };
@@ -181,6 +246,7 @@ export function updateBenchmarkCaseEntry(
   db: BackendDatabase,
   caseId: string,
   input: {
+    name?: string | null | undefined;
     prompt?: string | undefined;
     orderIndex?: number | undefined;
     expectedToolsCalled?: string[] | undefined;
@@ -196,6 +262,7 @@ export function updateBenchmarkCaseEntry(
   }
   const updated: BenchmarkCaseRecord = {
     ...existing,
+    name: input.name !== undefined ? input.name : existing.name,
     prompt: input.prompt ?? existing.prompt,
     orderIndex: input.orderIndex ?? existing.orderIndex,
     expectedToolsCalled:
@@ -271,13 +338,21 @@ export function launchBenchmarkRun(
     );
   }
 
+  // Resolve the effective model/MCP now: fail fast on bad config and record the
+  // concrete selection so the run is self-describing and stable across reps.
+  const resolved = resolvePrimarySessionInputs({
+    modelConfigId: input.modelConfigId,
+    mcpProfileIds: input.mcpProfileIds,
+  });
+  if (!resolved.ok) throw resolved.error;
+
   const ts = now();
   const run: BenchmarkRunRecord = {
     id: newId("br"),
     benchmarkId: input.benchmarkId,
     status: "pending",
-    modelConfigId: input.modelConfigId ?? null,
-    mcpProfileIds: input.mcpProfileIds ?? null,
+    modelConfigId: resolved.modelConfigId,
+    mcpProfileIds: resolved.mcpProfileSnapshots.map((s) => s.id),
     caseIds: selectedIds,
     repetitions,
     sessions: [],

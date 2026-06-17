@@ -7,6 +7,7 @@ import {
   updateBenchmarkEntry,
   deleteBenchmarkEntry,
   addBenchmarkCase,
+  addBenchmarkCaseFromSession,
   updateBenchmarkCaseEntry,
   deleteBenchmarkCaseEntry,
   launchBenchmarkRun,
@@ -82,6 +83,7 @@ export function registerBenchmarkRoutes({
     const body = z
       .object({
         prompt: z.string().min(1),
+        name: z.string().nullable().optional(),
         expectedToolsCalled: z.array(z.string()).optional(),
         expectedToolsNotCalled: z.array(z.string()).optional(),
       })
@@ -94,10 +96,28 @@ export function registerBenchmarkRoutes({
     }
   });
 
+  app.post("/api/benchmarks/:id/cases/from-session", async (request, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const body = z
+      .object({ sessionId: z.string(), name: z.string().nullable().optional() })
+      .parse(request.body);
+    try {
+      reply.code(201);
+      return {
+        case: addBenchmarkCaseFromSession(database, id, body.sessionId, {
+          name: body.name,
+        }),
+      };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
   app.patch("/api/benchmark-cases/:caseId", async (request, reply) => {
     const { caseId } = z.object({ caseId: z.string() }).parse(request.params);
     const body = z
       .object({
+        name: z.string().nullable().optional(),
         prompt: z.string().min(1).optional(),
         orderIndex: z.number().int().nonnegative().optional(),
         expectedToolsCalled: z.array(z.string()).optional(),
