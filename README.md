@@ -32,7 +32,6 @@ separate substrate.
 - [README.md](README.md) - repository/developer entrypoint for working on mcpscope itself
 - [RELEASING.md](RELEASING.md) - release workflow and GHCR image publishing
 - [backlog/README.md](backlog/README.md) - backlog workflow, state folders, and promotion rules
-- [backlog/ROADMAP.md](backlog/ROADMAP.md) - current product direction and backlog posture
 - [backend-data/README.md](backend-data/README.md) - local runtime data and live-test artifact policy
 - [`research/`](research/) - archived payload studies and superseded design research kept for context
 
@@ -61,8 +60,8 @@ Those surfaces share the same backend-owned session model and canonical hierarch
 
 - execution control is now backend-owned through an in-memory sequential scheduler, but explicit public step-target enqueue is still tracked as follow-up work
 - pausing execution is boundary-based: the backend stops after the current turn/step finishes; it does not interrupt an in-flight LM Studio or MCP request
-- runtime state persists on `session_containers` plus the `v2_*` tables; normal startup does not create the obsolete `sessions` / `turns` / `rounds` / `parts` / `raw_exchanges` runtime tables
-- session parent rules remain intentionally narrow: parents are limited to `session` and `benchmark`, depending on `session_type`
+- runtime state persists on the SQLite runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`); container ownership is recorded on `sessions` columns rather than a separate container table
+- session parent rules remain intentionally narrow: a `primary` session may optionally have a `benchmark` parent, and a `session_analysis` session requires a `session` parent
 - analysis-session deterministic workflow steps are shipped inside the normal session model; broader generalization and cleanup remain future work
 - benchmark support is currently limited to the minimal container model, not a fuller benchmark product surface
 
@@ -118,16 +117,7 @@ npm run start:backend    # run compiled backend
 
 ## Testing and type checking
 
-```bash
-npm test                 # deterministic local tests (pure logic, runtime, app, replay)
-npm run check            # svelte-check + frontend TypeScript
-npm run check:backend    # backend TypeScript check
-npm run check:cli        # CLI TypeScript check
-npm run lint:cli         # CLI lint
-npm run test:integration # live LM Studio + MCP validation (requires running LM Studio + MCP server)
-```
-
-See [TESTING.md](TESTING.md) for the test strategy and how to add regressions.
+See [TESTING.md](TESTING.md) for the canonical list of test, type-check, lint, and format commands, the test strategy, and how to add regressions.
 
 ## Repository notes
 

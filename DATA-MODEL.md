@@ -21,8 +21,8 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 - the runtime tree described below for persisted sessions (unchanged from user perspective)
 - one session contains one setup and zero or more turns
  - hierarchical IDs for session/setup/step/turn/round/part runtime nodes, with `W` for workflow steps, `T` for turns, and `C` for compaction steps
-- session ownership through `parent_container_type_key` / `parent_container_id` on `v2_sessions`
-- generic persistence for sessions, steps, and turns (`v2_sessions`, `v2_steps`, `v2_turns`)
+- session ownership through `parent_container_type_key` / `parent_container_id` on `sessions`
+- generic persistence for sessions, steps, and turns (`sessions`, `steps`, `turns`)
 - existing child-session behavior still works through the new model
 
 **Not implemented yet:**
@@ -32,8 +32,8 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 
 **Current deliberate limits:**
 
-- normal runtime persistence lives on the `v2_*` runtime tables
-- session parent rules remain intentionally limited to `session`
+- normal runtime persistence lives on the SQLite runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`)
+- session parent rules remain intentionally narrow: a `primary` session may optionally have a `benchmark` parent, and a `session_analysis` session requires a `session` parent
 
 The canonical vocabulary is now `SessionContainer`, `Session`, `Step`, `WorkflowStep`, and `Turn`.
 

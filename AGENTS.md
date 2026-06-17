@@ -44,13 +44,7 @@ The docs above are references, not pre-read requirements. Keep context lean and 
 
 ## Validation
 
-Choose the smallest check that matches the change:
-
-- `npm test` for deterministic backend and replay regressions
-- `npm run check:backend` for backend TypeScript changes
-- `npm run check:cli` for CLI changes
-- `npm run check` for frontend changes; `npm run lint` and `npm run format:check` for frontend style (ESLint + Prettier)
-- `npm run test:integration` only when the change needs live LM Studio or MCP validation
+Choose the smallest check that matches the change. See [TESTING.md](TESTING.md) for the canonical list of test, type-check, lint, and format commands and when to use each.
 
 ## High-Value References
 

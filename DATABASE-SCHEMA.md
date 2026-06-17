@@ -4,10 +4,9 @@ This document describes the current SQLite storage layout used by mcpscope.
 
 Source of truth:
 
-- shared table initialization lives in `backend/src/persistence/schema.ts`
-- canonical runtime table initialization lives in `backend/src/persistence/schemaV2.ts`
+- all table initialization (shared + runtime) lives in `backend/src/persistence/schema.ts`
 - runtime record read/write behavior lives in `backend/src/persistence/repositoryRuntime.ts`
-- configuration (LM connections, model configs, MCP profiles) is stored in a JSON file at `backend-data/mcpscope.config.json`, not in SQLite — see [move-config-from-db-to-json.md](backlog/move-config-from-db-to-json.md)
+- configuration (LM connections, model configs, MCP profiles) is stored in a JSON file at `backend-data/mcpscope.config.json`, not in SQLite (see `backend/src/config/configStore.ts`)
 
 This is intentionally separate from [DATA-MODEL.md](DATA-MODEL.md):
 
@@ -18,11 +17,10 @@ This is intentionally separate from [DATA-MODEL.md](DATA-MODEL.md):
 
 Normal startup creates:
 
-- shared tables from `schema.ts`: `schema_meta`, snapshot catalogs (`model_profiles`, `mcp_profiles`)
-- canonical runtime tables from `schemaV2.ts`: `v2_sessions`, `v2_steps`, `v2_turns`, `v2_rounds`, `v2_parts`, `v2_raw_exchanges`, and `artifacts`
+- shared tables: `schema_meta`, snapshot catalogs (`model_profiles`, `mcp_profiles`)
+- canonical runtime tables: `sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, and `artifacts`
 
-Normal startup does **not** create the obsolete legacy runtime tables `sessions`, `turns`, `rounds`, `parts`, or `raw_exchanges`.
-Those legacy tables remain only behind the explicit `initializeBackendSchema(...)` path used for old-schema validation and related tests.
+All tables are created fresh by `initializeSchema(...)` in `backend/src/persistence/schema.ts`. There is no migration path and no legacy table set.
 
 ## Mermaid ER Diagram
 
@@ -49,7 +47,7 @@ erDiagram
     INTEGER updated_at
   }
 
-  v2_sessions {
+  sessions {
     TEXT id PK
     TEXT title
     TEXT session_type_key
@@ -64,7 +62,7 @@ erDiagram
     INTEGER updated_at
   }
 
-  v2_steps {
+  steps {
     TEXT id PK
     TEXT session_id FK
     TEXT step_type_key
@@ -78,7 +76,7 @@ erDiagram
     UNIQUE (session_id, parent_step_id, child_index)
   }
 
-  v2_turns {
+  turns {
     TEXT id PK                   // canonical turn ID, not a FK
     TEXT session_id FK
     TEXT owner_step_id FK
@@ -97,9 +95,9 @@ erDiagram
     INTEGER completed_at
   }
 
-  v2_rounds {
+  rounds {
     TEXT id PK
-    TEXT step_id FK
+    TEXT turn_id FK
     TEXT session_id FK
     INTEGER round_index
     TEXT status
@@ -114,10 +112,10 @@ erDiagram
     INTEGER completed_at
   }
 
-  v2_parts {
+  parts {
     TEXT id PK
     TEXT session_id FK
-    TEXT step_id FK
+    TEXT turn_id FK
     TEXT round_id FK
     TEXT parent_part_id FK
     INTEGER ordinal
@@ -141,10 +139,10 @@ erDiagram
     INTEGER updated_at
   }
 
-  v2_raw_exchanges {
+  raw_exchanges {
     TEXT id PK
     TEXT session_id FK
-    TEXT step_id FK
+    TEXT turn_id FK
     TEXT round_id FK
     TEXT kind
     TEXT request_url
@@ -166,70 +164,82 @@ erDiagram
     TEXT content_json
     TEXT content_data
     TEXT mime_type
+    TEXT metadata_json
     INTEGER created_at
   }
 
-  session_containers ||--o{ v2_sessions : owns
-  v2_sessions ||--o{ v2_steps : executes
-  v2_steps ||--|| v2_turns : turn_extension
-  v2_steps o|--o{ v2_turns : owns_turns
-  v2_steps ||--o{ v2_rounds : iterates
-  v2_sessions ||--o{ v2_parts : scopes
-  v2_steps o|--o{ v2_parts : owns
-  v2_rounds o|--o{ v2_parts : groups
-  v2_parts o|--o{ v2_parts : parent_part
-  v2_steps o|--o{ v2_parts : strips_by_compaction
-  v2_sessions ||--o{ v2_raw_exchanges : records
-  v2_steps o|--o{ v2_raw_exchanges : during_step
-  v2_rounds o|--o{ v2_raw_exchanges : during_round
-  v2_sessions o|--o{ artifacts : session_artifacts
-  v2_steps o|--o{ artifacts : step_artifacts
+  sessions ||--o{ sessions : owns_via_parent_columns
+  sessions ||--o{ steps : executes
+  steps o|--o{ turns : owns_turns
+  turns ||--o{ rounds : iterates
+  sessions ||--o{ parts : scopes
+  turns o|--o{ parts : owns
+  rounds o|--o{ parts : groups
+  parts o|--o{ parts : parent_part
+  steps o|--o{ parts : strips_by_compaction
+  sessions ||--o{ raw_exchanges : records
+  turns o|--o{ raw_exchanges : during_turn
+  rounds o|--o{ raw_exchanges : during_round
+  sessions o|--o{ artifacts : session_artifacts
+  steps o|--o{ artifacts : step_artifacts
 ```
 
 ## Relationship Notes
 
-- `v2_steps.session_id`, `v2_turns.session_id`, `v2_rounds.step_id`, `v2_rounds.session_id`, `v2_parts.session_id`, and `v2_raw_exchanges.session_id` are required foreign keys with `ON DELETE CASCADE`.
-- `v2_turns.step_id` is the primary-key link from the generic step row to the turn-specific extension row.
-- `v2_turns.owner_step_id` is optional and links a turn to its owning non-turn step when workflow grouping is needed.
-- `v2_parts.step_id` and `v2_parts.round_id` are optional because setup parts live at the session level.
-- `v2_parts.parent_part_id` is a self-reference with `ON DELETE SET NULL`.
-- `v2_parts.stripped_by_compaction_at_step_id` points at the step that removed a part from active context and also uses `ON DELETE SET NULL`.
+- `steps.session_id`, `turns.session_id`, `rounds.turn_id`, `rounds.session_id`, `parts.session_id`, and `raw_exchanges.session_id` are required foreign keys with `ON DELETE CASCADE`.
+- `turns.id` is the canonical turn ID; turns are their own rows (not an extension of a `steps` row).
+- `turns.owner_step_id` is optional and links a turn to its owning non-turn step when workflow grouping is needed (`ON DELETE SET NULL`).
+- `parts.turn_id` and `parts.round_id` are optional because setup parts live at the session level.
+- `parts.parent_part_id` is a self-reference with `ON DELETE SET NULL`.
+- `parts.stripped_by_compaction_at_step_id` points at the step that removed a part from active context and also uses `ON DELETE SET NULL`.
 - `artifacts` may belong to a session, a step, or both, depending on how a workflow persists them.
 
 ## Snapshot Tables
 
 - `model_profiles` and `mcp_profiles` are snapshot catalogs written alongside session creation for historical inspectability.
-- session runtime rows persist model/MCP snapshots inside `v2_sessions.params_json`; they do not foreign-key to snapshot catalogs.
+- session runtime rows persist model/MCP snapshots inside `sessions.params_json`; they do not foreign-key to snapshot catalogs.
 
 ## Runtime Tables
 
 The canonical runtime path is:
 
-- `session_containers` for container ownership such as `Benchmark`
-- `v2_sessions` for generic session rows and parent-container references
-- `v2_steps` for generic execution-unit rows
-- `v2_turns` for the LLM-specific step extension, including optional `owner_step_id` workflow grouping
-- `v2_rounds` for turn-owned iterations
-- `v2_parts` for canonical setup/round parts
-- `v2_raw_exchanges` for diagnostics and replay payloads
+- `sessions` for generic session rows, including container ownership via the `parent_container_type_key` / `parent_container_id` columns (a non-null `parent_container_type_key = 'benchmark'` means the session belongs to a `Benchmark` container; there is no separate container table)
+- `steps` for generic non-turn execution-unit rows (workflow, compaction)
+- `turns` for LLM turn rows, including optional `owner_step_id` workflow grouping
+- `rounds` for turn-owned iterations
+- `parts` for canonical setup/round parts
+- `raw_exchanges` for diagnostics and replay payloads
 - `artifacts` for content-oriented persisted artifacts
+
+### Record-to-table mapping
+
+The persistence-layer record types map to the canonical tables as follows:
+
+| Record type | Table(s) |
+|---|---|
+| `SessionRecord` | `sessions` (container ownership via `parent_container_type_key` / `parent_container_id` columns) |
+| `TurnRecord` | `turns` (optionally grouped under a `steps` row via `owner_step_id`) |
+| `RoundRecord` | `rounds` |
+| `PartRecord` | `parts` |
+| `RawExchangeRecord` | `raw_exchanges` |
+
+A `Benchmark` container is not a record/table of its own; it is referenced by sessions through the `sessions.parent_container_type_key = 'benchmark'` / `parent_container_id` columns.
 
 Current deliberate limitations:
 
-- runtime table names still carry the `v2_` prefix even though they are the canonical shipped path
-- deterministic workflow steps currently reuse the shared `v2_steps` model; the shipped analysis flow does not require separate subtype tables
+- deterministic workflow steps currently reuse the shared `steps` model; the shipped analysis flow does not require separate subtype tables
 - parent/container relationships are still intentionally limited by the current session classification rules
 - benchmark support is still limited to the minimal container model
 
 ## Constraints and Indexes
 
-- Enumerated lifecycle columns are enforced with `CHECK (...)` constraints in `backend/src/persistence/schema.ts` and `backend/src/persistence/schemaV2.ts`.
-- `v2_steps` enforces `UNIQUE (session_id, ordinal)`.
-- `v2_turns` enforces `UNIQUE (session_id, sequence_number)`.
-- `v2_rounds` enforces `UNIQUE (step_id, round_index)`.
-- Secondary indexes exist on the main lookup and parent columns for `session_containers`, `v2_sessions`, `v2_steps`, `v2_turns`, `v2_rounds`, `v2_parts`, `v2_raw_exchanges`, and `artifacts`.
+- Enumerated lifecycle columns are enforced with `CHECK (...)` constraints in `backend/src/persistence/schema.ts`.
+- `steps` enforces `UNIQUE (session_id, parent_step_id, child_index)`.
+- `turns` has no UNIQUE constraint; turn position is tracked by the `turn_number` column.
+- `rounds` enforces `UNIQUE (turn_id, round_index)`.
+- `sessions` also enforces a `CHECK` that `parent_container_type_key` and `parent_container_id` are both null or both non-null.
+- Secondary indexes exist on the main lookup and parent columns for `sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, and `artifacts`.
 
 ## Current Schema Version
 
-The shared-table schema version is `7`, stored in `schema_meta.sqlite_schema_version`.
-The canonical runtime schema version is `1`, stored in `schema_meta.new_schema_version`.
+The schema version is `1`, stored in `schema_meta.schema_version` (defined as `SCHEMA_VERSION` in `backend/src/domain/model.ts`). There is a single version; with no migration path it is informational and surfaced on the `/api/system` endpoint.

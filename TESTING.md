@@ -2,10 +2,25 @@
 
 ## Commands
 
+This is the canonical list of validation commands. README, AGENTS, and RELEASING link here rather than re-listing them. All scripts are defined in the root `package.json`.
+
+Tests:
+
 - `npm test` — deterministic local tests (pure logic, runtime, app, replay)
+- `npm run test:integration` — live LM Studio + MCP validation (requires running LM Studio + MCP server)
+
+Type checks:
+
 - `npm run check` — svelte-check + frontend TypeScript
 - `npm run check:backend` — backend TypeScript check
-- `npm run test:integration` — live LM Studio + MCP validation (requires running LM Studio + MCP server)
+- `npm run check:cli` — CLI TypeScript check
+
+Lint and format:
+
+- `npm run lint` — frontend ESLint (`npm run lint:backend` / `npm run lint:cli` for backend / CLI)
+- `npm run format:check` — Prettier check for frontend style
+
+Choose the smallest check that matches the change: `npm test` for backend/replay logic, `check:backend` for backend types, `check:cli` for CLI, `check` + `lint` + `format:check` for frontend, and `test:integration` only when the change needs the live LM Studio or MCP path.
 
 ## Current test layers
 
@@ -64,14 +79,14 @@ Current fixtures include:
 - model-only two-turn compaction trace (exercises context sum consistency and
   reasoning stripping across compaction boundaries)
 
-### 5. Adapter structural tests
+### 4. Adapter structural tests
 
 These verify adapter-surface parity with the backend operation catalog without
 exercising live infrastructure:
 
 - **MCP HTTP endpoint smoke test** (`backend/src/mcp/mcp.test.ts`): sends a
   JSON-RPC `tools/list` to the primary `/mcp` endpoint and asserts the response
-  contains all 5 `mcpscope_*` tool names matching the backend catalog.
+  contains all 7 `mcpscope_*` tool names matching the backend catalog.
 - **CLI structural test** (`cli/src/commands/commandCatalog.test.ts`): verifies
   CLI command IDs match the backend operation catalog, and that `mcpscope --help`
   documents every command.
@@ -79,7 +94,7 @@ exercising live infrastructure:
 These tests do not require a running backend, LM Studio, or MCP server and
 complete in milliseconds.
 
-### 4. Live integration tests
+### 5. Live integration tests
 
 These remain thin and intentionally few.
 
