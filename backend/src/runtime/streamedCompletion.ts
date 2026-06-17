@@ -3,7 +3,7 @@ import type {
   OaiChatCompletionResponse,
   StreamCallbacks,
   OaiStreamedChatCompletionResult,
-} from "../services/lmstudio/client.js";
+} from "../services/openai/client.js";
 import type { ChatCompletionGateway } from "./modelTurns.js";
 
 function segmentsFromCompletion(

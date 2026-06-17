@@ -24,11 +24,11 @@ import {
 } from "../services/mcp/httpClient.js";
 import {
   isModelLoaded,
-  listModels,
   listModelsWithStatus,
   loadModel as loadLmModel,
   unloadModel as unloadLmModel,
 } from "../services/lmstudio/client.js";
+import { listModels } from "../services/openai/client.js";
 import { listUserModels } from "../services/openrouter/client.js";
 import { getOllamaModelDetails } from "../services/ollama/client.js";
 import type { RouteDeps } from "./types.js";

@@ -20,7 +20,7 @@ export async function runListModelConfigs(
 }
 
 function renderListModelConfigsText(result: ListModelConfigsResult): void {
-  const configs = result.modelConfigs;
+  const configs = result.model_configs;
   if (!configs || configs.length === 0) {
     process.stdout.write("No model configs configured.\n");
     return;
@@ -28,7 +28,7 @@ function renderListModelConfigsText(result: ListModelConfigsResult): void {
 
   for (const mc of configs) {
     process.stdout.write(
-      `${mc.id}  ${mc.name}  ${mc.connectionName}  ${mc.modelKey}  ${mc.providerType ?? ""}\n`,
+      `${mc.id}  ${mc.name}  ${mc.connection_name}  ${mc.model_key}  ${mc.provider_type ?? ""}\n`,
     );
   }
 }

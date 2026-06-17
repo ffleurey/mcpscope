@@ -1,25 +1,12 @@
 import { z } from "zod";
-import { OperationError } from "./errors.js";
-import {
-  getSessionCreationDefaults,
-  listLmConnections,
-  listMcpServerProfiles,
-  listModelConfigs,
-} from "../persistence/repository.js";
-import {
-  createSession,
-  SessionIdConflictError,
-  SessionIdGenerationError,
-  SessionIdInputError,
-} from "../runtime/modelTurns.js";
-import {
-  sessionRecordSchema,
-  type McpProfileSnapshot,
-  type ModelProfileSnapshot,
-  type SessionRecord,
-} from "../domain/model.js";
-import { type McpServerProfile } from "../domain/configuration.js";
+import type { OperationError } from "./errors.js";
+import { createSession } from "../runtime/modelTurns.js";
+import { sessionRecordSchema, type SessionRecord } from "../domain/model.js";
 import type { OperationContext } from "./context.js";
+import {
+  mapSessionIdError,
+  resolvePrimarySessionInputs,
+} from "./sessionCreationShared.js";
 
 export const launchPrimarySessionInputSchema = z.object({
   session_id: z.string().optional(),
@@ -56,19 +43,6 @@ export const launchPrimarySessionOperation = {
   },
 };
 
-function buildMcpSnapshot(mcpProfile: McpServerProfile): McpProfileSnapshot {
-  return {
-    id: mcpProfile.id,
-    name: mcpProfile.name,
-    url: mcpProfile.url,
-    transport: mcpProfile.transport,
-    authType: mcpProfile.authType ?? null,
-    authValue: mcpProfile.authValue ?? null,
-    createdAt: mcpProfile.createdAt,
-    updatedAt: mcpProfile.updatedAt,
-  };
-}
-
 export async function executePrimarySessionLaunch(
   ctx: OperationContext,
   rawInput: unknown,
@@ -77,138 +51,46 @@ export async function executePrimarySessionLaunch(
   const input = launchPrimarySessionInputSchema.parse(rawInput);
 
   type TxResult =
-    | { kind: "default_model_not_configured" }
-    | { kind: "model_config_not_found"; modelConfigId: string }
-    | { kind: "lm_connection_not_found"; connectionId: string }
-    | { kind: "mcp_profile_not_found"; mcpProfileIds: string[] }
-    | { kind: "id_input_error"; error: SessionIdInputError }
-    | { kind: "id_conflict_error"; error: SessionIdConflictError }
-    | { kind: "id_generation_error"; error: SessionIdGenerationError }
+    | { kind: "error"; error: OperationError }
     | { kind: "created"; session: SessionRecord };
 
   const result: TxResult = db.connection.transaction((): TxResult => {
-    const defaults = getSessionCreationDefaults();
-    const resolvedModelConfigId =
-      input.model_config_id ?? defaults.defaultModelConfigId;
-    if (!resolvedModelConfigId) return { kind: "default_model_not_configured" };
-
-    const modelConfig = listModelConfigs().find(
-      (record) => record.id === resolvedModelConfigId,
-    );
-    if (!modelConfig) {
-      return {
-        kind: "model_config_not_found",
-        modelConfigId: resolvedModelConfigId,
-      };
-    }
-
-    const lmConnection = listLmConnections().find(
-      (record) => record.id === modelConfig.connectionId,
-    );
-    if (!lmConnection) {
-      return {
-        kind: "lm_connection_not_found",
-        connectionId: modelConfig.connectionId,
-      };
-    }
-
-    // Resolve MCP profile snapshots
-    const allProfiles = listMcpServerProfiles();
-    const resolvedMcpIds =
-      input.mcp_profile_ids ??
-      allProfiles.filter((p) => p.defaultEnabled).map((p) => p.id);
-
-    const mcpProfileSnapshots: McpProfileSnapshot[] = [];
-    const notFoundIds: string[] = [];
-    for (const profileId of resolvedMcpIds) {
-      const mcpProfile = allProfiles.find((record) => record.id === profileId);
-      if (!mcpProfile) {
-        notFoundIds.push(profileId);
-      } else {
-        mcpProfileSnapshots.push(buildMcpSnapshot(mcpProfile));
-      }
-    }
-    if (notFoundIds.length > 0) {
-      return { kind: "mcp_profile_not_found", mcpProfileIds: notFoundIds };
-    }
-
-    const modelProfileSnapshot: ModelProfileSnapshot = {
-      id: modelConfig.id,
-      name: modelConfig.name,
-      connectionBaseUrl: lmConnection.baseUrl,
-      apiKey: lmConnection.apiKey ?? null,
-      modelKey: modelConfig.modelKey,
-      modelDisplayName: modelConfig.modelDisplayName,
-      systemPrompt: modelConfig.systemPrompt,
-      temperature: modelConfig.temperature,
-      reasoning: modelConfig.reasoning ?? null,
-      createdAt: modelConfig.createdAt,
-      updatedAt: modelConfig.updatedAt,
-    };
+    const resolved = resolvePrimarySessionInputs({
+      modelConfigId: input.model_config_id,
+      mcpProfileIds: input.mcp_profile_ids,
+    });
+    if (!resolved.ok) return { kind: "error", error: resolved.error };
 
     try {
       const session = createSession(db, {
         sessionId: input.session_id,
         title: input.title,
-        modelProfileSnapshot,
-        mcpProfileSnapshots,
+        modelProfileSnapshot: resolved.modelProfileSnapshot,
+        mcpProfileSnapshots: resolved.mcpProfileSnapshots,
         compactionStrategy: input.compaction_strategy ?? "strip-reasoning",
         sessionType: "primary",
       });
       return { kind: "created", session };
     } catch (error) {
-      if (error instanceof SessionIdInputError)
-        return { kind: "id_input_error", error };
-      if (error instanceof SessionIdConflictError)
-        return { kind: "id_conflict_error", error };
-      if (error instanceof SessionIdGenerationError)
-        return { kind: "id_generation_error", error };
+      const mapped = mapSessionIdError(error);
+      if (mapped) return { kind: "error", error: mapped };
       throw error;
     }
   })();
 
-  switch (result.kind) {
-    case "default_model_not_configured":
-      throw new OperationError(
-        "No default model config is configured for new sessions.",
-        "default_model_not_configured",
-      );
-    case "model_config_not_found":
-      throw new OperationError(
-        `Model config "${result.modelConfigId}" not found.`,
-        "model_config_not_found",
-      );
-    case "lm_connection_not_found":
-      throw new OperationError(
-        `LM connection "${result.connectionId}" referenced by the selected model config no longer exists.`,
-        "lm_connection_not_found",
-      );
-    case "mcp_profile_not_found":
-      throw new OperationError(
-        `MCP profile(s) not found: ${result.mcpProfileIds.join(", ")}`,
-        "mcp_profile_not_found",
-      );
-    case "id_input_error":
-      throw new OperationError(result.error.message, "invalid_session_id");
-    case "id_conflict_error":
-      throw new OperationError(result.error.message, "duplicate_session_id");
-    case "id_generation_error":
-      throw new OperationError(
-        result.error.message,
-        "session_id_generation_failed",
-      );
-    case "created": {
-      let initJobId: string | undefined;
-      if (ctx.scheduler) {
-        try {
-          const initJob = ctx.scheduler.enqueueInit(ctx, result.session.id);
-          initJobId = initJob.jobId;
-        } catch {
-          // Admission failure (e.g. another session active) is non-fatal here;
-          // the frontend can fall back to calling /initialize explicitly.
-        }
-      }
-      return { session: result.session, ...(initJobId ? { initJobId } : {}) };
+  if (result.kind === "error") {
+    throw result.error;
+  }
+
+  let initJobId: string | undefined;
+  if (ctx.scheduler) {
+    try {
+      const initJob = ctx.scheduler.enqueueInit(ctx, result.session.id);
+      initJobId = initJob.jobId;
+    } catch {
+      // Admission failure (e.g. another session active) is non-fatal here;
+      // the frontend can fall back to calling /initialize explicitly.
     }
   }
+  return { session: result.session, ...(initJobId ? { initJobId } : {}) };
 }

@@ -47,12 +47,9 @@ import type {
   PromptProbeResult,
   StreamCallbacks,
   OaiStreamedChatCompletionResult,
-} from "../services/lmstudio/client.js";
+} from "../services/openai/client.js";
 import { buildSessionTraceBundle } from "../domain/trace.js";
-import {
-  allocateProportionalTokenCounts,
-  deriveExactDeltaTokenMetadata,
-} from "../domain/tokenAccounting.js";
+import { deriveExactDeltaTokenMetadata } from "../domain/tokenAccounting.js";
 import {
   createSystemPromptPart,
   ensureSessionPreludeTokenMetadata,
@@ -67,9 +64,13 @@ import {
 } from "./sessionTitles.js";
 import {
   buildReasoningParams,
-  estimateTokensFromText,
   normalizeStreamUsage,
 } from "../services/provider/index.js";
+import {
+  commitSegmentsToParts,
+  deriveAssistantContentTokenMetadata,
+  extractContentSegmentTexts,
+} from "./turnAssembly.js";
 
 export interface ChatCompletionGateway {
   createChatCompletion(
@@ -134,18 +135,6 @@ export interface RuntimeTurnResult {
 export class SessionIdInputError extends Error {}
 export class SessionIdConflictError extends Error {}
 export class SessionIdGenerationError extends Error {}
-
-type SegmentTokenMetadata = {
-  count: number | null;
-  source: PartRecord["tokens"]["source"];
-  confidence: PartRecord["tokens"]["confidence"];
-  note: string | null;
-  provenanceJson: unknown;
-};
-
-function normalizeSegmentText(text: string): string | null {
-  return text.trim().length > 0 ? text : null;
-}
 
 export function sessionContextBody(
   session: SessionRecord,
@@ -439,239 +428,29 @@ export async function createModelOnlyTurn(
     assistantSegments: streamedCompletion.segments,
   };
 
-  const reasoningSegments = streamedCompletion.segments
-    .filter(
-      (segment): segment is { kind: "reasoning"; text: string } =>
-        segment.kind === "reasoning",
-    )
-    .map((segment) => normalizeSegmentText(segment.text))
-    .filter((text): text is string => text !== null);
-  const contentSegments = streamedCompletion.segments
-    .filter(
-      (segment): segment is { kind: "content"; text: string } =>
-        segment.kind === "content",
-    )
-    .map((segment) => normalizeSegmentText(segment.text))
-    .filter((text): text is string => text !== null);
+  const contentSegments = extractContentSegmentTexts(
+    streamedCompletion.segments,
+  );
 
-  const reasoningTokenMetadata: SegmentTokenMetadata[] =
-    reasoningSegments.length === 0
-      ? []
-      : usage.reasoningTokens == null
-        ? reasoningSegments.length === 1
-          ? [
-              {
-                count: estimateTokensFromText(reasoningSegments[0]!),
-                source: "estimated" as const,
-                confidence: "estimated" as const,
-                note: "Estimated from thinking text length (4 chars/token heuristic)",
-                provenanceJson: {
-                  derivedFrom: "estimated-from-text-length",
-                },
-              },
-            ]
-          : allocateProportionalTokenCounts(
-              reasoningSegments.reduce(
-                (sum, text) => sum + estimateTokensFromText(text),
-                0,
-              ),
-              reasoningSegments.map((text) => Math.max(1, text.length)),
-            ).map((count) => ({
-              count,
-              source: "estimated" as const,
-              confidence: "estimated" as const,
-              note: "Estimated from thinking text length and allocated proportionally",
-              provenanceJson: {
-                derivedFrom: "estimated-from-text-length",
-                allocation: "proportional-by-payload",
-              },
-            }))
-        : reasoningSegments.length === 1
-          ? [
-              {
-                count: usage.reasoningTokens,
-                source: "exact-api" as const,
-                confidence: "exact" as const,
-                note: null,
-                provenanceJson: {
-                  derivedFrom: "completion.usage.reasoning_tokens",
-                },
-              },
-            ]
-          : [];
-  const assistantContentTokenMetadata: SegmentTokenMetadata[] =
-    contentSegments.length === 0
-      ? []
-      : usage.assistantContentTokens == null
-        ? contentSegments.map(() => ({
-            count: null,
-            source: "unknown" as const,
-            confidence: "unknown" as const,
-            note: "Completion usage not returned by the backend",
-            provenanceJson: null,
-          }))
-        : contentSegments.length === 1
-          ? [
-              {
-                count: usage.assistantContentTokens,
-                source: "exact-api" as const,
-                confidence: "exact" as const,
-                note: null,
-                provenanceJson: {
-                  derivedFrom:
-                    "completion.usage.completion_tokens - completion.usage.reasoning_tokens",
-                },
-              },
-            ]
-          : [];
-
-  if (reasoningSegments.length > 1) {
-    const counts = allocateProportionalTokenCounts(
-      usage.reasoningTokens ?? 0,
-      reasoningSegments.map((text) => Math.max(1, text.length)),
-    );
-    reasoningTokenMetadata.splice(
-      0,
-      reasoningTokenMetadata.length,
-      ...counts.map((count) => ({
-        count,
-        source: "estimated" as const,
-        confidence: "estimated" as const,
-        note: "Allocated proportionally from the exact round reasoning token total",
-        provenanceJson: {
-          derivedFrom: "completion.usage.reasoning_tokens",
-          allocation: "proportional-by-payload",
-        },
-      })),
-    );
-  }
-
-  if (contentSegments.length > 1) {
-    const counts = allocateProportionalTokenCounts(
-      usage.assistantContentTokens ?? 0,
-      contentSegments.map((text) => Math.max(1, text.length)),
-    );
-    assistantContentTokenMetadata.splice(
-      0,
-      assistantContentTokenMetadata.length,
-      ...counts.map((count) => ({
-        count,
-        source: "estimated" as const,
-        confidence: "estimated" as const,
-        note: "Allocated proportionally from the exact assistant content token total",
-        provenanceJson: {
-          derivedFrom:
-            "completion.usage.completion_tokens - completion.usage.reasoning_tokens",
-          allocation: "proportional-by-payload",
-        },
-      })),
-    );
-  }
-
-  const assistantParts: PartRecord[] = [];
-  let nextOrdinal = initialOrdinal + 1;
-  let nextPartNumber = initialPartNumber + 1;
-
-  for (const segment of streamedCompletion.segments) {
-    if (segment.kind === "reasoning") {
-      const text = normalizeSegmentText(segment.text);
-      if (!text) {
-        continue;
-      }
-      const tokenMetadata = reasoningTokenMetadata.shift();
-      assistantParts.push({
-        id: formatPartId(
-          session.id,
-          turnNumber,
-          1,
-          nextPartNumber++,
-          "assistant-reasoning",
-          input.ownerStepId ?? null,
-        ),
-        sessionId: session.id,
-        turnId,
-        roundId,
-        parentPartId: null,
-        ordinal: nextOrdinal++,
-        partType: "assistant-reasoning",
-        roleLabel: "assistant",
-        payload: {
-          text,
-          json: null,
-          mimeType: "text/plain",
-          summary: null,
-        },
-        display: {
-          state: "transcript",
-          collapsedByDefault: true,
-        },
-        context: {
-          state: "included",
-          note: "Reasoning preserved in context for this turn; compaction will strip it after turn completion",
-          strippedByCompactionAtTurnId: null,
-        },
-        tokens: {
-          count: tokenMetadata?.count ?? null,
-          source: tokenMetadata?.source ?? "unknown",
-          confidence: tokenMetadata?.confidence ?? "unknown",
-          note: tokenMetadata?.note ?? null,
-        },
-        provenanceJson: tokenMetadata?.provenanceJson ?? null,
-        createdAt: completedAt,
-        updatedAt: completedAt,
-      });
-      continue;
-    }
-
-    if (segment.kind === "content") {
-      const text = normalizeSegmentText(segment.text);
-      if (!text) {
-        continue;
-      }
-      const tokenMetadata = assistantContentTokenMetadata.shift();
-      assistantParts.push({
-        id: formatPartId(
-          session.id,
-          turnNumber,
-          1,
-          nextPartNumber++,
-          "assistant-content",
-          input.ownerStepId ?? null,
-        ),
-        sessionId: session.id,
-        turnId,
-        roundId,
-        parentPartId: null,
-        ordinal: nextOrdinal++,
-        partType: "assistant-content",
-        roleLabel: "assistant",
-        payload: {
-          text,
-          json: null,
-          mimeType: "text/plain",
-          summary: null,
-        },
-        display: {
-          state: "transcript",
-          collapsedByDefault: false,
-        },
-        context: {
-          state: "included",
-          note: "Assistant answer remains part of later model-visible history",
-          strippedByCompactionAtTurnId: null,
-        },
-        tokens: {
-          count: tokenMetadata?.count ?? null,
-          source: tokenMetadata?.source ?? "unknown",
-          confidence: tokenMetadata?.confidence ?? "unknown",
-          note: tokenMetadata?.note ?? null,
-        },
-        provenanceJson: tokenMetadata?.provenanceJson ?? null,
-        createdAt: completedAt,
-        updatedAt: completedAt,
-      });
-    }
-  }
+  const { parts: assistantParts } = commitSegmentsToParts({
+    session,
+    turnId,
+    turnNumber,
+    roundNumber: 1,
+    roundId,
+    ownerStepId: input.ownerStepId ?? null,
+    segments: streamedCompletion.segments,
+    reasoningTokens: usage.reasoningTokens,
+    contentTokenMetadata: deriveAssistantContentTokenMetadata(
+      contentSegments,
+      usage.assistantContentTokens,
+    ),
+    contentContextNote:
+      "Assistant answer remains part of later model-visible history",
+    initialOrdinal: initialOrdinal + 1,
+    initialPartNumber: initialPartNumber + 1,
+    createdAt: completedAt,
+  });
 
   const rawRequestExchange = {
     id: createUuid(),

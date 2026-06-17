@@ -19,37 +19,7 @@
 
 import type { ProviderType } from "./index.js";
 import type { NormalizedUsage } from "../../domain/tokenAccounting.js";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Internal: SSE payload parser
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Split raw SSE text into individual data payloads, one per blank-line boundary.
- */
-function parseSsePayloads(rawText: string): string[] {
-  const payloads: string[] = [];
-  let currentDataLines: string[] = [];
-
-  for (const rawLine of rawText.split(/\r?\n/)) {
-    if (rawLine.length === 0) {
-      if (currentDataLines.length > 0) {
-        payloads.push(currentDataLines.join("\n"));
-        currentDataLines = [];
-      }
-      continue;
-    }
-    if (rawLine.startsWith("data:")) {
-      currentDataLines.push(rawLine.slice(5).trimStart());
-    }
-  }
-
-  if (currentDataLines.length > 0) {
-    payloads.push(currentDataLines.join("\n"));
-  }
-
-  return payloads;
-}
+import { parseServerSentEventPayloads as parseSsePayloads } from "../openai/client.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared: extract NormalizedUsage from a usage-like object

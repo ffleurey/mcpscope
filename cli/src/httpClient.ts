@@ -170,16 +170,22 @@ export async function cliInspect(
   );
 }
 
-/** GET /api/model-configs → ListModelConfigsResult */
+/** GET /api/operations/model-configs → ListModelConfigsResult */
 export async function cliListModelConfigs(
   baseUrl: string,
 ): Promise<ListModelConfigsResult> {
-  return request<ListModelConfigsResult>(baseUrl, "/api/model-configs");
+  return request<ListModelConfigsResult>(
+    baseUrl,
+    "/api/operations/model-configs",
+  );
 }
 
-/** GET /api/mcp-profiles → ListMcpProfilesResult */
+/** GET /api/operations/mcp-profiles → ListMcpProfilesResult */
 export async function cliListMcpProfiles(
   baseUrl: string,
 ): Promise<ListMcpProfilesResult> {
-  return request<ListMcpProfilesResult>(baseUrl, "/api/mcp-profiles");
+  return request<ListMcpProfilesResult>(
+    baseUrl,
+    "/api/operations/mcp-profiles",
+  );
 }

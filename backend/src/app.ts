@@ -8,16 +8,15 @@ import type { BackendConfig } from "./config.js";
 import { openBackendDatabase } from "./persistence/db.js";
 import {
   recoverInterruptedState,
-  listTurnRecordsBySession,
   type ActiveSessionInfo,
 } from "./persistence/repository.js";
+import { getLoadedContextLength } from "./services/lmstudio/client.js";
 import {
   createChatCompletion,
-  getLoadedContextLength,
   probePromptTokens,
   probePromptTokensDetailed,
   streamChatCompletion,
-} from "./services/lmstudio/client.js";
+} from "./services/openai/client.js";
 import {
   callMcpTool,
   initializeMcpSession,
@@ -40,7 +39,7 @@ import { registerSchedulerRoutes } from "./routes/schedulerRoutes.js";
 import { registerSessionRoutes } from "./routes/sessionRoutes.js";
 import { registerSystemRoutes } from "./routes/systemRoutes.js";
 import { registerTraceRoutes } from "./routes/traceRoutes.js";
-import { isAnalysisSessionTerminalError } from "./analysis/analysisSessionPresentation.js";
+import { computeLifecycleState } from "./operations/lifecycleState.js";
 import {
   initializeConfigStore,
   ConfigFileError,
@@ -286,45 +285,14 @@ export async function buildBackendApp(
     status: string;
     initStatus: string;
     sessionType?: string;
-  }): "initializing" | "ready" | "running" | "error" => {
-    const turns = listTurnRecordsBySession(database.connection, summary.id);
-    const activeTurn =
-      [...turns]
-        .reverse()
-        .find(
-          (t) =>
-            t.status === "draft" ||
-            t.status === "streaming" ||
-            t.status === "awaiting-tools",
-        ) ?? null;
-    const latestTurn = turns.at(-1) ?? null;
-
-    if (
-      isAnalysisSessionTerminalError(database.connection, {
-        ...summary,
-        sessionType:
-          summary.sessionType === "session_analysis"
-            ? "session_analysis"
-            : "primary",
-      }) ||
-      latestTurn?.status === "error"
-    ) {
-      return "error";
-    }
-    if (summary.initStatus === "error") {
-      return "error";
-    }
-    if (
-      summary.initStatus === "pending" ||
-      summary.initStatus === "initializing"
-    ) {
-      return "initializing";
-    }
-    if (activeTurn) {
-      return "running";
-    }
-    return "ready";
-  };
+  }): "initializing" | "ready" | "running" | "error" =>
+    computeLifecycleState(database.connection, {
+      ...summary,
+      sessionType:
+        summary.sessionType === "session_analysis"
+          ? "session_analysis"
+          : "primary",
+    });
 
   const routeDeps = {
     app,

@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { providerTypeValues } from "./configuration.js";
 
-export const DOMAIN_MODEL_VERSION = 2;
+/** Single schema/domain version recorded in schema_meta and reported on /api/system. */
+export const SCHEMA_VERSION = 1;
 
 export const sessionTypeValues = ["primary", "session_analysis"] as const;
 export const parentKindValues = ["session", "benchmark"] as const;
@@ -302,7 +303,7 @@ export type RawExchangeRecord = z.infer<typeof rawExchangeRecordSchema>;
 
 export function getDomainModelSummary() {
   return {
-    version: DOMAIN_MODEL_VERSION,
+    version: SCHEMA_VERSION,
     // Canonical execution-model entities in the landed implementation.
     entities: ["session", "step", "turn", "round", "part", "raw-exchange"],
     enums: {

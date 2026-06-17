@@ -1,35 +1,11 @@
 /**
- * LM Studio client — re-exports shared OAI functions + LM Studio-specific APIs.
+ * LM Studio-specific client.
  *
- * Shared OAI types and functions are imported from the generic openai client.
- * LM Studio-specific functions (native model listing, load/unload, etc.) live
- * here because they depend on LM Studio's proprietary /api/v1/models endpoints.
+ * The shared OpenAI-compatible chat/probe functions live in `../openai/client.js`
+ * and are imported directly by callers. This module only holds LM Studio-specific
+ * functions (native model listing, load/unload, loaded-context lookup) that depend
+ * on LM Studio's proprietary /api/v1/models endpoints.
  */
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Re-export shared OAI types and functions
-// ─────────────────────────────────────────────────────────────────────────────
-
-export {
-  // Functions
-  listModels,
-  createChatCompletion,
-  parseChatCompletionStream,
-  streamChatCompletion,
-  probePromptTokens,
-  probePromptTokensDetailed,
-  // Types
-  type OaiModelListResponse,
-  type OaiChatCompletionUsage,
-  type OaiChatCompletionResponse,
-  type OaiChatCompletionChunk,
-  type AssistantSegment,
-  type OaiStreamedChatCompletionResult,
-  type StreamDelta,
-  type StreamCallbacks,
-  type ProbeRawExchange,
-  type PromptProbeResult,
-} from "../openai/client.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LM Studio-specific types

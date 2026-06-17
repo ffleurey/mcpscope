@@ -11,7 +11,7 @@ import {
   type OaiChatCompletionResponse,
   type PromptProbeResult,
   type OaiStreamedChatCompletionResult,
-} from "../services/lmstudio/client.js";
+} from "../services/openai/client.js";
 import type { McpGateway } from "../runtime/toolTurns.js";
 import type { ChatCompletionGateway } from "../runtime/modelTurns.js";
 

@@ -7,7 +7,7 @@ import type {
   StepRecord,
   TurnRecord,
 } from "./model.js";
-import { getNextChildIndex } from "../persistence/repositoryV2.js";
+import { getNextChildIndex } from "../persistence/repository.js";
 
 export interface CompactionStepResult {
   turn: TurnRecord;
@@ -45,8 +45,8 @@ export function applyContextCompaction(
       .prepare<[string], { total: number | null }>(
         `
         SELECT SUM(token_count) AS total
-        FROM v2_parts
-        WHERE session_id = (SELECT session_id FROM v2_turns WHERE id = ?)
+        FROM parts
+        WHERE session_id = (SELECT session_id FROM turns WHERE id = ?)
           AND context_state IN ('included', 'round-only')
       `,
       )
@@ -65,7 +65,7 @@ export function applyContextCompaction(
   const childIndex = getNextChildIndex(connection, completedTurn.sessionId);
   const stepId = formatCompactionStepId(completedTurn.sessionId, childIndex);
 
-  // Create and insert the compaction step first so the FK on v2_parts is satisfied.
+  // Create and insert the compaction step first so the FK on parts is satisfied.
   const step: StepRecord = {
     id: stepId,
     sessionId: completedTurn.sessionId,
@@ -92,7 +92,7 @@ export function applyContextCompaction(
   connection
     .prepare(
       `
-    INSERT INTO v2_steps (
+    INSERT INTO steps (
       id, session_id, step_type_key, child_index, status,
       params_json, state_json, created_at, completed_at
     ) VALUES (
@@ -121,7 +121,7 @@ export function applyContextCompaction(
       >(
         `
         SELECT id, token_count, token_source
-        FROM v2_parts
+        FROM parts
         WHERE turn_id = ?
           AND part_type = 'assistant-reasoning'
           AND context_state = 'included'
@@ -162,7 +162,7 @@ export function applyContextCompaction(
       }
 
       const updatePart = connection.prepare(`
-        UPDATE v2_parts
+        UPDATE parts
         SET context_state = 'stripped',
             stripped_by_compaction_at_step_id = ?,
             updated_at = ?
@@ -180,7 +180,7 @@ export function applyContextCompaction(
       connection
         .prepare(
           `
-        UPDATE v2_steps
+        UPDATE steps
         SET state_json = @stateJson
         WHERE id = @id
       `,
@@ -209,7 +209,7 @@ export function applyContextCompaction(
   connection
     .prepare(
       `
-    UPDATE v2_turns
+    UPDATE turns
     SET context_tokens_at_turn_end = @contextTokensAtTurnEnd,
         context_tokens_after_compaction = @contextTokensAfterCompaction,
         compaction_applied = @compactionApplied,

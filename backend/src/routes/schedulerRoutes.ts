@@ -56,7 +56,7 @@ export function registerSchedulerRoutes({ app, database, scheduler, opCtx, handl
       return apiError('validation', `Analysis session is in terminal phase '${analysisState?.phase}'.`)
     }
     try {
-      const job = scheduler.enqueueStep(opCtx, session_id, session_id)
+      const job = scheduler.enqueueStep(opCtx, session_id)
       reply.code(202)
       return { job }
     } catch (err) {

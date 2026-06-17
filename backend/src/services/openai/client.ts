@@ -285,7 +285,12 @@ function appendToolCallSegment(
   });
 }
 
-function parseServerSentEventPayloads(rawText: string): string[] {
+/**
+ * Split raw SSE text into individual data payloads, one per blank-line boundary.
+ * Shared by the streaming-completion parser and the provider token-usage
+ * normalizer (services/provider/tokenUsage.ts).
+ */
+export function parseServerSentEventPayloads(rawText: string): string[] {
   const payloads: string[] = [];
   let currentDataLines: string[] = [];
 

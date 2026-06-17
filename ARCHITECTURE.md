@@ -19,7 +19,7 @@ The value of the project depends on correctness and inspectability:
 ## Documentation boundaries
 
 - [DATA-MODEL.md](DATA-MODEL.md) — compact canonical runtime tree, public part taxonomy, canonical IDs, and lookup-model rules
-- [SESSION-ANALYSIS.md](SESSION-ANALYSIS.md) — shipped `session_analysis` workflow and evidence-loading rules
+- [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) — shipped `session_analysis` workflow and evidence-loading rules
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) — current SQLite tables, foreign keys, singleton defaults, and ER diagram
 - [CLI.md](CLI.md) — CLI command reference: commands, flags, output format, exit codes
 - `ARCHITECTURE.md` — system design, persistence model, streaming model, replay model, and API overview
@@ -93,16 +93,7 @@ The backend persistence layer is organized around the execution model:
 - `WorkflowStep` — the abstract deterministic step subtype implemented by concrete analysis step classes in `analysis/shared/` and `analysis/fastTool/` (see `backend/src/workflow/workflowStep.ts`); may own zero or more `Turn` children
 - `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records
 
-The persistence-layer record types remain the authoritative source for runtime behavior and replay:
-
-- `SessionRecord`
-- `TurnRecord`
-- `RoundRecord`
-- `PartRecord`
-- `RawExchangeRecord`
-- `BenchmarkRecord`
-
-These map to the v2 persistence schema (`v2_sessions`, `v2_steps`, `v2_turns`, `v2_rounds`, `v2_parts`, `v2_raw_exchanges`, `session_containers`).
+The persistence-layer record types (`SessionRecord`, `TurnRecord`, `RoundRecord`, `PartRecord`, `RawExchangeRecord`) remain the authoritative source for runtime behavior and replay. They persist to the canonical v2 schema. For the record-to-table mapping and column-level details see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
 
 Normal startup initializes that runtime schema plus the shared config/default tables only. The legacy `sessions` / `turns` / `rounds` / `parts` / `raw_exchanges` tables remain available only through the explicit legacy initializer used by old-schema validation tests; they are not part of the normal runtime path.
 
@@ -253,12 +244,13 @@ plus transient and diagnostic transport-layer structures around it.
 
 These records are the authoritative mcpscope runtime state:
 
-- `SessionRecord` (maps to `v2_sessions` + `session_containers`)
-- `TurnRecord` (maps to `v2_steps` + `v2_turns`)
-- `RoundRecord` (maps to `v2_rounds`)
-- `PartRecord` (maps to `v2_parts`)
-- `RawExchangeRecord` (maps to `v2_raw_exchanges`)
-- `BenchmarkRecord` (maps to `session_containers` with `container_type_key = 'benchmark'`)
+- `SessionRecord`
+- `TurnRecord`
+- `RoundRecord`
+- `PartRecord`
+- `RawExchangeRecord`
+
+Each maps to a runtime table; the record-to-table mapping lives in [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md). Container ownership (including a `Benchmark` container) is not a separate table — it is recorded on `sessions.parent_container_type_key` / `parent_container_id`.
 
 #### Derived in-memory request state
 
@@ -274,16 +266,16 @@ These structures are rebuilt from canonical records as needed and are not persis
 
 These are provider-facing or service-layer structures, not the mcpscope domain model:
 
-- LM Studio request bodies sent to `POST /chat/completions`
-- `LmStudioChatCompletionResponse`
-- `LmStudioChatCompletionChunk`
-- `LmStudioStreamDelta`
-- `LmStudioAssistantSegment`
+- chat-completions request bodies sent to the provider's `POST /chat/completions`
+- `OaiChatCompletionResponse`
+- `OaiChatCompletionChunk`
+- `StreamDelta`
+- `AssistantSegment`
 - MCP raw exchanges and MCP tool-call results
 
 Some of these are partially persisted for diagnostics:
 
-- LM Studio request/response bodies are stored in `RawExchangeRecord`
+- model request/response bodies are stored in `RawExchangeRecord`
 - round-level `requestPayloadJson` and `responseTraceJson` keep a diagnostic mirror of transport activity
 
 That diagnostic persistence does **not** make those transport structures canonical. The canonical runtime still lives in session/turn/round/part records.
@@ -386,12 +378,12 @@ classDiagram
 classDiagram
 	class OperationContext {
 		+db
-		+lmStudioGateway
+		+chatCompletionGateway
 		+mcpGateway
 		+maxToolRounds
 	}
 
-	class LmStudioGateway {
+	class ChatCompletionGateway {
 		<<interface>>
 		+createChatCompletion()
 		+streamChatCompletion()
@@ -425,7 +417,7 @@ classDiagram
 		+execute
 	}
 
-	class LMStudioTransport {
+	class ChatCompletionTransport {
 		+chat completions
 	}
 
@@ -435,16 +427,16 @@ classDiagram
 		+call tool
 	}
 
-	OperationContext --> LmStudioGateway
+	OperationContext --> ChatCompletionGateway
 	OperationContext --> McpGateway
 	createModelOnlyTurn --> selectors
-	createModelOnlyTurn --> LmStudioGateway
+	createModelOnlyTurn --> ChatCompletionGateway
 	createModelOnlyTurn --> applyContextCompaction
 	createToolEnabledTurn --> selectors
-	createToolEnabledTurn --> LmStudioGateway
+	createToolEnabledTurn --> ChatCompletionGateway
 	createToolEnabledTurn --> McpGateway
 	createToolEnabledTurn --> applyContextCompaction
-	LmStudioGateway --> LMStudioTransport
+	ChatCompletionGateway --> ChatCompletionTransport
 	McpGateway --> MCPTransport
 ```
 

@@ -5,13 +5,11 @@
  *   - Session           — execution container
  *   - Step              — abstract execution unit
  *   - Turn              — LLM-specific Step subtype
- *   - VisibleContext    — the model-visible slice of session state
  *   - Artifact          — content-oriented artifact hierarchy
  *
- * These types define the target execution model.  The mapping boundary to the
- * current persistence-layer record shapes (SessionRecord, TurnRecord, etc.) is
- * declared in `executionModelMapping.ts`.  Existing record types remain active
- * until behavior is ported in later steps.
+ * These types define the target execution model.  Existing persistence-layer
+ * record shapes (SessionRecord, TurnRecord, etc.) remain active until behavior
+ * is ported in later steps.
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,10 +48,6 @@ export function sessionTypeKey(key: string): SessionTypeKey {
 
 export function stepTypeKey(key: string): StepTypeKey {
   return key as StepTypeKey
-}
-
-export function artifactTypeKey(key: string): ArtifactTypeKey {
-  return key as ArtifactTypeKey
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -98,54 +92,11 @@ export interface Artifact {
 
 /** Known artifact content type keys. */
 export const ARTIFACT_TYPE = {
-  JSON: artifactTypeKey('json'),
-  TEXT: artifactTypeKey('text'),
-  MARKDOWN: artifactTypeKey('markdown'),
-  IMAGE: artifactTypeKey('image'),
+  JSON: 'json' as ArtifactTypeKey,
+  TEXT: 'text' as ArtifactTypeKey,
+  MARKDOWN: 'markdown' as ArtifactTypeKey,
+  IMAGE: 'image' as ArtifactTypeKey,
 } as const
-
-export interface JsonArtifact extends Artifact {
-  readonly artifactTypeKey: typeof ARTIFACT_TYPE.JSON
-  readonly content: unknown
-}
-
-export interface TextArtifact extends Artifact {
-  readonly artifactTypeKey: typeof ARTIFACT_TYPE.TEXT
-  readonly content: string
-}
-
-export interface MarkdownArtifact extends Artifact {
-  readonly artifactTypeKey: typeof ARTIFACT_TYPE.MARKDOWN
-  readonly content: string
-}
-
-export interface ImageArtifact extends Artifact {
-  readonly artifactTypeKey: typeof ARTIFACT_TYPE.IMAGE
-  readonly mimeType: string
-  /** Base64-encoded bytes or a data URL. */
-  readonly data: string
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// VisibleContext
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * The model-visible slice of session state.
- *
- * VisibleContext is:
- *   - explicit in the domain model
- *   - derived from persisted state at execution time
- *   - controlled by persisted visibility rules when needed
- *
- * It is NOT a duplicated persisted copy of the full underlying data structures.
- */
-export interface VisibleContext {
-  /** Token count of the currently visible context. */
-  readonly usedTokens: number | null
-  /** Total available context window for the model. */
-  readonly availableTokens: number | null
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step
@@ -160,7 +111,13 @@ export type StepStatus = 'pending' | 'running' | 'complete' | 'error' | 'aborted
  */
 export interface StepExecutionContext {
   readonly sessionId: string
-  readonly visibleContext: VisibleContext
+  /** The model-visible slice of session state. */
+  readonly visibleContext: {
+    /** Token count of the currently visible context. */
+    readonly usedTokens: number | null
+    /** Total available context window for the model. */
+    readonly availableTokens: number | null
+  }
   readonly artifacts: ReadonlyArray<Artifact>
 }
 
@@ -195,12 +152,6 @@ export interface Step {
    * Unit-of-work execution: runs exactly once when inputs are populated.
    */
   execute(context: StepExecutionContext): Promise<StepResult>
-}
-
-/**
- * WorkflowStep is the abstract step subtype that owns Turn children.
- */
-export interface WorkflowStep extends Step {
 }
 
 /** Known step type keys. */

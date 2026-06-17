@@ -132,5 +132,5 @@ Its tool surface is intentionally restricted to:
 It is not the general public MCP surface for normal agent use. Its purpose is to let the analysis
 workflow inspect persisted mcpscope evidence without exposing broader session-management tools.
 
-See `SESSION-ANALYSIS.md` for how this restricted endpoint is used in the shipped analysis
+See [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) for how this restricted endpoint is used in the shipped analysis
 workflow.

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import type { StepRecord, TurnRecord, WorkflowStepTrace } from '../backendTypes'
+  import type { StepRecord, TurnRecord } from '../backendTypes'
   import {
     activeSession,
     activeTrace,
@@ -71,43 +71,8 @@
   let traceTurns = $derived(
     [...($activeTrace?.turns ?? [])].sort((a, b) => a.turnNumber - b.turnNumber),
   )
-  let traceArtifacts = $derived($activeTrace?.artifacts ?? [])
   let renderableSteps = $derived(traceSteps)
-  let analysisWorkflowSteps = $derived.by((): WorkflowStepTrace[] => {
-    const postambleStepsByTurn = new Map<string, StepRecord[]>()
-    for (const step of traceSteps) {
-      if (step.stepTypeKey !== 'compaction') continue
-      const sourceTurnId =
-        typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null
-      if (!sourceTurnId) continue
-      postambleStepsByTurn.set(sourceTurnId, [
-        ...(postambleStepsByTurn.get(sourceTurnId) ?? []),
-        step,
-      ])
-    }
-
-    const artifactsByStep = new Map<string, typeof traceArtifacts>()
-    for (const artifact of traceArtifacts) {
-      if (!artifact.stepId) continue
-      artifactsByStep.set(artifact.stepId, [
-        ...(artifactsByStep.get(artifact.stepId) ?? []),
-        artifact,
-      ])
-    }
-
-    return traceSteps
-      .filter((step) => step.stepTypeKey !== 'turn' && step.stepTypeKey !== 'compaction')
-      .map((step) => {
-        const ownedTurns = traceTurns.filter((turn) => turn.ownerStepId === step.id)
-        const postambleSteps = ownedTurns.flatMap((turn) => postambleStepsByTurn.get(turn.id) ?? [])
-        return {
-          step,
-          ownedTurns,
-          postambleSteps,
-          artifacts: artifactsByStep.get(step.id) ?? [],
-        }
-      })
-  })
+  let analysisWorkflowSteps = $derived($activeTrace?.workflowSteps ?? [])
   let analysisLooseTurns = $derived.by(() =>
     isAnalysisSession ? traceTurns.filter((turn) => turn.ownerStepId === null) : [],
   )

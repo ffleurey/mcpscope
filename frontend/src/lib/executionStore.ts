@@ -51,13 +51,9 @@ export const sessionStreamCache = writable<
 
 // ── Derived helpers ──────────────────────────────────────────────────────────
 
-export const schedulerControlState = derived(schedulerSnapshot, ($snap) => $snap.controlState)
-
 export const activeJob = derived(schedulerSnapshot, ($snap) => $snap.activeJob)
 
 export const pendingJobs = derived(schedulerSnapshot, ($snap) => $snap.pendingJobs)
-
-export const isExecuting = derived(schedulerSnapshot, ($snap) => $snap.activeJob !== null)
 
 export const queueLength = derived(schedulerSnapshot, ($snap) => $snap.pendingJobs.length)
 

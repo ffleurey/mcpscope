@@ -1,7 +1,7 @@
 import type { BackendDatabase } from '../persistence/db.js'
 import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
-import { insertStepRecord, getNextChildIndex, updateStepRecord } from '../persistence/repositoryV2.js'
+import { insertStepRecord, getNextChildIndex, updateStepRecord } from '../persistence/repository.js'
 import { formatStepId } from '../domain/hierarchicalIds.js'
 import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 import type { StepContext } from './stepContext.js'

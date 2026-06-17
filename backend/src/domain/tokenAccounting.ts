@@ -1,5 +1,5 @@
 import type { PartRecord, TokenMetadata } from './model.js'
-import type { OaiChatCompletionResponse, OaiChatCompletionUsage } from '../services/lmstudio/client.js'
+import type { OaiChatCompletionResponse, OaiChatCompletionUsage } from '../services/openai/client.js'
 
 export interface NormalizedUsage {
   promptTokens: number | null

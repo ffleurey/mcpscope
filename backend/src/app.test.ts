@@ -13,7 +13,7 @@ import {
   insertPartRecord,
   updateSessionRecord,
 } from "./persistence/repository.js";
-import { listStepRecordsBySession } from "./persistence/repositoryV2.js";
+import { listStepRecordsBySession } from "./persistence/repository.js";
 import {
   capturedReasoningThreeBatchParts,
   capturedReasoningThreeBatchRounds,
@@ -144,25 +144,23 @@ describe("backend foundation", () => {
 
     const body = response.json();
     expect(body).toMatchObject({
-      version: 2,
+      version: 1,
       entities: ["session", "step", "turn", "round", "part", "raw-exchange"],
     });
     expect(body.schema.tables).toEqual(
       expect.arrayContaining([
         // Canonical execution-model tables
-        "v2_sessions",
-        "v2_steps",
-        "v2_turns",
-        "v2_rounds",
-        "v2_parts",
-        "v2_raw_exchanges",
+        "sessions",
+        "steps",
+        "turns",
+        "rounds",
+        "parts",
+        "raw_exchanges",
         "artifacts",
       ]),
     );
     expect(body.schema.meta).toMatchObject({
-      domain_model_version: "2",
-      sqlite_schema_version: "8",
-      new_schema_version: "3",
+      schema_version: "1",
     });
   });
 
@@ -5441,7 +5439,7 @@ describe("analysis launch", () => {
     // tool-result parts committed as proper turns, not synthetic inject parts).
     const deterministicTurns = app.backendDb.connection
       .prepare(
-        `SELECT id, outcome FROM v2_turns WHERE session_id = ? AND outcome = 'deterministic-tool-call'`,
+        `SELECT id, outcome FROM turns WHERE session_id = ? AND outcome = 'deterministic-tool-call'`,
       )
       .all(childId) as Array<{ id: string; outcome: string }>;
     expect(deterministicTurns).toHaveLength(2);
@@ -5455,7 +5453,7 @@ describe("analysis launch", () => {
 
     const deterministicRounds = app.backendDb.connection
       .prepare(
-        `SELECT v2_turns.turn_number, v2_rounds.round_index FROM v2_rounds JOIN v2_turns ON v2_turns.id = v2_rounds.turn_id WHERE v2_turns.session_id = ? AND v2_turns.outcome = 'deterministic-tool-call' ORDER BY v2_turns.turn_number, v2_rounds.round_index`,
+        `SELECT turns.turn_number, rounds.round_index FROM rounds JOIN turns ON turns.id = rounds.turn_id WHERE turns.session_id = ? AND turns.outcome = 'deterministic-tool-call' ORDER BY turns.turn_number, rounds.round_index`,
       )
       .all(childId) as Array<{ turn_number: number; round_index: number }>;
     expect(deterministicRounds).toEqual([
@@ -5467,7 +5465,7 @@ describe("analysis launch", () => {
 
     const deterministicParts = app.backendDb.connection
       .prepare(
-        `SELECT token_count FROM v2_parts WHERE session_id = ? AND turn_id IN (SELECT id FROM v2_turns WHERE session_id = ? AND outcome = 'deterministic-tool-call')`,
+        `SELECT token_count FROM parts WHERE session_id = ? AND turn_id IN (SELECT id FROM turns WHERE session_id = ? AND outcome = 'deterministic-tool-call')`,
       )
       .all(childId, childId) as Array<{ token_count: number | null }>;
     expect(deterministicParts.length).toBeGreaterThan(0);
@@ -5479,7 +5477,7 @@ describe("analysis launch", () => {
     // in context once packet-specific evidence loading is in place.
     const rootInspectTurns = app.backendDb.connection
       .prepare(
-        `SELECT id FROM v2_parts WHERE session_id = ? AND part_type = 'user-message' AND payload_text LIKE ?`,
+        `SELECT id FROM parts WHERE session_id = ? AND part_type = 'user-message' AND payload_text LIKE ?`,
       )
       .all(
         childId,
@@ -5491,7 +5489,7 @@ describe("analysis launch", () => {
     // assessment completes so it does not accumulate in active context.
     const lingeringPacketInspectParts = app.backendDb.connection
       .prepare(
-        `SELECT id FROM v2_parts WHERE session_id = ? AND turn_id = ? AND context_state = 'included'`,
+        `SELECT id FROM parts WHERE session_id = ? AND turn_id = ? AND context_state = 'included'`,
       )
       .all(childId, deterministicTurns[1]?.id) as Array<{ id: string }>;
     expect(lingeringPacketInspectParts).toHaveLength(0);
@@ -5499,7 +5497,7 @@ describe("analysis launch", () => {
     // No synthetic evidence inject parts (old prompt-bundle pattern)
     const injectParts = app.backendDb.connection
       .prepare(
-        `SELECT id FROM v2_parts WHERE session_id = ? AND payload_summary LIKE 'Evidence for packet%'`,
+        `SELECT id FROM parts WHERE session_id = ? AND payload_summary LIKE 'Evidence for packet%'`,
       )
       .all(childId) as Array<{ id: string }>;
     expect(injectParts).toHaveLength(0);
