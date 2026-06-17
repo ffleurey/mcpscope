@@ -5,26 +5,26 @@
  * against the current v2 runtime tables.
  *
  * Key column mappings:
- *   sessions.session_type          → v2_sessions.session_type_key
- *   sessions.parent_kind           → v2_sessions.parent_container_type_key
- *   sessions.parent_id             → v2_sessions.parent_container_id
- *   sessions.model_profile_*_json  → v2_sessions.params_json.modelProfileSnapshot
- *   sessions.mcp_profile_*_json    → v2_sessions.params_json.mcpProfileSnapshot
- *   sessions.compaction_strategy   → v2_sessions.params_json.compactionStrategy
- *   sessions.loaded_context_length → v2_sessions.state_json.loadedContextLength
- *   sessions.system_prompt_tokens  → v2_sessions.state_json.systemPromptTokens
- *   sessions.tool_definitions_*    → v2_sessions.state_json.toolDefinitionsTokens
- *   sessions.is_context_exhausted  → v2_sessions.state_json.isContextExhausted
+ *   sessions.session_type          → sessions.session_type_key
+ *   sessions.parent_kind           → sessions.parent_container_type_key
+ *   sessions.parent_id             → sessions.parent_container_id
+ *   sessions.model_profile_*_json  → sessions.params_json.modelProfileSnapshot
+ *   sessions.mcp_profile_*_json    → sessions.params_json.mcpProfileSnapshot
+ *   sessions.compaction_strategy   → sessions.params_json.compactionStrategy
+ *   sessions.loaded_context_length → sessions.state_json.loadedContextLength
+ *   sessions.system_prompt_tokens  → sessions.state_json.systemPromptTokens
+ *   sessions.tool_definitions_*    → sessions.state_json.toolDefinitionsTokens
+ *   sessions.is_context_exhausted  → sessions.state_json.isContextExhausted
  *
- *   turns.*                        → v2_steps.* + v2_turns.*  (same id for top-level)
- *   turns.id                       → v2_steps.id (top-level) = v2_turns.id
- *   turns.sequence_number          → v2_turns.turn_number
- *   v2_steps.child_index           = turn_number - 1 (top-level)
+ *   turns.*                        → steps.* + turns.*  (same id for top-level)
+ *   turns.id                       → steps.id (top-level) = turns.id
+ *   turns.sequence_number          → turns.turn_number
+ *   steps.child_index           = turn_number - 1 (top-level)
  *
- *   rounds.turn_id                 → v2_rounds.turn_id
- *   parts.turn_id                  → v2_parts.turn_id
- *   parts.stripped_by_*_turn_id    → v2_parts.stripped_by_compaction_at_step_id
- *   raw_exchanges.turn_id          → v2_raw_exchanges.turn_id
+ *   rounds.turn_id                 → rounds.turn_id
+ *   parts.turn_id                  → parts.turn_id
+ *   parts.stripped_by_*_turn_id    → parts.stripped_by_compaction_at_step_id
+ *   raw_exchanges.turn_id          → raw_exchanges.turn_id
  */
 
 import type Database from 'better-sqlite3'
@@ -39,6 +39,7 @@ import type {
   TurnRecord,
   StepRecord,
 } from '../domain/model.js'
+import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 import { validateSessionParent } from '../domain/sessionValidation.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -203,10 +204,56 @@ function mapV2SessionSummaryRow(row: V2SessionRow): SessionSummary {
   }
 }
 
+export function insertStepRecord(
+  connection: Database.Database,
+  record: StepPersistenceRecord,
+): void {
+  connection.prepare(`
+    INSERT INTO steps (
+      id, session_id, step_type_key, parent_step_id, child_index, status,
+      params_json, state_json, created_at, completed_at
+    ) VALUES (
+      @id, @sessionId, @stepTypeKey, @parentStepId, @childIndex, @status,
+      @paramsJson, @stateJson, @createdAt, @completedAt
+    )
+  `).run({
+    id: record.id,
+    sessionId: record.sessionId,
+    stepTypeKey: record.stepTypeKey,
+    parentStepId: record.parentStepId,
+    childIndex: record.childIndex,
+    status: record.status,
+    paramsJson: JSON.stringify(record.params ?? {}),
+    stateJson: JSON.stringify(record.state ?? {}),
+    createdAt: record.createdAt,
+    completedAt: record.completedAt,
+  })
+}
+
+export function updateStepRecord(
+  connection: Database.Database,
+  record: StepPersistenceRecord,
+): void {
+  connection.prepare(`
+    UPDATE steps
+    SET status = @status,
+        params_json = @paramsJson,
+        state_json = @stateJson,
+        completed_at = @completedAt
+    WHERE id = @id
+  `).run({
+    id: record.id,
+    status: record.status,
+    paramsJson: JSON.stringify(record.params ?? {}),
+    stateJson: JSON.stringify(record.state ?? {}),
+    completedAt: record.completedAt,
+  })
+}
+
 export function getStepRecord(connection: Database.Database, stepId: string): StepRecord | null {
   const row = connection.prepare(`
     SELECT *
-    FROM v2_steps
+    FROM steps
     WHERE id = ?
   `).get(stepId) as V2StepRow | undefined
 
@@ -216,7 +263,7 @@ export function getStepRecord(connection: Database.Database, stepId: string): St
 export function listStepRecordsBySession(connection: Database.Database, sessionId: string): StepRecord[] {
   const rows = connection.prepare(`
     SELECT *
-    FROM v2_steps
+    FROM steps
     WHERE session_id = ?
     ORDER BY child_index ASC
   `).all(sessionId) as V2StepRow[]
@@ -227,7 +274,7 @@ export function listStepRecordsBySession(connection: Database.Database, sessionI
 export function getNextChildIndex(connection: Database.Database, sessionId: string): number {
   const row = connection.prepare(`
     SELECT COALESCE(MAX(child_index), 0) AS max_child_index
-    FROM v2_steps
+    FROM steps
     WHERE session_id = ? AND parent_step_id IS NULL
   `).get(sessionId) as { max_child_index: number }
 
@@ -244,7 +291,7 @@ export function createSessionRecord(
 ): void {
   assertValidSessionParent(session)
   connection.prepare(`
-    INSERT INTO v2_sessions (
+    INSERT INTO sessions (
       id, title, session_type_key, parent_container_type_key, parent_container_id,
       status, init_status, params_json, state_json,
       created_at, updated_at
@@ -299,7 +346,7 @@ export function getSessionRecord(
 ): SessionRecord | null {
   const row = connection.prepare(`
     SELECT *
-    FROM v2_sessions
+    FROM sessions
     WHERE id = ?
   `).get(sessionId) as V2SessionRow | undefined
 
@@ -310,7 +357,7 @@ export function getSessionRecord(
 export function updateSessionRecord(connection: Database.Database, session: SessionRecord): void {
   assertValidSessionParent(session)
   connection.prepare(`
-    UPDATE v2_sessions
+    UPDATE sessions
     SET title = @title,
         status = @status,
         init_status = @initStatus,
@@ -341,7 +388,7 @@ export function updateSessionAnalysisState(
   analysisState: Record<string, unknown> | null,
 ): void {
   connection.prepare(`
-    UPDATE v2_sessions
+    UPDATE sessions
     SET analysis_state_json = @analysisStateJson,
         updated_at = @updatedAt
     WHERE id = @id
@@ -356,16 +403,16 @@ export function deleteSessionRecord(connection: Database.Database, sessionId: st
   const result = connection.prepare(`
     WITH RECURSIVE session_tree(id) AS (
       SELECT id
-      FROM v2_sessions
+      FROM sessions
       WHERE id = ?
       UNION
       SELECT s.id
-      FROM v2_sessions s
+      FROM sessions s
       JOIN session_tree st
         ON s.parent_container_type_key = 'session'
        AND s.parent_container_id = st.id
     )
-    DELETE FROM v2_sessions
+    DELETE FROM sessions
     WHERE id IN (SELECT id FROM session_tree)
   `).run(sessionId)
 
@@ -375,7 +422,7 @@ export function deleteSessionRecord(connection: Database.Database, sessionId: st
 export function listSessionRecords(connection: Database.Database): SessionRecord[] {
   const rows = connection.prepare(`
     SELECT *
-    FROM v2_sessions
+    FROM sessions
     ORDER BY updated_at DESC, created_at DESC
   `).all() as V2SessionRow[]
 
@@ -386,7 +433,7 @@ export function listSessionRecords(connection: Database.Database): SessionRecord
 export function listSessionSummaries(connection: Database.Database): SessionSummary[] {
   const rows = connection.prepare(`
     SELECT *
-    FROM v2_sessions
+    FROM sessions
     WHERE session_type_key = 'primary'
     ORDER BY updated_at DESC, created_at DESC
   `).all() as V2SessionRow[]
@@ -402,7 +449,7 @@ export function listChildSessionSummaries(
 ): SessionSummary[] {
   const rows = connection.prepare(`
     SELECT *
-    FROM v2_sessions
+    FROM sessions
     WHERE parent_container_type_key = ? AND parent_container_id = ?
     ORDER BY created_at ASC
   `).all(parentKind, parentId) as V2SessionRow[]
@@ -414,7 +461,7 @@ export function listChildSessionSummaries(
 export function listAllSessionSummaries(connection: Database.Database): SessionSummary[] {
   const rows = connection.prepare(`
     SELECT *
-    FROM v2_sessions
+    FROM sessions
     ORDER BY updated_at DESC, created_at DESC
   `).all() as V2SessionRow[]
 
@@ -426,20 +473,20 @@ export function findActiveSession(
   excludeSessionId?: string,
 ): ActiveSessionInfo | null {
   const whereInit = excludeSessionId ? 'AND id != @excludeId' : ''
-  const whereRun = excludeSessionId ? 'AND v2_sessions.id != @excludeId' : ''
+  const whereRun = excludeSessionId ? 'AND sessions.id != @excludeId' : ''
   const params: Record<string, string> = excludeSessionId ? { excludeId: excludeSessionId } : {}
 
   const row = connection.prepare(`
     SELECT id, state FROM (
       SELECT id, 'initializing' AS state
-      FROM v2_sessions
+      FROM sessions
       WHERE init_status = 'initializing'
       ${whereInit}
       UNION ALL
-      SELECT DISTINCT v2_sessions.id, 'running' AS state
-      FROM v2_sessions
-      JOIN v2_turns ON v2_turns.session_id = v2_sessions.id
-      WHERE v2_turns.status IN ('draft', 'streaming', 'awaiting-tools')
+      SELECT DISTINCT sessions.id, 'running' AS state
+      FROM sessions
+      JOIN turns ON turns.session_id = sessions.id
+      WHERE turns.status IN ('draft', 'streaming', 'awaiting-tools')
       ${whereRun}
     )
     LIMIT 1
@@ -457,19 +504,19 @@ export function recoverInterruptedState(connection: Database.Database): void {
     const now = Date.now()
 
     connection.prepare(`
-      UPDATE v2_steps
+      UPDATE steps
       SET status = 'aborted', completed_at = ?
       WHERE status IN ('draft', 'streaming', 'awaiting-tools')
     `).run(now)
 
     connection.prepare(`
-      UPDATE v2_turns
+      UPDATE turns
       SET status = 'aborted', completed_at = ?
       WHERE status IN ('draft', 'streaming', 'awaiting-tools')
     `).run(now)
 
     connection.prepare(`
-      UPDATE v2_sessions
+      UPDATE sessions
       SET init_status = 'error', updated_at = ?
       WHERE init_status = 'initializing'
     `).run(now)
@@ -477,7 +524,7 @@ export function recoverInterruptedState(connection: Database.Database): void {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Turn CRUD  (v2_steps for top-level + v2_turns for all)
+// Turn CRUD  (steps for top-level + turns for all)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function insertTurnRecord(
@@ -489,7 +536,7 @@ export function insertTurnRecord(
     const childIndex = getNextChildIndex(connection, turn.sessionId)
 
     connection.prepare(`
-      INSERT INTO v2_steps (
+      INSERT INTO steps (
         id, session_id, step_type_key, parent_step_id, child_index, status,
         params_json, state_json, created_at, completed_at
       ) VALUES (
@@ -508,7 +555,7 @@ export function insertTurnRecord(
   }
 
   connection.prepare(`
-    INSERT INTO v2_turns (
+    INSERT INTO turns (
       id, session_id, owner_step_id, turn_number, status, outcome,
       prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
       context_tokens_at_turn_end, context_tokens_after_compaction,
@@ -544,7 +591,7 @@ export function insertTurnRecord(
 export function updateTurnRecord(connection: Database.Database, turn: TurnRecord): void {
   if (!turn.ownerStepId) {
     connection.prepare(`
-      UPDATE v2_steps
+      UPDATE steps
       SET status = @status,
           completed_at = @completedAt
       WHERE id = @id
@@ -556,7 +603,7 @@ export function updateTurnRecord(connection: Database.Database, turn: TurnRecord
   }
 
   connection.prepare(`
-    UPDATE v2_turns
+    UPDATE turns
     SET owner_step_id = @ownerStepId,
       status = @status,
         outcome = @outcome,
@@ -590,25 +637,25 @@ export function updateTurnRecord(connection: Database.Database, turn: TurnRecord
 export function getTurnRecord(connection: Database.Database, turnId: string): TurnRecord | null {
   const row = connection.prepare(`
     SELECT
-      v2_turns.id,
-      v2_turns.session_id,
-      v2_turns.owner_step_id,
-      v2_turns.turn_number,
-      v2_turns.status,
-      v2_turns.outcome,
-      v2_turns.prompt_tokens,
-      v2_turns.completion_tokens,
-      v2_turns.reasoning_tokens,
-      v2_turns.total_tokens,
-      v2_turns.context_tokens_at_turn_end,
-      v2_turns.context_tokens_after_compaction,
-      v2_turns.compaction_applied,
-      v2_turns.compaction_tokens_removed,
-      COALESCE(v2_steps.created_at, v2_turns.created_at) AS created_at,
-      v2_turns.completed_at
-    FROM v2_turns
-    LEFT JOIN v2_steps ON v2_steps.id = v2_turns.id
-    WHERE v2_turns.id = ?
+      turns.id,
+      turns.session_id,
+      turns.owner_step_id,
+      turns.turn_number,
+      turns.status,
+      turns.outcome,
+      turns.prompt_tokens,
+      turns.completion_tokens,
+      turns.reasoning_tokens,
+      turns.total_tokens,
+      turns.context_tokens_at_turn_end,
+      turns.context_tokens_after_compaction,
+      turns.compaction_applied,
+      turns.compaction_tokens_removed,
+      COALESCE(steps.created_at, turns.created_at) AS created_at,
+      turns.completed_at
+    FROM turns
+    LEFT JOIN steps ON steps.id = turns.id
+    WHERE turns.id = ?
   `).get(turnId) as
     | {
         id: string
@@ -660,26 +707,26 @@ export function listTurnRecordsBySession(
 ): TurnRecord[] {
   const rows = connection.prepare(`
     SELECT
-      v2_turns.id,
-      v2_turns.session_id,
-      v2_turns.owner_step_id,
-      v2_turns.turn_number,
-      v2_turns.status,
-      v2_turns.outcome,
-      v2_turns.prompt_tokens,
-      v2_turns.completion_tokens,
-      v2_turns.reasoning_tokens,
-      v2_turns.total_tokens,
-      v2_turns.context_tokens_at_turn_end,
-      v2_turns.context_tokens_after_compaction,
-      v2_turns.compaction_applied,
-      v2_turns.compaction_tokens_removed,
-      COALESCE(v2_steps.created_at, v2_turns.created_at) AS created_at,
-      v2_turns.completed_at
-    FROM v2_turns
-    LEFT JOIN v2_steps ON v2_steps.id = v2_turns.id
-    WHERE v2_turns.session_id = ?
-    ORDER BY v2_turns.turn_number ASC
+      turns.id,
+      turns.session_id,
+      turns.owner_step_id,
+      turns.turn_number,
+      turns.status,
+      turns.outcome,
+      turns.prompt_tokens,
+      turns.completion_tokens,
+      turns.reasoning_tokens,
+      turns.total_tokens,
+      turns.context_tokens_at_turn_end,
+      turns.context_tokens_after_compaction,
+      turns.compaction_applied,
+      turns.compaction_tokens_removed,
+      COALESCE(steps.created_at, turns.created_at) AS created_at,
+      turns.completed_at
+    FROM turns
+    LEFT JOIN steps ON steps.id = turns.id
+    WHERE turns.session_id = ?
+    ORDER BY turns.turn_number ASC
   `).all(sessionId) as Array<{
     id: string
     session_id: string
@@ -722,17 +769,17 @@ export function listTurnRecordsBySession(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Round CRUD  (v2_rounds)
+// Round CRUD  (rounds)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function insertRoundRecord(connection: Database.Database, round: RoundRecord): void {
   connection.prepare(`
-    INSERT INTO v2_rounds (
+    INSERT INTO rounds (
       id, turn_id, session_id, round_index, status, finish_reason,
       prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
       request_payload_json, response_trace_json, started_at, completed_at
     ) VALUES (
-      @id, @turnId, (SELECT session_id FROM v2_turns WHERE id = @turnId),
+      @id, @turnId, (SELECT session_id FROM turns WHERE id = @turnId),
       @roundIndex, @status, @finishReason,
       @promptTokens, @completionTokens, @reasoningTokens, @totalTokens,
       @requestPayloadJson, @responseTraceJson, @startedAt, @completedAt
@@ -756,7 +803,7 @@ export function insertRoundRecord(connection: Database.Database, round: RoundRec
 
 export function updateRoundRecord(connection: Database.Database, round: RoundRecord): void {
   connection.prepare(`
-    UPDATE v2_rounds
+    UPDATE rounds
     SET status = @status,
         finish_reason = @finishReason,
         prompt_tokens = @promptTokens,
@@ -784,7 +831,7 @@ export function updateRoundRecord(connection: Database.Database, round: RoundRec
 export function getRoundRecord(connection: Database.Database, roundId: string): RoundRecord | null {
   const row = connection.prepare(`
     SELECT *
-    FROM v2_rounds
+    FROM rounds
     WHERE id = ?
   `).get(roundId) as
     | {
@@ -830,11 +877,11 @@ export function listRoundRecordsBySession(
   sessionId: string,
 ): RoundRecord[] {
   const rows = connection.prepare(`
-    SELECT v2_rounds.*
-    FROM v2_rounds
-    JOIN v2_turns ON v2_turns.id = v2_rounds.turn_id
-    WHERE v2_rounds.session_id = ?
-    ORDER BY v2_turns.turn_number ASC, v2_rounds.round_index ASC
+    SELECT rounds.*
+    FROM rounds
+    JOIN turns ON turns.id = rounds.turn_id
+    WHERE rounds.session_id = ?
+    ORDER BY turns.turn_number ASC, rounds.round_index ASC
   `).all(sessionId) as Array<{
     id: string
     turn_id: string
@@ -871,12 +918,12 @@ export function listRoundRecordsBySession(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Part CRUD  (v2_parts)
+// Part CRUD  (parts)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function insertPartRecord(connection: Database.Database, part: PartRecord): void {
   connection.prepare(`
-    INSERT INTO v2_parts (
+    INSERT INTO parts (
       id, session_id, turn_id, round_id, parent_part_id, ordinal, part_type, role_label,
       payload_text, payload_json, payload_mime_type, payload_summary,
       display_state, collapsed_by_default, context_state, context_note,
@@ -921,7 +968,7 @@ export function insertPartRecord(connection: Database.Database, part: PartRecord
 
 export function updatePartRecord(connection: Database.Database, part: PartRecord): void {
   connection.prepare(`
-    UPDATE v2_parts
+    UPDATE parts
     SET parent_part_id = @parentPartId,
         ordinal = @ordinal,
         part_type = @partType,
@@ -969,7 +1016,7 @@ export function updatePartRecord(connection: Database.Database, part: PartRecord
 export function getPartRecord(connection: Database.Database, partId: string): PartRecord | null {
   const row = connection.prepare(`
     SELECT *
-    FROM v2_parts
+    FROM parts
     WHERE id = ?
   `).get(partId) as
     | {
@@ -1044,7 +1091,7 @@ export function listPartRecordsBySession(
 ): PartRecord[] {
   const rows = connection.prepare(`
     SELECT *
-    FROM v2_parts
+    FROM parts
     WHERE session_id = ?
     ORDER BY ordinal ASC
   `).all(sessionId) as Array<{
@@ -1111,12 +1158,12 @@ export function listPartRecordsBySession(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Raw exchange CRUD  (v2_raw_exchanges)
+// Raw exchange CRUD  (raw_exchanges)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function insertRawExchangeRecord(connection: Database.Database, exchange: RawExchangeRecord): void {
   connection.prepare(`
-    INSERT INTO v2_raw_exchanges (
+    INSERT INTO raw_exchanges (
       id, session_id, turn_id, round_id, kind, request_url, request_method,
       request_headers_json, request_body, response_status, response_headers_json, response_body, created_at
     ) VALUES (
@@ -1146,7 +1193,7 @@ export function listRawExchangeRecordsBySession(
 ): RawExchangeRecord[] {
   const rows = connection.prepare(`
     SELECT *
-    FROM v2_raw_exchanges
+    FROM raw_exchanges
     WHERE session_id = ?
     ORDER BY created_at ASC, rowid ASC
   `).all(sessionId) as Array<{
@@ -1190,7 +1237,7 @@ export function getNextTurnNumber(connection: Database.Database, sessionId: stri
   if (ownerStepId) {
     const row = connection.prepare(`
       SELECT COUNT(*) AS cnt
-      FROM v2_turns
+      FROM turns
       WHERE owner_step_id = ?
     `).get(ownerStepId) as { cnt: number }
     return row.cnt + 1
@@ -1198,7 +1245,7 @@ export function getNextTurnNumber(connection: Database.Database, sessionId: stri
 
   const row = connection.prepare(`
     SELECT COALESCE(MAX(turn_number), 0) AS max_turn_number
-    FROM v2_turns
+    FROM turns
     WHERE session_id = ? AND owner_step_id IS NULL
   `).get(sessionId) as { max_turn_number: number }
 
@@ -1208,7 +1255,7 @@ export function getNextTurnNumber(connection: Database.Database, sessionId: stri
 export function getNextPartOrdinal(connection: Database.Database, sessionId: string): number {
   const row = connection.prepare(`
     SELECT COALESCE(MAX(ordinal), 0) AS max_ordinal
-    FROM v2_parts
+    FROM parts
     WHERE session_id = ?
   `).get(sessionId) as { max_ordinal: number }
 
@@ -1218,7 +1265,7 @@ export function getNextPartOrdinal(connection: Database.Database, sessionId: str
 export function getNextRoundPartSequence(connection: Database.Database, roundId: string): number {
   const row = connection.prepare(`
     SELECT COUNT(*) AS part_count
-    FROM v2_parts
+    FROM parts
     WHERE round_id = ?
   `).get(roundId) as { part_count: number }
 
@@ -1228,7 +1275,7 @@ export function getNextRoundPartSequence(connection: Database.Database, roundId:
 export function getNextPreludePartSequence(connection: Database.Database, sessionId: string): number {
   const row = connection.prepare(`
     SELECT COUNT(*) AS part_count
-    FROM v2_parts
+    FROM parts
     WHERE session_id = ? AND turn_id IS NULL
   `).get(sessionId) as { part_count: number }
 

@@ -38,7 +38,7 @@ export const launchAnalysisV2InputSchema = z.object({
 export type LaunchAnalysisV2Input = z.infer<typeof launchAnalysisV2InputSchema>
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Session state (stored in v2_steps.state_json for the cursor step)
+// Session state (stored in steps.state_json for the cursor step)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type AnalysisPhase =

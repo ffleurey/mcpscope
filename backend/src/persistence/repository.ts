@@ -15,10 +15,10 @@ export {
   ConfigFileError,
 } from "../config/configStore.js";
 
-export { insertStepRecord } from "./repositoryV2.js";
-
 export type { ActiveSessionInfo } from "./repositoryRuntime.js";
 export {
+  insertStepRecord,
+  updateStepRecord,
   createSessionRecord,
   getSessionRecord,
   updateSessionRecord,

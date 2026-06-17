@@ -99,7 +99,7 @@ export function importTraceBundle(
 ): SessionRecord {
   const sessionId = generateUniqueSessionId(
     candidate => database.connection
-      .prepare('SELECT 1 FROM v2_sessions WHERE id = ?')
+      .prepare('SELECT 1 FROM sessions WHERE id = ?')
       .get(candidate) != null,
     3,
   ) ?? createUuid()

@@ -104,7 +104,7 @@ describe('WorkflowStep.execute() step status persistence', () => {
     await step.execute({ sessionId: 'TEST', stepTypeKey: stepTypeKey('analysis_bootstrap') })
 
     const row = db.connection.prepare(
-      'SELECT status, state_json FROM v2_steps WHERE id = ?',
+      'SELECT status, state_json FROM steps WHERE id = ?',
     ).get(step.stepId) as { status: string; state_json: string } | undefined
 
     expect(row?.status).toBe('error')
@@ -122,7 +122,7 @@ describe('WorkflowStep.execute() step status persistence', () => {
     await step.execute({ sessionId: 'TEST', stepTypeKey: stepTypeKey('analysis_bootstrap') })
 
     const row = db.connection.prepare(
-      'SELECT status FROM v2_steps WHERE id = ?',
+      'SELECT status FROM steps WHERE id = ?',
     ).get(step.stepId) as { status: string } | undefined
 
     expect(row?.status).toBe('complete')
@@ -150,7 +150,7 @@ describe('WorkflowStep.execute() step status persistence', () => {
     expect(result.status).toBe('error')
 
     const row = db.connection.prepare(
-      'SELECT status FROM v2_steps WHERE id = ?',
+      'SELECT status FROM steps WHERE id = ?',
     ).get(step.stepId) as { status: string } | undefined
 
     expect(row?.status).toBe('error')

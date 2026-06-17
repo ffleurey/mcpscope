@@ -6,7 +6,6 @@
  * session_type / parent_ref plus analysis-session metadata.
  */
 import fs from "node:fs";
-import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildBackendApp } from "./app.js";
@@ -17,18 +16,15 @@ import {
   getPartRecord,
   getSessionRecord,
   insertPartRecord,
+  insertStepRecord,
   insertTurnRecord,
   listChildSessionSummaries,
   listSessionSummaries,
   updateSessionAnalysisState,
   updateSessionRecord,
 } from "./persistence/repository.js";
-import { insertStepRecord } from "./persistence/repositoryV2.js";
 import { openBackendDatabase } from "./persistence/db.js";
-import {
-  initializeBackendSchema,
-  validateBackendSchema,
-} from "./persistence/schema.js";
+import { validateSchema } from "./persistence/schema.js";
 import { importTraceBundle } from "./runtime/traceImport.js";
 import { insertJsonArtifact } from "./analysis/artifactRepository.js";
 import { SCHEMA_KEY } from "./analysis/schemas.js";
@@ -36,12 +32,14 @@ import { stepTypeKey } from "./domain/executionModel.js";
 import type { PartRecord } from "./domain/model.js";
 import type { StepPersistenceRecord } from "./domain/persistenceContract.js";
 
-const LEGACY_RUNTIME_TABLES = [
+const RUNTIME_TABLES = [
   "sessions",
+  "steps",
   "turns",
   "rounds",
   "parts",
   "raw_exchanges",
+  "artifacts",
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -212,17 +210,17 @@ describe("session metadata repository", () => {
     }
   });
 
-  it("openBackendDatabase initializes shared defaults and canonical runtime tables without legacy runtime tables", () => {
+  it("openBackendDatabase initializes shared defaults and the runtime tables", () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
 
     const db = openBackendDatabase(config.sqlitePath);
 
-    expect(db.schema.tables).toContain("v2_sessions");
-
-    for (const table of LEGACY_RUNTIME_TABLES) {
-      expect(db.schema.tables).not.toContain(table);
+    for (const table of RUNTIME_TABLES) {
+      expect(db.schema.tables).toContain(table);
     }
+
+    expect(() => validateSchema(db.connection)).not.toThrow();
 
     db.connection.close();
   });
@@ -557,58 +555,6 @@ describe("session metadata repository", () => {
     );
 
     db.connection.close();
-  });
-
-  it("migrated databases enforce enum checks for session metadata columns", () => {
-    const config = makeTestConfig();
-    dataDir = config.dataDir;
-    fs.mkdirSync(dataDir, { recursive: true });
-
-    const connection = new Database(config.sqlitePath);
-    connection.exec(`
-      CREATE TABLE schema_meta (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
-      CREATE TABLE sessions (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        status TEXT NOT NULL,
-        init_status TEXT NOT NULL,
-        model_profile_snapshot_json TEXT NOT NULL,
-        mcp_profile_snapshot_json TEXT,
-        loaded_context_length INTEGER,
-        system_prompt_tokens INTEGER,
-        tool_definitions_tokens INTEGER,
-        is_context_exhausted INTEGER NOT NULL DEFAULT 0,
-        compaction_strategy TEXT NOT NULL DEFAULT 'strip-reasoning',
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      );
-    `);
-
-    initializeBackendSchema(connection);
-    validateBackendSchema(connection);
-
-    expect(() =>
-      connection
-        .prepare(
-          `
-      INSERT INTO sessions (
-        id, title, status, init_status, session_type, parent_kind, parent_id,
-        model_profile_snapshot_json, mcp_profile_snapshot_json,
-        loaded_context_length, system_prompt_tokens, tool_definitions_tokens,
-        is_context_exhausted, compaction_strategy, created_at, updated_at
-      ) VALUES (
-        'BAD2', 'Bad', 'ready', 'pending', 'invalid_type', NULL, NULL,
-        '{}', NULL, NULL, NULL, NULL, 0, 'strip-reasoning', 1, 1
-      )
-    `,
-        )
-        .run(),
-    ).toThrow();
-
-    connection.close();
   });
 
   it("importTraceBundle rejects invalid imported session metadata", () => {
