@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseChatCompletionStream } from './client.js'
+import { parseChatCompletionStream } from '../openai/client.js'
 
 describe('LM Studio streaming parser', () => {
   it('parses streamed reasoning, content, and usage for a model-only response', () => {

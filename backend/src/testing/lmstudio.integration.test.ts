@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createChatCompletion, listModels } from '../services/lmstudio/client.js'
+import { createChatCompletion, listModels } from '../services/openai/client.js'
 import { writeIntegrationArtifact } from './artifacts.js'
 import { getIntegrationEnv } from './integrationEnv.js'
 

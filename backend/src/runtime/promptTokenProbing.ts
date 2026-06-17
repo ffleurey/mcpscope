@@ -5,7 +5,7 @@ import type { RawExchangeRecord, SessionRecord } from "../domain/model.js";
 import {
   probePromptTokens,
   type PromptProbeResult,
-} from "../services/lmstudio/client.js";
+} from "../services/openai/client.js";
 import {
   buildReasoningParams,
   estimateTokensFromText,

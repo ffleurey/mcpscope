@@ -40,9 +40,13 @@ import {
 } from "../domain/hierarchicalIds.js";
 import {
   buildReasoningParams,
-  estimateTokensFromText,
   normalizeStreamUsage,
 } from "../services/provider/index.js";
+import {
+  commitSegmentsToParts,
+  deriveAssistantContentTokenMetadata,
+  extractContentSegmentTexts,
+} from "./turnAssembly.js";
 import {
   sessionContextBody,
   type ChatCompletionGateway,
@@ -926,230 +930,6 @@ function createToolResultPart(
   };
 }
 
-function normalizeSegmentText(text: string): string | null {
-  return text.trim().length > 0 ? text : null;
-}
-
-function buildReasoningPartsFromSegments(
-  session: SessionRecord,
-  turnId: string,
-  roundId: string,
-  initialOrdinal: number,
-  reasoningSegments: string[],
-  reasoningTokens: number | null,
-  createdAt: number,
-): PartRecord[] {
-  if (reasoningSegments.length === 0) {
-    return [];
-  }
-
-  // When the API doesn't report reasoning tokens, estimate from text length.
-  // Uses ~4 chars per token, matching the heuristic used in normalizeStreamUsage
-  // for providers like Ollama that don't report reasoning tokens separately.
-  const tokenMetadata =
-    reasoningTokens == null
-      ? reasoningSegments.length === 1
-        ? [
-            {
-              count: estimateTokensFromText(reasoningSegments[0]!),
-              source: "estimated" as const,
-              confidence: "estimated" as const,
-              note: "Estimated from thinking text length (4 chars/token heuristic)",
-              provenanceJson: {
-                derivedFrom: "estimated-from-text-length",
-              },
-            },
-          ]
-        : allocateProportionalTokenCounts(
-            reasoningSegments.reduce(
-              (sum, text) => sum + estimateTokensFromText(text),
-              0,
-            ),
-            reasoningSegments.map((text) => Math.max(1, text.length)),
-          ).map((count) => ({
-            count,
-            source: "estimated" as const,
-            confidence: "estimated" as const,
-            note: "Estimated from thinking text length and allocated proportionally",
-            provenanceJson: {
-              derivedFrom: "estimated-from-text-length",
-              allocation: "proportional-by-payload",
-            },
-          }))
-      : reasoningSegments.length === 1
-        ? [
-            {
-              count: reasoningTokens,
-              source: "exact-api" as const,
-              confidence: "exact" as const,
-              note: null,
-              provenanceJson: {
-                derivedFrom: "completion.usage.reasoning_tokens",
-              },
-            },
-          ]
-        : allocateProportionalTokenCounts(
-            reasoningTokens,
-            reasoningSegments.map((text) => Math.max(1, text.length)),
-          ).map((count) => ({
-            count,
-            source: "estimated" as const,
-            confidence: "estimated" as const,
-            note: "Allocated proportionally from the exact round reasoning token total",
-            provenanceJson: {
-              derivedFrom: "completion.usage.reasoning_tokens",
-              allocation: "proportional-by-payload",
-            },
-          }));
-
-  return reasoningSegments.map((reasoningText, index) => {
-    const metadata = tokenMetadata[index];
-    return {
-      id: createUuid(),
-      sessionId: session.id,
-      turnId,
-      roundId,
-      parentPartId: null,
-      ordinal: initialOrdinal + index,
-      partType: "assistant-reasoning" as const,
-      roleLabel: "assistant",
-      payload: {
-        text: reasoningText,
-        json: null,
-        mimeType: "text/plain",
-        summary: null,
-      },
-      display: {
-        state: "transcript" as const,
-        collapsedByDefault: true,
-      },
-      context: {
-        state: "included" as const,
-        note: "Reasoning preserved in context for this turn; compaction will strip it after turn completion",
-        strippedByCompactionAtTurnId: null,
-      },
-      tokens: {
-        count: metadata?.count ?? null,
-        source: metadata?.source ?? "unknown",
-        confidence: metadata?.confidence ?? "unknown",
-        note: metadata?.note ?? null,
-      },
-      provenanceJson: metadata?.provenanceJson ?? null,
-      createdAt,
-      updatedAt: createdAt,
-    };
-  });
-}
-
-function buildAssistantContentPartsFromSegments(
-  session: SessionRecord,
-  turnId: string,
-  roundId: string,
-  initialOrdinal: number,
-  contentSegments: string[],
-  tokenMetadata: Array<{
-    count: number | null;
-    source: PartRecord["tokens"]["source"];
-    confidence: PartRecord["tokens"]["confidence"];
-    note: string | null;
-    provenanceJson: unknown;
-  }> | null,
-  createdAt: number,
-  contextNote: string,
-): PartRecord[] {
-  return contentSegments.map((contentText, index) => {
-    const metadata = tokenMetadata?.[index];
-    return {
-      id: createUuid(),
-      sessionId: session.id,
-      turnId,
-      roundId,
-      parentPartId: null,
-      ordinal: initialOrdinal + index,
-      partType: "assistant-content" as const,
-      roleLabel: "assistant",
-      payload: {
-        text: contentText,
-        json: null,
-        mimeType: "text/plain",
-        summary: null,
-      },
-      display: {
-        state: "transcript" as const,
-        collapsedByDefault: false,
-      },
-      context: {
-        state: "included" as const,
-        note: contextNote,
-        strippedByCompactionAtTurnId: null,
-      },
-      tokens: {
-        count: metadata?.count ?? null,
-        source: metadata?.source ?? "unknown",
-        confidence: metadata?.confidence ?? "unknown",
-        note: metadata?.note ?? "Assistant content token allocation is pending",
-      },
-      provenanceJson: metadata?.provenanceJson ?? null,
-      createdAt,
-      updatedAt: createdAt,
-    };
-  });
-}
-
-function allocateAssistantContentTokenMetadata(
-  contentSegments: string[],
-  assistantContentTokens: number | null,
-): Array<{
-  count: number | null;
-  source: PartRecord["tokens"]["source"];
-  confidence: PartRecord["tokens"]["confidence"];
-  note: string | null;
-  provenanceJson: unknown;
-}> {
-  if (contentSegments.length === 0) {
-    return [];
-  }
-
-  if (assistantContentTokens == null) {
-    return contentSegments.map(() => ({
-      count: null,
-      source: "unknown" as const,
-      confidence: "unknown" as const,
-      note: "Completion usage not returned by the backend",
-      provenanceJson: null,
-    }));
-  }
-
-  if (contentSegments.length === 1) {
-    return [
-      {
-        count: assistantContentTokens,
-        source: "exact-api" as const,
-        confidence: "exact" as const,
-        note: null,
-        provenanceJson: {
-          derivedFrom:
-            "completion.usage.completion_tokens - completion.usage.reasoning_tokens",
-        },
-      },
-    ];
-  }
-
-  return allocateProportionalTokenCounts(
-    assistantContentTokens,
-    contentSegments.map((text) => Math.max(1, text.length)),
-  ).map((count) => ({
-    count,
-    source: "estimated" as const,
-    confidence: "estimated" as const,
-    note: "Allocated proportionally from the exact assistant content token total",
-    provenanceJson: {
-      derivedFrom:
-        "completion.usage.completion_tokens - completion.usage.reasoning_tokens",
-      allocation: "proportional-by-payload",
-    },
-  }));
-}
 
 /**
  * Runs a single MCP tool call deterministically (without an LLM deciding to call it).
@@ -1753,124 +1533,77 @@ export async function createToolEnabledTurn(
       const toolCallByIndex = new Map(
         toolCalls.map((toolCall, index) => [index, toolCall]),
       );
-      const reasoningSegments = streamedCompletion.segments
-        .filter(
-          (segment): segment is { kind: "reasoning"; text: string } =>
-            segment.kind === "reasoning",
-        )
-        .map((segment) => normalizeSegmentText(segment.text))
-        .filter((text): text is string => text !== null);
-      const reasoningParts = buildReasoningPartsFromSegments(
-        session,
-        turnId,
-        currentRound.id,
-        getNextPartOrdinal(database.connection, session.id),
-        reasoningSegments,
-        usage.reasoningTokens,
-        completedAt,
+      const assistantContentSegments = extractContentSegmentTexts(
+        streamedCompletion.segments,
       );
-      const reasoningPartsQueue = [...reasoningParts];
-      const assistantContentSegments = streamedCompletion.segments
-        .filter(
-          (segment): segment is { kind: "content"; text: string } =>
-            segment.kind === "content",
-        )
-        .map((segment) => normalizeSegmentText(segment.text))
-        .filter((text): text is string => text !== null);
-      const assistantContentParts = buildAssistantContentPartsFromSegments(
-        session,
-        turnId,
-        currentRound.id,
-        getNextPartOrdinal(database.connection, session.id) +
-          reasoningParts.length,
-        assistantContentSegments,
-        assistantContentSegments.map(() => ({
-          count: null,
-          source: "unknown" as const,
-          confidence: "unknown" as const,
-          note: "Assistant content shared a tool-call message; prompt delta allocation is pending",
-          provenanceJson: null,
-        })),
-        completedAt,
-        "Assistant content shared a tool-call message and remains part of later model-visible history",
-      );
-      const assistantContentPartsQueue = [...assistantContentParts];
       const toolCallPartsByIndex = new Map<number, PartRecord>();
       const toolResultParts: PartRecord[] = [];
-      const assistantMessageParts: PartRecord[] = [];
-      let ordinal = getNextPartOrdinal(database.connection, session.id);
-      let partNumber = getNextRoundPartSequence(
-        database.connection,
-        currentRound.id,
-      );
 
-      for (const segment of streamedCompletion.segments) {
-        if (segment.kind === "reasoning") {
-          const part = reasoningPartsQueue.shift();
-          if (!part) {
-            continue;
-          }
-          part.id = formatPartId(
-            session.id,
-            turnNumber,
-            currentRound.roundIndex + 1,
-            partNumber++,
-            "assistant-reasoning",
-            input.ownerStepId ?? null,
-          );
-          part.ordinal = ordinal++;
-          assistantMessageParts.push(part);
-          continue;
-        }
-
-        if (segment.kind === "content") {
-          const part = assistantContentPartsQueue.shift();
-          if (!part) {
-            continue;
-          }
-          part.id = formatPartId(
-            session.id,
-            turnNumber,
-            currentRound.roundIndex + 1,
-            partNumber++,
-            "assistant-content",
-            input.ownerStepId ?? null,
-          );
-          part.ordinal = ordinal++;
-          assistantMessageParts.push(part);
-          continue;
-        }
-
-        const toolCall = toolCallByIndex.get(segment.toolCallIndex);
-        if (!toolCall || toolCallPartsByIndex.has(segment.toolCallIndex)) {
-          continue;
-        }
-
-        const toolCallPart = createToolCallPart(
+      const {
+        parts: assistantMessageParts,
+        nextOrdinal,
+        nextPartNumber,
+      } = commitSegmentsToParts({
           session,
-          formatPartId(
-            session.id,
-            turnNumber,
-            currentRound.roundIndex + 1,
-            partNumber++,
-            "tool-call",
-            input.ownerStepId ?? null,
-          ),
           turnId,
-          currentRound.id,
-          ordinal++,
-          toolCall,
-          completedAt,
-        );
-        toolCallPartsByIndex.set(segment.toolCallIndex, toolCallPart);
-        assistantMessageParts.push(toolCallPart);
-      }
+          turnNumber,
+          roundNumber: currentRound.roundIndex + 1,
+          roundId: currentRound.id,
+          ownerStepId: input.ownerStepId ?? null,
+          segments: streamedCompletion.segments,
+          reasoningTokens: usage.reasoningTokens,
+          // Assistant content that shares a tool-call message has its token share
+          // resolved later by applyPendingPromptSuffixAttribution, so seed unknowns.
+          contentTokenMetadata: assistantContentSegments.map(() => ({
+            count: null,
+            source: "unknown" as const,
+            confidence: "unknown" as const,
+            note: "Assistant content shared a tool-call message; prompt delta allocation is pending",
+            provenanceJson: null,
+          })),
+          contentContextNote:
+            "Assistant content shared a tool-call message and remains part of later model-visible history",
+          initialOrdinal: getNextPartOrdinal(database.connection, session.id),
+          initialPartNumber: getNextRoundPartSequence(
+            database.connection,
+            currentRound.id,
+          ),
+          createdAt: completedAt,
+          onToolCallSegment: (segment, partNumber, ordinal) => {
+            const toolCall = toolCallByIndex.get(segment.toolCallIndex);
+            if (!toolCall || toolCallPartsByIndex.has(segment.toolCallIndex)) {
+              return null;
+            }
+            const toolCallPart = createToolCallPart(
+              session,
+              formatPartId(
+                session.id,
+                turnNumber,
+                currentRound.roundIndex + 1,
+                partNumber,
+                "tool-call",
+                input.ownerStepId ?? null,
+              ),
+              turnId,
+              currentRound.id,
+              ordinal,
+              toolCall,
+              completedAt,
+            );
+            toolCallPartsByIndex.set(segment.toolCallIndex, toolCallPart);
+            return toolCallPart;
+          },
+        });
 
+      const assistantContentParts = assistantMessageParts.filter(
+        (part) => part.partType === "assistant-content",
+      );
       const toolCallParts = [...toolCallPartsByIndex.entries()]
         .sort((a, b) => a[0] - b[0])
         .map(([, part]) => part);
 
-      let toolResultOrdinal = ordinal;
+      let toolResultOrdinal = nextOrdinal;
+      let toolResultPartNumber = nextPartNumber;
       for (const toolCallPart of toolCallParts) {
         const toolJson = toolCallPart.payload.json as {
           id?: string;
@@ -1902,7 +1635,7 @@ export async function createToolEnabledTurn(
             session.id,
             turnNumber,
             currentRound.roundIndex + 1,
-            partNumber++,
+            toolResultPartNumber++,
             "tool-result",
             input.ownerStepId ?? null,
           ),
@@ -2037,89 +1770,32 @@ export async function createToolEnabledTurn(
       continue;
     }
 
-    const reasoningSegments = streamedCompletion.segments
-      .filter(
-        (segment): segment is { kind: "reasoning"; text: string } =>
-          segment.kind === "reasoning",
-      )
-      .map((segment) => normalizeSegmentText(segment.text))
-      .filter((text): text is string => text !== null);
-    const assistantContentSegments = streamedCompletion.segments
-      .filter(
-        (segment): segment is { kind: "content"; text: string } =>
-          segment.kind === "content",
-      )
-      .map((segment) => normalizeSegmentText(segment.text))
-      .filter((text): text is string => text !== null);
-
-    const reasoningParts = buildReasoningPartsFromSegments(
-      session,
-      turnId,
-      currentRound.id,
-      getNextPartOrdinal(database.connection, session.id),
-      reasoningSegments,
-      usage.reasoningTokens,
-      completedAt,
+    const assistantContentSegments = extractContentSegmentTexts(
+      streamedCompletion.segments,
     );
-    const assistantContentParts = buildAssistantContentPartsFromSegments(
+
+    const { parts: assistantParts } = commitSegmentsToParts({
       session,
       turnId,
-      currentRound.id,
-      getNextPartOrdinal(database.connection, session.id) +
-        reasoningParts.length,
-      assistantContentSegments,
-      allocateAssistantContentTokenMetadata(
+      turnNumber,
+      roundNumber: currentRound.roundIndex + 1,
+      roundId: currentRound.id,
+      ownerStepId: input.ownerStepId ?? null,
+      segments: streamedCompletion.segments,
+      reasoningTokens: usage.reasoningTokens,
+      contentTokenMetadata: deriveAssistantContentTokenMetadata(
         assistantContentSegments,
         usage.assistantContentTokens,
       ),
-      completedAt,
-      "Assistant answer remains part of later model-visible history",
-    );
-    const reasoningPartsQueue = [...reasoningParts];
-    const assistantContentPartsQueue = [...assistantContentParts];
-    const assistantParts: PartRecord[] = [];
-    let ordinal = getNextPartOrdinal(database.connection, session.id);
-    let partNumber = getNextRoundPartSequence(
-      database.connection,
-      currentRound.id,
-    );
-
-    for (const segment of streamedCompletion.segments) {
-      if (segment.kind === "reasoning") {
-        const part = reasoningPartsQueue.shift();
-        if (!part) {
-          continue;
-        }
-        part.id = formatPartId(
-          session.id,
-          turnNumber,
-          currentRound.roundIndex + 1,
-          partNumber++,
-          "assistant-reasoning",
-          input.ownerStepId ?? null,
-        );
-        part.ordinal = ordinal++;
-        assistantParts.push(part);
-        continue;
-      }
-
-      if (segment.kind === "content") {
-        const part = assistantContentPartsQueue.shift();
-        if (!part) {
-          continue;
-        }
-        part.id = formatPartId(
-          session.id,
-          turnNumber,
-          currentRound.roundIndex + 1,
-          partNumber++,
-          "assistant-content",
-          input.ownerStepId ?? null,
-        );
-        part.ordinal = ordinal++;
-        assistantParts.push(part);
-      }
-    }
+      contentContextNote:
+        "Assistant answer remains part of later model-visible history",
+      initialOrdinal: getNextPartOrdinal(database.connection, session.id),
+      initialPartNumber: getNextRoundPartSequence(
+        database.connection,
+        currentRound.id,
+      ),
+      createdAt: completedAt,
+    });
 
     turn.status = "complete";
     turn.completedAt = completedAt;

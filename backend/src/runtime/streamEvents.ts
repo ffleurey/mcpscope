@@ -1,6 +1,6 @@
 import type { PartRecord, RoundRecord, StepRecord, TurnRecord } from '../domain/model.js'
 import type { SessionTraceBundle } from '../domain/trace.js'
-import type { StreamDelta } from '../services/lmstudio/client.js'
+import type { StreamDelta } from '../services/openai/client.js'
 
 export type TurnStreamEvent =
   | {

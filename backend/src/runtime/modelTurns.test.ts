@@ -3,7 +3,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createSession, createModelOnlyTurn } from './modelTurns.js'
 import { openBackendDatabase } from '../persistence/db.js'
-import { insertStepRecord } from '../persistence/repositoryV2.js'
+import { insertStepRecord } from '../persistence/repository.js'
 import { stepTypeKey } from '../domain/executionModel.js'
 import type { ChatCompletionGateway } from './modelTurns.js'
 
