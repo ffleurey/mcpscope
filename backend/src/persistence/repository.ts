@@ -52,3 +52,21 @@ export {
   getNextRoundPartSequence,
   getNextPreludePartSequence,
 } from "./repositoryRuntime.js";
+
+// ─── Benchmark CRUD ───────────────────────────────────────────────────────────
+export {
+  createBenchmark,
+  getBenchmark,
+  listBenchmarks,
+  updateBenchmark,
+  deleteBenchmark,
+  createBenchmarkCase,
+  getBenchmarkCase,
+  listBenchmarkCases,
+  updateBenchmarkCase,
+  deleteBenchmarkCase,
+  createBenchmarkRun,
+  getBenchmarkRun,
+  listBenchmarkRuns,
+  updateBenchmarkRun,
+} from "./benchmarkRepository.js";

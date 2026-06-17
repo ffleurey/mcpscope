@@ -43,6 +43,12 @@ export const roundFinishReasonValues = [
   "cancelled",
 ] as const;
 export const compactionStrategyValues = ["none", "strip-reasoning"] as const;
+export const benchmarkRunStatusValues = [
+  "pending",
+  "running",
+  "complete",
+  "error",
+] as const;
 export const partTypeValues = [
   "system-prompt",
   "mcp-instructions",
@@ -286,6 +292,62 @@ export const rawExchangeRecordSchema = z.object({
   createdAt: z.number().int().nonnegative(),
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Benchmark (static test suite), cases, and runs
+//
+// A benchmark is a static suite; a case is one prompt (+ optional tool-behavior
+// expectations); a run is one execution that selects cases and repeats each N
+// times. Each repetition is a normal primary session with parentKind='benchmark'
+// and parentId = the run id. See backlog/specification/benchmark-v1.md.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const benchmarkRunStatusSchema = z.enum(benchmarkRunStatusValues);
+
+export const benchmarkRecordSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable().default(null),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+});
+
+export const benchmarkCaseRecordSchema = z.object({
+  id: z.string(),
+  benchmarkId: z.string(),
+  prompt: z.string(),
+  orderIndex: z.number().int().nonnegative(),
+  // Optional deterministic tool-behavior expectations (Phase B checks). Empty = none.
+  expectedToolsCalled: z.array(z.string()).default([]),
+  expectedToolsNotCalled: z.array(z.string()).default([]),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+});
+
+// One run-session: which case and repetition a produced session corresponds to.
+export const benchmarkRunSessionSchema = z.object({
+  sessionId: z.string(),
+  caseId: z.string(),
+  repetition: z.number().int().positive(),
+});
+
+export const benchmarkRunRecordSchema = z.object({
+  id: z.string(),
+  benchmarkId: z.string(),
+  status: benchmarkRunStatusSchema,
+  // Explicit overrides; null = resolve defaults at launch (default model / default-enabled MCP).
+  modelConfigId: z.string().nullable().default(null),
+  mcpProfileIds: z.array(z.string()).nullable().default(null),
+  caseIds: z.array(z.string()),
+  repetitions: z.number().int().positive(),
+  // Populated by the run coordinator as sessions are created.
+  sessions: z.array(benchmarkRunSessionSchema).default([]),
+  error: z.string().nullable().default(null),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+  startedAt: z.number().int().nonnegative().nullable().default(null),
+  completedAt: z.number().int().nonnegative().nullable().default(null),
+});
+
 export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>;
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>;
 
@@ -300,15 +362,30 @@ export type TurnRecord = z.infer<typeof turnRecordSchema>;
 export type RoundRecord = z.infer<typeof roundRecordSchema>;
 export type PartRecord = z.infer<typeof partRecordSchema>;
 export type RawExchangeRecord = z.infer<typeof rawExchangeRecordSchema>;
+export type BenchmarkRecord = z.infer<typeof benchmarkRecordSchema>;
+export type BenchmarkCaseRecord = z.infer<typeof benchmarkCaseRecordSchema>;
+export type BenchmarkRunSession = z.infer<typeof benchmarkRunSessionSchema>;
+export type BenchmarkRunRecord = z.infer<typeof benchmarkRunRecordSchema>;
 
 export function getDomainModelSummary() {
   return {
     version: SCHEMA_VERSION,
     // Canonical execution-model entities in the landed implementation.
-    entities: ["session", "step", "turn", "round", "part", "raw-exchange"],
+    entities: [
+      "session",
+      "step",
+      "turn",
+      "round",
+      "part",
+      "raw-exchange",
+      "benchmark",
+      "benchmark-case",
+      "benchmark-run",
+    ],
     enums: {
       sessionTypeValues,
       parentKindValues,
+      benchmarkRunStatusValues,
       sessionStatusValues,
       sessionInitStatusValues,
       turnStatusValues,

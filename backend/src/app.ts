@@ -35,6 +35,7 @@ import {
 import { ExecutionScheduler } from "./runtime/scheduler.js";
 import type { SchedulerEvent } from "./runtime/schedulerTypes.js";
 import { registerConfigurationRoutes } from "./routes/configurationRoutes.js";
+import { registerBenchmarkRoutes } from "./routes/benchmarkRoutes.js";
 import { registerSchedulerRoutes } from "./routes/schedulerRoutes.js";
 import { registerSessionRoutes } from "./routes/sessionRoutes.js";
 import { registerSystemRoutes } from "./routes/systemRoutes.js";
@@ -311,6 +312,7 @@ export async function buildBackendApp(
   registerSessionRoutes(routeDeps);
   registerTraceRoutes(routeDeps);
   registerSchedulerRoutes(routeDeps);
+  registerBenchmarkRoutes(routeDeps);
 
   app.addHook("onClose", async () => {
     database.connection.close();
