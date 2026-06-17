@@ -3,11 +3,14 @@
   import { currentView } from './lib/navStore'
   import { initConnectionStore, backendError } from './lib/connectionStore'
   import { initSessionStore } from './lib/sessionStore'
+  import { initBenchmarkStore, activeRunId } from './lib/benchmarkStore'
   import { initExecutionStore, destroyExecutionStore } from './lib/executionStore'
   import Sidebar from './lib/components/Sidebar.svelte'
   import LmConnections from './lib/components/LmConnections.svelte'
   import ModelConfigs from './lib/components/ModelConfigs.svelte'
   import McpProfiles from './lib/components/McpProfiles.svelte'
+  import BenchmarksView from './lib/components/BenchmarksView.svelte'
+  import RunReportView from './lib/components/RunReportView.svelte'
   import ChatView from './lib/components/ChatView.svelte'
   import DesignReference from './lib/components/DesignReference.svelte'
   import ErrorDialog from './lib/components/ErrorDialog.svelte'
@@ -16,7 +19,11 @@
   let loading = $state(true)
 
   onMount(() => {
-    Promise.all([initConnectionStore(), initSessionStore()])
+    Promise.all([
+      initConnectionStore(),
+      initSessionStore(),
+      initBenchmarkStore().catch(() => undefined),
+    ])
       .then(() => {
         initExecutionStore()
       })
@@ -41,6 +48,8 @@
 
     {#if loading}
       <div class="loading">Loading…</div>
+    {:else if $activeRunId}
+      <RunReportView />
     {:else if $currentView === 'chats'}
       <ChatView />
     {:else if $currentView === 'model-configs'}
@@ -49,6 +58,8 @@
       <LmConnections />
     {:else if $currentView === 'mcp-profiles'}
       <McpProfiles />
+    {:else if $currentView === 'benchmarks'}
+      <BenchmarksView />
     {:else if $currentView === 'design'}
       <DesignReference />
     {/if}

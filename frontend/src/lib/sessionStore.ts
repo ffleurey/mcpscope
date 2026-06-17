@@ -245,9 +245,22 @@ export function closePrimaryLaunchDialog(): void {
   isPrimaryLaunchDialogOpen.set(false)
 }
 
+/**
+ * Reset the chat selection without touching benchmark state. Called by the
+ * benchmark store on selectRun (mutual selection reset).
+ */
+export function clearChatSelection(): void {
+  activeChatId.set(null)
+  activeTrace.set(null)
+  activeTurnStream.set(null)
+}
+
 export async function selectChat(sessionId: string): Promise<void> {
   clearSessionError()
   activeChatId.set(sessionId)
+
+  // Mutual reset: opening a chat closes any open benchmark run report.
+  void import('./benchmarkStore').then(({ clearActiveRun }) => clearActiveRun())
 
   try {
     await refreshActiveTrace()

@@ -23,6 +23,7 @@
   import { deriveContextSnapshotAtRound } from '../traceStreaming'
   import { patchSessionTitle } from '../api/backendClient'
   import AnalysisWorkflowBlock from './AnalysisWorkflowBlock.svelte'
+  import ExtractCaseModal from './ExtractCaseModal.svelte'
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import IdBadge from './IdBadge.svelte'
   import NewSessionPanel from './NewSessionPanel.svelte'
@@ -57,6 +58,7 @@
   let editingTitle = $state(false)
   let titleDraft = $state('')
   let titleInputEl = $state<HTMLInputElement | null>(null)
+  let showExtractCase = $state(false)
   let session = $derived($activeSession)
   let traceSteps = $derived(
     [...($activeTrace?.steps ?? [])].sort((a, b) => a.childIndex - b.childIndex),
@@ -363,7 +365,24 @@
           ⬇ Export
         </button>
       {/if}
+      {#if session.session_type === 'primary'}
+        <button
+          class="btn export-btn"
+          onclick={() => (showExtractCase = true)}
+          title="Extract this session as a benchmark case"
+        >
+          ＋ Case
+        </button>
+      {/if}
     </div>
+
+    {#if showExtractCase}
+      <ExtractCaseModal
+        sessionId={session.id}
+        sessionTitle={session.title}
+        onClose={() => (showExtractCase = false)}
+      />
+    {/if}
 
     <div class="transcript" bind:this={transcriptEl} onscroll={handleTranscriptScroll}>
       {#if $activeTraceLoading}

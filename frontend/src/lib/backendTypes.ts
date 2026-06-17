@@ -540,6 +540,181 @@ export type TerminalJob = z.infer<typeof terminalJobSchema>
 export type ExecutionSnapshot = z.infer<typeof executionSnapshotSchema>
 export type SchedulerEvent = z.infer<typeof schedulerEventSchema>
 
+// ─── Benchmark schemas ───────────────────────────────────────────────────────
+// camelCase, mirroring the backend benchmark HTTP contract (see BENCHMARK.md).
+
+export const benchmarkRunStatusSchema = z.enum(['pending', 'running', 'complete', 'error'])
+
+export const benchmarkSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable().default(null),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+})
+
+export const benchmarkSummarySchema = benchmarkSchema.extend({
+  caseCount: z.number().int().nonnegative(),
+  runCount: z.number().int().nonnegative(),
+})
+
+export const benchmarkCaseSchema = z.object({
+  id: z.string(),
+  benchmarkId: z.string(),
+  name: z.string().nullable().default(null),
+  prompt: z.string(),
+  orderIndex: z.number().int().nonnegative(),
+  expectedToolsCalled: z.array(z.string()).default([]),
+  expectedToolsNotCalled: z.array(z.string()).default([]),
+  sourceSessionId: z.string().nullable().default(null),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+})
+
+export const benchmarkRunCaseSnapshotSchema = z.object({
+  sourceCaseId: z.string(),
+  name: z.string().nullable(),
+  prompt: z.string(),
+  expectedToolsCalled: z.array(z.string()),
+  expectedToolsNotCalled: z.array(z.string()),
+})
+
+export const benchmarkRunSessionRefSchema = z.object({
+  sessionId: z.string(),
+  sourceCaseId: z.string(),
+  repetition: z.number().int().positive(),
+})
+
+export const benchmarkRunSchema = z.object({
+  id: z.string(),
+  benchmarkId: z.string(),
+  benchmarkName: z.string(),
+  status: benchmarkRunStatusSchema,
+  modelConfigId: z.string(),
+  mcpProfileIds: z.array(z.string()).default([]),
+  cases: z.array(benchmarkRunCaseSnapshotSchema).default([]),
+  repetitions: z.number().int().positive(),
+  sessions: z.array(benchmarkRunSessionRefSchema).default([]),
+  error: z.string().nullable().default(null),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+  startedAt: z.number().int().nonnegative().nullable().default(null),
+  completedAt: z.number().int().nonnegative().nullable().default(null),
+})
+
+// ── Report shapes (computed on read; see backend benchmarkMetrics.ts) ──
+
+const numberStatsSchema = z.object({
+  min: z.number(),
+  max: z.number(),
+  mean: z.number(),
+  median: z.number(),
+  stddev: z.number(),
+})
+
+const perToolCountsSchema = z.object({
+  calls: z.number(),
+  errors: z.number(),
+  resultPayloadChars: z.number(),
+})
+
+export const sessionMetricsSchema = z.object({
+  sessionId: z.string(),
+  terminalStatus: z.string().nullable(),
+  completed: z.boolean(),
+  toolCallCount: z.number(),
+  toolErrorCount: z.number(),
+  toolsCalled: z.array(z.string()),
+  perTool: z.record(z.string(), perToolCountsSchema),
+  tokens: z.object({
+    prompt: z.number().nullable(),
+    completion: z.number().nullable(),
+    reasoning: z.number().nullable(),
+    total: z.number().nullable(),
+  }),
+  finalAnswer: z.string().nullable(),
+})
+
+export const caseReportSchema = z.object({
+  caseId: z.string(),
+  prompt: z.string(),
+  repetitions: z.number(),
+  sessionCount: z.number(),
+  hasChecks: z.boolean(),
+  passCount: z.number().nullable(),
+  passAtK: z.boolean().nullable(),
+  passHatK: z.boolean().nullable(),
+  successRate: z.number().nullable(),
+  completedCount: z.number(),
+  toolErrorCount: z.number(),
+  toolCallStats: numberStatsSchema.nullable(),
+  totalTokenStats: numberStatsSchema.nullable(),
+  perTool: z.record(z.string(), perToolCountsSchema),
+  sessions: z.array(sessionMetricsSchema),
+})
+
+export const perToolRollupSchema = z.object({
+  calls: z.number(),
+  errors: z.number(),
+  errorRate: z.number(),
+  resultPayloadChars: z.number(),
+  casesUsedIn: z.number(),
+})
+
+export const runReportSchema = z.object({
+  runId: z.string(),
+  benchmarkId: z.string(),
+  status: z.string(),
+  repetitions: z.number(),
+  caseCount: z.number(),
+  sessionCount: z.number(),
+  cases: z.array(caseReportSchema),
+  perTool: z.record(z.string(), perToolRollupSchema),
+})
+
+// ── Benchmark HTTP response envelopes ──
+
+export const listBenchmarksResponseSchema = z.object({
+  benchmarks: z.array(benchmarkSummarySchema),
+})
+
+export const benchmarkDetailResponseSchema = z.object({
+  benchmark: benchmarkSchema,
+  cases: z.array(benchmarkCaseSchema),
+  runs: z.array(benchmarkRunSchema),
+})
+
+export const benchmarkResponseSchema = z.object({
+  benchmark: benchmarkSchema,
+})
+
+export const benchmarkCaseResponseSchema = z.object({
+  case: benchmarkCaseSchema,
+})
+
+export const benchmarkRunResponseSchema = z.object({
+  run: benchmarkRunSchema,
+})
+
+export const benchmarkRunReportResponseSchema = z.object({
+  run: benchmarkRunSchema,
+  report: runReportSchema,
+})
+
+export type BenchmarkRunStatus = z.infer<typeof benchmarkRunStatusSchema>
+export type Benchmark = z.infer<typeof benchmarkSchema>
+export type BenchmarkSummary = z.infer<typeof benchmarkSummarySchema>
+export type BenchmarkCase = z.infer<typeof benchmarkCaseSchema>
+export type BenchmarkRunCaseSnapshot = z.infer<typeof benchmarkRunCaseSnapshotSchema>
+export type BenchmarkRunSessionRef = z.infer<typeof benchmarkRunSessionRefSchema>
+export type BenchmarkRun = z.infer<typeof benchmarkRunSchema>
+export type NumberStats = z.infer<typeof numberStatsSchema>
+export type PerToolCounts = z.infer<typeof perToolCountsSchema>
+export type SessionMetrics = z.infer<typeof sessionMetricsSchema>
+export type CaseReport = z.infer<typeof caseReportSchema>
+export type PerToolRollup = z.infer<typeof perToolRollupSchema>
+export type RunReport = z.infer<typeof runReportSchema>
+
 export const listSessionsResponseSchema = z.object({
   api_version: z.literal(1),
   sessions: z.array(sessionSummarySchema),

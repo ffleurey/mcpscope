@@ -2,6 +2,8 @@
   import { currentView } from '../navStore'
   import type { NavView } from '../types'
   import ChatList from './ChatList.svelte'
+  import RunList from './RunList.svelte'
+  import { clearActiveRun } from '../benchmarkStore'
   import { modelConfigs } from '../connectionStore'
   import {
     importTraceFile,
@@ -17,6 +19,9 @@
   let importInput = $state<HTMLInputElement | null>(null)
 
   function navigate(view: NavView) {
+    // Navigating to a config/management view closes any open run report so the
+    // chosen view actually shows (RunReportView wins over $currentView).
+    clearActiveRun()
     currentView.set(view)
   }
 
@@ -110,8 +115,20 @@
       <ChatList />
     </div>
 
+    <div class="run-list-area">
+      <div class="run-list-header">Benchmark runs</div>
+      <RunList />
+    </div>
+
     <div class="config-section">
       <div class="config-label">Configuration</div>
+      <button
+        class="nav-item"
+        class:active={$currentView === 'benchmarks'}
+        onclick={() => navigate('benchmarks')}
+      >
+        Benchmarks
+      </button>
       <button
         class="nav-item"
         class:active={$currentView === 'model-configs'}
@@ -199,6 +216,24 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+
+  .run-list-area {
+    flex-shrink: 0;
+    max-height: 30vh;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+  .run-list-header {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding: 0.5rem 0.75rem 0.2rem;
+    opacity: 0.55;
   }
 
   .config-section {

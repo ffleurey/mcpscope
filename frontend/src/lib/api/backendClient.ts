@@ -15,6 +15,12 @@ import {
   analysisSystemPromptResponseSchema,
   executionSnapshotSchema,
   schedulerEventSchema,
+  listBenchmarksResponseSchema,
+  benchmarkDetailResponseSchema,
+  benchmarkResponseSchema,
+  benchmarkCaseResponseSchema,
+  benchmarkRunResponseSchema,
+  benchmarkRunReportResponseSchema,
   type LmStudioConnection,
   type McpServerProfile,
   type ModelConfig,
@@ -500,6 +506,116 @@ export function removeSchedulerJob(jobId: string): Promise<void> {
 
 export function retryInitSession(sessionId: string): Promise<{ ok: true }> {
   return request(`/api/sessions/${sessionId}/retry-init`, { method: 'POST' })
+}
+
+// ─── Benchmark API ────────────────────────────────────────────────────────
+
+export function listBenchmarks() {
+  return request('/api/benchmarks', { schema: listBenchmarksResponseSchema })
+}
+
+export function getBenchmark(id: string) {
+  return request(`/api/benchmarks/${encodeURIComponent(id)}`, {
+    schema: benchmarkDetailResponseSchema,
+  })
+}
+
+export function createBenchmark(input: { name: string; description?: string | null }) {
+  return request('/api/benchmarks', {
+    method: 'POST',
+    body: input,
+    schema: benchmarkResponseSchema,
+  })
+}
+
+export function patchBenchmark(id: string, input: { name?: string; description?: string | null }) {
+  return request(`/api/benchmarks/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: input,
+    schema: benchmarkResponseSchema,
+  })
+}
+
+export function deleteBenchmark(id: string) {
+  return request<void>(`/api/benchmarks/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function createCase(
+  benchmarkId: string,
+  input: {
+    prompt: string
+    name?: string | null
+    expectedToolsCalled?: string[]
+    expectedToolsNotCalled?: string[]
+  },
+) {
+  return request(`/api/benchmarks/${encodeURIComponent(benchmarkId)}/cases`, {
+    method: 'POST',
+    body: input,
+    schema: benchmarkCaseResponseSchema,
+  })
+}
+
+export function createCaseFromSession(
+  benchmarkId: string,
+  input: { sessionId: string; name?: string | null },
+) {
+  return request(`/api/benchmarks/${encodeURIComponent(benchmarkId)}/cases/from-session`, {
+    method: 'POST',
+    body: input,
+    schema: benchmarkCaseResponseSchema,
+  })
+}
+
+export function patchCase(
+  caseId: string,
+  input: {
+    name?: string | null
+    prompt?: string
+    orderIndex?: number
+    expectedToolsCalled?: string[]
+    expectedToolsNotCalled?: string[]
+  },
+) {
+  return request(`/api/benchmark-cases/${encodeURIComponent(caseId)}`, {
+    method: 'PATCH',
+    body: input,
+    schema: benchmarkCaseResponseSchema,
+  })
+}
+
+export function deleteCase(caseId: string) {
+  return request<void>(`/api/benchmark-cases/${encodeURIComponent(caseId)}`, {
+    method: 'DELETE',
+  })
+}
+
+export function launchRun(
+  benchmarkId: string,
+  input: {
+    caseIds?: string[]
+    repetitions?: number
+    modelConfigId?: string
+    mcpProfileIds?: string[]
+  },
+) {
+  return request(`/api/benchmarks/${encodeURIComponent(benchmarkId)}/runs`, {
+    method: 'POST',
+    body: input,
+    schema: benchmarkRunResponseSchema,
+  })
+}
+
+export function getBenchmarkRun(runId: string) {
+  return request(`/api/benchmark-runs/${encodeURIComponent(runId)}`, {
+    schema: benchmarkRunReportResponseSchema,
+  })
+}
+
+export function deleteBenchmarkRun(runId: string) {
+  return request<void>(`/api/benchmark-runs/${encodeURIComponent(runId)}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function streamSchedulerEvents(

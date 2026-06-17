@@ -41,6 +41,8 @@ import {
   mdiTune,
   mdiCircle,
   mdiDotsHorizontal,
+  mdiClipboardListOutline,
+  mdiRocketLaunchOutline,
 } from '@mdi/js'
 
 // ── Navigation & layout ────────────────────────────────────────────
@@ -75,3 +77,5 @@ export const iconAnalysis = mdiChartBar
 export const iconSettings = mdiTune
 export const iconDot = mdiCircle
 export const iconSpinner = mdiDotsHorizontal
+export const iconBenchmark = mdiClipboardListOutline
+export const iconRun = mdiRocketLaunchOutline
