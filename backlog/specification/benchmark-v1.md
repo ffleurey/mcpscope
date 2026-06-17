@@ -33,7 +33,8 @@ the tester never scripts it.
 - **Phase B — deterministic checks → per-case success rate (pass@k / pass^k).** Depends on the
   research note. First check set is intentionally tool-behavior based (below).
 - **Phase C — optional LLM-judged check, using a SEPARATE judge model (deferred).** Never the
-  model under test; never self-judging (research-backed).
+  model under test; never self-judging (research-backed). This is where most of the
+  qualitative-success value will come from — V1 only needs a solid skeleton for it to land on.
 
 Metrics (A) never depend on checks (B).
 
@@ -48,8 +49,8 @@ Metrics (A) never depend on checks (B).
   execution; it selects cases + repetitions. Persisted.
 - **Session**: existing primary session, created with `parentKind='benchmark'` and tagged with
   its `run_id` + `case_id`, runs the case prompt to completion via the scheduler.
-- **Report**: derived from persisted session state, aggregated per case and rolled up per tool.
-  (Open: compute on read vs cache; lean compute-on-read for V1.)
+- **Report**: derived from persisted session state, aggregated per case and rolled up per tool,
+  **computed on read** for V1 (runs are not large at this stage; add caching later if needed).
 
 ## What already exists vs what is new
 
@@ -78,19 +79,23 @@ Three families, all from persisted session state:
    pass@k + pass^k** over repetitions (Phase B once checks exist; Phase A reports error/
    completion stats only).
 
-## Success checks (Phase B) — deterministic, tool-behavior first
+## Success checks (Phase B) — deterministic, tool-behavior only
 
-Per the research note, V1 checks anchor on tool behavior, not answer text or self-judging:
+V1 checks are a lightweight, **optional** skeleton — a case definition must NOT require a
+formal, brittle answer oracle. Most of the success value will come from the Phase C LLM
+evaluation; the deterministic checks only anchor on tool behavior (objective, reproducible,
+not gameable):
 
 - `expected_tools_called` — named tools each called ≥ once.
 - `expected_tools_not_called` — named tools must not be called.
-- plus obvious-failure detection: no tool errors; the session completed (final answer
-  produced, did not hit the tool-round limit / bail).
+- obvious-failure detection: no tool errors; the session completed (final answer produced, did
+  not hit the tool-round limit / bail).
 
-Optional, loose answer checks (`answer_contains` with OR-alternatives, `answer_number` ±
-tolerance) may follow but are weak/phrasing-brittle. Anything qualitative is deferred to the
-separate-model LLM judge (Phase C). `valid_tool_arguments` (args validate vs each tool's input
-schema) is collected as a **metric** in Phase A and is a strong criterion candidate later.
+No answer-text checks in V1 (`answer_contains` and `answer_number` are both out) — answer /
+qualitative correctness, including numeric, is entirely a Phase C separate-judge concern.
+`valid_tool_arguments` (args validate vs each tool's input schema) is collected as a **metric**
+in Phase A and is a strong criterion candidate later. **A case with no checks is valid**: it
+still produces full Phase A metrics and can be judged by the Phase C evaluation.
 
 ## Surfaces
 
@@ -119,7 +124,10 @@ the realistic test); regression diffing between two runs (future,
 - Definitions in **DB as first-class objects**, editable via UI/CLI/MCP. (resolved)
 - **Cold runs** — each session fresh. (resolved)
 - Vocabulary: benchmark / case / run / session / check. (resolved)
-- Remaining: `answer_number` extraction approach (research note); whether to cache reports.
+- Reports **computed on read** for V1; caching deferred. (resolved)
+- V1 checks are **tool-behavior only** — no answer-text oracle in case definitions
+  (`answer_contains` and `answer_number` both dropped). Answer / qualitative success is entirely
+  a Phase C separate-judge concern. A case may define no checks at all. (resolved)
 
 ## Related
 
