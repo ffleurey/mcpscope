@@ -16,12 +16,8 @@ import {
   listModelConfigs,
   updateSessionAnalysisState,
 } from "../persistence/repository.js";
-import {
-  createSession,
-  SessionIdConflictError,
-  SessionIdGenerationError,
-  SessionIdInputError,
-} from "../runtime/modelTurns.js";
+import { createSession } from "../runtime/modelTurns.js";
+import { mapSessionIdError } from "./sessionCreationShared.js";
 import {
   sessionRecordSchema,
   type McpProfileSnapshot,
@@ -140,9 +136,7 @@ export async function executeAnalysisLaunch(
     | { kind: "default_model_config_not_found"; modelConfigId: string }
     | { kind: "model_config_not_found"; modelConfigId: string }
     | { kind: "lm_connection_not_found"; connectionId: string }
-    | { kind: "id_input_error"; error: SessionIdInputError }
-    | { kind: "id_conflict_error"; error: SessionIdConflictError }
-    | { kind: "id_generation_error"; error: SessionIdGenerationError }
+    | { kind: "id_error"; error: OperationError }
     | { kind: "created"; session: SessionRecord };
 
   const requestedModelConfigId = input.model_config_id;
@@ -282,12 +276,8 @@ export async function executeAnalysisLaunch(
       // initStatus = 'ready'.
       return { kind: "created", session };
     } catch (error) {
-      if (error instanceof SessionIdInputError)
-        return { kind: "id_input_error", error };
-      if (error instanceof SessionIdConflictError)
-        return { kind: "id_conflict_error", error };
-      if (error instanceof SessionIdGenerationError)
-        return { kind: "id_generation_error", error };
+      const mapped = mapSessionIdError(error);
+      if (mapped) return { kind: "id_error", error: mapped };
       throw error;
     }
   })();
@@ -327,15 +317,8 @@ export async function executeAnalysisLaunch(
         `LM connection "${result.connectionId}" referenced by the model config no longer exists.`,
         "analysis_lm_connection_not_found",
       );
-    case "id_input_error":
-      throw new OperationError(result.error.message, "invalid_session_id");
-    case "id_conflict_error":
-      throw new OperationError(result.error.message, "duplicate_session_id");
-    case "id_generation_error":
-      throw new OperationError(
-        result.error.message,
-        "session_id_generation_failed",
-      );
+    case "id_error":
+      throw result.error;
     case "created": {
       const { session } = result;
       // Full session initialization: initializes the analysis MCP context

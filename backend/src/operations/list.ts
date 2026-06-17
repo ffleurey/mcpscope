@@ -1,42 +1,11 @@
 import { z } from 'zod'
-import { listAllSessionSummaries, listTurnRecordsBySession, listStepRecordsBySession } from '../persistence/repository.js'
+import { listAllSessionSummaries, listStepRecordsBySession } from '../persistence/repository.js'
 import type { OperationContext } from './context.js'
+import { computeLifecycleState } from './lifecycleState.js'
 import {
   getAnalysisWorkflowKindFromSteps,
   getLatestAnalysisDiagnosticSummaryForSession,
-  isAnalysisSessionTerminalError,
 } from '../analysis/analysisSessionPresentation.js'
-
-function toLifecycleState(
-  ctx: OperationContext,
-  summary: {
-    id: string
-    status: string
-    initStatus: string
-    sessionType: string
-  },
-): 'initializing' | 'ready' | 'running' | 'error' {
-  const turns = listTurnRecordsBySession(ctx.db.connection, summary.id)
-  const activeTurn = [...turns]
-    .reverse()
-    .find(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
-    ?? null
-  const latestTurn = turns.at(-1) ?? null
-
-  if (isAnalysisSessionTerminalError(ctx.db.connection, summary) || latestTurn?.status === 'error') {
-    return 'error'
-  }
-  if (summary.initStatus === 'error' || summary.status === 'error') {
-    return 'error'
-  }
-  if (summary.initStatus === 'pending' || summary.initStatus === 'initializing') {
-    return 'initializing'
-  }
-  if (activeTurn) {
-    return 'running'
-  }
-  return 'ready'
-}
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
@@ -109,14 +78,15 @@ export const listOperation = {
         const workflowKind = s.sessionType === 'session_analysis'
           ? getAnalysisWorkflowKindFromSteps(listStepRecordsBySession(ctx.db.connection, s.id), ctx.db.connection, s.id)
           : null
-        const latestError = toLifecycleState(ctx, s) === 'error' && s.sessionType === 'session_analysis'
+        const state = computeLifecycleState(ctx.db.connection, s)
+        const latestError = state === 'error' && s.sessionType === 'session_analysis'
           ? getLatestAnalysisDiagnosticSummaryForSession(ctx.db.connection, s.id) ?? undefined
           : undefined
 
         return {
           id: s.id,
           title: s.title,
-          status: toLifecycleState(ctx, s),
+          status: state,
           init_status: s.initStatus,
           session_type: s.sessionType,
           parent_kind: s.parentKind,

@@ -14,7 +14,7 @@ export interface SchedulerContext {
 
 export type ExecutionTarget =
   | { kind: 'session'; sessionId: string }
-  | { kind: 'step'; sessionId: string; stepId: string }
+  | { kind: 'step'; sessionId: string }
   | { kind: 'init'; sessionId: string }
 
 export interface ExecutionJob {
@@ -30,7 +30,7 @@ export interface ActiveExecutionJob extends ExecutionJob {
 
 export interface TerminalJob extends ActiveExecutionJob {
   endedAt: number
-  outcome: 'completed' | 'failed' | 'removed'
+  outcome: 'completed' | 'failed'
   error?: string
 }
 
@@ -58,7 +58,5 @@ export const SCHEDULER_ERROR = {
   SESSION_NOT_INITIALIZED: 'session_not_initialized',
   SESSION_ALREADY_QUEUED: 'session_already_queued',
   TURN_IN_PROGRESS: 'turn_in_progress',
-  STEP_NOT_FOUND: 'step_not_found',
   STEP_NOT_READY: 'step_not_ready',
-  SESSION_ACTIVE: 'another_session_active',
 } as const

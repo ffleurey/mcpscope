@@ -128,12 +128,6 @@ export function reservePrimaryTurn(opCtx: SchedulerContext, sessionId: string): 
   return reservation.turn
 }
 
-export function assertAnalysisSessionJobAllowed(
-  _opCtx: SchedulerContext,
-  _sessionId: string,
-): void {
-}
-
 export function assertStepJobAllowed(
   opCtx: SchedulerContext,
   sessionId: string,

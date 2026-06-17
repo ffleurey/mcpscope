@@ -20,14 +20,14 @@ export async function runListMcpProfiles(
 }
 
 function renderListMcpProfilesText(result: ListMcpProfilesResult): void {
-  const profiles = result.mcpProfiles;
+  const profiles = result.mcp_profiles;
   if (profiles.length === 0) {
     process.stdout.write("No MCP server profiles configured.\n");
     return;
   }
 
   for (const p of profiles) {
-    const enabled = p.defaultEnabled ? "enabled" : "disabled";
+    const enabled = p.default_enabled ? "enabled" : "disabled";
     process.stdout.write(`${p.id}  ${p.name}  ${p.url}  ${enabled}\n`);
   }
 }

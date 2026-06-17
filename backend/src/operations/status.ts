@@ -2,10 +2,10 @@ import { z } from 'zod'
 import { OperationError } from './errors.js'
 import { getSessionRecord, listTurnRecordsBySession, listStepRecordsBySession } from '../persistence/repository.js'
 import type { OperationContext } from './context.js'
+import { computeLifecycleState } from './lifecycleState.js'
 import {
   getAnalysisWorkflowKindFromSteps,
   getLatestAnalysisDiagnosticSummaryForSession,
-  isAnalysisSessionTerminalError,
 } from '../analysis/analysisSessionPresentation.js'
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
@@ -65,21 +65,11 @@ export const statusOperation = {
       ?? null
     const latestTurn = turns.at(-1) ?? null
 
-    let state: StatusResult['session']['state']
     const workflowSteps = session.sessionType === 'session_analysis'
       ? listStepRecordsBySession(db.connection, input.session_id)
       : []
-    const isAnalysisError = isAnalysisSessionTerminalError(db.connection, session)
 
-    if (isAnalysisError || latestTurn?.status === 'error') {
-      state = 'error'
-    } else if (session.initStatus === 'pending' || session.initStatus === 'initializing') {
-      state = 'initializing'
-    } else if (activeTurn) {
-      state = 'running'
-    } else {
-      state = 'ready'
-    }
+    const state = computeLifecycleState(db.connection, session)
 
     const relevantTurn = state === 'running'
       ? activeTurn

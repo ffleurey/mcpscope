@@ -17,6 +17,8 @@ import {
   inspectOperation,
   listOperation,
   statusOperation,
+  listModelConfigsOperation,
+  listMcpProfilesOperation,
 } from "../operations/index.js";
 import {
   createExplicitOperation,
@@ -426,6 +428,25 @@ export function registerSessionRoutes(deps: RouteDeps): void {
     return listOperation.execute(opCtx, {});
   });
 
+  // Operation-backed config listings (canonical snake_case shape, consumed by
+  // the CLI and MCP). Distinct from the camelCase frontend routes in
+  // configurationRoutes.ts (GET /api/model-configs, /api/mcp-profiles).
+  app.get("/api/operations/model-configs", async (_request, reply) => {
+    try {
+      return await listModelConfigsOperation.execute(opCtx, {});
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.get("/api/operations/mcp-profiles", async (_request, reply) => {
+    try {
+      return await listMcpProfilesOperation.execute(opCtx, {});
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
   app.delete("/api/sessions/:sessionId", async (request, reply) => {
     const { sessionId } = z
       .object({ sessionId: z.string() })
@@ -514,7 +535,7 @@ export function registerSessionRoutes(deps: RouteDeps): void {
             `Analysis session is in terminal phase '${analysisState?.phase}'.`,
           );
         }
-        job = scheduler.enqueueStep(opCtx, sessionId, sessionId);
+        job = scheduler.enqueueStep(opCtx, sessionId);
       } else {
         job = scheduler.enqueueSession(opCtx, sessionId);
       }

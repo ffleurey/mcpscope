@@ -87,23 +87,22 @@ export interface InspectResult {
 export interface ModelConfigSummary {
   id: string;
   name: string;
-  connectionId: string;
-  connectionName: string;
-  modelKey: string;
-  providerType: string | null;
+  connection_name: string;
+  model_key: string;
+  provider_type: string | null;
 }
 
 export interface ListModelConfigsResult {
-  modelConfigs: ModelConfigSummary[];
+  model_configs: ModelConfigSummary[];
 }
 
 export interface McpProfileSummary {
   id: string;
   name: string;
   url: string;
-  defaultEnabled: boolean;
+  default_enabled: boolean;
 }
 
 export interface ListMcpProfilesResult {
-  mcpProfiles: McpProfileSummary[];
+  mcp_profiles: McpProfileSummary[];
 }

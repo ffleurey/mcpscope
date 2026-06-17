@@ -16,7 +16,6 @@
 
 import { randomUUID } from 'node:crypto'
 import {
-  assertAnalysisSessionJobAllowed,
   assertInitJobAllowed,
   assertStepJobAllowed,
   getSessionExecutionKind,
@@ -143,9 +142,9 @@ export class ExecutionScheduler {
   /**
    * Enqueue a session initialization (prelude) job for a primary session.
    *
-   * Admission: the session must exist, be a primary session, have initStatus
-   * in ['pending', 'initializing'], no other session must be active, and no
-   * duplicate job for the same session may be pending or active.
+   * Admission: the session must exist, be a primary session, not already be
+   * initialized (initStatus !== 'ready'), and have no duplicate job for the same
+   * session already pending or active.
    *
    * Prelude events (part-committed, prelude-complete, prelude-failed) are
    * emitted through the scheduler event stream as scheduler-execution-events.
@@ -209,8 +208,6 @@ export class ExecutionScheduler {
   }
 
   private enqueueAnalysisSession(opCtx: SchedulerContext, sessionId: string): ExecutionJob {
-    assertAnalysisSessionJobAllowed(opCtx, sessionId)
-
     const job: ExecutionJob = {
       jobId: randomUUID(),
       target: { kind: 'session', sessionId },
@@ -301,12 +298,12 @@ export class ExecutionScheduler {
    *
    * Returns the new job.
    */
-  enqueueStep(opCtx: SchedulerContext, sessionId: string, stepId: string): ExecutionJob {
+  enqueueStep(opCtx: SchedulerContext, sessionId: string): ExecutionJob {
     assertStepJobAllowed(opCtx, sessionId, value => this.hasJobForSession(value))
 
     const job: ExecutionJob = {
       jobId: randomUUID(),
-      target: { kind: 'step', sessionId, stepId },
+      target: { kind: 'step', sessionId },
       createdAt: Date.now(),
     }
     this.pendingJobs.push(job)
