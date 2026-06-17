@@ -55,7 +55,7 @@ function closeLiveReasoning(roundState: StreamingRoundState): void {
   roundState.reasoningText = ''
 }
 
-export function deriveTranscriptEntries(parts: PartRecord[]): TranscriptEntry[] {
+function deriveTranscriptEntries(parts: PartRecord[]): TranscriptEntry[] {
   return sortParts(parts)
     .filter((part) => part.display.state === 'transcript')
     .map((part) => ({
