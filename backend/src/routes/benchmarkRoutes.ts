@@ -29,7 +29,7 @@ import {
  * Benchmark HTTP routes. The camelCase record routes are the frontend surface
  * (consistent with the session/trace HTTP API). The canonical snake_case catalog
  * operations — the CLI/MCP surface — are mounted separately below under
- * /api/operations/*. See BENCHMARK.md and backlog/specification/benchmark-v1.md.
+ * /api/operations/*. See BENCHMARK.md and backlog/completed/benchmark-v1.md.
  */
 export function registerBenchmarkRoutes({
   app,

@@ -1,6 +1,6 @@
 # Research: benchmark success criteria & evaluation vocabulary
 
-The hard, open part of `specification/benchmark-v1.md`: how to define a **simple, useful**
+The hard, open part of `completed/benchmark-v1.md`: how to define a **simple, useful**
 success signal for a prompt run — robust to LLM non-determinism, useful to an MCP-server
 tester, and (for V1) evaluable **deterministically without an LLM judge** — and what
 **vocabulary** to use. Findings are grounded in current eval-framework practice (sources at end).

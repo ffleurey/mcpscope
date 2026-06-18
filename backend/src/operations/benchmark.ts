@@ -3,7 +3,7 @@
 // and the compute-on-read run report. Phase A (run + deterministic metrics).
 // The agent-facing snake_case surface (benchmarkOperations.ts) wraps these functions
 // and is registered in the operation catalog, so the capabilities are exposed
-// identically via CLI and MCP. See backlog/specification/benchmark-v1.md.
+// identically via CLI and MCP. See backlog/completed/benchmark-v1.md.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { BackendDatabase } from "../persistence/db.js";

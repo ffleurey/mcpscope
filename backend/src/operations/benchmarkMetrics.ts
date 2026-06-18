@@ -2,7 +2,7 @@
 // Pure benchmark metrics: derive per-session metrics from persisted parts/turns,
 // evaluate optional tool-behavior checks, and aggregate per case + per tool.
 // No DB, no LLM — computed on read from already-persisted session state.
-// See backlog/specification/benchmark-v1.md and research/benchmark-success-criteria.md.
+// See backlog/completed/benchmark-v1.md and research/benchmark-success-criteria.md.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PartRecord, TurnRecord } from "../domain/model.js";

@@ -6,8 +6,8 @@ cause issues (coverage, errors, token efficiency). mcpscope owns session/run cre
 do not script it.
 
 This is the **Phase A** surface (run + deterministic metrics, no LLM evaluation). See
-[backlog/specification/benchmark-v1.md](backlog/specification/benchmark-v1.md) for the full
-plan and [backlog/research/benchmark-success-criteria.md](backlog/research/benchmark-success-criteria.md)
+[backlog/completed/benchmark-v1.md](backlog/completed/benchmark-v1.md) for the completed
+Phase A record and [backlog/research/benchmark-success-criteria.md](backlog/research/benchmark-success-criteria.md)
 for the evaluation-design research.
 
 ## Vocabulary

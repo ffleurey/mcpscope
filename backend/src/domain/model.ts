@@ -298,7 +298,7 @@ export const rawExchangeRecordSchema = z.object({
 // A benchmark is a static suite; a case is one prompt (+ optional tool-behavior
 // expectations); a run is one execution that selects cases and repeats each N
 // times. Each repetition is a normal primary session with parentKind='benchmark'
-// and parentId = the run id. See backlog/specification/benchmark-v1.md.
+// and parentId = the run id. See backlog/completed/benchmark-v1.md.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const benchmarkRunStatusSchema = z.enum(benchmarkRunStatusValues);
