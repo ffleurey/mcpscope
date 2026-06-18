@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Benchmark operations: benchmark/case CRUD, run launch + background coordinator,
 // and the compute-on-read run report. Phase A (run + deterministic metrics).
-// HTTP/CLI surface only for now (not registered in the MCP operation catalog).
-// See backlog/specification/benchmark-v1.md.
+// The agent-facing snake_case surface (benchmarkOperations.ts) wraps these functions
+// and is registered in the operation catalog, so the capabilities are exposed
+// identically via CLI and MCP. See backlog/specification/benchmark-v1.md.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { BackendDatabase } from "../persistence/db.js";

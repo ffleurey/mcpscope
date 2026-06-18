@@ -181,6 +181,37 @@ errored **and** the session completed. Cases with no checks report metrics only 
 Answer/qualitative correctness is deliberately **not** checked here — that is deferred to a
 future separate-model LLM evaluation (never self-judging). See the research note.
 
+## Tutorial: benchmark an MCP server via MCP (for coding agents)
+
+You are a coding agent iterating on an MCP server and want a repeatable check. mcpscope
+exposes the benchmark workflow as MCP tools (`mcpscope_*`); the CLI mirrors them
+one-for-one (`mcpscope <id>`), so every step below works identically from the shell.
+
+**Prerequisite (one-time, via the UI):** register an LM connection + model config and the
+MCP server profile under test in mcpscope's configuration. Discover their ids with the
+`mcpscope_list_model_configs` and `mcpscope_list_mcp_profiles` tools.
+
+1. **Create a benchmark** (the reusable suite):
+   `mcpscope_benchmark_create { "name": "weather server" }` → `{ "benchmark": { "id": "B-7K3M", … } }`
+2. **Add cases** — one prompt each, with optional deterministic tool-behavior expectations:
+   `mcpscope_benchmark_add_case { "benchmark_id": "B-7K3M", "prompt": "What's the forecast for Paris tomorrow?", "expected_tools_called": ["get_forecast"] }` → `{ "case": { "id": "B-7K3M.1", … } }`.
+   To turn a session you already ran into a case (pre-fills the tools it actually called):
+   `mcpscope_benchmark_add_case_from_session { "benchmark_id": "B-7K3M", "session_id": "AB12" }`.
+3. **Launch a run** — pick the model, MCP server(s), cases, and repetitions (all optional;
+   defaults = the configured default model, the case's benchmark, all cases, 1 repetition):
+   `mcpscope_benchmark_run { "benchmark_id": "B-7K3M", "repetitions": 5, "model_config_id": "<id>", "mcp_profile_ids": ["<id>"] }` → `{ "run": { "id": "R-9QX4", "status": "pending" } }`.
+4. **Follow progress** — poll until terminal:
+   `mcpscope_benchmark_run_status { "run_id": "R-9QX4" }` → `{ "status": "running", "completed_sessions": 7, "total_sessions": 25, "per_case": [{ "name": …, "completed": …, "total": … }], "current_session_id": … }`. Stop when `status` is `complete` or `error`.
+5. **Inspect the result**:
+   `mcpscope_benchmark_run_report { "run_id": "R-9QX4" }` → `{ "run", "report" }`.
+   - `report.per_tool` is the **tool scorecard** — per tool: `calls`, `errors`, `error_rate`,
+     `result_payload_chars`, `cases_used_in`. High `error_rate` or oversized payloads point at
+     a tool whose description/params/behavior need work.
+   - `report.cases` is per case: `success_rate`, `pass_at_k` (any repetition passed),
+     `pass_hat_k` (all passed — reliability), `tool_error_count`, and tool-call/token stats.
+6. **Iterate** — change the server, run again, compare reports. Each run is an immutable
+   snapshot, so past results stay valid as you edit the benchmark.
+
 ## Known limitations (Phase A)
 
 - Runs are sequential (one scheduler queue); no concurrency.

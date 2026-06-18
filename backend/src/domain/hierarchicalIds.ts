@@ -219,6 +219,11 @@ export function formatStepId(sessionId: string, childIndex: number): string {
 // A bare 4-char code remains a session. Runs are NOT nested under benchmarks: a
 // benchmark is an editable blueprint, a run is an independent snapshot spawned
 // from it (association, not composition).
+//
+// The id predicates below (isBenchmarkId / isRunId / isBenchmarkCaseId) are
+// scaffolding for the deferred `inspect`-unification work
+// (backlog/candidates/benchmark-inspect-id-unification.md) — teaching the generic
+// inspect/hierarchicalLookup path to resolve B-/R- ids. Not yet wired in.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const BENCHMARK_ID_REGEX = /^B-[A-HJ-NP-Z2-9]{4}$/

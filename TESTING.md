@@ -32,6 +32,7 @@ Fast deterministic coverage for:
 - selectors / context reconstruction
 - LM Studio SSE parsing
 - token count sanity (proportionality, context sum consistency, compaction math, monotonic context growth)
+- benchmark metrics (`operations/benchmarkMetrics.test.ts`): tool coverage, error counting, pass@k/pass^k
 
 Token count sanity (`tokenSanity.test.ts`) uses mock gateways and exercises the full
 backend turn pipeline without live infrastructure. It was previously excluded from
@@ -46,6 +47,7 @@ Deterministic tests around the backend runtime and API surface:
 - model-only turns
 - tool-enabled turns
 - session / transcript / context / trace endpoints
+- benchmark run coordination + compute-on-read report (`benchmarkRun.test.ts`)
 - edge-case orchestration that is easier to express directly than as a full trace fixture
 
 Keep these few and surgical.

@@ -247,4 +247,100 @@ describe("benchmark run", () => {
     expect(afterBody.report.cases[0].prompt).toBe("What is the weather?");
     expect(afterBody.report.sessionCount).toBe(2);
   });
+
+  it("runs via the snake_case catalog operations and reports progress", async () => {
+    const config = makeTestConfig();
+    dataDir = config.dataDir;
+    app = await buildBackendApp(config, stubGateways());
+    await seedModelConfig(app);
+
+    // The catalog ops (CLI/MCP surface) are mounted under /api/operations/*.
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/operations/benchmark-create",
+      payload: { name: "ops suite" },
+    });
+    expect(created.statusCode).toBe(200);
+    const benchmarkId = created.json().benchmark.id as string;
+    expect(benchmarkId).toMatch(/^B-[A-HJ-NP-Z2-9]{4}$/);
+
+    const caseRes = await app.inject({
+      method: "POST",
+      url: "/api/operations/benchmark-add-case",
+      payload: { benchmark_id: benchmarkId, prompt: "What is the weather?" },
+    });
+    expect(caseRes.statusCode).toBe(200);
+    expect(caseRes.json().case.id).toMatch(/^B-[A-HJ-NP-Z2-9]{4}\.\d+$/);
+
+    const runRes = await app.inject({
+      method: "POST",
+      url: "/api/operations/benchmark-run",
+      payload: {
+        benchmark_id: benchmarkId,
+        repetitions: 2,
+        model_config_id: "model-config-1",
+        mcp_profile_ids: [],
+      },
+    });
+    expect(runRes.statusCode).toBe(200);
+    const runId = runRes.json().run.id as string;
+    expect(runId).toMatch(/^R-[A-HJ-NP-Z2-9]{4}$/);
+
+    // Poll the snake_case progress endpoint until terminal.
+    let status: Record<string, unknown> = {};
+    for (let i = 0; i < 100; i++) {
+      const res = await app.inject({
+        method: "GET",
+        url: `/api/operations/benchmark-runs/${runId}/status`,
+      });
+      status = res.json();
+      if (status.status === "complete" || status.status === "error") break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(status.status).toBe("complete");
+    expect(status.total_sessions).toBe(2);
+    expect(status.completed_sessions).toBe(2);
+    expect(status.failed_sessions).toBe(0);
+    expect(status.per_case).toMatchObject([{ completed: 2, total: 2 }]);
+
+    const reportRes = await app.inject({
+      method: "GET",
+      url: `/api/operations/benchmark-runs/${runId}/report`,
+    });
+    expect(reportRes.statusCode).toBe(200);
+    const reportBody = reportRes.json();
+    expect(reportBody.run.id).toBe(runId);
+    expect(reportBody.report.session_count).toBe(2);
+    expect(reportBody.report.cases).toHaveLength(1);
+    expect(reportBody.report.cases[0]).toHaveProperty("success_rate");
+    expect(reportBody.report.per_tool).toBeDefined();
+  });
+
+  it("surfaces benchmark errors as HTTP statuses", async () => {
+    const config = makeTestConfig();
+    dataDir = config.dataDir;
+    app = await buildBackendApp(config, stubGateways());
+    await seedModelConfig(app);
+
+    // Unknown run id → 404.
+    const notFound = await app.inject({
+      method: "GET",
+      url: "/api/operations/benchmark-runs/R-ZZZZ/status",
+    });
+    expect(notFound.statusCode).toBe(404);
+
+    // Running a benchmark with no cases → 400 (benchmark_empty).
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/operations/benchmark-create",
+      payload: { name: "empty" },
+    });
+    const benchmarkId = created.json().benchmark.id as string;
+    const emptyRun = await app.inject({
+      method: "POST",
+      url: "/api/operations/benchmark-run",
+      payload: { benchmark_id: benchmarkId, model_config_id: "model-config-1", mcp_profile_ids: [] },
+    });
+    expect(emptyRun.statusCode).toBe(400);
+  });
 });

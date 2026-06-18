@@ -706,14 +706,10 @@ export type Benchmark = z.infer<typeof benchmarkSchema>
 export type BenchmarkSummary = z.infer<typeof benchmarkSummarySchema>
 export type BenchmarkCase = z.infer<typeof benchmarkCaseSchema>
 export type BenchmarkRunCaseSnapshot = z.infer<typeof benchmarkRunCaseSnapshotSchema>
-export type BenchmarkRunSessionRef = z.infer<typeof benchmarkRunSessionRefSchema>
 export type BenchmarkRun = z.infer<typeof benchmarkRunSchema>
 export type BenchmarkDetailResponse = z.infer<typeof benchmarkDetailResponseSchema>
 export type NumberStats = z.infer<typeof numberStatsSchema>
-export type PerToolCounts = z.infer<typeof perToolCountsSchema>
-export type SessionMetrics = z.infer<typeof sessionMetricsSchema>
 export type CaseReport = z.infer<typeof caseReportSchema>
-export type PerToolRollup = z.infer<typeof perToolRollupSchema>
 export type RunReport = z.infer<typeof runReportSchema>
 
 export const listSessionsResponseSchema = z.object({
