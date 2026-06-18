@@ -104,13 +104,29 @@
     return snapshot?.name?.trim() || c.caseId
   }
 
-  // The case snapshot currently shown in the full-view dialog.
-  let viewCase = $state<BenchmarkRunCaseSnapshot | null>(null)
+  // The case shown in the full-view dialog (tracked by id so we can also pull its
+  // produced sessions for this run).
+  let viewCaseId = $state<string | null>(null)
+  const viewSnapshot = $derived(viewCaseId ? caseSnapshotFor(viewCaseId) : null)
+  const viewSessions = $derived.by(() => {
+    if (!viewCaseId || !run) return []
+    const caseReport = report?.cases.find((c) => c.caseId === viewCaseId)
+    if (!caseReport) return []
+    return caseReport.sessions.map((sm) => ({
+      sessionId: sm.sessionId,
+      terminalStatus: sm.terminalStatus,
+      completed: sm.completed,
+      repetition: run.sessions.find((rs) => rs.sessionId === sm.sessionId)?.repetition ?? null,
+    }))
+  })
 
-  // Map a sourceCaseId to its produced child sessions for click-through.
-  function sessionsForCase(caseId: string): string[] {
-    if (!run) return []
-    return run.sessions.filter((s) => s.sourceCaseId === caseId).map((s) => s.sessionId)
+  function outcomeLabel(s: { terminalStatus: string | null; completed: boolean }): string {
+    return s.terminalStatus ?? (s.completed ? 'complete' : 'running')
+  }
+  function outcomePillClass(s: { terminalStatus: string | null }): string {
+    if (s.terminalStatus === 'complete') return 'success'
+    if (s.terminalStatus === 'error' || s.terminalStatus === 'aborted') return 'error'
+    return 'soft'
   }
 
   function openSession(sessionId: string) {
@@ -226,6 +242,7 @@
               <col style="width: 5rem" />
               <col style="width: 11rem" />
               <col style="width: 12rem" />
+              <col style="width: 4rem" />
             </colgroup>
             <thead>
               <tr>
@@ -237,37 +254,13 @@
                 <th class="col-num">Tool errors</th>
                 <th class="col-num">Tool calls (min/med/mean)</th>
                 <th class="col-num">Total tokens (min/med/mean)</th>
+                <th class="col-actions"></th>
               </tr>
             </thead>
             <tbody>
               {#each report.cases as c (c.caseId)}
-                {@const sids = sessionsForCase(c.caseId)}
-                {@const snapshot = caseSnapshotFor(c.caseId)}
                 <tr>
-                  <td>
-                    <div class="case-cell">
-                      <span class="case-name" title={caseLabel(c)}>{caseLabel(c)}</span>
-                      {#if snapshot}
-                        <button
-                          class="icon-btn"
-                          title="View case"
-                          aria-label="View case"
-                          onclick={() => (viewCase = snapshot)}><Icon path={iconView} /></button
-                        >
-                      {/if}
-                    </div>
-                    {#if sids.length > 0}
-                      <span class="case-sessions">
-                        {#each sids as sid (sid)}
-                          <button
-                            class="session-link"
-                            title="Open session {sid}"
-                            onclick={() => openSession(sid)}>{sid}</button
-                          >
-                        {/each}
-                      </span>
-                    {/if}
-                  </td>
+                  <td><span class="case-name" title={caseLabel(c)}>{caseLabel(c)}</span></td>
                   <td class="col-num">{c.hasChecks ? pct(c.successRate) : '—'}</td>
                   <td class="col-num">{c.hasChecks ? (c.passAtK ? 'yes' : 'no') : '—'}</td>
                   <td class="col-num">{c.hasChecks ? (c.passHatK ? 'yes' : 'no') : '—'}</td>
@@ -275,6 +268,16 @@
                   <td class="col-num">{c.toolErrorCount}</td>
                   <td class="col-num">{statTriple(c.toolCallStats)}</td>
                   <td class="col-num">{statTriple(c.totalTokenStats)}</td>
+                  <td class="col-actions">
+                    <span class="row-actions">
+                      <button
+                        class="icon-btn"
+                        title="View case"
+                        aria-label="View case"
+                        onclick={() => (viewCaseId = c.caseId)}><Icon path={iconView} /></button
+                      >
+                    </span>
+                  </td>
                 </tr>
               {/each}
             </tbody>
@@ -285,9 +288,59 @@
   </div>
 {/if}
 
-{#if viewCase}
-  <DialogShell title="Case detail" onClose={() => (viewCase = null)} dialogClass="case-view-dialog">
-    <BenchmarkCaseCard case={viewCase} />
+{#if viewCaseId && viewSnapshot}
+  <DialogShell
+    title="Case detail"
+    onClose={() => (viewCaseId = null)}
+    dialogClass="case-view-dialog"
+  >
+    <BenchmarkCaseCard case={viewSnapshot} />
+    <div class="case-sessions-section">
+      <div class="subsection-title">Sessions ({viewSessions.length})</div>
+      {#if viewSessions.length === 0}
+        <div class="empty-note">No sessions for this case in this run.</div>
+      {:else}
+        <div class="table-scroll">
+          <table class="data-table" use:columnResize>
+            <colgroup>
+              <col style="width: 9rem" />
+              <col style="width: 3.5rem" />
+              <col style="width: 7rem" />
+              <col style="width: 4rem" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Session</th>
+                <th class="col-num">Rep</th>
+                <th>Outcome</th>
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each viewSessions as s (s.sessionId)}
+                <tr>
+                  <td><IdBadge id={s.sessionId} /></td>
+                  <td class="col-num">{s.repetition ?? '—'}</td>
+                  <td>
+                    <span class="status-pill {outcomePillClass(s)}">{outcomeLabel(s)}</span>
+                  </td>
+                  <td class="col-actions">
+                    <span class="row-actions">
+                      <button
+                        class="icon-btn"
+                        title="Open session"
+                        aria-label="Open session"
+                        onclick={() => openSession(s.sessionId)}><Icon path={iconView} /></button
+                      >
+                    </span>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </div>
   </DialogShell>
 {/if}
 
@@ -351,39 +404,28 @@
     font-weight: 600;
     margin: 0 0 0.6rem;
   }
-  .case-cell {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    min-width: 0;
-  }
   .case-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .case-sessions {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-    margin-top: 0.25rem;
-  }
   :global(.case-view-dialog) {
     max-width: min(640px, 95vw);
   }
-  .session-link {
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    color: var(--text-dim);
-    font-family: var(--mono);
-    font-size: 0.68rem;
-    padding: 0.05rem 0.4rem;
-    cursor: pointer;
+  .case-sessions-section {
+    margin-top: 0.75rem;
   }
-  .session-link:hover {
-    color: var(--amber-bright);
-    border-color: var(--amber-bright);
+  .subsection-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.4rem;
+  }
+  .empty-note {
+    font-size: 0.82rem;
+    color: var(--text-dim);
   }
 </style>
