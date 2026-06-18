@@ -47,9 +47,9 @@
   function handlePicked(selected: string[]): void {
     const field = pickerField
     if (!field) return
-    const current = field === 'expect' ? formExpectCalled : formExpectNotCalled
-    const merged = [...new Set([...parseTools(current), ...selected])]
-    const value = merged.join(', ')
+    // Replace (not merge): the picker manages the field's full selection, so both
+    // additions and removals made in the dialog take effect.
+    const value = selected.join(', ')
     if (field === 'expect') formExpectCalled = value
     else formExpectNotCalled = value
   }
@@ -126,8 +126,8 @@
         <button
           type="button"
           class="icon-btn"
-          title="Pick from MCP servers"
-          aria-label="Pick from MCP servers"
+          title="Select MCP tools"
+          aria-label="Select MCP tools"
           onclick={() => (pickerField = 'expect')}
           disabled={saving}
         >
@@ -150,8 +150,8 @@
         <button
           type="button"
           class="icon-btn"
-          title="Pick from MCP servers"
-          aria-label="Pick from MCP servers"
+          title="Select MCP tools"
+          aria-label="Select MCP tools"
           onclick={() => (pickerField = 'forbid')}
           disabled={saving}
         >
@@ -170,7 +170,7 @@
 
 {#if pickerField}
   <ToolPickerModal
-    alreadySelected={parseTools(pickerTarget())}
+    selectedTools={parseTools(pickerTarget())}
     onConfirm={handlePicked}
     onClose={() => (pickerField = null)}
   />

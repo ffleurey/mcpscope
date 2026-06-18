@@ -176,11 +176,11 @@
           <table class="data-table" use:columnResize>
             <colgroup>
               <col style="width: 16rem" />
-              <col style="width: 6rem" />
-              <col style="width: 6rem" />
+              <col style="width: 4.5rem" />
+              <col style="width: 4.5rem" />
+              <col style="width: 5.5rem" />
+              <col style="width: 5.5rem" />
               <col style="width: 7rem" />
-              <col style="width: 8rem" />
-              <col style="width: 10rem" />
             </colgroup>
             <thead>
               <tr>
@@ -219,11 +219,11 @@
           <table class="data-table" use:columnResize>
             <colgroup>
               <col style="width: 16rem" />
-              <col style="width: 8rem" />
-              <col style="width: 7rem" />
-              <col style="width: 7rem" />
-              <col style="width: 7rem" />
-              <col style="width: 8rem" />
+              <col style="width: 5rem" />
+              <col style="width: 4.5rem" />
+              <col style="width: 4.5rem" />
+              <col style="width: 5rem" />
+              <col style="width: 5rem" />
               <col style="width: 11rem" />
               <col style="width: 12rem" />
             </colgroup>

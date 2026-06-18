@@ -176,15 +176,20 @@ Active tab: 2px `--amber-bright` underline + `--text-bright`. Inactive: `--text-
 rounded status label.
 
 ### Tables
-The shared **`.data-table`** primitive (config admin pages; live demo in the Reference):
+The shared **`.data-table`** primitive (config admin pages, run reports; live demo in the Reference):
 - Wrap in `.table-scroll` (`overflow-x:auto`); `table-layout: fixed` with a `<colgroup>` of widths;
-  `width: max-content; min-width: 100%` (never collapse, fill when there's room). Resizable columns via
-  `use:columnResize` (drag a header border; session-only).
+  `width: max-content; min-width: 100%` (never collapse, fill when there's room). The last column absorbs
+  slack.
+- **Every `.data-table` is resizable** — always add `use:columnResize` (drag a header border to resize;
+  session-only). This is uniform across the app: config tables, the run report, and the Reference demo.
 - Header: `--text-dim` 0.68rem uppercase. Dense rows, `--border` horizontal separators only, `--bg-hover`
   hover. Cells truncate with ellipsis (add `title=`).
 - Column roles: `.col-num` (right mono), `.col-mono` (IDs/URLs), `.col-toggle` (first-column control),
   `.col-actions` (trailing). Layout reads **static data → state indicator → actions**; state is a
   `.status-dot` or amber icon toggle, actions are always-visible `.icon-btn`s in `.row-actions`.
+- **Columns holding a single number use `.col-num` and are narrow by default** — give them tight
+  `<col>` widths so numeric data doesn't waste horizontal space; let text/label columns be wide and the
+  last column absorb the slack.
 
 ### Token pill, disclosure, other primitives
 `.token-pill` (grey metadata count, 999px). `.disclosure-summary`/`.disclosure-boxed`/`.disclosure-arrow`

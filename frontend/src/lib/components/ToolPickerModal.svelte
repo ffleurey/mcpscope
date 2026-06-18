@@ -6,130 +6,163 @@
   import { toAppError } from '../errors'
   import DialogShell from './DialogShell.svelte'
   import Checkbox from './Checkbox.svelte'
+  import Icon from './Icon.svelte'
+  import { iconClose } from '../design/icons'
 
   interface Props {
-    /** Tool names already present in the target field; shown as "already added". */
-    alreadySelected: string[]
-    /** Called with the newly-checked tool names (excludes already-present ones). */
+    /** Tool names already present in the target field; seed the selection. */
+    selectedTools: string[]
+    /** Called with the full selected tool-name list when the user applies. */
     onConfirm: (selected: string[]) => void
     onClose: () => void
   }
 
-  let { alreadySelected, onConfirm, onClose }: Props = $props()
-
-  interface ServerState {
-    id: string
-    name: string
-    url: string
-    loading: boolean
-    error: string | null
-    tools: string[]
-  }
+  let { selectedTools, onConfirm, onClose }: Props = $props()
 
   // Snapshot inputs once on open; the dialog is short-lived and recreated per open.
-  const alreadySet = new Set(untrack(() => alreadySelected))
   const profiles = untrack(() => get(mcpProfiles))
 
-  let servers = $state<ServerState[]>(
-    profiles.map((p) => ({
-      id: p.id,
-      name: p.name,
-      url: p.url,
-      loading: true,
-      error: null,
-      tools: [],
-    })),
-  )
+  // The working selection — the full set of tools the field will hold on Apply.
+  // Seeded from the field's current tools so the user can both add and remove.
+  let selection = $state<Set<string>>(new Set(untrack(() => selectedTools)))
 
-  // Tool names the user has newly checked in this dialog.
-  let picked = $state<Set<string>>(new Set())
+  // Stage 1: which server is picked (by id). Stage 2: its tools load below.
+  let selectedServerId = $state<string>('')
+  let loading = $state(false)
+  let loadError = $state<string | null>(null)
+  let serverTools = $state<string[]>([])
 
-  async function loadServer(index: number, url: string): Promise<void> {
+  const selectedServer = $derived(profiles.find((p) => p.id === selectedServerId) ?? null)
+
+  // Sorted view of the working selection for the persistent "Selected (N)" list.
+  const selectedList = $derived([...selection].sort((a, b) => a.localeCompare(b)))
+
+  async function loadServerTools(url: string): Promise<void> {
+    loading = true
+    loadError = null
+    serverTools = []
     try {
       const { tools } = await testMcpProfile(url)
-      servers[index] = { ...servers[index], loading: false, error: null, tools }
+      serverTools = tools
     } catch (e) {
-      servers[index] = {
-        ...servers[index],
-        loading: false,
-        error: toAppError(e).message,
-        tools: [],
-      }
+      loadError = toAppError(e).message
+    } finally {
+      loading = false
     }
   }
 
-  // Load every registered server in parallel; one failing does not block the others.
-  $effect(() => {
-    profiles.forEach((p, i) => {
-      void loadServer(i, p.url)
-    })
-  })
+  function onServerChange(): void {
+    const server = profiles.find((p) => p.id === selectedServerId)
+    if (server) void loadServerTools(server.url)
+    else {
+      serverTools = []
+      loadError = null
+    }
+  }
 
   function toggle(name: string, checked: boolean): void {
-    const next = new Set(picked)
+    const next = new Set(selection)
     if (checked) next.add(name)
     else next.delete(name)
-    picked = next
+    selection = next
+  }
+
+  function remove(name: string): void {
+    const next = new Set(selection)
+    next.delete(name)
+    selection = next
   }
 
   function handleConfirm(): void {
-    onConfirm([...picked])
+    onConfirm([...selection])
     onClose()
   }
 </script>
 
-<DialogShell title="Add tools" {onClose} dialogClass="tool-picker-dialog">
+<DialogShell title="Select MCP tools" {onClose} dialogClass="tool-picker-dialog">
   <div class="form-stack">
-    {#if servers.length === 0}
+    {#if profiles.length === 0}
       <p class="empty-state">
         No MCP servers are registered. Add a server in the connections settings to pick tools from
         it.
       </p>
     {:else}
-      <div class="server-list">
-        {#each servers as server (server.id)}
-          <div class="server-group">
-            <div class="server-head">
-              <span class="server-name">{server.name}</span>
-              {#if server.loading}
-                <span class="status-pill dim">loading…</span>
-              {:else if server.error}
-                <span class="status-pill error" title={server.error}>unreachable</span>
-              {:else}
-                <span class="status-pill dim">{server.tools.length} tools</span>
-              {/if}
-            </div>
+      <div class="field">
+        <label class="field-label" for="tool-picker-server">MCP server</label>
+        <select
+          id="tool-picker-server"
+          class="field-input"
+          bind:value={selectedServerId}
+          onchange={onServerChange}
+        >
+          <option value="">Select a server…</option>
+          {#each profiles as profile (profile.id)}
+            <option value={profile.id}>{profile.name}</option>
+          {/each}
+        </select>
+      </div>
 
-            {#if !server.loading && !server.error}
-              {#if server.tools.length === 0}
-                <p class="server-empty">No tools exposed.</p>
-              {:else}
-                <div class="tool-rows">
-                  {#each server.tools as tool (tool)}
-                    {@const already = alreadySet.has(tool)}
-                    <div class="tool-row" class:already>
-                      <Checkbox
-                        checked={already || picked.has(tool)}
-                        disabled={already}
-                        label={tool}
-                        hint={already ? 'already added' : ''}
-                        onchange={(c) => toggle(tool, c)}
-                      />
-                    </div>
-                  {/each}
-                </div>
-              {/if}
+      {#if selectedServer}
+        <div class="server-tools">
+          <div class="server-head">
+            <span class="server-name">{selectedServer.name}</span>
+            {#if loading}
+              <span class="status-pill dim">loading…</span>
+            {:else if loadError}
+              <span class="status-pill error" title={loadError}>unreachable</span>
+            {:else}
+              <span class="status-pill dim">{serverTools.length} tools</span>
             {/if}
           </div>
-        {/each}
-      </div>
+
+          {#if !loading && !loadError}
+            {#if serverTools.length === 0}
+              <p class="server-empty">No tools exposed.</p>
+            {:else}
+              <div class="tool-rows">
+                {#each serverTools as tool (tool)}
+                  <div class="tool-row">
+                    <Checkbox
+                      checked={selection.has(tool)}
+                      label={tool}
+                      onchange={(c) => toggle(tool, c)}
+                    />
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          {/if}
+        </div>
+      {/if}
     {/if}
+
+    <div class="selected-area">
+      <span class="field-label">Selected ({selection.size})</span>
+      {#if selectedList.length === 0}
+        <p class="server-empty">No tools selected.</p>
+      {:else}
+        <div class="selected-list">
+          {#each selectedList as tool (tool)}
+            <span class="selected-item">
+              <span class="selected-name">{tool}</span>
+              <button
+                type="button"
+                class="icon-btn icon-btn-dim"
+                title="Remove {tool}"
+                aria-label="Remove {tool}"
+                onclick={() => remove(tool)}
+              >
+                <Icon path={iconClose} />
+              </button>
+            </span>
+          {/each}
+        </div>
+      {/if}
+    </div>
 
     <div class="form-actions">
       <button class="btn" onclick={onClose}>Cancel</button>
-      <button class="btn btn-primary" onclick={handleConfirm} disabled={picked.size === 0}>
-        Add selected
-      </button>
+      <button class="btn btn-primary" onclick={handleConfirm}>Apply</button>
     </div>
   </div>
 </DialogShell>
@@ -144,12 +177,6 @@
     font-size: 0.85rem;
     color: var(--text-dim);
     line-height: 1.4;
-  }
-
-  .server-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.85rem;
   }
 
   .server-head {
@@ -177,9 +204,36 @@
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
+    max-height: 30vh;
+    overflow-y: auto;
   }
 
-  .tool-row.already {
-    opacity: 0.6;
+  .selected-area {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.6rem;
+  }
+
+  .selected-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .selected-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05rem 0.1rem 0.05rem 0.45rem;
+  }
+
+  .selected-name {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text-bright);
   }
 </style>

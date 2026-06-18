@@ -27,10 +27,10 @@
 
 <article class="case-card">
   <header class="card-header">
-    <IdBadge id={caseId} />
     {#if name}
       <span class="case-name">{name}</span>
     {/if}
+    <IdBadge id={caseId} />
     {#if actions}
       <span class="card-actions">{@render actions()}</span>
     {/if}
@@ -43,32 +43,19 @@
 
   <section class="card-section">
     <span class="section-label">Tools</span>
-    <div class="tool-groups">
-      <div class="tool-group">
-        <span class="tool-group-label">Expected</span>
-        {#if expectedToolsCalled.length > 0}
-          <div class="chips">
-            {#each expectedToolsCalled as tool (tool)}
-              <span class="token-pill tool-chip expect">{tool}</span>
-            {/each}
-          </div>
-        {:else}
-          <span class="tool-empty">none</span>
-        {/if}
+    {#if expectedToolsCalled.length === 0 && expectedToolsNotCalled.length === 0}
+      <span class="tool-empty">none</span>
+    {:else}
+      <!-- One combined inline list; colour is the signal: green = expected, red = forbidden. -->
+      <div class="tool-list">
+        {#each expectedToolsCalled as tool (tool)}
+          <span class="tool-name expect">{tool}</span>
+        {/each}
+        {#each expectedToolsNotCalled as tool (tool)}
+          <span class="tool-name forbid">{tool}</span>
+        {/each}
       </div>
-      <div class="tool-group">
-        <span class="tool-group-label">Forbidden</span>
-        {#if expectedToolsNotCalled.length > 0}
-          <div class="chips">
-            {#each expectedToolsNotCalled as tool (tool)}
-              <span class="token-pill tool-chip forbid">{tool}</span>
-            {/each}
-          </div>
-        {:else}
-          <span class="tool-empty">none</span>
-        {/if}
-      </div>
-    </div>
+    {/if}
   </section>
 </article>
 
@@ -89,7 +76,6 @@
     gap: 0.5rem;
   }
   .case-name {
-    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -127,35 +113,20 @@
     word-break: break-word;
   }
 
-  .tool-groups {
+  /* One combined inline, wrapping list of tool names; colour carries the signal. */
+  .tool-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem 1.5rem;
+    gap: 0.2rem 0.75rem;
   }
-  .tool-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    min-width: 0;
-  }
-  .tool-group-label {
-    font-size: 0.72rem;
-    color: var(--text-dim);
-  }
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-  }
-  .tool-chip {
+  .tool-name {
     font-family: var(--mono);
+    font-size: 0.8rem;
   }
-  .tool-chip.expect {
-    border-color: color-mix(in srgb, var(--green-bright) 45%, var(--border));
+  .tool-name.expect {
     color: var(--green-bright);
   }
-  .tool-chip.forbid {
-    border-color: color-mix(in srgb, var(--red-bright) 45%, var(--border));
+  .tool-name.forbid {
     color: var(--red-bright);
   }
   .tool-empty {
