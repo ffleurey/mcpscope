@@ -72,6 +72,7 @@ During session creation, `providerType` is copied from the connection into the [
 ### Model context length (`getProviderContextLength` in `contextLength.ts`)
 
 Resolution order:
+
 1. User-configured `contextSize` from model config (authoritative — this is what gets sent as `num_ctx`)
 2. Provider-native API (Ollama `/api/show`)
 3. OAI `/v1/models` endpoint (OpenRouter, OpenAI)

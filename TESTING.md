@@ -76,6 +76,7 @@ Use replay tests whenever the behavior under test spans:
 Replay fixtures and most deterministic tests operate on committed **parts**, not transient streaming **deltas**.
 
 Current fixtures include:
+
 - model-only single-turn trace
 - tool-enabled single-turn trace
 - model-only two-turn compaction trace (exercises context sum consistency and
@@ -165,4 +166,4 @@ That slice should stay green when changing:
 
 If a bug is about backend conversation flow, token attribution, reasoning retention, tool orchestration, or persistence, prefer:
 
-**record trace -> replay trace -> compare trace**
+`record trace -> replay trace -> compare trace`

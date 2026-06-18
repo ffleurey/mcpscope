@@ -138,8 +138,20 @@ The thinking evolved here: analysis should be a first-class session type, not a 
 
 **PR #30** `execution-model-refactoring` — Plan + Interpret execution model replacing flatten/walk cursor. The walk cursor (a bare integer index) had no causal link to work done — it could not answer which packet was being assessed, could not regress when the tree grew, and retry required full re-walk. The Plan + Interpret model derived position from artifact existence instead, making retry a simple cascade removal. Visitor restoration: hooks drive plan construction via `addCommand()`. Plan-level progress in API events and frontend. `AnalysisCommand` and `WorkflowStep` merged — steps *are* the commands. ARCHITECTURE.md finalized to reflect step-as-command design.
 
+## v0.12.0 → v0.13.0: providers, configuration, design system, foundation cleanup, and benchmarks (June 2–18, 2026)
+
+**PR #31** `add-support-for-ollama` — Ollama as a first-class provider alongside LM Studio and OpenRouter, with provider-aware reasoning extraction, token accounting, and context-window tracking. Provider-specific behavior documented in PROVIDERS.md.
+
+**PR #32** `model-selection-from-cli-mcp` — Configuration moved from the database to a JSON config file, and explicit model/MCP selection exposed on the shared `create` operation (`model_config_id`, `mcp_profile_ids`) plus `list_model_configs` / `list_mcp_profiles` operations — so a CLI/MCP agent can choose model and MCP profiles without the GUI. Selection is everywhere; configuration stays GUI-only.
+
+**PR #33** `design-system` — A dark, restrained design system: neutral-grey chrome, amber accent, green session data, a small token set, shared primitives (buttons, fields, `DialogShell`, `.data-table` with column resize, status pills/dots, `IdBadge`, MDI `Icon`), and an amber favicon. Rules + tokens + a live in-app reference captured in DESIGN-SYSTEM.md.
+
+**PR #34** `cleanup/v1-foundation` — V1 foundation cleanup. Removed v1→v2 migration cruft and dead persistence/domain code; the runtime tables were renamed from the `v2_*` development names (PR #16/#25) to plain names (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`) at a single schema version `1` with **no migration path** — an out-of-date database is started empty rather than migrated. Documentation consolidated and factual errors fixed.
+
+**PR #35** `benchmark-v1` — Benchmark suite/case/run feature (Phase A): benchmarks and cases as first-class persisted blueprints, runs as immutable snapshots, a sequential run coordinator on the existing scheduler, and a compute-on-read metrics report (per-tool rollup + per-case pass@k/pass^k, deterministic tool-behavior checks only). Shipped across UI, CLI, and MCP — the catalog grew from 7 to 15 mirrored operations. LLM-judged success (Phase B/C) deferred. See BENCHMARK.md.
+
 ---
 
-*V1 scope document drafted and under discussion — see `backlog/what-should-v1-look-like.md`.*
+*V1 scope and readiness tracked in `backlog/what-should-v1-look-like.md`.*
 
-*Last updated: 2026-06-07*
+*Last updated: 2026-06-18.*

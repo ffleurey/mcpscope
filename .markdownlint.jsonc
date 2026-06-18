@@ -1,0 +1,17 @@
+// markdownlint configuration for mcpscope docs.
+// Makes the IDE's "Problems" diagnostics deterministic for every contributor
+// (no longer dependent on personal editor settings). We keep the substantive
+// rules (blank lines around headings/lists/tables, fenced-code languages,
+// no emphasis-as-heading) and disable the cosmetic ones the docs deliberately
+// ignore.
+{
+  "default": true,
+  "MD013": false, // line-length — docs use long, readable prose lines on purpose
+  "MD010": false, // hard tabs — several docs use tab indentation for nested lists
+  "MD007": false, // unordered-list indent — tied to the tab indentation above
+  "MD024": false, // duplicate headings — fine across different sections
+  "MD033": false, // inline HTML — used intentionally in a few places
+  "MD041": false, // first line need not be a top-level heading (front-matter-free docs)
+  "MD058": false, // blanks around tables — many docs embed compact inline tables
+  "MD060": false  // table-column-style — cosmetic; not enforced
+}

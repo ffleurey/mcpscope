@@ -24,7 +24,7 @@ mcpscope() {
 
 ## Connection
 
-```
+```sh
 mcpscope --url http://host:3030 <command>    # explicit
 MCPSCOPE_URL=http://host:3030 mcpscope …    # env var
 mcpscope …                                  # default: http://localhost:3030
@@ -126,7 +126,7 @@ Inspects any object by hierarchical ID. Calls `GET /api/lookup/:id`.
 
 **Text output** — parts rendered ID-first, turns separated by blank lines:
 
-```
+```text
 QGWA.S.1-SP  system_prompt  (167 tokens)
 QGWA.S.2-MI  mcp_instructions  (371 tokens)
 QGWA.S.3-TD  tool_definitions  (4169 tokens)
@@ -150,7 +150,7 @@ Stripped parts: `(N tokens - stripped)`.
 
 Lists all model configs with their ID, name, connection, model key, and provider type.
 
-```
+```text
 $ mcpscope list_model_configs
 home-assistant   Home Assistant    http://host:8123/mcp   enabled
 weather-mcp      Weather MCP       http://host:8000/mcp   disabled
@@ -162,7 +162,7 @@ weather-mcp      Weather MCP       http://host:8000/mcp   disabled
 
 Lists all MCP server profiles with their ID, name, URL, and default-enabled status.
 
-```
+```text
 $ mcpscope list_mcp_profiles
 home-assistant   Home Assistant    http://host:8123/mcp   enabled
 weather-mcp      Weather MCP       http://host:8000/mcp   disabled
@@ -234,7 +234,7 @@ Text output shows overall and per-case completion, the currently running session
 
 ### `mcpscope benchmark_run_report <run_id> [--json]`
 
-Returns the full compute-on-read **metrics** report for a run (loads session traces): per-case pass rates, tool-call/token stats, per-session metrics, and a cross-case per-tool rollup. Text output leads with the per-tool rollup, then per-case detail. JSON output: `{ run, report }`.
+Returns the full compute-on-read **metrics** report for a run (loads session traces): per-case pass rates, tool-call/token stats, per-session metrics, and a cross-case per-tool rollup. Text output leads with the per-tool rollup, then per-case detail. JSON output: `{ run, report }`. For what the metrics mean (pass@k vs pass^k, the per-tool scorecard, what the checks evaluate), see [BENCHMARK.md → Report and metrics](BENCHMARK.md#report-and-metrics).
 
 ### `mcpscope sessions list [--json]`
 

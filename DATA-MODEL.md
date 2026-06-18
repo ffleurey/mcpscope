@@ -20,14 +20,15 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 - `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records, and may optionally belong to one `WorkflowStep`
 - the runtime tree described below for persisted sessions (unchanged from user perspective)
 - one session contains one setup and zero or more turns
- - hierarchical IDs for session/setup/step/turn/round/part runtime nodes, with `W` for workflow steps, `T` for turns, and `C` for compaction steps
+- hierarchical IDs for session/setup/step/turn/round/part runtime nodes, with `W` for workflow steps, `T` for turns, and `C` for compaction steps. Benchmarks add their own type-tagged IDs (`B-XXXX` benchmark, `B-XXXX.N` case, `R-XXXX` run) — see [BENCHMARK.md](BENCHMARK.md)
 - session ownership through `parent_container_type_key` / `parent_container_id` on `sessions`
 - generic persistence for sessions, steps, and turns (`sessions`, `steps`, `turns`)
 - existing child-session behavior still works through the new model
+- the benchmark suite/case/run feature (Phase A): benchmarks and cases are first-class persisted objects, a run is an immutable snapshot of selected cases + settings, and a session created by a run carries that run as its `benchmark` parent (see [BENCHMARK.md](BENCHMARK.md))
 
 **Not implemented yet:**
 
-- full benchmark-domain product work beyond minimal container support
+- benchmark Phase B/C (LLM-judged success); Phase A evaluates deterministic tool-behavior checks only
 - broader workflow automation for session sequencing beyond the shipped analysis-session workflow
 
 **Current deliberate limits:**

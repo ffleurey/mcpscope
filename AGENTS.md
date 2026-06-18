@@ -6,11 +6,14 @@ mcpscope is a backend-centered runtime analysis tool for MCP and multi-turn LLM 
 
 Read only what the task needs:
 
-- [README.md](README.md) for the repo map and dev commands
+- [README.md](README.md) for the repo map and dev commands — its **Documentation map** is the complete index of every doc; start there if the right file isn't listed below
 - [ARCHITECTURE.md](ARCHITECTURE.md) for runtime flow, persistence, execution, and adapters
 - [DATA-MODEL.md](DATA-MODEL.md) for sessions, turns, rounds, parts, and canonical IDs
+- [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) for the SQLite tables behind that model
 - [TESTING.md](TESTING.md) for regression strategy and test selection
 - [CLI.md](CLI.md) and [MCP.md](MCP.md) for command and tool behavior
+- [BENCHMARK.md](BENCHMARK.md) for the benchmark suite/case/run feature, metrics, and its agent-facing surface
+- [PROVIDERS.md](PROVIDERS.md) when touching reasoning, token counting, or context-window handling across LM Studio / Ollama / OpenRouter
 - [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) **before any frontend visual change** — tokens, shared primitives, and patterns. Reuse the primitives; keep `DESIGN-SYSTEM.md`, `frontend/src/app.css`, and the live Design System Reference (`DesignReference.svelte`) in sync.
 
 The docs above are references, not pre-read requirements. Keep context lean and open only the specific files needed for the task at hand.

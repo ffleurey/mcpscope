@@ -184,13 +184,13 @@ The MCP interface is hosted on the same port as the backend API (`BACKEND_PORT`,
 
 Example connection string for an MCP client:
 
-```
+```text
 http://localhost:3030/mcp
 ```
 
 Inside Docker:
 
-```
+```text
 http://localhost:3030/mcp
 ```
 
@@ -198,7 +198,7 @@ http://localhost:3030/mcp
 
 mcpscope also exposes an internal restricted MCP endpoint for analysis sessions:
 
-```
+```text
 http://localhost:3030/mcp/analysis
 ```
 

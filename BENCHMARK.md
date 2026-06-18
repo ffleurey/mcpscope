@@ -38,6 +38,9 @@ left-pane tree as a container of its sessions.
 
 ## Data model
 
+The backing tables (`benchmarks`, `benchmark_cases`, `benchmark_runs`) and their columns are
+defined in [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md); this section describes the domain shape.
+
 - **Benchmark** (editable blueprint): `id, name, description, createdAt, updatedAt`.
 - **Case**: `id, benchmarkId, name, prompt, orderIndex, expectedToolsCalled[],
   expectedToolsNotCalled[], sourceSessionId, createdAt, updatedAt`.
@@ -56,6 +59,7 @@ are run-level (the point is to run the same cases against different model/MCP co
 cases hold only the prompt + expectations.
 
 ### Lifecycles
+
 - Deleting a **benchmark** cascades to its **cases** but leaves its **runs** intact.
 - Deleting a **run** removes its produced sessions.
 - Deleting a **case** removes it from the blueprint; past runs keep their snapshot.
@@ -130,21 +134,12 @@ the identical operations as `mcpscope_<id>` tools.
 
 ## CLI / MCP
 
-The agent-facing benchmark commands are flat, catalog-backed commands (exposed identically as
-`mcpscope_<id>` MCP tools):
-
-```
-mcpscope benchmark_create <name> [--description <text>]
-mcpscope benchmark_list
-mcpscope benchmark_inspect <benchmark_id>
-mcpscope benchmark_add_case <benchmark_id> <prompt> [--name <text>] [--expect-tool <name>]... [--forbid-tool <name>]...
-mcpscope benchmark_add_case_from_session <benchmark_id> <session_id> [--name <text>]
-mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--wait]
-mcpscope benchmark_run_status <run_id>
-mcpscope benchmark_run_report <run_id>
-```
-
-All support `--json` and `--url`. See [CLI.md](CLI.md) for full per-command flags and output.
+The eight `benchmark_*` operations are flat, catalog-backed commands, each exposed identically
+as a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool. The exact per-command flags,
+arguments, and text/JSON output live in one place — [CLI.md](CLI.md) (Benchmark commands) and
+[MCP.md](MCP.md) (tool inputs/results) — and are not repeated here to avoid drift. The
+end-to-end worked example is the [tutorial](#tutorial-benchmark-an-mcp-server-via-mcp-for-coding-agents)
+below.
 
 ### Run progress vs report
 
