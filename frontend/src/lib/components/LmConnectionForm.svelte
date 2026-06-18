@@ -133,8 +133,8 @@
   </div>
 
   <div class="form-actions">
-    <button type="submit" class="btn btn-primary">Save</button>
     <button type="button" class="btn" onclick={onCancel}>Cancel</button>
+    <button type="submit" class="btn btn-primary">Save</button>
   </div>
 </form>
 

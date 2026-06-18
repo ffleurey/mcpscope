@@ -6,7 +6,6 @@
     removeBenchmark,
     removeCase,
     selectRun,
-    updateBenchmark,
   } from '../benchmarkStore'
   import { toAppError, type AppError } from '../errors'
   import { iconPlus, iconEdit, iconTrash, iconRun } from '../design/icons'
@@ -14,9 +13,11 @@
   import IdBadge from './IdBadge.svelte'
   import InlineAppError from './InlineAppError.svelte'
   import CaseFormModal from './CaseFormModal.svelte'
+  import BenchmarkCaseCard from './BenchmarkCaseCard.svelte'
+  import BenchmarkFormModal from './BenchmarkFormModal.svelte'
   import RunLaunchModal from './RunLaunchModal.svelte'
   import { columnResize } from '../actions/columnResize'
-  import type { BenchmarkCase, BenchmarkRun, BenchmarkRunStatus } from '../backendTypes'
+  import type { BenchmarkRun, BenchmarkRunStatus } from '../backendTypes'
 
   const detail = $derived($activeBenchmarkDetail)
   const benchmark = $derived(detail?.benchmark ?? null)
@@ -27,41 +28,18 @@
 
   let viewError = $state<AppError | null>(null)
 
-  // Case add/edit dialog
-  let caseDialog = $state<{ editCase: BenchmarkCase | null } | null>(null)
+  // Case add/edit dialog. `cases` is the sorted derived list element type.
+  let caseDialog = $state<{ editCase: (typeof cases)[number] | null } | null>(null)
 
   // Run-launch dialog
   let showRun = $state(false)
 
-  // Inline header edit
+  // Benchmark edit dialog
   let editing = $state(false)
-  let editName = $state('')
-  let editDescription = $state('')
-  let savingEdit = $state(false)
 
-  function startEdit() {
-    if (!benchmark) return
-    editName = benchmark.name
-    editDescription = benchmark.description ?? ''
-    editing = true
-  }
-
-  async function saveEdit() {
-    if (!benchmark || !editName.trim()) return
-    savingEdit = true
-    viewError = null
-    try {
-      await updateBenchmark(benchmark.id, {
-        name: editName.trim(),
-        description: editDescription.trim() || null,
-      })
-      await refreshActiveBenchmarkDetail()
-      editing = false
-    } catch (e) {
-      viewError = toAppError(e)
-    } finally {
-      savingEdit = false
-    }
+  async function onBenchmarkSaved() {
+    editing = false
+    await refreshActiveBenchmarkDetail()
   }
 
   async function handleDeleteBenchmark() {
@@ -112,10 +90,6 @@
     return `${dd}/${mm} ${HH}:${MM}`
   }
 
-  function sourceSessionLabel(c: BenchmarkCase): string {
-    return c.sourceSessionId ?? '—'
-  }
-
   async function openRun(run: BenchmarkRun) {
     await selectRun(run.id)
   }
@@ -126,61 +100,33 @@
 {:else}
   <div class="config-view">
     <div class="config-view-header">
-      {#if editing}
-        <div class="edit-stack">
-          <input
-            class="field-input"
-            type="text"
-            bind:value={editName}
-            disabled={savingEdit}
-            aria-label="Benchmark name"
-          />
-          <textarea
-            class="field-input"
-            rows={2}
-            bind:value={editDescription}
-            disabled={savingEdit}
-            placeholder="Description (optional)"
-            aria-label="Benchmark description"></textarea>
-          <div class="form-actions">
-            <button class="btn btn-sm" onclick={() => (editing = false)} disabled={savingEdit}
-              >Cancel</button
-            >
-            <button
-              class="btn btn-sm btn-primary"
-              onclick={saveEdit}
-              disabled={savingEdit || !editName.trim()}
-            >
-              {savingEdit ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </div>
-      {:else}
-        <div class="title-block">
+      <div class="title-block">
+        <div class="title-line">
           <h2>{benchmark.name}</h2>
-          {#if benchmark.description}
-            <p class="benchmark-description">{benchmark.description}</p>
-          {/if}
+          <IdBadge id={benchmark.id} />
         </div>
-        <div class="header-actions">
-          <button
-            class="btn btn-primary"
-            onclick={() => (showRun = true)}
-            disabled={cases.length === 0}
-          >
-            <span class="btn-icon"><Icon path={iconRun} /></span> Run
-          </button>
-          <button class="btn" onclick={startEdit}>
-            <span class="btn-icon"><Icon path={iconEdit} /></span> Edit
-          </button>
-          <button
-            class="icon-btn icon-btn-danger"
-            title="Delete benchmark"
-            aria-label="Delete benchmark"
-            onclick={handleDeleteBenchmark}><Icon path={iconTrash} /></button
-          >
-        </div>
-      {/if}
+        {#if benchmark.description}
+          <p class="benchmark-description">{benchmark.description}</p>
+        {/if}
+      </div>
+      <div class="header-actions">
+        <button
+          class="btn btn-primary"
+          onclick={() => (showRun = true)}
+          disabled={cases.length === 0}
+        >
+          <span class="btn-icon"><Icon path={iconRun} /></span> Run
+        </button>
+        <button class="btn" onclick={() => (editing = true)}>
+          <span class="btn-icon"><Icon path={iconEdit} /></span> Edit
+        </button>
+        <button
+          class="icon-btn icon-btn-danger"
+          title="Delete benchmark"
+          aria-label="Delete benchmark"
+          onclick={handleDeleteBenchmark}><Icon path={iconTrash} /></button
+        >
+      </div>
     </div>
 
     <InlineAppError error={viewError} />
@@ -195,59 +141,25 @@
       {#if cases.length === 0}
         <p class="config-empty">No cases yet. Add one to get started.</p>
       {:else}
-        <div class="table-scroll">
-          <table class="data-table" use:columnResize>
-            <colgroup>
-              <col style="width: 10rem" />
-              <col style="width: 22rem" />
-              <col style="width: 11rem" />
-              <col style="width: 11rem" />
-              <col style="width: 9rem" />
-              <col style="width: 6rem" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Prompt</th>
-                <th>Expect called</th>
-                <th>Forbid called</th>
-                <th>Source session</th>
-                <th class="col-actions">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each cases as c (c.id)}
-                <tr>
-                  <td title={c.name ?? ''}>{c.name ?? '—'}</td>
-                  <td title={c.prompt}>{c.prompt}</td>
-                  <td title={c.expectedToolsCalled.join(', ')}
-                    >{c.expectedToolsCalled.join(', ') || '—'}</td
-                  >
-                  <td title={c.expectedToolsNotCalled.join(', ')}
-                    >{c.expectedToolsNotCalled.join(', ') || '—'}</td
-                  >
-                  <td class="col-mono" title={c.sourceSessionId ?? ''}>{sourceSessionLabel(c)}</td>
-                  <td class="col-actions">
-                    <span class="row-actions">
-                      <button
-                        class="icon-btn"
-                        title="Edit case"
-                        aria-label="Edit case"
-                        onclick={() => (caseDialog = { editCase: c })}
-                        ><Icon path={iconEdit} /></button
-                      >
-                      <button
-                        class="icon-btn icon-btn-danger"
-                        title="Delete case"
-                        aria-label="Delete case"
-                        onclick={() => handleDeleteCase(c.id)}><Icon path={iconTrash} /></button
-                      >
-                    </span>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+        <div class="case-list">
+          {#each cases as c (c.id)}
+            <BenchmarkCaseCard case={c}>
+              {#snippet actions()}
+                <button
+                  class="icon-btn"
+                  title="Edit case"
+                  aria-label="Edit case"
+                  onclick={() => (caseDialog = { editCase: c })}><Icon path={iconEdit} /></button
+                >
+                <button
+                  class="icon-btn icon-btn-danger"
+                  title="Delete case"
+                  aria-label="Delete case"
+                  onclick={() => handleDeleteCase(c.id)}><Icon path={iconTrash} /></button
+                >
+              {/snippet}
+            </BenchmarkCaseCard>
+          {/each}
         </div>
       {/if}
     </section>
@@ -314,6 +226,14 @@
   />
 {/if}
 
+{#if editing && benchmark}
+  <BenchmarkFormModal
+    editBenchmark={benchmark}
+    onClose={() => (editing = false)}
+    onSaved={onBenchmarkSaved}
+  />
+{/if}
+
 <style>
   .detail-loading {
     padding: 2rem;
@@ -327,6 +247,12 @@
   .title-block {
     min-width: 0;
   }
+  .title-line {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
   .config-view-header h2 {
     margin: 0;
   }
@@ -335,14 +261,13 @@
     font-size: 0.85rem;
     color: var(--text-dim);
   }
-  .edit-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    flex: 1;
-  }
   .detail-section {
     margin-bottom: 1.5rem;
+  }
+  .case-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
   }
   .section-title-row {
     display: flex;

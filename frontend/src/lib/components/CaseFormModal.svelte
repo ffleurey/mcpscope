@@ -4,6 +4,7 @@
   import { toAppError, type AppError } from '../errors'
   import DialogShell from './DialogShell.svelte'
   import InlineAppError from './InlineAppError.svelte'
+  import IdBadge from './IdBadge.svelte'
   import type { BenchmarkCase } from '../backendTypes'
 
   interface Props {
@@ -61,6 +62,13 @@
 <DialogShell title={editCase ? 'Edit case' : 'Add case'} {onClose} dialogClass="case-form-dialog">
   <div class="form-stack">
     <InlineAppError error={formError} />
+
+    {#if editCase}
+      <div class="field">
+        <span class="field-label">Case ID</span>
+        <div><IdBadge id={editCase.id} /></div>
+      </div>
+    {/if}
 
     <div class="field">
       <label class="field-label" for="case-name"

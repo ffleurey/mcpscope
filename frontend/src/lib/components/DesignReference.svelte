@@ -28,6 +28,7 @@
     iconLoad,
     iconEject,
     iconInfo,
+    iconView,
     iconStar,
     iconStarOutline,
     iconRadioMarked,
@@ -740,6 +741,9 @@
       </div>
       <div class="icon-cell">
         <span class="icon-demo"><Icon path={iconInfo} /></span><code>iconInfo</code>
+      </div>
+      <div class="icon-cell">
+        <span class="icon-demo"><Icon path={iconView} /></span><code>iconView</code>
       </div>
       <div class="icon-cell">
         <span class="icon-demo"><Icon path={iconStar} /></span><code>iconStar</code>

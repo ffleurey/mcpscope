@@ -4,11 +4,23 @@
   import { modelConfigs } from '../connectionStore'
   import { columnResize } from '../actions/columnResize'
   import IdBadge from './IdBadge.svelte'
-  import type { CaseReport, NumberStats } from '../backendTypes'
+  import Icon from './Icon.svelte'
+  import DialogShell from './DialogShell.svelte'
+  import BenchmarkCaseCard from './BenchmarkCaseCard.svelte'
+  import { iconView } from '../design/icons'
+  import type { CaseReport, NumberStats, BenchmarkRunCaseSnapshot } from '../backendTypes'
 
   const run = $derived($activeRun)
   const report = $derived($activeRunReport)
   const isRunning = $derived(run != null && (run.status === 'pending' || run.status === 'running'))
+
+  // Live clock so the elapsed-time of an in-progress run ticks forward.
+  let now = $state(Date.now())
+  $effect(() => {
+    if (!isRunning) return
+    const t = setInterval(() => (now = Date.now()), 1000)
+    return () => clearInterval(t)
+  })
 
   const modelName = $derived.by(() => {
     if (!run) return ''
@@ -52,9 +64,48 @@
     return `${stat(s, 'min')} / ${stat(s, 'median')} / ${stat(s, 'mean')}`
   }
 
-  function caseLabel(c: CaseReport): string {
-    return c.prompt
+  // ── Timing ────────────────────────────────────────────────────────
+  function formatTimestamp(ts: number | null): string {
+    if (ts == null) return '—'
+    const d = new Date(ts)
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const HH = String(d.getHours()).padStart(2, '0')
+    const MM = String(d.getMinutes()).padStart(2, '0')
+    const SS = String(d.getSeconds()).padStart(2, '0')
+    return `${dd}/${mm} ${HH}:${MM}:${SS}`
   }
+
+  function formatDuration(ms: number): string {
+    const totalSec = Math.max(0, Math.round(ms / 1000))
+    const h = Math.floor(totalSec / 3600)
+    const m = Math.floor((totalSec % 3600) / 60)
+    const s = totalSec % 60
+    if (h > 0) return `${h}h ${m}m ${s}s`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
+  }
+
+  // Duration: completed − started; while running, elapsed from start to now.
+  const durationLabel = $derived.by(() => {
+    if (!run?.startedAt) return null
+    const end = run.completedAt ?? (isRunning ? now : null)
+    if (end == null) return null
+    return formatDuration(end - run.startedAt)
+  })
+
+  // ── Per-case detail: name + full case view ──────────────────────────
+  function caseSnapshotFor(caseId: string): BenchmarkRunCaseSnapshot | null {
+    return run?.cases.find((c) => c.sourceCaseId === caseId) ?? null
+  }
+
+  function caseLabel(c: CaseReport): string {
+    const snapshot = caseSnapshotFor(c.caseId)
+    return snapshot?.name?.trim() || c.caseId
+  }
+
+  // The case snapshot currently shown in the full-view dialog.
+  let viewCase = $state<BenchmarkRunCaseSnapshot | null>(null)
 
   // Map a sourceCaseId to its produced child sessions for click-through.
   function sessionsForCase(caseId: string): string[] {
@@ -91,6 +142,18 @@
         <span class="meta-item"
           >Sessions: <span class="meta-value">{report.sessionCount}</span></span
         >
+        <span class="meta-item"
+          >Started: <span class="meta-value">{formatTimestamp(run.startedAt)}</span></span
+        >
+        <span class="meta-item"
+          >Completed: <span class="meta-value">{formatTimestamp(run.completedAt)}</span></span
+        >
+        {#if durationLabel}
+          <span class="meta-item"
+            >Duration: <span class="meta-value">{durationLabel}{isRunning ? ' (elapsed)' : ''}</span
+            ></span
+          >
+        {/if}
       </div>
       {#if run.error}
         <div class="run-error">{run.error}</div>
@@ -155,7 +218,7 @@
         <div class="table-scroll">
           <table class="data-table" use:columnResize>
             <colgroup>
-              <col style="width: 22rem" />
+              <col style="width: 16rem" />
               <col style="width: 8rem" />
               <col style="width: 7rem" />
               <col style="width: 7rem" />
@@ -179,9 +242,20 @@
             <tbody>
               {#each report.cases as c (c.caseId)}
                 {@const sids = sessionsForCase(c.caseId)}
+                {@const snapshot = caseSnapshotFor(c.caseId)}
                 <tr>
-                  <td title={caseLabel(c)}>
-                    {caseLabel(c)}
+                  <td>
+                    <div class="case-cell">
+                      <span class="case-name" title={caseLabel(c)}>{caseLabel(c)}</span>
+                      {#if snapshot}
+                        <button
+                          class="icon-btn"
+                          title="View case"
+                          aria-label="View case"
+                          onclick={() => (viewCase = snapshot)}><Icon path={iconView} /></button
+                        >
+                      {/if}
+                    </div>
                     {#if sids.length > 0}
                       <span class="case-sessions">
                         {#each sids as sid (sid)}
@@ -209,6 +283,12 @@
       {/if}
     </section>
   </div>
+{/if}
+
+{#if viewCase}
+  <DialogShell title="Case detail" onClose={() => (viewCase = null)} dialogClass="case-view-dialog">
+    <BenchmarkCaseCard case={viewCase} />
+  </DialogShell>
 {/if}
 
 <style>
@@ -271,11 +351,26 @@
     font-weight: 600;
     margin: 0 0 0.6rem;
   }
+  .case-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+  .case-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .case-sessions {
     display: inline-flex;
     flex-wrap: wrap;
     gap: 0.25rem;
-    margin-left: 0.4rem;
+    margin-top: 0.25rem;
+  }
+  :global(.case-view-dialog) {
+    max-width: min(640px, 95vw);
   }
   .session-link {
     background: none;

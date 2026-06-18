@@ -7,7 +7,6 @@
     benchmarks,
     clearActiveRun,
     clearBenchmarkSelection,
-    createBenchmark,
     selectBenchmark,
     activeBenchmarkId,
   } from '../benchmarkStore'
@@ -20,10 +19,8 @@
   } from '../sessionStore'
   import { iconChevronRight, iconChevronDown, iconPlus } from '../design/icons'
   import Icon from './Icon.svelte'
-  import DialogShell from './DialogShell.svelte'
-  import InlineAppError from './InlineAppError.svelte'
   import PrimarySessionLaunchModal from './PrimarySessionLaunchModal.svelte'
-  import { toAppError, type AppError } from '../errors'
+  import BenchmarkFormModal from './BenchmarkFormModal.svelte'
 
   let collapsed = $state(false)
   let sidebarWidth = $state(240)
@@ -67,10 +64,6 @@
 
   // New-benchmark dialog
   let showNewBenchmark = $state(false)
-  let newName = $state('')
-  let newDescription = $state('')
-  let creating = $state(false)
-  let createError = $state<AppError | null>(null)
 
   function navigate(view: NavView) {
     // Navigating to a config/management view closes any open run report or
@@ -149,28 +142,12 @@
 
   function startNewBenchmark(e: MouseEvent) {
     e.stopPropagation()
-    newName = ''
-    newDescription = ''
-    createError = null
     showNewBenchmark = true
   }
 
-  async function handleCreateBenchmark() {
-    if (!newName.trim()) return
-    creating = true
-    createError = null
-    try {
-      const benchmark = await createBenchmark({
-        name: newName.trim(),
-        description: newDescription.trim() || null,
-      })
-      showNewBenchmark = false
-      await selectBenchmark(benchmark.id)
-    } catch (e) {
-      createError = toAppError(e)
-    } finally {
-      creating = false
-    }
+  async function handleBenchmarkCreated(id: string) {
+    showNewBenchmark = false
+    await selectBenchmark(id)
   }
 </script>
 
@@ -229,11 +206,17 @@
             {:else}
               <ul class="bench-list">
                 {#each $benchmarks as benchmark (benchmark.id)}
-                  <li class="bench-item" class:active={$activeBenchmarkId === benchmark.id}>
-                    <button class="bench-button" onclick={() => selectBenchmark(benchmark.id)}>
-                      <span class="bench-name">{benchmark.name}</span>
-                      <span class="bench-count">{benchmark.caseCount}</span>
-                    </button>
+                  <li
+                    class="bench-item primary-item"
+                    class:active={$activeBenchmarkId === benchmark.id}
+                  >
+                    <div class="bench-row">
+                      <button class="bench-button" onclick={() => selectBenchmark(benchmark.id)}>
+                        <span class="bench-id">[{benchmark.id}]</span>
+                        <span class="bench-name">{benchmark.name}</span>
+                        <span class="bench-count">{benchmark.caseCount}</span>
+                      </button>
+                    </div>
                   </li>
                 {/each}
               </ul>
@@ -371,48 +354,7 @@
 </nav>
 
 {#if showNewBenchmark}
-  <DialogShell
-    title="New benchmark"
-    onClose={() => (showNewBenchmark = false)}
-    dialogClass="benchmark-new-dialog"
-  >
-    <div class="form-stack">
-      <InlineAppError error={createError} />
-      <div class="field">
-        <label class="field-label" for="benchmark-name">Name</label>
-        <input
-          id="benchmark-name"
-          class="field-input"
-          type="text"
-          bind:value={newName}
-          disabled={creating}
-        />
-      </div>
-      <div class="field">
-        <label class="field-label" for="benchmark-description"
-          >Description <span class="optional">(optional)</span></label
-        >
-        <textarea
-          id="benchmark-description"
-          class="field-input"
-          rows={3}
-          bind:value={newDescription}
-          disabled={creating}></textarea>
-      </div>
-      <div class="form-actions">
-        <button class="btn" onclick={() => (showNewBenchmark = false)} disabled={creating}
-          >Cancel</button
-        >
-        <button
-          class="btn btn-primary"
-          onclick={handleCreateBenchmark}
-          disabled={creating || !newName.trim()}
-        >
-          {creating ? 'Creating…' : 'Create benchmark'}
-        </button>
-      </div>
-    </div>
-  </DialogShell>
+  <BenchmarkFormModal onClose={() => (showNewBenchmark = false)} onSaved={handleBenchmarkCreated} />
 {/if}
 
 <style>
@@ -527,26 +469,42 @@
     color: var(--text-dim);
     font-size: 0.82rem;
   }
-  .bench-item.active {
+  .bench-row {
+    display: flex;
+    align-items: center;
+    padding: 0.3rem 0.5rem 0.3rem 0.25rem;
+    transition:
+      background 0.1s,
+      color 0.1s;
+  }
+  .primary-item:hover > .bench-row {
     background: var(--bg-hover);
     color: var(--text-bright);
   }
-  .bench-item:hover {
+  .bench-item.active > .bench-row {
     background: var(--bg-hover);
     color: var(--text-bright);
   }
   .bench-button {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     background: none;
     border: none;
     cursor: pointer;
     color: inherit;
     font: inherit;
     text-align: left;
-    padding: 0.3rem 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    overflow: hidden;
+    padding: 0 0.25rem;
+  }
+  .bench-id {
+    flex-shrink: 0;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    opacity: 0.7;
   }
   .bench-name {
     flex: 1;
@@ -611,16 +569,6 @@
     color: var(--text-bright);
     border-bottom: 2px solid var(--amber-bright);
     font-weight: 500;
-  }
-
-  .optional {
-    font-weight: 400;
-    text-transform: none;
-    letter-spacing: 0;
-    font-size: 0.75rem;
-  }
-  :global(.benchmark-new-dialog) {
-    max-width: min(520px, 95vw);
   }
 
   .resize-handle {
