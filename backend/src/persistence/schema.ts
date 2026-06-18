@@ -33,6 +33,7 @@ import {
   tokenConfidenceValues,
   tokenSourceValues,
   turnStatusValues,
+  benchmarkRunStatusValues,
   SCHEMA_VERSION,
 } from "../domain/model.js";
 import { ARTIFACT_TYPE } from "../domain/executionModel.js";
@@ -250,6 +251,55 @@ export function initializeSchema(connection: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_artifacts_session_id ON artifacts(session_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_step_id ON artifacts(step_id);
+
+    -- ─────────────────────────────────────────────────────────────────────
+    -- Benchmarks (static test suite), cases, and runs
+    -- A run produces normal primary sessions with parent_container_type_key
+    -- = 'benchmark' and parent_container_id = the run id.
+    -- ─────────────────────────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS benchmarks (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS benchmark_cases (
+      id TEXT PRIMARY KEY,
+      benchmark_id TEXT NOT NULL REFERENCES benchmarks(id) ON DELETE CASCADE,
+      name TEXT,
+      prompt TEXT NOT NULL,
+      order_index INTEGER NOT NULL,
+      expected_tools_called_json TEXT NOT NULL DEFAULT '[]',
+      expected_tools_not_called_json TEXT NOT NULL DEFAULT '[]',
+      source_session_id TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_benchmark_cases_benchmark ON benchmark_cases(benchmark_id);
+
+    -- A run is independent of its source benchmark (no cascade): a benchmark is an
+    -- editable blueprint, a run is an immutable snapshot spawned from it.
+    CREATE TABLE IF NOT EXISTS benchmark_runs (
+      id TEXT PRIMARY KEY,
+      benchmark_id TEXT NOT NULL,
+      benchmark_name TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN (${sqlEnum(benchmarkRunStatusValues)})),
+      model_config_id TEXT NOT NULL,
+      mcp_profile_ids_json TEXT NOT NULL DEFAULT '[]',
+      cases_json TEXT NOT NULL DEFAULT '[]',
+      repetitions INTEGER NOT NULL,
+      sessions_json TEXT NOT NULL DEFAULT '[]',
+      error TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      started_at INTEGER,
+      completed_at INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_benchmark_runs_benchmark ON benchmark_runs(benchmark_id);
   `);
 
   const upsertMeta = connection.prepare(`
@@ -381,6 +431,35 @@ export function validateSchema(connection: Database.Database): void {
       "mime_type",
       "metadata_json",
       "created_at",
+    ],
+    benchmarks: ["id", "name", "description", "created_at", "updated_at"],
+    benchmark_cases: [
+      "id",
+      "benchmark_id",
+      "name",
+      "prompt",
+      "order_index",
+      "expected_tools_called_json",
+      "expected_tools_not_called_json",
+      "source_session_id",
+      "created_at",
+      "updated_at",
+    ],
+    benchmark_runs: [
+      "id",
+      "benchmark_id",
+      "benchmark_name",
+      "status",
+      "model_config_id",
+      "mcp_profile_ids_json",
+      "cases_json",
+      "repetitions",
+      "sessions_json",
+      "error",
+      "created_at",
+      "updated_at",
+      "started_at",
+      "completed_at",
     ],
   };
 

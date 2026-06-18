@@ -223,13 +223,22 @@ The persistence-layer record types map to the canonical tables as follows:
 | `PartRecord` | `parts` |
 | `RawExchangeRecord` | `raw_exchanges` |
 
-A `Benchmark` container is not a record/table of its own; it is referenced by sessions through the `sessions.parent_container_type_key = 'benchmark'` / `parent_container_id` columns.
+A benchmark **run** acts as the container: the sessions it produces reference it via `sessions.parent_container_type_key = 'benchmark'` / `parent_container_id = <run id>`. Benchmark *definitions* (suite, case, run) have their own tables — see [Benchmark Tables](#benchmark-tables) below.
 
 Current deliberate limitations:
 
 - deterministic workflow steps currently reuse the shared `steps` model; the shipped analysis flow does not require separate subtype tables
 - parent/container relationships are still intentionally limited by the current session classification rules
-- benchmark support is still limited to the minimal container model
+
+## Benchmark Tables
+
+Benchmarks add three tables (see [BENCHMARK.md](BENCHMARK.md) for the feature reference). IDs are type-tagged and hierarchical: `B-7K3M` (benchmark), `B-7K3M.3` (case 3), `R-9QX4` (run). A run produces one normal primary session per case × repetition, parented to the run id via the `sessions` parent columns above.
+
+- `benchmarks` — a static suite (editable blueprint): `id`, `name`, `description`, `created_at`, `updated_at`.
+- `benchmark_cases` — a case in a suite: `id`, `benchmark_id` (FK → `benchmarks`, `ON DELETE CASCADE`), `name` (optional), `prompt`, `order_index`, `expected_tools_called_json`, `expected_tools_not_called_json`, `source_session_id` (the session a case was extracted from, if any), `created_at`, `updated_at`.
+- `benchmark_runs` — an immutable execution snapshot, **independent** of its source benchmark (no FK / no cascade): `id`, `benchmark_id` (soft reference), `benchmark_name` (snapshot for display), `status` (`pending`/`running`/`complete`/`error`), `model_config_id`, `mcp_profile_ids_json` (effective selection, resolved at launch), `cases_json` (snapshot of the selected cases: `{sourceCaseId, name, prompt, expectedToolsCalled, expectedToolsNotCalled}`), `repetitions`, `sessions_json` (the produced `{sessionId, sourceCaseId, repetition}` mapping), `error`, `created_at`, `updated_at`, `started_at`, `completed_at`.
+
+Indexes: `idx_benchmark_cases_benchmark`, `idx_benchmark_runs_benchmark`. The report is computed on read from the produced sessions, evaluated against the run's case snapshot (never the live cases). Lifecycles are decoupled: deleting a **benchmark** cascades to its **cases** but leaves its **runs** intact (they are self-contained snapshots); deleting a **run** removes its produced sessions explicitly (generic untyped parent → no cascade). Editing/deleting a benchmark or case therefore never alters a past run or its report.
 
 ## Constraints and Indexes
 

@@ -41,6 +41,9 @@ import {
   mdiTune,
   mdiCircle,
   mdiDotsHorizontal,
+  mdiClipboardListOutline,
+  mdiRocketLaunchOutline,
+  mdiEyeOutline,
 } from '@mdi/js'
 
 // ── Navigation & layout ────────────────────────────────────────────
@@ -61,6 +64,7 @@ export const iconRefresh = mdiRefresh
 export const iconLoad = mdiDownloadOutline
 export const iconEject = mdiEjectOutline
 export const iconInfo = mdiInformationOutline
+export const iconView = mdiEyeOutline
 export const iconPlay = mdiPlay
 export const iconPause = mdiPause
 export const iconImport = mdiImport
@@ -75,3 +79,5 @@ export const iconAnalysis = mdiChartBar
 export const iconSettings = mdiTune
 export const iconDot = mdiCircle
 export const iconSpinner = mdiDotsHorizontal
+export const iconBenchmark = mdiClipboardListOutline
+export const iconRun = mdiRocketLaunchOutline

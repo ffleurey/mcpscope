@@ -59,6 +59,8 @@ http://localhost:3030
 - `-p 3030:3030` exposes both the UI and API
 - `--add-host=host.docker.internal:host-gateway` lets the container reach LM Studio and your MCP server on the host machine
 
+For pinning a specific version instead of `:latest`, running the CLI inside the container, or the docker-compose variant, see [RELEASING.md → Pulling a released image](RELEASING.md#pulling-a-released-image).
+
 If you stop the container later, start it again with:
 
 ```bash

@@ -106,3 +106,187 @@ export interface McpProfileSummary {
 export interface ListMcpProfilesResult {
   mcp_profiles: McpProfileSummary[];
 }
+
+// ─── Benchmark result shapes (snake_case — mirror the backend op catalog) ─────
+
+export interface BenchmarkSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface BenchmarkCaseRecord {
+  id: string;
+  benchmark_id: string;
+  name: string | null;
+  prompt: string;
+  order_index: number;
+  expected_tools_called: string[];
+  expected_tools_not_called: string[];
+  source_session_id: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface BenchmarkRunSession {
+  session_id: string;
+  source_case_id: string;
+  repetition: number;
+  status: string;
+}
+
+export interface BenchmarkRunCaseSnapshot {
+  source_case_id: string;
+  name: string | null;
+  prompt: string;
+  expected_tools_called: string[];
+  expected_tools_not_called: string[];
+}
+
+export interface BenchmarkRunRecord {
+  id: string;
+  benchmark_id: string;
+  benchmark_name: string;
+  status: string;
+  model_config_id: string;
+  mcp_profile_ids: string[];
+  repetitions: number;
+  cases: BenchmarkRunCaseSnapshot[];
+  sessions: BenchmarkRunSession[];
+  error: string | null;
+  created_at: number;
+  updated_at: number;
+  started_at: number | null;
+  completed_at: number | null;
+}
+
+export interface BenchmarkListEntry {
+  id: string;
+  name: string;
+  description: string | null;
+  case_count: number;
+  run_count: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface BenchmarkCreateResult {
+  benchmark: BenchmarkSummary;
+}
+
+export interface BenchmarkListResult {
+  benchmarks: BenchmarkListEntry[];
+}
+
+export interface BenchmarkInspectResult {
+  benchmark: BenchmarkSummary;
+  cases: BenchmarkCaseRecord[];
+  runs: BenchmarkRunRecord[];
+}
+
+export interface BenchmarkAddCaseResult {
+  case: BenchmarkCaseRecord;
+}
+
+export interface BenchmarkRunLaunchResult {
+  run: BenchmarkRunRecord;
+}
+
+export interface BenchmarkRunProgressPerCase {
+  source_case_id: string;
+  name: string | null;
+  completed: number;
+  total: number;
+}
+
+export interface BenchmarkRunStatusResult {
+  run_id: string;
+  benchmark_id: string;
+  benchmark_name: string;
+  status: string;
+  repetitions: number;
+  total_cases: number;
+  total_sessions: number;
+  completed_sessions: number;
+  failed_sessions: number;
+  per_case: BenchmarkRunProgressPerCase[];
+  current_session_id: string | null;
+  error: string | null;
+  started_at: number | null;
+  completed_at: number | null;
+}
+
+export interface NumberStats {
+  min: number;
+  max: number;
+  mean: number;
+  median: number;
+  stddev: number;
+}
+
+export interface PerToolCounts {
+  calls: number;
+  errors: number;
+  result_payload_chars: number;
+}
+
+export interface SessionMetrics {
+  session_id: string;
+  terminal_status: string | null;
+  completed: boolean;
+  tool_call_count: number;
+  tool_error_count: number;
+  tools_called: string[];
+  per_tool: Record<string, PerToolCounts>;
+  tokens: {
+    prompt: number | null;
+    completion: number | null;
+    reasoning: number | null;
+    total: number | null;
+  };
+  final_answer: string | null;
+}
+
+export interface CaseReport {
+  case_id: string;
+  prompt: string;
+  repetitions: number;
+  session_count: number;
+  has_checks: boolean;
+  pass_count: number | null;
+  pass_at_k: boolean | null;
+  pass_hat_k: boolean | null;
+  success_rate: number | null;
+  completed_count: number;
+  tool_error_count: number;
+  tool_call_stats: NumberStats | null;
+  total_token_stats: NumberStats | null;
+  per_tool: Record<string, PerToolCounts>;
+  sessions: SessionMetrics[];
+}
+
+export interface PerToolRollup {
+  calls: number;
+  errors: number;
+  error_rate: number;
+  result_payload_chars: number;
+  cases_used_in: number;
+}
+
+export interface RunReport {
+  run_id: string;
+  benchmark_id: string;
+  status: string;
+  repetitions: number;
+  case_count: number;
+  session_count: number;
+  cases: CaseReport[];
+  per_tool: Record<string, PerToolRollup>;
+}
+
+export interface BenchmarkRunReportResult {
+  run: BenchmarkRunRecord;
+  report: RunReport;
+}

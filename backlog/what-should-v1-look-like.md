@@ -4,6 +4,16 @@ We want to release mcpscope as an opensource project.
 
 For that we have to package what we can call a V1 with a simple and useful set of features.
 
+> **Status (updated 2026-06-18).** Major progress since this was first drafted: the foundation
+> was cleaned up (v1→v2 migration cruft removed, schema/IDs simplified — merged to `main`); a
+> **design system** shipped ([DESIGN-SYSTEM.md](../DESIGN-SYSTEM.md)); and the **benchmark**
+> feature (suite/case/run) shipped for V1 across UI, CLI and MCP (PR #35 — see
+> [BENCHMARK.md](../BENCHMARK.md) and [completed/benchmark-v1.md](completed/benchmark-v1.md)).
+> The analysis direction was reframed to **benchmark-first**, with two analysis *modes* (guided +
+> "skill") layered on later — see
+> [candidates/v1-analysis-and-benchmark-plan.md](candidates/v1-analysis-and-benchmark-plan.md).
+> The readiness summary at the bottom is current; the prose sections below are partly historical.
+
 We target developers and ai enthusiasts who want to experiment with mcp servers and mcp server development. The core use-case is to allow experimenting with local AI models (LMStudio, Ollama) to help people understand how the context work and how the llm actually picks tools and call them. The reason I built mcpscope in the first place was that I felt that the built-in chat in LMStudio or other tools like OpenWebUI did not give me enough observability on the state of the context at all time. Working with local model with small context windows from 8k to 64k means that context management is very important.
 
 ## The MCP:Scope usecases
@@ -36,13 +46,32 @@ UC1 and UC2 are in scope for V1. UC3 is out of scope: we should design and struc
 
 Support for Ollama with full streaming and reasoning like we have with LMStudio. Since Ollama and LMStudio are the most popular tools to run LLM locally it is good to have both in the V1. We have support for OpenRouter as well for remote LLM to complement but that is secondary and from tests it is not as easy to get the thinking and reasoning blocks. Being able to use bigger models for the analysis make sense and this is mostly where OpenRouter integration is useful. For the analysis, it is the result which is interesting, not the details of the session so the limitation in terms of observability does not matter. We could consider having also a standard OpenAI Connection option for other tools but we have to make sure that the standard part is enough for the basics.
 
-### Session Analysis
+### Session Analysis — reframed to benchmark-first
 
-We need to ship V1 with a couple of different analysis strategies which can be used out of the box. Currently we have 3 different ones which have mostly been created to test the framework. None of them is really good and efficient, they need more work. Ideally I would like to propose 2 options. The first one targeted at small models like 'Gemma 4 e4b' which requires a deterministic step by step analysis along the lines of what we have implemented where we inject the exact content to be analysed automatically and provide full guidance. The second one targeting more "autonomous" models like "deepseek-v4-flash" and maybe some locally running version of Qwen 3.6. With those models we would like to provide less guidance and have them use more autonomously the mcp tools to decide and inspect the relevant parts without being forced to inspect everything. This should take advantage of their stronger abilities to still get good analysis but quicker and more efficiently.
+This was reframed after experience with the three test-framework strategies (`fullSession` /
+`fastSession` / `fastTool`, none production-ready). The V1 direction is **benchmark-first**: the
+benchmark suite/case/run feature (shipped — repeatable runs + per-tool/per-case deterministic
+metrics) is the primary UC2 value. Session *analysis* becomes two **modes** layered on the
+existing workflow framework, both deferred past this increment:
 
-### Acceptable UI and Design
+- a **guided** strategy (deterministic injection) to compensate for small/lazy models (e.g. Gemma-class), and
+- a **"skill"** mode (prompt-guided) that lets a more capable model decide what to inspect via the `mcpscope_inspect` tools.
 
-The UI is very basic at this point, no effort has been put in it. It works but visually we should do some improvements and we should choose a color palette and make a basic icon. for the colors we will go with a dark mode, some shades of grey and amber and green as the main colors (colors of text CRT monitors of the 80s). We should try to make sure that we use a few colors consistently so that we do not run into advanced design issues. We need the readability to be good and the user experience to be efficient. We are not trying to be fancy and should use the underlying libs as much as possible to avoid too much custom CSS and alike. We need to do something about the dialogs and modals to make them consistent and decent looking. It is not the case for now but that should not be too hard to fix.
+LLM-judged evaluation — using a *separate* judge model, never self-judging — is the future
+success layer on top of the benchmark. Full plan:
+[candidates/v1-analysis-and-benchmark-plan.md](candidates/v1-analysis-and-benchmark-plan.md);
+evaluation research: [research/benchmark-success-criteria.md](research/benchmark-success-criteria.md).
+The original two-strategy text is preserved in git history.
+
+### Acceptable UI and Design — ✅ design system shipped
+
+A dark, restrained design system shipped (the original goal as described below was met): neutral
+greys for chrome, **amber** as the single accent, **green** for session data (80s CRT-phosphor
+inspiration), a small token set, shared primitives (buttons, fields, dialogs via `DialogShell`,
+`.data-table`, status pills/dots), MDI icons, and an amber oscilloscope favicon. Dialogs/modals
+are consistent (shared shell, standardized action order). Rules, tokens, and a live in-app
+reference are documented in [DESIGN-SYSTEM.md](../DESIGN-SYSTEM.md). Remaining work is
+incremental polish, not a V1 blocker.
 
 ### Explicit model and MCP profile selection from CLI and MCP
 
@@ -107,8 +136,8 @@ See [improve-distribution.md](improve-distribution.md) for the full analysis of 
 
 ### UC2 — CLI and MCP
 
-- Five CLI commands (`create`, `send`, `status`, `list`, `inspect`) with text and `--json` output, polling-based automation loop
-- Five matching MCP tools (`mcpscope_create`, `mcpscope_send`, `mcpscope_status`, `mcpscope_list`, `mcpscope_inspect`) over Streamable HTTP — shared operation catalog enforces parity
+- Fifteen shared catalog operations, each exposed identically as a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (Streamable HTTP) — seven core (`create`, `send`, `status`, `list`, `inspect`, `list_model_configs`, `list_mcp_profiles`) plus eight `benchmark_*` ops. Parity (CLI ids == MCP ids) is test-enforced; CLI has text and `--json` output with a polling automation loop
+- Benchmark suite/case/run via UI, CLI and MCP: define a reusable prompt suite, run it (N repetitions, chosen model/MCP), poll progress, and read a per-tool/per-case report (see [BENCHMARK.md](../BENCHMARK.md))
 - Restricted analysis MCP endpoint at `/mcp/analysis` exposing read-only `inspect` + `status` for agent-driven evaluation
 - Sequential scheduler with init/session/step job types, admission control, pause/resume, and SSE event stream consumed by the frontend
 - Three shipped analysis workflow types (`fullSession`, `fastSession`, `fastTool`) with plan-based execution, idempotent artifact steps, retry, and progress tracking
@@ -120,19 +149,17 @@ See [improve-distribution.md](improve-distribution.md) for the full analysis of 
 
 | Area | State | v1 Gap |
 |---|---|---|
-| Architecture & data model | ✅ Solid | None |
+| Architecture & data model | ✅ Solid | None (foundation cleanup merged to `main`) |
 | Provider support (LM Studio, OpenRouter, Ollama) | ✅ Complete | Minor: generic OpenAI-compatible option |
-| Execution model & scheduler | ✅ Solid | None (step enqueue is deferred) |
+| Execution model & scheduler | ✅ Solid | None (explicit public step enqueue still deferred) |
 | Session management (CRUD, lifecycle) | ✅ Complete | None |
-| CLI 5 commands | ✅ Complete | Minor: follow mode, help UX |
-| MCP 5 tools | ✅ Complete | None |
+| CLI + MCP surface (15 catalog ops, mirrored) | ✅ Complete | None — parity is test-enforced |
+| **Benchmark (suite/case/run) via UI/CLI/MCP** | ✅ Phase A shipped | LLM-judged evaluation deferred (Phase B/C) |
 | Docker packaging & tutorial | ✅ Complete | None |
 | **npm distribution + `serve` command** | ❌ Not implemented | **Medium** — needs CLI `serve` command with bundled frontend |
 | Replay harness & test infrastructure | ✅ Strong | None |
-| **Session analysis quality** | ⚠️ Shipped but weak | **Major** — needs hybrid + autonomous workflows |
-| **Analysis launch ownership** | ⚠️ Partially frontend-owned | **Medium** — needs backend-owned launch + CLI/MCP trigger |
-| **Model/MCP selection on CLI and MCP** | ✅ Complete | None |
-| **UI design & polish** | ❌ Basic/functional | **Medium** — needs color palette, icons, consistent modals |
-| **Evidence protocol** | ⚠️ Research phase | **Medium** — needs to settle before analysis workflow freezes |
+| Session analysis (guided / "skill" modes) | ⏸ Deferred | Reframed behind the benchmark; future increment + LLM judge |
+| **UI design & polish** | ✅ Design system shipped | Incremental polish only |
+| Model/MCP selection on CLI and MCP | ✅ Complete | None |
 | Trace export/import | ✅ Complete | None |
 | Configuration management | ✅ Complete | None |

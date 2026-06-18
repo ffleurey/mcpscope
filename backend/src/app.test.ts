@@ -145,7 +145,17 @@ describe("backend foundation", () => {
     const body = response.json();
     expect(body).toMatchObject({
       version: 1,
-      entities: ["session", "step", "turn", "round", "part", "raw-exchange"],
+      entities: [
+        "session",
+        "step",
+        "turn",
+        "round",
+        "part",
+        "raw-exchange",
+        "benchmark",
+        "benchmark-case",
+        "benchmark-run",
+      ],
     });
     expect(body.schema.tables).toEqual(
       expect.arrayContaining([
@@ -157,6 +167,9 @@ describe("backend foundation", () => {
         "parts",
         "raw_exchanges",
         "artifacts",
+        "benchmarks",
+        "benchmark_cases",
+        "benchmark_runs",
       ]),
     );
     expect(body.schema.meta).toMatchObject({

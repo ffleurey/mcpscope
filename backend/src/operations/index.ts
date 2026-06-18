@@ -47,6 +47,33 @@ export {
 } from "./inspect.js";
 export type { InspectInput, InspectResult } from "./inspect.js";
 
+export {
+  benchmarkCreateOperation,
+  benchmarkCreateInputSchema,
+  benchmarkCreateOutputSchema,
+  benchmarkListOperation,
+  benchmarkListInputSchema,
+  benchmarkListOutputSchema,
+  benchmarkInspectOperation,
+  benchmarkInspectInputSchema,
+  benchmarkInspectOutputSchema,
+  benchmarkAddCaseOperation,
+  benchmarkAddCaseInputSchema,
+  benchmarkAddCaseOutputSchema,
+  benchmarkAddCaseFromSessionOperation,
+  benchmarkAddCaseFromSessionInputSchema,
+  benchmarkAddCaseFromSessionOutputSchema,
+  benchmarkRunOperation,
+  benchmarkRunInputSchema,
+  benchmarkRunOutputSchema,
+  benchmarkRunStatusOperation,
+  benchmarkRunStatusInputSchema,
+  benchmarkRunStatusOutputSchema,
+  benchmarkRunReportOperation,
+  benchmarkRunReportInputSchema,
+  benchmarkRunReportOutputSchema,
+} from "./benchmarkOperations.js";
+
 export { operationCatalog, operationList } from "./catalog.js";
 export type { BackendOperationId } from "./catalog.js";
 

@@ -40,7 +40,7 @@ export default [
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        project: "./frontend/tsconfig.app.json",
+        project: "./frontend/tsconfig.json",
         extraFileExtensions: [".svelte"],
       },
       globals: { ...globals.browser },
@@ -72,7 +72,7 @@ export default [
       parser: svelteParser,
       parserOptions: {
         parser: tsParser,
-        project: "./frontend/tsconfig.app.json",
+        project: "./frontend/tsconfig.json",
         extraFileExtensions: [".svelte"],
       },
       globals: { ...globals.browser },

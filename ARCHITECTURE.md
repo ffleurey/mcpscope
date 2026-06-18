@@ -21,7 +21,9 @@ The value of the project depends on correctness and inspectability:
 - [DATA-MODEL.md](DATA-MODEL.md) — compact canonical runtime tree, public part taxonomy, canonical IDs, and lookup-model rules
 - [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) — shipped `session_analysis` workflow and evidence-loading rules
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) — current SQLite tables, foreign keys, singleton defaults, and ER diagram
-- [CLI.md](CLI.md) — CLI command reference: commands, flags, output format, exit codes
+- [CLI.md](CLI.md) and [MCP.md](MCP.md) — the shared operation catalog as CLI commands and MCP tools
+- [BENCHMARK.md](BENCHMARK.md) — benchmark suite/case/run feature: model, metrics, and agent-facing surface
+- [PROVIDERS.md](PROVIDERS.md) — provider-specific reasoning, token-counting, and context-window behavior
 - `ARCHITECTURE.md` — system design, persistence model, streaming model, replay model, and API overview
 
 ## Tech stack
@@ -93,9 +95,9 @@ The backend persistence layer is organized around the execution model:
 - `WorkflowStep` — the abstract deterministic step subtype implemented by concrete analysis step classes in `analysis/shared/` and `analysis/fastTool/` (see `backend/src/workflow/workflowStep.ts`); may own zero or more `Turn` children
 - `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records
 
-The persistence-layer record types (`SessionRecord`, `TurnRecord`, `RoundRecord`, `PartRecord`, `RawExchangeRecord`) remain the authoritative source for runtime behavior and replay. They persist to the canonical v2 schema. For the record-to-table mapping and column-level details see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
+The persistence-layer record types (`SessionRecord`, `TurnRecord`, `RoundRecord`, `PartRecord`, `RawExchangeRecord`) remain the authoritative source for runtime behavior and replay. They persist to the canonical runtime schema (plain table names, schema version `1`, no migration history). For the record-to-table mapping and column-level details see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
 
-Normal startup initializes that runtime schema plus the shared config/default tables only. The legacy `sessions` / `turns` / `rounds` / `parts` / `raw_exchanges` tables remain available only through the explicit legacy initializer used by old-schema validation tests; they are not part of the normal runtime path.
+Startup runs a single `initializeSchema()` that creates the snapshot/config tables, the runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`), and the benchmark tables. There is no migration path and no separate legacy schema: the tables use plain names at schema version `1`, and an out-of-date database is started empty rather than migrated.
 
 ### Current implementation
 
@@ -118,7 +120,7 @@ The shipped product implements:
 - a `WorkflowStep` abstract class with template-method lifecycle (`execute()` → `run(ctx)`) and five concrete analysis step subclasses (bootstrap, tool-call assessment, turn summary, final aggregation, grouped assessment)
 - a backend-owned sequential execution scheduler with one active slot, one in-memory queue, and one global execution event stream
 - `SessionContainer` ownership: sessions may belong to a parent session or a `Benchmark` container
-- `Benchmark` as a minimal `SessionContainer` for grouping sessions (full benchmark domain design is future work)
+- the benchmark suite/case/run feature (Phase A): persisted benchmarks and cases, immutable run snapshots, a sequential run coordinator, and a compute-on-read metrics report — shipped across UI, CLI, and MCP (see [BENCHMARK.md](BENCHMARK.md))
 - generic container/session/step persistence without table-per-subtype growth
 - a registry-based analysis workflow factory (`registerAnalysisWorkflow()` / Map lookup) replacing `switch(workflowKind)`
 - self-contained analysis subclasses (`fullSession/`, `fastSession/`, `fastTool/`) each owning its own prompt builders, schema keys, Zod schemas, and system prompt
@@ -127,7 +129,7 @@ The shipped product implements:
 
 What is **not** implemented yet:
 
-- full benchmark product work beyond minimal container support
+- benchmark Phase B/C: LLM-judged success and richer scoring (Phase A ships deterministic tool-behavior checks only — see [BENCHMARK.md](BENCHMARK.md))
 - public generic step enqueue across all adapters and client helpers
 - broader workflow automation and cleanup beyond the shipped analysis-session workflow
 
@@ -135,7 +137,7 @@ What is **not** implemented yet:
 
 All executable work runs through a single backend scheduler. The canonical flow is:
 
-```
+```text
 trigger (HTTP / CLI / MCP)
   → enqueue (scheduler.enqueueSession / enqueueInit / enqueueStep)
   → scheduler execution (one sequential worker, one active job at a time)
@@ -151,6 +153,7 @@ Scheduler characteristics:
 - pausing is boundary-based: the scheduler stops after the current running step or turn finishes, then leaves the remaining session state resumable from persisted runtime records
 
 Job kinds:
+
 - `init` — session initialization (prelude token probing, MCP setup); auto-enqueued when a primary session is created
 - `session` — primary turn execution or analysis session execution
 - `step` — single analysis step execution (for debug step-through)
@@ -185,7 +188,7 @@ The backend structure is intentionally split so architectural seams are visible 
 
 This split is deliberate: route modules should stay thin HTTP adapters over backend-owned operations and scheduler entrypoints, while scheduler submodules separate queue ownership from admission and execution behavior.
 
-**Benchmark support note**: benchmark orchestration can be added as a thin layer above sessions and queue jobs without new execution infrastructure. The scheduler's sequential control plane, job kinds, and event stream are already the right primitives.
+**Benchmark support note**: benchmark orchestration (Phase A) is implemented exactly as a thin layer above sessions and queue jobs, with no new execution infrastructure — the run coordinator enqueues ordinary `session` jobs on the existing sequential scheduler and reads results back from persisted runtime records. The scheduler's sequential control plane, job kinds, and event stream were already the right primitives.
 
 The important rule is that mcpscope keeps one canonical model across persistence, API, UI, and
 CLI. Provider-specific transport structures are normalized into that model at the integration

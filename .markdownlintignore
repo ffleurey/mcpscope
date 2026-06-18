@@ -1,0 +1,6 @@
+node_modules/
+# backlog/ is a historical board, not maintained documentation (see AGENTS.md),
+# so it is intentionally excluded from markdown linting.
+backlog/
+exports/
+backend-data/test-artifacts/

@@ -59,55 +59,28 @@ Monitor progress under the **Actions** tab on GitHub.
 
 ## Pulling a released image
 
-Users need a GitHub personal access token (PAT) with `read:packages` scope.
+The end-user run path — GHCR login (PAT with `read:packages`), `docker pull`, and the
+recommended persistent `docker run` — is the [quick-start tutorial](TUTORIAL.md). It is not
+repeated here so the two docs cannot drift.
 
-```bash
-echo "$GITHUB_PAT" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-docker pull ghcr.io/ffleurey/mcpscope:latest
-```
+Release-side notes for the published image:
 
-Run a quick local instance without persistence:
-```bash
-docker run -d \
-  --name mcpscope-app \
-  --add-host=host.docker.internal:host-gateway \
-  -p 3030:3030 \
-  ghcr.io/ffleurey/mcpscope:latest
-```
+- **Tags:** `:X.Y.Z` (exact), `:X.Y` (major.minor), and `:latest` (see step 5 above).
+- **CLI in-container:** the image bundles the CLI, so commands can run against the same container:
 
-Run with persistent local data:
-```bash
-docker run -d \
-  --name mcpscope-app \
-  --restart unless-stopped \
-  --add-host=host.docker.internal:host-gateway \
-  -p 3030:3030 \
-  -v mcpscope-data:/data \
-  ghcr.io/ffleurey/mcpscope:latest
-```
+  ```bash
+  docker exec -i mcpscope-app mcpscope list
+  docker exec -i mcpscope-app mcpscope create "test session"
+  ```
 
-The image also includes the CLI, so you can run commands inside the same container:
-
-```bash
-docker exec -i mcpscope-app mcpscope list
-docker exec -i mcpscope-app mcpscope create "test session"
-```
-
-Or with docker-compose (optional convenience):
-```bash
-# Edit docker-compose.yml to use the GHCR image instead of building locally:
-#   image: ghcr.io/ffleurey/mcpscope:latest
-#   (remove the `build: .` line)
-docker compose up -d
-```
-
-Then open **http://localhost:3030**.
+- **docker-compose (optional):** point `image:` at `ghcr.io/ffleurey/mcpscope:latest` (and drop
+  the `build: .` line) in `docker-compose.yml`, then `docker compose up -d`.
 
 ---
 
 ## How the version flows
 
-```
+```text
 npm version patch
   → updates package.json "version"
   → creates git tag vX.Y.Z

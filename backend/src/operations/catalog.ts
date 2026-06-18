@@ -5,6 +5,16 @@ import { statusOperation } from "./status.js";
 import { inspectOperation } from "./inspect.js";
 import { listModelConfigsOperation } from "./listConfigs.js";
 import { listMcpProfilesOperation } from "./listConfigs.js";
+import {
+  benchmarkCreateOperation,
+  benchmarkListOperation,
+  benchmarkInspectOperation,
+  benchmarkAddCaseOperation,
+  benchmarkAddCaseFromSessionOperation,
+  benchmarkRunOperation,
+  benchmarkRunStatusOperation,
+  benchmarkRunReportOperation,
+} from "./benchmarkOperations.js";
 
 export const operationCatalog = {
   list: listOperation,
@@ -14,6 +24,14 @@ export const operationCatalog = {
   inspect: inspectOperation,
   list_model_configs: listModelConfigsOperation,
   list_mcp_profiles: listMcpProfilesOperation,
+  benchmark_create: benchmarkCreateOperation,
+  benchmark_list: benchmarkListOperation,
+  benchmark_inspect: benchmarkInspectOperation,
+  benchmark_add_case: benchmarkAddCaseOperation,
+  benchmark_add_case_from_session: benchmarkAddCaseFromSessionOperation,
+  benchmark_run: benchmarkRunOperation,
+  benchmark_run_status: benchmarkRunStatusOperation,
+  benchmark_run_report: benchmarkRunReportOperation,
 } as const;
 
 export type BackendOperationId = keyof typeof operationCatalog;
@@ -26,4 +44,12 @@ export const operationList = [
   inspectOperation,
   listModelConfigsOperation,
   listMcpProfilesOperation,
+  benchmarkCreateOperation,
+  benchmarkListOperation,
+  benchmarkInspectOperation,
+  benchmarkAddCaseOperation,
+  benchmarkAddCaseFromSessionOperation,
+  benchmarkRunOperation,
+  benchmarkRunStatusOperation,
+  benchmarkRunReportOperation,
 ] as const;

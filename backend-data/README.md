@@ -18,6 +18,7 @@ Only this README is tracked in git. Database files and JSON artifacts in this fo
 ### Backend runtime
 
 The backend stores its local state here by default. That includes:
+
 - SQLite database (`mcpscope.db`) — sessions, turns, rounds, parts, raw exchanges, and profile snapshots
 - Configuration file (`mcpscope.config.json`) — LM connections, model configs, MCP server profiles, and session creation defaults
 

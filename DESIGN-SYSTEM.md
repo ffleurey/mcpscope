@@ -143,6 +143,7 @@ dense inspection tool; the shared primitives already carry consistent internal s
 All of these are shared primitives in `app.css` (or shared components) with a live demo in the Reference.
 
 ### Buttons
+
 | Variant | Style |
 |---|---|
 | `.btn` | Transparent bg, dim border + text; hover lifts to `--bg-hover`, brighter text |
@@ -154,6 +155,7 @@ Sizes: default `0.4rem 0.85rem`; `.btn-sm` (`0.28rem 0.65rem`); `.btn-xs` (dense
 2px `--amber-bright` outline, 2px offset.
 
 ### Form elements
+
 - Inputs/selects/textareas (`.field-input`): `--bg-base` bg, `--border`, `--text-bright`. Focus shows a
   **`--amber-bright` border on `:focus-visible`** — always, never suppressed (WCAG 2.4.7).
 - Labels: `.field-label` — `--text-dim`, 0.78rem, uppercase, above the input. Hints `.field-hinttext`,
@@ -163,34 +165,49 @@ Sizes: default `0.4rem 0.85rem`; `.btn-sm` (`0.28rem 0.65rem`); `.btn-xs` (dense
   toggle look as the tables (`.opt-check`/`.opt-radio`). Selects stay native (`accent-color`).
 
 ### Dialogs
+
 Use the shared **`DialogShell.svelte`** — never hand-roll `<dialog>`. Backdrop `rgba(0,0,0,0.55)`,
 `--bg-surface` surface + `--border`, 8px radius, header & body `0.75rem 1rem`, `min(720px,95vw)` / 85vh,
 draggable header. Error content: the **`InlineAppError.svelte`** component.
 
 ### Tabs / navigation
+
 Active tab: 2px `--amber-bright` underline + `--text-bright`. Inactive: `--text-dim`. Hover: `--text-bright`.
 
 ### Status indicators
+
 `.status-dot` (8px flat circle) + modifier: `.running` (green-bright), `.idle` (green-dim),
 `.warn` (amber), `.error` (red). Flat — no glow. `.status-pill` (+ `.dim/.soft/.error/.success`) for a
 rounded status label.
 
 ### Tables
-The shared **`.data-table`** primitive (config admin pages; live demo in the Reference):
+
+The shared **`.data-table`** primitive (config admin pages, run reports; live demo in the Reference):
+
 - Wrap in `.table-scroll` (`overflow-x:auto`); `table-layout: fixed` with a `<colgroup>` of widths;
-  `width: max-content; min-width: 100%` (never collapse, fill when there's room). Resizable columns via
-  `use:columnResize` (drag a header border; session-only).
-- Header: `--text-dim` 0.68rem uppercase. Dense rows, `--border` horizontal separators only, `--bg-hover`
-  hover. Cells truncate with ellipsis (add `title=`).
-- Column roles: `.col-num` (right mono), `.col-mono` (IDs/URLs), `.col-toggle` (first-column control),
-  `.col-actions` (trailing). Layout reads **static data → state indicator → actions**; state is a
-  `.status-dot` or amber icon toggle, actions are always-visible `.icon-btn`s in `.row-actions`.
+  `width: max-content` — the table is exactly the sum of its column widths and the wrapper scrolls
+  horizontally when that exceeds the view (it does **not** stretch to fill, so columns never redistribute).
+- **Every `.data-table` is resizable** — always add `use:columnResize`. **Each column resizes
+  independently**: dragging a header border changes only that column's width; the table grows/shrinks and
+  scrolls (no proportional resizing of the other columns). A persistent thin divider marks every column
+  border and turns amber on hover, so the grab point is always visible. Widths are session-only.
+- Header: `--text-dim` 0.68rem uppercase, **always left-aligned** (including `.col-num` headers — only the
+  numeric *cells* are right-aligned, so titles stay consistent). Dense rows, `--border` horizontal
+  separators only, `--bg-hover` hover. Cells truncate with ellipsis (add `title=`).
+- Column roles: `.col-num` (right-aligned mono cells, left header), `.col-mono` (IDs/URLs),
+  `.col-toggle` (first-column control), `.col-actions` (trailing). Layout reads **static data → state
+  indicator → actions**; state is a `.status-dot` or amber icon toggle, actions are always-visible
+  `.icon-btn`s in `.row-actions`.
+- **Columns holding a single number use `.col-num` and are narrow by default** — give them tight
+  `<col>` widths so numeric data doesn't waste horizontal space; let text/label columns be wide.
 
 ### Token pill, disclosure, other primitives
+
 `.token-pill` (grey metadata count, 999px). `.disclosure-summary`/`.disclosure-boxed`/`.disclosure-arrow`
 for `<details>` and button-toggle expand/collapse. See the Reference for the full set.
 
 ### Icons
+
 - **Material Design Icons** via `@mdi/js` (tree-shakeable path data — no icon font), exposed under
   semantic names in `src/lib/design/icons.ts` (`iconEdit`, `iconTest`, …). To change the set, only that
   file changes.
@@ -216,10 +233,12 @@ waveform trace (see `public/favicon.svg`) — never a crosshair or weapon/scope 
 - `color-scheme: dark` on `:root` forces neutral native controls (scrollbars, form elements).
 
 ### Border-radius ladder
+
 - **4px** — controls: buttons, inputs, selects, small chips.
 - **6–8px** — containers: dialogs (8px), cards, callouts, banners (6px).
 - **999px** — pills: token counts, ID badges, status labels.
 
 ### Edges
+
 - **Links:** `--amber-bright`, no underline by default, underline on hover.
 - **Text selection:** `--amber-bright` at 30% opacity.

@@ -18,6 +18,13 @@ import type {
   InspectResult,
   ListModelConfigsResult,
   ListMcpProfilesResult,
+  BenchmarkCreateResult,
+  BenchmarkListResult,
+  BenchmarkInspectResult,
+  BenchmarkAddCaseResult,
+  BenchmarkRunLaunchResult,
+  BenchmarkRunStatusResult,
+  BenchmarkRunReportResult,
 } from "./types.js";
 
 // ─── HTTP primitives ──────────────────────────────────────────────────────────
@@ -187,5 +194,107 @@ export async function cliListMcpProfiles(
   return request<ListMcpProfilesResult>(
     baseUrl,
     "/api/operations/mcp-profiles",
+  );
+}
+
+// ─── Benchmark endpoints (operation-backed, canonical snake_case) ─────────────
+
+/** POST /api/operations/benchmark-create → BenchmarkCreateResult */
+export async function cliBenchmarkCreate(
+  baseUrl: string,
+  body: { name: string; description?: string },
+): Promise<BenchmarkCreateResult> {
+  return post<BenchmarkCreateResult>(
+    baseUrl,
+    "/api/operations/benchmark-create",
+    body,
+  );
+}
+
+/** GET /api/operations/benchmarks → BenchmarkListResult */
+export async function cliBenchmarkList(
+  baseUrl: string,
+): Promise<BenchmarkListResult> {
+  return request<BenchmarkListResult>(baseUrl, "/api/operations/benchmarks");
+}
+
+/** GET /api/operations/benchmarks/:benchmarkId → BenchmarkInspectResult */
+export async function cliBenchmarkInspect(
+  baseUrl: string,
+  benchmarkId: string,
+): Promise<BenchmarkInspectResult> {
+  return request<BenchmarkInspectResult>(
+    baseUrl,
+    `/api/operations/benchmarks/${encodeURIComponent(benchmarkId)}`,
+  );
+}
+
+/** POST /api/operations/benchmark-add-case → BenchmarkAddCaseResult */
+export async function cliBenchmarkAddCase(
+  baseUrl: string,
+  body: {
+    benchmark_id: string;
+    prompt: string;
+    name?: string;
+    expected_tools_called?: string[];
+    expected_tools_not_called?: string[];
+  },
+): Promise<BenchmarkAddCaseResult> {
+  return post<BenchmarkAddCaseResult>(
+    baseUrl,
+    "/api/operations/benchmark-add-case",
+    body,
+  );
+}
+
+/** POST /api/operations/benchmark-add-case-from-session → BenchmarkAddCaseResult */
+export async function cliBenchmarkAddCaseFromSession(
+  baseUrl: string,
+  body: { benchmark_id: string; session_id: string; name?: string },
+): Promise<BenchmarkAddCaseResult> {
+  return post<BenchmarkAddCaseResult>(
+    baseUrl,
+    "/api/operations/benchmark-add-case-from-session",
+    body,
+  );
+}
+
+/** POST /api/operations/benchmark-run → BenchmarkRunLaunchResult */
+export async function cliBenchmarkRun(
+  baseUrl: string,
+  body: {
+    benchmark_id: string;
+    case_ids?: string[];
+    repetitions?: number;
+    model_config_id?: string;
+    mcp_profile_ids?: string[];
+  },
+): Promise<BenchmarkRunLaunchResult> {
+  return post<BenchmarkRunLaunchResult>(
+    baseUrl,
+    "/api/operations/benchmark-run",
+    body,
+  );
+}
+
+/** GET /api/operations/benchmark-runs/:runId/status → BenchmarkRunStatusResult */
+export async function cliBenchmarkRunStatus(
+  baseUrl: string,
+  runId: string,
+): Promise<BenchmarkRunStatusResult> {
+  return request<BenchmarkRunStatusResult>(
+    baseUrl,
+    `/api/operations/benchmark-runs/${encodeURIComponent(runId)}/status`,
+  );
+}
+
+/** GET /api/operations/benchmark-runs/:runId/report → BenchmarkRunReportResult */
+export async function cliBenchmarkRunReport(
+  baseUrl: string,
+  runId: string,
+): Promise<BenchmarkRunReportResult> {
+  return request<BenchmarkRunReportResult>(
+    baseUrl,
+    `/api/operations/benchmark-runs/${encodeURIComponent(runId)}/report`,
   );
 }

@@ -32,6 +32,7 @@ Fast deterministic coverage for:
 - selectors / context reconstruction
 - LM Studio SSE parsing
 - token count sanity (proportionality, context sum consistency, compaction math, monotonic context growth)
+- benchmark metrics (`operations/benchmarkMetrics.test.ts`): tool coverage, error counting, pass@k/pass^k
 
 Token count sanity (`tokenSanity.test.ts`) uses mock gateways and exercises the full
 backend turn pipeline without live infrastructure. It was previously excluded from
@@ -46,6 +47,7 @@ Deterministic tests around the backend runtime and API surface:
 - model-only turns
 - tool-enabled turns
 - session / transcript / context / trace endpoints
+- benchmark run coordination + compute-on-read report (`benchmarkRun.test.ts`)
 - edge-case orchestration that is easier to express directly than as a full trace fixture
 
 Keep these few and surgical.
@@ -74,6 +76,7 @@ Use replay tests whenever the behavior under test spans:
 Replay fixtures and most deterministic tests operate on committed **parts**, not transient streaming **deltas**.
 
 Current fixtures include:
+
 - model-only single-turn trace
 - tool-enabled single-turn trace
 - model-only two-turn compaction trace (exercises context sum consistency and
@@ -86,7 +89,7 @@ exercising live infrastructure:
 
 - **MCP HTTP endpoint smoke test** (`backend/src/mcp/mcp.test.ts`): sends a
   JSON-RPC `tools/list` to the primary `/mcp` endpoint and asserts the response
-  contains all 7 `mcpscope_*` tool names matching the backend catalog.
+  contains all 15 `mcpscope_*` tool names matching the backend catalog.
 - **CLI structural test** (`cli/src/commands/commandCatalog.test.ts`): verifies
   CLI command IDs match the backend operation catalog, and that `mcpscope --help`
   documents every command.
@@ -163,4 +166,4 @@ That slice should stay green when changing:
 
 If a bug is about backend conversation flow, token attribution, reasoning retention, tool orchestration, or persistence, prefer:
 
-**record trace -> replay trace -> compare trace**
+`record trace -> replay trace -> compare trace`

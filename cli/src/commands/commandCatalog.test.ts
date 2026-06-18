@@ -9,10 +9,18 @@ const expectedCommandIds = [
   "inspect",
   "list_model_configs",
   "list_mcp_profiles",
+  "benchmark_create",
+  "benchmark_list",
+  "benchmark_inspect",
+  "benchmark_add_case",
+  "benchmark_add_case_from_session",
+  "benchmark_run",
+  "benchmark_run_status",
+  "benchmark_run_report",
 ] as const;
 
 describe("CLI command catalog matches backend operations", () => {
-  it("CLI command IDs match backend operation catalog", () => {
+  it("CLI command IDs match backend operation catalog exactly", () => {
     const backendIds = operationList.map((op) => op.id).sort();
     expect(backendIds).toEqual([...expectedCommandIds].sort());
   });

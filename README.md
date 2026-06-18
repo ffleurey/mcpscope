@@ -15,9 +15,11 @@ separate substrate.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
 - [DATA-MODEL.md](DATA-MODEL.md) - canonical runtime tree, part taxonomy, and canonical IDs
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) - SQLite tables, foreign keys, singleton defaults, and ER diagram
-- [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) - shipped `session_analysis` workflow and evidence-loading contract
+- [PROVIDERS.md](PROVIDERS.md) - provider-specific behavior (LM Studio, Ollama, OpenRouter): reasoning tokens, token counting, context windows
 - [MCP.md](MCP.md) - MCP interface reference: transport, tool surface, and structured results
 - [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
+- [BENCHMARK.md](BENCHMARK.md) - benchmark feature reference: suite/case/run model, HTTP API, CLI, and the metrics report
+- [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) - shipped `session_analysis` workflow and evidence-loading contract
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
 - [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) - frontend design system: brand, tokens, shared primitives, patterns, and the live Design System Reference (read before any frontend visual change)
 
@@ -30,10 +32,12 @@ separate substrate.
 ### Project workflow
 
 - [README.md](README.md) - repository/developer entrypoint for working on mcpscope itself
+- [AGENTS.md](AGENTS.md) - guide for AI coding agents: project shape, parity principle, working style, and validation
+- [HISTORY.md](HISTORY.md) - chronological log of releases and major architectural decisions
 - [RELEASING.md](RELEASING.md) - release workflow and GHCR image publishing
 - [backlog/README.md](backlog/README.md) - backlog workflow, state folders, and promotion rules
 - [backend-data/README.md](backend-data/README.md) - local runtime data and live-test artifact policy
-- [`research/`](research/) - archived payload studies and superseded design research kept for context
+- [`backlog/research/`](backlog/research/) - archived payload studies and superseded design research kept for context
 
 ## Audience
 
@@ -63,7 +67,7 @@ Those surfaces share the same backend-owned session model and canonical hierarch
 - runtime state persists on the SQLite runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`); container ownership is recorded on `sessions` columns rather than a separate container table
 - session parent rules remain intentionally narrow: a `primary` session may optionally have a `benchmark` parent, and a `session_analysis` session requires a `session` parent
 - analysis-session deterministic workflow steps are shipped inside the normal session model; broader generalization and cleanup remain future work
-- benchmark support is currently limited to the minimal container model, not a fuller benchmark product surface
+- the benchmark feature ships Phase A: repeatable suite/case/run execution with deterministic tool-behavior checks and a compute-on-read metrics report; LLM-judged success (Phase B/C) is future work (see [BENCHMARK.md](BENCHMARK.md))
 
 ## Developer setup
 
@@ -122,5 +126,5 @@ See [TESTING.md](TESTING.md) for the canonical list of test, type-check, lint, a
 ## Repository notes
 
 - `backend-data/` is local runtime state and live integration output; only its README is tracked.
-- `research/` contains reference material and archived investigations, not active implementation specs.
+- `backlog/research/` contains reference material and archived investigations, not active implementation specs.
 - `backlog/` is a lightweight historical board and workflow state area, not up-to-date project documentation. Only use a specific backlog file when task instructions explicitly point to it.
