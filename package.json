@@ -19,7 +19,7 @@
     "build:cli": "tsc -p cli/tsconfig.json",
     "start:backend": "node backend/dist/server.js",
     "preview": "vite preview --config frontend/vite.config.ts",
-    "check": "svelte-check --tsconfig ./frontend/tsconfig.app.json && tsc -p frontend/tsconfig.node.json",
+    "check": "svelte-check --tsconfig ./frontend/tsconfig.json && tsc -p frontend/tsconfig.node.json",
     "check:backend": "tsc -p backend/tsconfig.json --noEmit",
     "check:cli": "tsc -p cli/tsconfig.json --noEmit",
     "lint": "eslint frontend/src",
