@@ -259,8 +259,12 @@ export async function selectChat(sessionId: string): Promise<void> {
   clearSessionError()
   activeChatId.set(sessionId)
 
-  // Mutual reset: opening a chat closes any open benchmark run report.
-  void import('./benchmarkStore').then(({ clearActiveRun }) => clearActiveRun())
+  // Mutual reset: opening a chat closes any open benchmark run report and
+  // benchmark detail view.
+  void import('./benchmarkStore').then(({ clearActiveRun, clearBenchmarkSelection }) => {
+    clearActiveRun()
+    clearBenchmarkSelection()
+  })
 
   try {
     await refreshActiveTrace()

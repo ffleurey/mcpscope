@@ -16,6 +16,7 @@ import {
 import type {
   Benchmark,
   BenchmarkCase,
+  BenchmarkDetailResponse,
   BenchmarkRun,
   BenchmarkSummary,
   RunReport,
@@ -27,6 +28,10 @@ export const runs = writable<BenchmarkRun[]>([])
 export const activeRunId = writable<string | null>(null)
 export const activeRunReport = writable<RunReport | null>(null)
 export const activeRun = writable<BenchmarkRun | null>(null)
+
+// Active benchmark detail view (mutually exclusive with run/chat selection).
+export const activeBenchmarkId = writable<string | null>(null)
+export const activeBenchmarkDetail = writable<BenchmarkDetailResponse | null>(null)
 
 const TERMINAL_STATUSES = new Set(['complete', 'error'])
 const POLL_INTERVAL_MS = 700
@@ -88,12 +93,13 @@ async function pollActiveRun(runId: string): Promise<void> {
   pollTimer = setTimeout(() => void pollActiveRun(runId), POLL_INTERVAL_MS)
 }
 
-/** Open a run report. Clears the active chat selection (mutual reset). */
+/** Open a run report. Clears chat + benchmark selection (mutual reset). */
 export async function selectRun(runId: string): Promise<void> {
   stopPolling()
   activeRunId.set(runId)
   activeRun.set(null)
   activeRunReport.set(null)
+  clearBenchmarkSelection()
 
   // Mutual reset: opening a run clears the chat selection.
   const { clearChatSelection } = await import('./sessionStore')
@@ -119,6 +125,39 @@ export function clearActiveRun(): void {
   activeRunReport.set(null)
 }
 
+/** Clear the active benchmark detail (called when a run/chat is selected). */
+export function clearBenchmarkSelection(): void {
+  activeBenchmarkId.set(null)
+  activeBenchmarkDetail.set(null)
+}
+
+/**
+ * Open a benchmark detail view. Loads the full detail (cases + runs) and clears
+ * the active run + chat selection so exactly one main-pane entity renders.
+ */
+export async function selectBenchmark(benchmarkId: string): Promise<void> {
+  activeBenchmarkId.set(benchmarkId)
+  activeBenchmarkDetail.set(null)
+
+  // Mutual reset: opening a benchmark clears the run + chat selections.
+  clearActiveRun()
+  const { clearChatSelection } = await import('./sessionStore')
+  clearChatSelection()
+
+  const detail = await getBenchmark(benchmarkId)
+  if (get(activeBenchmarkId) !== benchmarkId) return
+  activeBenchmarkDetail.set(detail)
+}
+
+/** Reload the active benchmark's detail (after a case/run mutation). */
+export async function refreshActiveBenchmarkDetail(): Promise<void> {
+  const benchmarkId = get(activeBenchmarkId)
+  if (!benchmarkId) return
+  const detail = await getBenchmark(benchmarkId)
+  if (get(activeBenchmarkId) !== benchmarkId) return
+  activeBenchmarkDetail.set(detail)
+}
+
 // ── Mutations ────────────────────────────────────────────────────────────
 
 export async function createBenchmark(input: {
@@ -140,6 +179,7 @@ export async function updateBenchmark(
 
 export async function removeBenchmark(id: string): Promise<void> {
   await deleteBackendBenchmark(id)
+  if (get(activeBenchmarkId) === id) clearBenchmarkSelection()
   await refreshBenchmarks()
 }
 
