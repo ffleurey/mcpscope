@@ -63,16 +63,23 @@ function now(): number {
 function nextCaseNumber(existing: BenchmarkCaseRecord[]): number {
   let max = 0;
   for (const c of existing) {
-    const n = Number(c.id.split(".").pop());
+    // Case ids are `<benchmarkId>.<n>`; match the trailing number explicitly so a
+    // future id-format change can't silently parse to a wrong value.
+    const match = /\.(\d+)$/.exec(c.id);
+    const n = match ? Number(match[1]) : NaN;
     if (Number.isInteger(n) && n > max) max = n;
   }
   return max + 1;
 }
 
-function requireGeneratedId(id: string | null, kind: string): string {
+function requireGeneratedId(
+  id: string | null,
+  kind: string,
+  detail?: string,
+): string {
   if (!id) {
     throw new OperationError(
-      `Failed to generate a unique ${kind} id.`,
+      `Failed to generate a unique ${kind} id${detail ? ` (${detail})` : ""}.`,
       "benchmark_id_generation_failed",
     );
   }
@@ -101,6 +108,7 @@ export function createBenchmarkEntry(
     id: requireGeneratedId(
       generateBenchmarkId((c) => getBenchmark(db.connection, c) !== null),
       "benchmark",
+      `name "${input.name}"`,
     ),
     name: input.name,
     description: input.description ?? null,
@@ -399,6 +407,7 @@ export function launchBenchmarkRun(
     id: requireGeneratedId(
       generateRunId((c) => getBenchmarkRun(db.connection, c) !== null),
       "run",
+      `benchmark ${input.benchmarkId}`,
     ),
     benchmarkId: input.benchmarkId,
     benchmarkName: benchmark.name,
@@ -443,6 +452,12 @@ async function runBenchmarkCoordinator(
     updatedAt: now(),
   });
 
+  // Sequential: each repetition is awaited to completion before the next starts,
+  // and its session status (complete/error) is recorded before the next begins.
+  // Soft failures (init never reaches ready, tool errors, non-complete turns) are
+  // recorded on the individual session and do NOT stop the run; only a hard
+  // exception (scheduler / createSession / awaitJob) propagates here and marks the
+  // whole run errored via the catch below.
   try {
     for (const snapshot of initial.cases) {
       for (let rep = 1; rep <= initial.repetitions; rep++) {

@@ -35,6 +35,9 @@ export interface CaseExpectations {
   expectedToolsNotCalled: string[];
 }
 
+// Serialized character count (text length + JSON.stringify length). This is a
+// RELATIVE size signal for comparing tools/runs, deterministic for the same
+// input — not an exact byte/token measurement (it counts JSON punctuation too).
 function payloadChars(part: PartRecord): number {
   const text = part.payload.text ? part.payload.text.length : 0;
   const json = part.payload.json ? JSON.stringify(part.payload.json).length : 0;

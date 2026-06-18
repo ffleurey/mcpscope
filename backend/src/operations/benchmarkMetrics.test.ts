@@ -205,6 +205,26 @@ describe("buildCaseReport + pass@k/pass^k", () => {
     expect(report.successRate).toBeNull();
     expect(report.completedCount).toBe(1);
   });
+
+  it("handles a case that produced zero sessions (with checks)", () => {
+    const report = buildCaseReport(
+      "bc-3",
+      "never ran",
+      { expectedToolsCalled: ["get_stats"], expectedToolsNotCalled: [] },
+      3,
+      [],
+    );
+    expect(report.sessionCount).toBe(0);
+    expect(report.hasChecks).toBe(true);
+    expect(report.passCount).toBe(0);
+    expect(report.passAtK).toBe(false);
+    // pass^k and success rate are undefined with no sessions → null, not false/0.
+    expect(report.passHatK).toBeNull();
+    expect(report.successRate).toBeNull();
+    expect(report.completedCount).toBe(0);
+    expect(report.toolCallStats).toBeNull();
+    expect(report.totalTokenStats).toBeNull();
+  });
 });
 
 describe("buildPerToolRollup", () => {
@@ -237,6 +257,16 @@ describe("numberStats", () => {
       mean: 5,
       median: 4.5,
       stddev: 2,
+    });
+  });
+
+  it("handles a single value (median = value, stddev 0)", () => {
+    expect(numberStats([7])).toEqual({
+      min: 7,
+      max: 7,
+      mean: 7,
+      median: 7,
+      stddev: 0,
     });
   });
 });
