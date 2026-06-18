@@ -147,7 +147,7 @@ All of these are shared primitives in `app.css` (or shared components) with a li
 | Variant | Style |
 |---|---|
 | `.btn` | Transparent bg, dim border + text; hover lifts to `--bg-hover`, brighter text |
-| `.btn-primary` | Transparent bg, `--amber-bright` border + text; **only one per view/dialog** |
+| `.btn-primary` | Filled `--amber-bright` bg, matching border, dark (`--bg-base`) text; **only one per view/dialog** |
 | `.btn-danger` | `--red-bright` border + text, subtle red tint on hover |
 | `.icon-btn` | Borderless icon button; `.icon-btn-danger` (red), `.icon-btn-dim` (muted chrome) |
 
