@@ -6,8 +6,11 @@
  *     <colgroup>…</colgroup>
  *     <thead>…</thead>
  *
- * Widths are applied to the matching <col> elements (px) and are session-only —
- * they reset when the view unmounts.
+ * Each column resizes INDEPENDENTLY — dragging a handle changes only that
+ * column's width; the table grows/shrinks and its `.table-scroll` wrapper
+ * scrolls horizontally as needed (no proportional redistribution across the
+ * other columns). Widths are applied to the matching <col> elements (px) and
+ * are session-only — they reset when the view unmounts.
  */
 export function columnResize(table: HTMLTableElement) {
   const cols = Array.from(table.querySelectorAll('col'))
@@ -17,7 +20,7 @@ export function columnResize(table: HTMLTableElement) {
   const handles: HTMLDivElement[] = []
 
   Array.from(headRow.cells).forEach((th, i) => {
-    if (i >= cols.length - 1) return // last column absorbs slack — no handle
+    if (i >= cols.length) return // no matching <col> for this header cell
 
     th.style.position = 'relative'
     const handle = document.createElement('div')

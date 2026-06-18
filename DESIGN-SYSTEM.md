@@ -178,18 +178,21 @@ rounded status label.
 ### Tables
 The shared **`.data-table`** primitive (config admin pages, run reports; live demo in the Reference):
 - Wrap in `.table-scroll` (`overflow-x:auto`); `table-layout: fixed` with a `<colgroup>` of widths;
-  `width: max-content; min-width: 100%` (never collapse, fill when there's room). The last column absorbs
-  slack.
-- **Every `.data-table` is resizable** — always add `use:columnResize` (drag a header border to resize;
-  session-only). This is uniform across the app: config tables, the run report, and the Reference demo.
-- Header: `--text-dim` 0.68rem uppercase. Dense rows, `--border` horizontal separators only, `--bg-hover`
-  hover. Cells truncate with ellipsis (add `title=`).
-- Column roles: `.col-num` (right mono), `.col-mono` (IDs/URLs), `.col-toggle` (first-column control),
-  `.col-actions` (trailing). Layout reads **static data → state indicator → actions**; state is a
-  `.status-dot` or amber icon toggle, actions are always-visible `.icon-btn`s in `.row-actions`.
+  `width: max-content` — the table is exactly the sum of its column widths and the wrapper scrolls
+  horizontally when that exceeds the view (it does **not** stretch to fill, so columns never redistribute).
+- **Every `.data-table` is resizable** — always add `use:columnResize`. **Each column resizes
+  independently**: dragging a header border changes only that column's width; the table grows/shrinks and
+  scrolls (no proportional resizing of the other columns). A persistent thin divider marks every column
+  border and turns amber on hover, so the grab point is always visible. Widths are session-only.
+- Header: `--text-dim` 0.68rem uppercase, **always left-aligned** (including `.col-num` headers — only the
+  numeric *cells* are right-aligned, so titles stay consistent). Dense rows, `--border` horizontal
+  separators only, `--bg-hover` hover. Cells truncate with ellipsis (add `title=`).
+- Column roles: `.col-num` (right-aligned mono cells, left header), `.col-mono` (IDs/URLs),
+  `.col-toggle` (first-column control), `.col-actions` (trailing). Layout reads **static data → state
+  indicator → actions**; state is a `.status-dot` or amber icon toggle, actions are always-visible
+  `.icon-btn`s in `.row-actions`.
 - **Columns holding a single number use `.col-num` and are narrow by default** — give them tight
-  `<col>` widths so numeric data doesn't waste horizontal space; let text/label columns be wide and the
-  last column absorb the slack.
+  `<col>` widths so numeric data doesn't waste horizontal space; let text/label columns be wide.
 
 ### Token pill, disclosure, other primitives
 `.token-pill` (grey metadata count, 999px). `.disclosure-summary`/`.disclosure-boxed`/`.disclosure-arrow`
