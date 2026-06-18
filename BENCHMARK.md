@@ -69,11 +69,28 @@ Two ways to create a case:
    default). This turns observed behavior into a checkable expectation cheaply.
 2. **Manually** — provide a prompt (and optionally expected/forbidden tools) directly.
 
+## Agent-facing surface (CLI + MCP)
+
+The agent-facing benchmark capabilities now live in the shared **operation catalog**
+(`backend/src/operations/catalog.ts`), so each is exposed identically through both adapters:
+every operation is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP
+parity). These ops return **snake_case** results, the operation-catalog convention. The eight
+benchmark operations are:
+
+`benchmark_create`, `benchmark_list`, `benchmark_inspect`, `benchmark_add_case`,
+`benchmark_add_case_from_session`, `benchmark_run`, `benchmark_run_status`,
+`benchmark_run_report`.
+
+See [CLI.md](CLI.md) for the CLI commands and [MCP.md](MCP.md) for the MCP tools.
+
+The frontend keeps a separate set of **camelCase** HTTP routes (below); those are not part of
+the CLI/MCP parity surface.
+
 ## HTTP API
 
-Benchmark routes use **camelCase** JSON (consistent with the session/trace HTTP API the
-frontend consumes — distinct from the snake_case operation catalog used by the five core
-CLI/MCP commands). Not part of the MCP operation catalog.
+The frontend benchmark routes use **camelCase** JSON (consistent with the session/trace HTTP
+API the frontend consumes — distinct from the snake_case operation catalog used by the CLI/MCP
+surface). These camelCase routes are not part of the MCP operation catalog.
 
 | Method | Path | Body | Result |
 |---|---|---|---|
@@ -94,20 +111,55 @@ A run launch returns immediately (`202`); a background coordinator drives the se
 sequentially through the scheduler. Poll `GET /api/benchmark-runs/:runId` for `run.status`
 (`pending` → `running` → `complete`/`error`) and the computed report.
 
-## CLI
+### Operation-backed routes (snake_case)
+
+The same catalog benchmark operations are also mounted under `/api/operations/*`. These return
+the operation result verbatim (snake_case) and are what the CLI calls; the MCP server exposes
+the identical operations as `mcpscope_<id>` tools.
+
+| Method | Path | Operation |
+|---|---|---|
+| `POST` | `/api/operations/benchmark-create` | `benchmark_create` |
+| `GET` | `/api/operations/benchmarks` | `benchmark_list` |
+| `GET` | `/api/operations/benchmarks/:benchmarkId` | `benchmark_inspect` |
+| `POST` | `/api/operations/benchmark-add-case` | `benchmark_add_case` |
+| `POST` | `/api/operations/benchmark-add-case-from-session` | `benchmark_add_case_from_session` |
+| `POST` | `/api/operations/benchmark-run` | `benchmark_run` |
+| `GET` | `/api/operations/benchmark-runs/:runId/status` | `benchmark_run_status` |
+| `GET` | `/api/operations/benchmark-runs/:runId/report` | `benchmark_run_report` |
+
+## CLI / MCP
+
+The agent-facing benchmark commands are flat, catalog-backed commands (exposed identically as
+`mcpscope_<id>` MCP tools):
 
 ```
-mcpscope benchmark create <name> [--description <text>]
-mcpscope benchmark list
-mcpscope benchmark show <benchmarkId>
-mcpscope benchmark add-case <benchmarkId> <prompt> [--name <text>] [--expect-tool <name>]... [--forbid-tool <name>]...
-mcpscope benchmark from-session <benchmarkId> <sessionId> [--name <text>]
-mcpscope benchmark run <benchmarkId> [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--case <id>]... [--wait]
-mcpscope benchmark report <runId>
+mcpscope benchmark_create <name> [--description <text>]
+mcpscope benchmark_list
+mcpscope benchmark_inspect <benchmark_id>
+mcpscope benchmark_add_case <benchmark_id> <prompt> [--name <text>] [--expect-tool <name>]... [--forbid-tool <name>]...
+mcpscope benchmark_add_case_from_session <benchmark_id> <session_id> [--name <text>]
+mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--wait]
+mcpscope benchmark_run_status <run_id>
+mcpscope benchmark_run_report <run_id>
 ```
 
-All support `--json` and `--url`. `run --wait` polls until the run finishes and prints the
-report.
+All support `--json` and `--url`. See [CLI.md](CLI.md) for full per-command flags and output.
+
+### Run progress vs report
+
+A run is launched in the background and tracked through two distinct reads:
+
+- **`benchmark_run_status`** — cheap, pollable **progress** derived from the run record only
+  (no session traces loaded): overall and per-case completion, total/completed/failed session
+  counts, the currently running session, terminal status, error, and timestamps. The
+  coordinator records each session at creation with a `running`/`complete`/`error` status, so
+  progress reflects in-flight work as it happens.
+- **`benchmark_run_report`** — the heavy, compute-on-read **metrics** report (loads session
+  traces): per-case pass rates, tool-call/token stats, per-session metrics, and the cross-case
+  per-tool rollup described below.
+
+`benchmark_run --wait` polls status to a terminal state before printing.
 
 ## Report and metrics
 

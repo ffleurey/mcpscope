@@ -170,6 +170,72 @@ weather-mcp      Weather MCP       http://host:8000/mcp   disabled
 
 `--json` returns the full list: `{ mcp_profiles: [...] }`.
 
+## Benchmark commands
+
+These commands drive the benchmark feature (see [BENCHMARK.md](BENCHMARK.md)). They are flat, catalog-backed commands — each is also exposed as an `mcpscope_<id>` MCP tool (CLI/MCP parity) — and return **snake_case** results. All support `--json` and `--url`.
+
+### `mcpscope benchmark_create <name> [--description <text>] [--json]`
+
+Creates a new empty benchmark blueprint.
+
+- `<name>` — benchmark name (required, positional)
+- `--description <text>` — optional description
+
+Text output prints the benchmark ID and name. JSON output: `{ benchmark: { id, name, description, created_at, updated_at } }`.
+
+### `mcpscope benchmark_list [--json]`
+
+Lists all benchmarks as a columnar table (ID, name, cases, runs). JSON output: `{ benchmarks: [{ id, name, description, case_count, run_count, created_at, updated_at }] }`.
+
+### `mcpscope benchmark_inspect <benchmark_id> [--json]`
+
+Inspects a benchmark: prints the benchmark, its cases, and its runs. JSON output: `{ benchmark, cases: [...], runs: [...] }`.
+
+### `mcpscope benchmark_add_case <benchmark_id> <prompt> [--name <text>] [--expect-tool <name>]... [--forbid-tool <name>]... [--json]`
+
+Adds a case (a prompt plus optional tool-behavior expectations) to a benchmark.
+
+- `<benchmark_id>` — positional
+- `<prompt>` — positional, the user prompt the case sends
+- `--name <text>` — optional human label
+- `--expect-tool <name>` — repeatable; a tool that should be called (`expected_tools_called`)
+- `--forbid-tool <name>` — repeatable; a tool that should NOT be called (`expected_tools_not_called`)
+
+JSON output: `{ case: { id, benchmark_id, name, prompt, order_index, expected_tools_called, expected_tools_not_called, source_session_id, created_at, updated_at } }`.
+
+### `mcpscope benchmark_add_case_from_session <benchmark_id> <session_id> [--name <text>] [--json]`
+
+Creates a case from an existing session: uses its first user message as the prompt and pre-fills `expected_tools_called` with the tools that session actually called (editable defaults).
+
+- `<benchmark_id>` — positional
+- `<session_id>` — positional, the session to extract from
+- `--name <text>` — optional human label
+
+JSON output: same `{ case }` shape as `benchmark_add_case`.
+
+### `mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--wait] [--json]`
+
+Launches a benchmark run in the background and returns the run immediately (`status: "pending"`).
+
+- `<benchmark_id>` — positional
+- `--case <id>` — repeatable; subset of case ids to run (default: all cases)
+- `--repetitions <n>` — positive integer; times to run each case (default: 1)
+- `--model-config <id>` — model config to use (default: the configured default)
+- `--mcp-profile <id>` — repeatable; MCP profiles to enable (default: the configured defaults)
+- `--wait` — poll `benchmark_run_status` until the run reaches a terminal state, then print final progress
+
+Without `--wait`, text output prints the run ID and status plus hints to poll status or fetch the report. JSON output: `{ run: {...} }`. With `--wait`, output is the final run-status object (the progress shape below).
+
+### `mcpscope benchmark_run_status <run_id> [--json]`
+
+Returns cheap, pollable **progress** for a run (derived from the run record only — no session traces loaded), distinct from the heavier `benchmark_run_report`. The coordinator records each session at creation with a `running`/`complete`/`error` status, so progress reflects in-flight work.
+
+Text output shows overall and per-case completion, the currently running session, and terminal status. JSON output: `{ run_id, benchmark_id, benchmark_name, status, repetitions, total_cases, total_sessions, completed_sessions, failed_sessions, per_case: [{ source_case_id, name, completed, total }], current_session_id, error, started_at, completed_at }`.
+
+### `mcpscope benchmark_run_report <run_id> [--json]`
+
+Returns the full compute-on-read **metrics** report for a run (loads session traces): per-case pass rates, tool-call/token stats, per-session metrics, and a cross-case per-tool rollup. Text output leads with the per-tool rollup, then per-case detail. JSON output: `{ run, report }`.
+
 ### `mcpscope sessions list [--json]`
 
 Legacy form of `list`. Kept for backward compatibility.
@@ -202,8 +268,15 @@ mcpscope inspect ABCD.1T
 | `--json`           | all                | emit JSON instead of text           |
 | `--short`          | `inspect`          | token counts only, no content       |
 | `--url <url>`      | all                | backend URL (overrides MCPSCOPE_URL)|
-| `--model-config <id>` | `create`        | model config ID (instead of default)|
-| `--mcp-profile <id>` | `create`        | repeatable; MCP profile IDs (instead of default-enabled) |
+| `--model-config <id>` | `create`, `benchmark_run` | model config ID (instead of default)|
+| `--mcp-profile <id>` | `create`, `benchmark_run` | repeatable; MCP profile IDs (instead of default-enabled) |
+| `--description <text>` | `benchmark_create` | optional benchmark description |
+| `--name <text>`    | `benchmark_add_case`, `benchmark_add_case_from_session` | optional case label |
+| `--expect-tool <name>` | `benchmark_add_case` | repeatable; tool that should be called |
+| `--forbid-tool <name>` | `benchmark_add_case` | repeatable; tool that should NOT be called |
+| `--case <id>`      | `benchmark_run`    | repeatable; subset of case ids to run |
+| `--repetitions <n>` | `benchmark_run`   | times to run each case (default: 1) |
+| `--wait`           | `benchmark_run`    | poll run status until terminal, then print final progress |
 
 ## Exit codes
 

@@ -1,24 +1,28 @@
 import {
   cliBenchmarkCreate,
   cliBenchmarkList,
-  cliBenchmarkShow,
+  cliBenchmarkInspect,
   cliBenchmarkAddCase,
   cliBenchmarkAddCaseFromSession,
   cliBenchmarkRun,
-  cliBenchmarkReport,
+  cliBenchmarkRunStatus,
+  cliBenchmarkRunReport,
 } from "../httpClient.js";
 import { bold } from "../colors.js";
 import type {
   BenchmarkCreateResult,
   BenchmarkListResult,
-  BenchmarkDetailResult,
+  BenchmarkInspectResult,
   BenchmarkAddCaseResult,
+  BenchmarkRunStatusResult,
   BenchmarkRunReportResult,
   NumberStats,
   CaseReport,
 } from "../types.js";
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
+
+type ParseResult<T> = { opts: T } | { help: true } | { error: string };
 
 function formatDate(epochMs: number): string {
   return new Date(epochMs).toISOString().slice(0, 16).replace("T", " ");
@@ -35,9 +39,11 @@ function formatStats(stats: NumberStats | null): string {
   return `min ${round(stats.min)}  mean ${round(stats.mean)}  median ${round(stats.median)}  max ${round(stats.max)}`;
 }
 
-type ParseResult<T> = { opts: T } | { help: true } | { error: string };
+function emitJson(result: unknown): void {
+  process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+}
 
-// ─── create ──────────────────────────────────────────────────────────────────
+// ─── benchmark_create ──────────────────────────────────────────────────────
 
 export interface BenchmarkCreateOptions {
   url: string;
@@ -57,7 +63,7 @@ export async function runBenchmarkCreate(
   });
 
   if (opts.json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    emitJson(result);
     return;
   }
 
@@ -71,7 +77,7 @@ function renderBenchmarkCreate(result: BenchmarkCreateResult): void {
     process.stdout.write(`  description  ${benchmark.description}\n`);
   }
   process.stdout.write(
-    `\nRun 'mcpscope benchmark add-case ${benchmark.id} <prompt>' to add cases.\n`,
+    `\nRun 'mcpscope benchmark_add_case ${benchmark.id} <prompt>' to add cases.\n`,
   );
 }
 
@@ -114,7 +120,7 @@ export function parseBenchmarkCreateArgs(
   return { opts };
 }
 
-// ─── list ──────────────────────────────────────────────────────────────────
+// ─── benchmark_list ──────────────────────────────────────────────────────────
 
 export interface BenchmarkListOptions {
   url: string;
@@ -127,7 +133,7 @@ export async function runBenchmarkList(
   const result = await cliBenchmarkList(opts.url);
 
   if (opts.json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    emitJson(result);
     return;
   }
 
@@ -148,7 +154,7 @@ function renderBenchmarkList(result: BenchmarkListResult): void {
 
   for (const b of benchmarks) {
     process.stdout.write(
-      `${truncate(b.id, 16).padEnd(16)}  ${truncate(b.name, 36).padEnd(36)}  ${String(b.caseCount).padStart(5)}  ${String(b.runCount).padStart(5)}\n`,
+      `${truncate(b.id, 16).padEnd(16)}  ${truncate(b.name, 36).padEnd(36)}  ${String(b.case_count).padStart(5)}  ${String(b.run_count).padStart(5)}\n`,
     );
   }
 }
@@ -175,35 +181,35 @@ export function parseBenchmarkListArgs(
   return { opts: { url: url ?? "", json } };
 }
 
-// ─── show ──────────────────────────────────────────────────────────────────
+// ─── benchmark_inspect ─────────────────────────────────────────────────────
 
-export interface BenchmarkShowOptions {
+export interface BenchmarkInspectOptions {
   url: string;
   json: boolean;
   benchmarkId: string;
 }
 
-export async function runBenchmarkShow(
-  opts: BenchmarkShowOptions,
+export async function runBenchmarkInspect(
+  opts: BenchmarkInspectOptions,
 ): Promise<void> {
-  const result = await cliBenchmarkShow(opts.url, opts.benchmarkId);
+  const result = await cliBenchmarkInspect(opts.url, opts.benchmarkId);
 
   if (opts.json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    emitJson(result);
     return;
   }
 
-  renderBenchmarkShow(result);
+  renderBenchmarkInspect(result);
 }
 
-function renderBenchmarkShow(result: BenchmarkDetailResult): void {
+function renderBenchmarkInspect(result: BenchmarkInspectResult): void {
   const { benchmark, cases, runs } = result;
   process.stdout.write(`${bold(benchmark.id)}  ${benchmark.name}\n`);
   if (benchmark.description) {
     process.stdout.write(`  description  ${benchmark.description}\n`);
   }
-  process.stdout.write(`  created      ${formatDate(benchmark.createdAt)}\n`);
-  process.stdout.write(`  updated      ${formatDate(benchmark.updatedAt)}\n`);
+  process.stdout.write(`  created      ${formatDate(benchmark.created_at)}\n`);
+  process.stdout.write(`  updated      ${formatDate(benchmark.updated_at)}\n`);
 
   process.stdout.write(`\n${bold("Cases")} (${cases.length})\n`);
   if (cases.length === 0) {
@@ -211,16 +217,16 @@ function renderBenchmarkShow(result: BenchmarkDetailResult): void {
   } else {
     for (const c of cases) {
       process.stdout.write(
-        `  ${c.id}  #${c.orderIndex + 1}  ${truncate(c.prompt, 60)}\n`,
+        `  ${c.id}  #${c.order_index + 1}  ${truncate(c.prompt, 60)}\n`,
       );
-      if (c.expectedToolsCalled.length > 0) {
+      if (c.expected_tools_called.length > 0) {
         process.stdout.write(
-          `      expect-tool   ${c.expectedToolsCalled.join(", ")}\n`,
+          `      expect-tool   ${c.expected_tools_called.join(", ")}\n`,
         );
       }
-      if (c.expectedToolsNotCalled.length > 0) {
+      if (c.expected_tools_not_called.length > 0) {
         process.stdout.write(
-          `      forbid-tool   ${c.expectedToolsNotCalled.join(", ")}\n`,
+          `      forbid-tool   ${c.expected_tools_not_called.join(", ")}\n`,
         );
       }
     }
@@ -232,15 +238,15 @@ function renderBenchmarkShow(result: BenchmarkDetailResult): void {
   } else {
     for (const r of runs) {
       process.stdout.write(
-        `  ${r.id}  ${r.status.padEnd(9)}  reps ${r.repetitions}  cases ${r.cases.length}  ${formatDate(r.createdAt)}\n`,
+        `  ${r.id}  ${r.status.padEnd(9)}  reps ${r.repetitions}  cases ${r.cases.length}  ${formatDate(r.created_at)}\n`,
       );
     }
   }
 }
 
-export function parseBenchmarkShowArgs(
+export function parseBenchmarkInspectArgs(
   args: string[],
-): ParseResult<BenchmarkShowOptions> {
+): ParseResult<BenchmarkInspectOptions> {
   let url: string | undefined;
   let json = false;
   let benchmarkId: string | undefined;
@@ -264,13 +270,13 @@ export function parseBenchmarkShowArgs(
   }
 
   if (!benchmarkId) {
-    return { error: "Missing required argument: <benchmarkId>" };
+    return { error: "Missing required argument: <benchmark_id>" };
   }
 
   return { opts: { url: url ?? "", json, benchmarkId } };
 }
 
-// ─── add-case ──────────────────────────────────────────────────────────────
+// ─── benchmark_add_case ──────────────────────────────────────────────────────
 
 export interface BenchmarkAddCaseOptions {
   url: string;
@@ -285,19 +291,20 @@ export interface BenchmarkAddCaseOptions {
 export async function runBenchmarkAddCase(
   opts: BenchmarkAddCaseOptions,
 ): Promise<void> {
-  const result = await cliBenchmarkAddCase(opts.url, opts.benchmarkId, {
+  const result = await cliBenchmarkAddCase(opts.url, {
+    benchmark_id: opts.benchmarkId,
     prompt: opts.prompt,
     ...(opts.name !== undefined ? { name: opts.name } : {}),
     ...(opts.expectedToolsCalled !== undefined
-      ? { expectedToolsCalled: opts.expectedToolsCalled }
+      ? { expected_tools_called: opts.expectedToolsCalled }
       : {}),
     ...(opts.expectedToolsNotCalled !== undefined
-      ? { expectedToolsNotCalled: opts.expectedToolsNotCalled }
+      ? { expected_tools_not_called: opts.expectedToolsNotCalled }
       : {}),
   });
 
   if (opts.json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    emitJson(result);
     return;
   }
 
@@ -306,21 +313,23 @@ export async function runBenchmarkAddCase(
 
 function renderBenchmarkAddCase(result: BenchmarkAddCaseResult): void {
   const { case: c } = result;
-  process.stdout.write(`${c.id}  #${c.orderIndex + 1}  ${truncate(c.prompt, 60)}\n`);
+  process.stdout.write(
+    `${c.id}  #${c.order_index + 1}  ${truncate(c.prompt, 60)}\n`,
+  );
   if (c.name) {
     process.stdout.write(`  name          ${c.name}\n`);
   }
-  if (c.sourceSessionId) {
-    process.stdout.write(`  from-session  ${c.sourceSessionId}\n`);
+  if (c.source_session_id) {
+    process.stdout.write(`  from-session  ${c.source_session_id}\n`);
   }
-  if (c.expectedToolsCalled.length > 0) {
+  if (c.expected_tools_called.length > 0) {
     process.stdout.write(
-      `  expect-tool   ${c.expectedToolsCalled.join(", ")}\n`,
+      `  expect-tool   ${c.expected_tools_called.join(", ")}\n`,
     );
   }
-  if (c.expectedToolsNotCalled.length > 0) {
+  if (c.expected_tools_not_called.length > 0) {
     process.stdout.write(
-      `  forbid-tool   ${c.expectedToolsNotCalled.join(", ")}\n`,
+      `  forbid-tool   ${c.expected_tools_not_called.join(", ")}\n`,
     );
   }
 }
@@ -374,7 +383,7 @@ export function parseBenchmarkAddCaseArgs(
   }
 
   if (!benchmarkId) {
-    return { error: "Missing required argument: <benchmarkId>" };
+    return { error: "Missing required argument: <benchmark_id>" };
   }
   if (!prompt) return { error: "Missing required argument: <prompt>" };
 
@@ -394,9 +403,9 @@ export function parseBenchmarkAddCaseArgs(
   return { opts };
 }
 
-// ─── from-session ────────────────────────────────────────────────────────────
+// ─── benchmark_add_case_from_session ─────────────────────────────────────────
 
-export interface BenchmarkFromSessionOptions {
+export interface BenchmarkAddCaseFromSessionOptions {
   url: string;
   json: boolean;
   benchmarkId: string;
@@ -404,29 +413,26 @@ export interface BenchmarkFromSessionOptions {
   name?: string | undefined;
 }
 
-export async function runBenchmarkFromSession(
-  opts: BenchmarkFromSessionOptions,
+export async function runBenchmarkAddCaseFromSession(
+  opts: BenchmarkAddCaseFromSessionOptions,
 ): Promise<void> {
-  const result = await cliBenchmarkAddCaseFromSession(
-    opts.url,
-    opts.benchmarkId,
-    {
-      sessionId: opts.sessionId,
-      ...(opts.name !== undefined ? { name: opts.name } : {}),
-    },
-  );
+  const result = await cliBenchmarkAddCaseFromSession(opts.url, {
+    benchmark_id: opts.benchmarkId,
+    session_id: opts.sessionId,
+    ...(opts.name !== undefined ? { name: opts.name } : {}),
+  });
 
   if (opts.json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    emitJson(result);
     return;
   }
 
   renderBenchmarkAddCase(result);
 }
 
-export function parseBenchmarkFromSessionArgs(
+export function parseBenchmarkAddCaseFromSessionArgs(
   args: string[],
-): ParseResult<BenchmarkFromSessionOptions> {
+): ParseResult<BenchmarkAddCaseFromSessionOptions> {
   let url: string | undefined;
   let json = false;
   let benchmarkId: string | undefined;
@@ -459,13 +465,13 @@ export function parseBenchmarkFromSessionArgs(
   }
 
   if (!benchmarkId) {
-    return { error: "Missing required argument: <benchmarkId>" };
+    return { error: "Missing required argument: <benchmark_id>" };
   }
   if (!sessionId) {
-    return { error: "Missing required argument: <sessionId>" };
+    return { error: "Missing required argument: <session_id>" };
   }
 
-  const opts: BenchmarkFromSessionOptions = {
+  const opts: BenchmarkAddCaseFromSessionOptions = {
     url: url ?? "",
     json,
     benchmarkId,
@@ -475,7 +481,7 @@ export function parseBenchmarkFromSessionArgs(
   return { opts };
 }
 
-// ─── run ──────────────────────────────────────────────────────────────────
+// ─── benchmark_run ───────────────────────────────────────────────────────────
 
 export interface BenchmarkRunOptions {
   url: string;
@@ -488,20 +494,21 @@ export interface BenchmarkRunOptions {
   wait: boolean;
 }
 
-const POLL_INTERVAL_MS = 500;
+const POLL_INTERVAL_MS = 700;
 const POLL_MAX_MS = 5 * 60 * 1000;
 
 export async function runBenchmarkRun(opts: BenchmarkRunOptions): Promise<void> {
-  const launch = await cliBenchmarkRun(opts.url, opts.benchmarkId, {
-    ...(opts.caseIds !== undefined ? { caseIds: opts.caseIds } : {}),
+  const launch = await cliBenchmarkRun(opts.url, {
+    benchmark_id: opts.benchmarkId,
+    ...(opts.caseIds !== undefined ? { case_ids: opts.caseIds } : {}),
     ...(opts.repetitions !== undefined
       ? { repetitions: opts.repetitions }
       : {}),
     ...(opts.modelConfigId !== undefined
-      ? { modelConfigId: opts.modelConfigId }
+      ? { model_config_id: opts.modelConfigId }
       : {}),
     ...(opts.mcpProfileIds !== undefined
-      ? { mcpProfileIds: opts.mcpProfileIds }
+      ? { mcp_profile_ids: opts.mcpProfileIds }
       : {}),
   });
 
@@ -509,34 +516,38 @@ export async function runBenchmarkRun(opts: BenchmarkRunOptions): Promise<void> 
 
   if (!opts.wait) {
     if (opts.json) {
-      process.stdout.write(JSON.stringify(launch, null, 2) + "\n");
+      emitJson(launch);
       return;
     }
     process.stdout.write(`${runId}  ${launch.run.status}\n`);
     process.stdout.write(
-      `\nRun 'mcpscope benchmark report ${runId}' to view results.\n`,
+      `\nRun 'mcpscope benchmark_run_status ${runId}' to poll progress,` +
+        ` or 'mcpscope benchmark_run_report ${runId}' for full metrics.\n`,
     );
     return;
   }
 
-  // Poll until the run reaches a terminal state.
+  // Poll status until the run reaches a terminal state.
   const deadline = Date.now() + POLL_MAX_MS;
-  let report = await cliBenchmarkReport(opts.url, runId);
+  let status = await cliBenchmarkRunStatus(opts.url, runId);
   while (
-    report.run.status !== "complete" &&
-    report.run.status !== "error" &&
+    status.status !== "complete" &&
+    status.status !== "error" &&
     Date.now() < deadline
   ) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-    report = await cliBenchmarkReport(opts.url, runId);
+    status = await cliBenchmarkRunStatus(opts.url, runId);
   }
 
   if (opts.json) {
-    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+    emitJson(status);
     return;
   }
 
-  renderBenchmarkReport(report);
+  renderBenchmarkRunStatus(status);
+  process.stdout.write(
+    `\nRun 'mcpscope benchmark_run_report ${runId}' for full metrics.\n`,
+  );
 }
 
 export function parseBenchmarkRunArgs(
@@ -594,7 +605,7 @@ export function parseBenchmarkRunArgs(
   }
 
   if (!benchmarkId) {
-    return { error: "Missing required argument: <benchmarkId>" };
+    return { error: "Missing required argument: <benchmark_id>" };
   }
 
   const opts: BenchmarkRunOptions = { url: url ?? "", json, benchmarkId, wait };
@@ -605,88 +616,58 @@ export function parseBenchmarkRunArgs(
   return { opts };
 }
 
-// ─── report ──────────────────────────────────────────────────────────────────
+// ─── benchmark_run_status ────────────────────────────────────────────────────
 
-export interface BenchmarkReportOptions {
+export interface BenchmarkRunStatusOptions {
   url: string;
   json: boolean;
   runId: string;
 }
 
-export async function runBenchmarkReport(
-  opts: BenchmarkReportOptions,
+export async function runBenchmarkRunStatus(
+  opts: BenchmarkRunStatusOptions,
 ): Promise<void> {
-  const result = await cliBenchmarkReport(opts.url, opts.runId);
+  const result = await cliBenchmarkRunStatus(opts.url, opts.runId);
 
   if (opts.json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    emitJson(result);
     return;
   }
 
-  renderBenchmarkReport(result);
+  renderBenchmarkRunStatus(result);
 }
 
-function renderCaseLine(c: CaseReport): void {
+function renderBenchmarkRunStatus(status: BenchmarkRunStatusResult): void {
+  process.stdout.write(`${bold(status.run_id)}  ${status.status}\n`);
   process.stdout.write(
-    `  ${bold(c.caseId)}  ${truncate(c.prompt, 56)}\n`,
+    `  benchmark ${status.benchmark_id}  reps ${status.repetitions}  cases ${status.total_cases}\n`,
   );
-  if (c.hasChecks) {
-    const rate =
-      c.successRate !== null ? `${(c.successRate * 100).toFixed(0)}%` : "n/a";
-    process.stdout.write(
-      `      success ${rate}  pass@k ${c.passAtK ? "yes" : "no"}  pass^k ${c.passHatK ? "yes" : "no"}  (${c.passCount ?? 0}/${c.sessionCount})\n`,
-    );
-  } else {
-    process.stdout.write("      (no checks — metrics only)\n");
+  process.stdout.write(
+    `  sessions  ${status.completed_sessions}/${status.total_sessions} complete  (${status.failed_sessions} failed)\n`,
+  );
+  if (status.current_session_id) {
+    process.stdout.write(`  current   ${status.current_session_id}\n`);
   }
-  process.stdout.write(
-    `      completed ${c.completedCount}/${c.sessionCount}  tool errors ${c.toolErrorCount}\n`,
-  );
-  process.stdout.write(`      tool calls    ${formatStats(c.toolCallStats)}\n`);
-  process.stdout.write(`      total tokens  ${formatStats(c.totalTokenStats)}\n`);
-}
-
-function renderBenchmarkReport(result: BenchmarkRunReportResult): void {
-  const { report } = result;
-
-  process.stdout.write(`${bold(report.runId)}  ${report.status}\n`);
-  process.stdout.write(
-    `  benchmark ${report.benchmarkId}  reps ${report.repetitions}  cases ${report.caseCount}  sessions ${report.sessionCount}\n`,
-  );
-  if (result.run.error) {
-    process.stdout.write(`  error      ${result.run.error}\n`);
+  if (status.error) {
+    process.stdout.write(`  error     ${status.error}\n`);
   }
 
-  // Headline: per-tool rollup.
-  const toolNames = Object.keys(report.perTool).sort();
-  process.stdout.write(`\n${bold("Per-tool rollup")}\n`);
-  if (toolNames.length === 0) {
-    process.stdout.write("  (no tool calls)\n");
+  process.stdout.write(`\n${bold("Per-case")} (${status.per_case.length})\n`);
+  if (status.per_case.length === 0) {
+    process.stdout.write("  (none)\n");
   } else {
-    const header = `  ${"TOOL".padEnd(28)}  ${"CALLS".padStart(6)}  ${"ERRORS".padStart(6)}  ${"ERR%".padStart(6)}  ${"CASES".padStart(5)}`;
-    process.stdout.write(header + "\n");
-    process.stdout.write("  " + "-".repeat(header.length - 2) + "\n");
-    for (const name of toolNames) {
-      const t = report.perTool[name]!;
-      const errPct = `${(t.errorRate * 100).toFixed(0)}%`;
+    for (const c of status.per_case) {
+      const label = c.name ?? c.source_case_id;
       process.stdout.write(
-        `  ${truncate(name, 28).padEnd(28)}  ${String(t.calls).padStart(6)}  ${String(t.errors).padStart(6)}  ${errPct.padStart(6)}  ${String(t.casesUsedIn).padStart(5)}\n`,
+        `  ${truncate(label, 40).padEnd(40)}  ${c.completed}/${c.total}\n`,
       );
     }
   }
-
-  // Per-case detail.
-  process.stdout.write(`\n${bold("Cases")} (${report.cases.length})\n`);
-  if (report.cases.length === 0) {
-    process.stdout.write("  (none)\n");
-  } else {
-    for (const c of report.cases) renderCaseLine(c);
-  }
 }
 
-export function parseBenchmarkReportArgs(
+export function parseBenchmarkRunStatusArgs(
   args: string[],
-): ParseResult<BenchmarkReportOptions> {
+): ParseResult<BenchmarkRunStatusOptions> {
   let url: string | undefined;
   let json = false;
   let runId: string | undefined;
@@ -709,7 +690,116 @@ export function parseBenchmarkReportArgs(
     }
   }
 
-  if (!runId) return { error: "Missing required argument: <runId>" };
+  if (!runId) return { error: "Missing required argument: <run_id>" };
+
+  return { opts: { url: url ?? "", json, runId } };
+}
+
+// ─── benchmark_run_report ────────────────────────────────────────────────────
+
+export interface BenchmarkRunReportOptions {
+  url: string;
+  json: boolean;
+  runId: string;
+}
+
+export async function runBenchmarkRunReport(
+  opts: BenchmarkRunReportOptions,
+): Promise<void> {
+  const result = await cliBenchmarkRunReport(opts.url, opts.runId);
+
+  if (opts.json) {
+    emitJson(result);
+    return;
+  }
+
+  renderBenchmarkRunReport(result);
+}
+
+function renderCaseLine(c: CaseReport): void {
+  process.stdout.write(`  ${bold(c.case_id)}  ${truncate(c.prompt, 56)}\n`);
+  if (c.has_checks) {
+    const rate =
+      c.success_rate !== null ? `${(c.success_rate * 100).toFixed(0)}%` : "n/a";
+    process.stdout.write(
+      `      success ${rate}  pass@k ${c.pass_at_k ? "yes" : "no"}  pass^k ${c.pass_hat_k ? "yes" : "no"}  (${c.pass_count ?? 0}/${c.session_count})\n`,
+    );
+  } else {
+    process.stdout.write("      (no checks — metrics only)\n");
+  }
+  process.stdout.write(
+    `      completed ${c.completed_count}/${c.session_count}  tool errors ${c.tool_error_count}\n`,
+  );
+  process.stdout.write(`      tool calls    ${formatStats(c.tool_call_stats)}\n`);
+  process.stdout.write(
+    `      total tokens  ${formatStats(c.total_token_stats)}\n`,
+  );
+}
+
+function renderBenchmarkRunReport(result: BenchmarkRunReportResult): void {
+  const { report } = result;
+
+  process.stdout.write(`${bold(report.run_id)}  ${report.status}\n`);
+  process.stdout.write(
+    `  benchmark ${report.benchmark_id}  reps ${report.repetitions}  cases ${report.case_count}  sessions ${report.session_count}\n`,
+  );
+  if (result.run.error) {
+    process.stdout.write(`  error      ${result.run.error}\n`);
+  }
+
+  // Headline: per-tool rollup.
+  const toolNames = Object.keys(report.per_tool).sort();
+  process.stdout.write(`\n${bold("Per-tool rollup")}\n`);
+  if (toolNames.length === 0) {
+    process.stdout.write("  (no tool calls)\n");
+  } else {
+    const header = `  ${"TOOL".padEnd(28)}  ${"CALLS".padStart(6)}  ${"ERRORS".padStart(6)}  ${"ERR%".padStart(6)}  ${"CASES".padStart(5)}`;
+    process.stdout.write(header + "\n");
+    process.stdout.write("  " + "-".repeat(header.length - 2) + "\n");
+    for (const name of toolNames) {
+      const t = report.per_tool[name]!;
+      const errPct = `${(t.error_rate * 100).toFixed(0)}%`;
+      process.stdout.write(
+        `  ${truncate(name, 28).padEnd(28)}  ${String(t.calls).padStart(6)}  ${String(t.errors).padStart(6)}  ${errPct.padStart(6)}  ${String(t.cases_used_in).padStart(5)}\n`,
+      );
+    }
+  }
+
+  // Per-case detail.
+  process.stdout.write(`\n${bold("Cases")} (${report.cases.length})\n`);
+  if (report.cases.length === 0) {
+    process.stdout.write("  (none)\n");
+  } else {
+    for (const c of report.cases) renderCaseLine(c);
+  }
+}
+
+export function parseBenchmarkRunReportArgs(
+  args: string[],
+): ParseResult<BenchmarkRunReportOptions> {
+  let url: string | undefined;
+  let json = false;
+  let runId: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (arg === "-h" || arg === "--help") return { help: true };
+    if (arg === "--url") {
+      url = args[++i];
+      if (!url) return { error: "--url requires a value" };
+    } else if (arg === "--json") {
+      json = true;
+    } else if (!arg.startsWith("-")) {
+      if (runId !== undefined) {
+        return { error: "Too many arguments" };
+      }
+      runId = arg;
+    } else {
+      return { error: `Unknown option: ${arg}` };
+    }
+  }
+
+  if (!runId) return { error: "Missing required argument: <run_id>" };
 
   return { opts: { url: url ?? "", json, runId } };
 }

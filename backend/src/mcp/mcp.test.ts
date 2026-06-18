@@ -14,6 +14,14 @@ const EXPECTED_OPERATION_IDS = [
   "inspect",
   "list_model_configs",
   "list_mcp_profiles",
+  "benchmark_create",
+  "benchmark_list",
+  "benchmark_inspect",
+  "benchmark_add_case",
+  "benchmark_add_case_from_session",
+  "benchmark_run",
+  "benchmark_run_status",
+  "benchmark_run_report",
 ] as const;
 
 // Mock context — never called in these unit tests (no actual execution)
@@ -37,14 +45,14 @@ describe("MCP tool names derived from backend operation IDs", () => {
     });
   }
 
-  it("produces exactly 7 tool names", () => {
+  it("produces exactly 15 tool names", () => {
     const names = operationList.map((op) => `${TOOL_PREFIX}${op.id}`);
     expect(names).toEqual(EXPECTED_OPERATION_IDS.map((id) => `mcpscope_${id}`));
   });
 });
 
-describe("backend operation catalog — 7 operations with execute", () => {
-  it("catalog has all 7 operations", () => {
+describe("backend operation catalog — 15 operations with execute", () => {
+  it("catalog has all 15 operations", () => {
     expect(Object.keys(operationCatalog)).toEqual([...EXPECTED_OPERATION_IDS]);
   });
 
@@ -61,17 +69,9 @@ describe("backend operation catalog — 7 operations with execute", () => {
 });
 
 describe("CLI/MCP parity — backend operation catalog is the source of truth", () => {
-  it("backend catalog contains exactly the 7 shipped operations", () => {
+  it("backend catalog contains exactly the 15 shipped operations", () => {
     const backendIds = operationList.map((op) => op.id);
-    expect(backendIds).toEqual([
-      "list",
-      "create",
-      "send",
-      "status",
-      "inspect",
-      "list_model_configs",
-      "list_mcp_profiles",
-    ]);
+    expect(backendIds).toEqual([...EXPECTED_OPERATION_IDS]);
   });
 
   it("each operation has a non-empty description", () => {
@@ -191,7 +191,7 @@ describe("MCP structured output — outputSchema defined for all operations", ()
 });
 
 describe("MCP HTTP endpoint execution", () => {
-  it("responds to JSON-RPC tools/list and returns all 7 mcpscope tools", async () => {
+  it("responds to JSON-RPC tools/list and returns all 15 mcpscope tools", async () => {
     const dataDir = `.tmp-test-data/${crypto.randomUUID()}`;
     const app = await buildBackendApp({
       host: "127.0.0.1",
@@ -240,15 +240,9 @@ describe("MCP HTTP endpoint execution", () => {
         }
       }
 
-      expect(toolNames).toEqual([
-        "mcpscope_list",
-        "mcpscope_create",
-        "mcpscope_send",
-        "mcpscope_status",
-        "mcpscope_inspect",
-        "mcpscope_list_model_configs",
-        "mcpscope_list_mcp_profiles",
-      ]);
+      expect(toolNames).toEqual(
+        EXPECTED_OPERATION_IDS.map((id) => `mcpscope_${id}`),
+      );
     } finally {
       await app.close();
       fs.rmSync(dataDir, { recursive: true, force: true });

@@ -86,7 +86,7 @@ exercising live infrastructure:
 
 - **MCP HTTP endpoint smoke test** (`backend/src/mcp/mcp.test.ts`): sends a
   JSON-RPC `tools/list` to the primary `/mcp` endpoint and asserts the response
-  contains all 7 `mcpscope_*` tool names matching the backend catalog.
+  contains all 15 `mcpscope_*` tool names matching the backend catalog.
 - **CLI structural test** (`cli/src/commands/commandCatalog.test.ts`): verifies
   CLI command IDs match the backend operation catalog, and that `mcpscope --help`
   documents every command.

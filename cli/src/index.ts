@@ -22,16 +22,18 @@ import {
   runBenchmarkCreate,
   parseBenchmarkListArgs,
   runBenchmarkList,
-  parseBenchmarkShowArgs,
-  runBenchmarkShow,
+  parseBenchmarkInspectArgs,
+  runBenchmarkInspect,
   parseBenchmarkAddCaseArgs,
   runBenchmarkAddCase,
-  parseBenchmarkFromSessionArgs,
-  runBenchmarkFromSession,
+  parseBenchmarkAddCaseFromSessionArgs,
+  runBenchmarkAddCaseFromSession,
   parseBenchmarkRunArgs,
   runBenchmarkRun,
-  parseBenchmarkReportArgs,
-  runBenchmarkReport,
+  parseBenchmarkRunStatusArgs,
+  runBenchmarkRunStatus,
+  parseBenchmarkRunReportArgs,
+  runBenchmarkRunReport,
 } from "./commands/benchmark.js";
 
 function printHelp(): void {
@@ -45,13 +47,14 @@ function printHelp(): void {
   mcpscope list_model_configs [--json]
   mcpscope list_mcp_profiles [--json]
 
-  mcpscope benchmark create <name> [--description <text>] [--json]
-  mcpscope benchmark list [--json]
-  mcpscope benchmark show <benchmarkId> [--json]
-  mcpscope benchmark add-case <benchmarkId> <prompt> [--name <text>] [--expect-tool <name>]... [--forbid-tool <name>]... [--json]
-  mcpscope benchmark from-session <benchmarkId> <sessionId> [--name <text>] [--json]
-  mcpscope benchmark run <benchmarkId> [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--case <id>]... [--wait] [--json]
-  mcpscope benchmark report <runId> [--json]
+  mcpscope benchmark_create <name> [--description <text>] [--json]
+  mcpscope benchmark_list [--json]
+  mcpscope benchmark_inspect <benchmark_id> [--json]
+  mcpscope benchmark_add_case <benchmark_id> <prompt> [--name <text>] [--expect-tool <name>]... [--forbid-tool <name>]... [--json]
+  mcpscope benchmark_add_case_from_session <benchmark_id> <session_id> [--name <text>] [--json]
+  mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--wait] [--json]
+  mcpscope benchmark_run_status <run_id> [--json]
+  mcpscope benchmark_run_report <run_id> [--json]
 
 Options:
   --json        emit JSON instead of text
@@ -188,65 +191,79 @@ export async function main(argv: string[]): Promise<void> {
     process.exit(2);
   }
 
-  if (cmd === "benchmark") {
-    if (!sub || sub === "-h" || sub === "--help") {
+  const dispatchFlat = async <T extends { url: string }>(
+    parsed: { opts: T } | { help: true } | { error: string },
+    run: (opts: T) => Promise<void>,
+  ): Promise<void> => {
+    if ("help" in parsed) {
       printHelp();
       return;
     }
+    if ("error" in parsed) {
+      printError(parsed.error);
+      printError("Run `mcpscope --help` for usage.");
+      process.exit(2);
+    }
+    const { opts } = parsed;
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl);
+    await run({ ...opts, url: resolvedUrl });
+  };
 
-    const dispatch = async <T extends { url: string }>(
-      parsed: { opts: T } | { help: true } | { error: string },
-      run: (opts: T) => Promise<void>,
-    ): Promise<void> => {
-      if ("help" in parsed) {
-        printHelp();
-        return;
-      }
-      if ("error" in parsed) {
-        printError(parsed.error);
-        printError("Run `mcpscope --help` for usage.");
-        process.exit(2);
-      }
-      const { opts } = parsed;
-      const resolvedUrl = resolveBackendUrl(opts.url || globalUrl);
-      await run({ ...opts, url: resolvedUrl });
-    };
+  const benchmarkArgs = [sub, ...rest].filter(Boolean) as string[];
 
-    if (sub === "create") {
-      await dispatch(parseBenchmarkCreateArgs(rest), runBenchmarkCreate);
-      return;
-    }
-    if (sub === "list") {
-      await dispatch(parseBenchmarkListArgs(rest), runBenchmarkList);
-      return;
-    }
-    if (sub === "show") {
-      await dispatch(parseBenchmarkShowArgs(rest), runBenchmarkShow);
-      return;
-    }
-    if (sub === "add-case") {
-      await dispatch(parseBenchmarkAddCaseArgs(rest), runBenchmarkAddCase);
-      return;
-    }
-    if (sub === "from-session") {
-      await dispatch(
-        parseBenchmarkFromSessionArgs(rest),
-        runBenchmarkFromSession,
-      );
-      return;
-    }
-    if (sub === "run") {
-      await dispatch(parseBenchmarkRunArgs(rest), runBenchmarkRun);
-      return;
-    }
-    if (sub === "report") {
-      await dispatch(parseBenchmarkReportArgs(rest), runBenchmarkReport);
-      return;
-    }
+  if (cmd === "benchmark_create") {
+    await dispatchFlat(parseBenchmarkCreateArgs(benchmarkArgs), runBenchmarkCreate);
+    return;
+  }
 
-    printError(`Unknown subcommand: benchmark ${sub}`);
-    printError("Run `mcpscope --help` for usage.");
-    process.exit(2);
+  if (cmd === "benchmark_list") {
+    await dispatchFlat(parseBenchmarkListArgs(benchmarkArgs), runBenchmarkList);
+    return;
+  }
+
+  if (cmd === "benchmark_inspect") {
+    await dispatchFlat(
+      parseBenchmarkInspectArgs(benchmarkArgs),
+      runBenchmarkInspect,
+    );
+    return;
+  }
+
+  if (cmd === "benchmark_add_case") {
+    await dispatchFlat(
+      parseBenchmarkAddCaseArgs(benchmarkArgs),
+      runBenchmarkAddCase,
+    );
+    return;
+  }
+
+  if (cmd === "benchmark_add_case_from_session") {
+    await dispatchFlat(
+      parseBenchmarkAddCaseFromSessionArgs(benchmarkArgs),
+      runBenchmarkAddCaseFromSession,
+    );
+    return;
+  }
+
+  if (cmd === "benchmark_run") {
+    await dispatchFlat(parseBenchmarkRunArgs(benchmarkArgs), runBenchmarkRun);
+    return;
+  }
+
+  if (cmd === "benchmark_run_status") {
+    await dispatchFlat(
+      parseBenchmarkRunStatusArgs(benchmarkArgs),
+      runBenchmarkRunStatus,
+    );
+    return;
+  }
+
+  if (cmd === "benchmark_run_report") {
+    await dispatchFlat(
+      parseBenchmarkRunReportArgs(benchmarkArgs),
+      runBenchmarkRunReport,
+    );
+    return;
   }
 
   if (cmd === "inspect") {

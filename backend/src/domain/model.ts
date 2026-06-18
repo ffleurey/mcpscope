@@ -339,10 +339,13 @@ export const benchmarkRunCaseSnapshotSchema = z.object({
 });
 
 // One run-session: which snapshotted case and repetition a session corresponds to.
+// status tracks in-flight progress: 'running' is recorded right after the session
+// is created (before init/turn), then flipped to 'complete' or 'error'.
 export const benchmarkRunSessionSchema = z.object({
   sessionId: z.string(),
   sourceCaseId: z.string(),
   repetition: z.number().int().positive(),
+  status: z.enum(["running", "complete", "error"]).default("running"),
 });
 
 export const benchmarkRunRecordSchema = z.object({

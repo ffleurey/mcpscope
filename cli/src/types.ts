@@ -107,75 +107,81 @@ export interface ListMcpProfilesResult {
   mcp_profiles: McpProfileSummary[];
 }
 
-// ─── Benchmark result shapes (camelCase — distinct from the snake_case above) ──
+// ─── Benchmark result shapes (snake_case — mirror the backend op catalog) ─────
 
-export interface BenchmarkRecord {
+export interface BenchmarkSummary {
   id: string;
   name: string;
   description: string | null;
-  createdAt: number;
-  updatedAt: number;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface BenchmarkCaseRecord {
   id: string;
-  benchmarkId: string;
+  benchmark_id: string;
   name: string | null;
   prompt: string;
-  orderIndex: number;
-  expectedToolsCalled: string[];
-  expectedToolsNotCalled: string[];
-  sourceSessionId: string | null;
-  createdAt: number;
-  updatedAt: number;
+  order_index: number;
+  expected_tools_called: string[];
+  expected_tools_not_called: string[];
+  source_session_id: string | null;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface BenchmarkRunSession {
-  sessionId: string;
-  sourceCaseId: string;
+  session_id: string;
+  source_case_id: string;
   repetition: number;
+  status: string;
 }
 
 export interface BenchmarkRunCaseSnapshot {
-  sourceCaseId: string;
+  source_case_id: string;
   name: string | null;
   prompt: string;
-  expectedToolsCalled: string[];
-  expectedToolsNotCalled: string[];
+  expected_tools_called: string[];
+  expected_tools_not_called: string[];
 }
 
 export interface BenchmarkRunRecord {
   id: string;
-  benchmarkId: string;
-  benchmarkName: string;
+  benchmark_id: string;
+  benchmark_name: string;
   status: string;
-  modelConfigId: string;
-  mcpProfileIds: string[];
-  cases: BenchmarkRunCaseSnapshot[];
+  model_config_id: string;
+  mcp_profile_ids: string[];
   repetitions: number;
+  cases: BenchmarkRunCaseSnapshot[];
   sessions: BenchmarkRunSession[];
   error: string | null;
-  createdAt: number;
-  updatedAt: number;
-  startedAt: number | null;
-  completedAt: number | null;
+  created_at: number;
+  updated_at: number;
+  started_at: number | null;
+  completed_at: number | null;
 }
 
-export interface BenchmarkListEntry extends BenchmarkRecord {
-  caseCount: number;
-  runCount: number;
+export interface BenchmarkListEntry {
+  id: string;
+  name: string;
+  description: string | null;
+  case_count: number;
+  run_count: number;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface BenchmarkCreateResult {
-  benchmark: BenchmarkRecord;
+  benchmark: BenchmarkSummary;
 }
 
 export interface BenchmarkListResult {
   benchmarks: BenchmarkListEntry[];
 }
 
-export interface BenchmarkDetailResult {
-  benchmark: BenchmarkRecord;
+export interface BenchmarkInspectResult {
+  benchmark: BenchmarkSummary;
   cases: BenchmarkCaseRecord[];
   runs: BenchmarkRunRecord[];
 }
@@ -186,6 +192,30 @@ export interface BenchmarkAddCaseResult {
 
 export interface BenchmarkRunLaunchResult {
   run: BenchmarkRunRecord;
+}
+
+export interface BenchmarkRunProgressPerCase {
+  source_case_id: string;
+  name: string | null;
+  completed: number;
+  total: number;
+}
+
+export interface BenchmarkRunStatusResult {
+  run_id: string;
+  benchmark_id: string;
+  benchmark_name: string;
+  status: string;
+  repetitions: number;
+  total_cases: number;
+  total_sessions: number;
+  completed_sessions: number;
+  failed_sessions: number;
+  per_case: BenchmarkRunProgressPerCase[];
+  current_session_id: string | null;
+  error: string | null;
+  started_at: number | null;
+  completed_at: number | null;
 }
 
 export interface NumberStats {
@@ -199,61 +229,61 @@ export interface NumberStats {
 export interface PerToolCounts {
   calls: number;
   errors: number;
-  resultPayloadChars: number;
+  result_payload_chars: number;
 }
 
 export interface SessionMetrics {
-  sessionId: string;
-  terminalStatus: string | null;
+  session_id: string;
+  terminal_status: string | null;
   completed: boolean;
-  toolCallCount: number;
-  toolErrorCount: number;
-  toolsCalled: string[];
-  perTool: Record<string, PerToolCounts>;
+  tool_call_count: number;
+  tool_error_count: number;
+  tools_called: string[];
+  per_tool: Record<string, PerToolCounts>;
   tokens: {
     prompt: number | null;
     completion: number | null;
     reasoning: number | null;
     total: number | null;
   };
-  finalAnswer: string | null;
+  final_answer: string | null;
 }
 
 export interface CaseReport {
-  caseId: string;
+  case_id: string;
   prompt: string;
   repetitions: number;
-  sessionCount: number;
-  hasChecks: boolean;
-  passCount: number | null;
-  passAtK: boolean | null;
-  passHatK: boolean | null;
-  successRate: number | null;
-  completedCount: number;
-  toolErrorCount: number;
-  toolCallStats: NumberStats | null;
-  totalTokenStats: NumberStats | null;
-  perTool: Record<string, PerToolCounts>;
+  session_count: number;
+  has_checks: boolean;
+  pass_count: number | null;
+  pass_at_k: boolean | null;
+  pass_hat_k: boolean | null;
+  success_rate: number | null;
+  completed_count: number;
+  tool_error_count: number;
+  tool_call_stats: NumberStats | null;
+  total_token_stats: NumberStats | null;
+  per_tool: Record<string, PerToolCounts>;
   sessions: SessionMetrics[];
 }
 
 export interface PerToolRollup {
   calls: number;
   errors: number;
-  errorRate: number;
-  resultPayloadChars: number;
-  casesUsedIn: number;
+  error_rate: number;
+  result_payload_chars: number;
+  cases_used_in: number;
 }
 
 export interface RunReport {
-  runId: string;
-  benchmarkId: string;
+  run_id: string;
+  benchmark_id: string;
   status: string;
   repetitions: number;
-  caseCount: number;
-  sessionCount: number;
+  case_count: number;
+  session_count: number;
   cases: CaseReport[];
-  perTool: Record<string, PerToolRollup>;
+  per_tool: Record<string, PerToolRollup>;
 }
 
 export interface BenchmarkRunReportResult {

@@ -14,6 +14,16 @@ import {
   getBenchmarkRunReport,
   deleteBenchmarkRunEntry,
 } from "../operations/benchmark.js";
+import {
+  benchmarkCreateOperation,
+  benchmarkListOperation,
+  benchmarkInspectOperation,
+  benchmarkAddCaseOperation,
+  benchmarkAddCaseFromSessionOperation,
+  benchmarkRunOperation,
+  benchmarkRunStatusOperation,
+  benchmarkRunReportOperation,
+} from "../operations/index.js";
 
 /**
  * Benchmark HTTP surface (frontend + CLI). camelCase record shapes, consistent
@@ -181,4 +191,99 @@ export function registerBenchmarkRoutes({
       return handleOperationError(err, reply);
     }
   });
+
+  // ── Operation-backed surface (canonical snake_case, consumed by CLI + MCP) ──
+  // These mirror the catalog benchmark operations and return their result
+  // verbatim. Distinct from the camelCase frontend routes above. The MCP server
+  // exposes the same ops as mcpscope_<id> tools (CLI/MCP parity).
+
+  app.post("/api/operations/benchmark-create", async (request, reply) => {
+    try {
+      return await benchmarkCreateOperation.execute(opCtx, request.body as never);
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.get("/api/operations/benchmarks", async (_request, reply) => {
+    try {
+      return await benchmarkListOperation.execute(opCtx, {});
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.get("/api/operations/benchmarks/:benchmarkId", async (request, reply) => {
+    const { benchmarkId } = z
+      .object({ benchmarkId: z.string() })
+      .parse(request.params);
+    try {
+      return await benchmarkInspectOperation.execute(opCtx, {
+        benchmark_id: benchmarkId,
+      });
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.post("/api/operations/benchmark-add-case", async (request, reply) => {
+    try {
+      return await benchmarkAddCaseOperation.execute(
+        opCtx,
+        request.body as never,
+      );
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.post(
+    "/api/operations/benchmark-add-case-from-session",
+    async (request, reply) => {
+      try {
+        return await benchmarkAddCaseFromSessionOperation.execute(
+          opCtx,
+          request.body as never,
+        );
+      } catch (err) {
+        return handleOperationError(err, reply);
+      }
+    },
+  );
+
+  app.post("/api/operations/benchmark-run", async (request, reply) => {
+    try {
+      return await benchmarkRunOperation.execute(opCtx, request.body as never);
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.get(
+    "/api/operations/benchmark-runs/:runId/status",
+    async (request, reply) => {
+      const { runId } = z.object({ runId: z.string() }).parse(request.params);
+      try {
+        return await benchmarkRunStatusOperation.execute(opCtx, {
+          run_id: runId,
+        });
+      } catch (err) {
+        return handleOperationError(err, reply);
+      }
+    },
+  );
+
+  app.get(
+    "/api/operations/benchmark-runs/:runId/report",
+    async (request, reply) => {
+      const { runId } = z.object({ runId: z.string() }).parse(request.params);
+      try {
+        return await benchmarkRunReportOperation.execute(opCtx, {
+          run_id: runId,
+        });
+      } catch (err) {
+        return handleOperationError(err, reply);
+      }
+    },
+  );
 }

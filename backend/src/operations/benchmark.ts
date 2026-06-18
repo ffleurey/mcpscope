@@ -445,17 +445,7 @@ async function runBenchmarkCoordinator(
   try {
     for (const snapshot of initial.cases) {
       for (let rep = 1; rep <= initial.repetitions; rep++) {
-        const sessionId = await runOneRepetition(ctx, runId, snapshot, rep);
-        const current = getBenchmarkRun(db.connection, runId);
-        if (!current) return;
-        updateBenchmarkRun(db.connection, {
-          ...current,
-          sessions: [
-            ...current.sessions,
-            { sessionId, sourceCaseId: snapshot.sourceCaseId, repetition: rep },
-          ],
-          updatedAt: now(),
-        });
+        await runOneRepetition(ctx, runId, snapshot, rep);
       }
     }
     const done = getBenchmarkRun(db.connection, runId);
@@ -479,6 +469,24 @@ async function runBenchmarkCoordinator(
       });
     }
   }
+}
+
+/** Patch a single run-session entry (matched by sessionId) in place. */
+function setRunSessionStatus(
+  db: BackendDatabase,
+  runId: string,
+  sessionId: string,
+  status: "running" | "complete" | "error",
+): void {
+  const current = getBenchmarkRun(db.connection, runId);
+  if (!current) return;
+  updateBenchmarkRun(db.connection, {
+    ...current,
+    sessions: current.sessions.map((s) =>
+      s.sessionId === sessionId ? { ...s, status } : s,
+    ),
+    updatedAt: now(),
+  });
 }
 
 async function runOneRepetition(
@@ -514,18 +522,133 @@ async function runOneRepetition(
     }
   })();
 
-  const initJob = scheduler.enqueueInit(ctx, session.id);
-  await scheduler.awaitJob(initJob.jobId);
+  // Record the session as in-flight immediately so progress polling can see it
+  // before init/turn complete.
+  const current = getBenchmarkRun(db.connection, runId);
+  if (current) {
+    updateBenchmarkRun(db.connection, {
+      ...current,
+      sessions: [
+        ...current.sessions,
+        {
+          sessionId: session.id,
+          sourceCaseId: snapshot.sourceCaseId,
+          repetition: rep,
+          status: "running",
+        },
+      ],
+      updatedAt: now(),
+    });
+  }
 
-  // Only run the prompt if initialization succeeded; a failed-init session is
-  // still recorded and surfaces as a non-completed session in the report.
-  const initialized = getSessionRecord(db.connection, session.id);
-  if (initialized?.initStatus === "ready") {
-    const turnJob = scheduler.enqueueSession(ctx, session.id, snapshot.prompt);
-    await scheduler.awaitJob(turnJob.jobId);
+  try {
+    const initJob = scheduler.enqueueInit(ctx, session.id);
+    await scheduler.awaitJob(initJob.jobId);
+
+    // Only run the prompt if initialization succeeded; a failed-init session is
+    // still recorded and surfaces as a non-completed session in the report.
+    const initialized = getSessionRecord(db.connection, session.id);
+    if (initialized?.initStatus === "ready") {
+      const turnJob = scheduler.enqueueSession(ctx, session.id, snapshot.prompt);
+      await scheduler.awaitJob(turnJob.jobId);
+      setRunSessionStatus(db, runId, session.id, "complete");
+    } else {
+      // Init did not reach ready — mark the session as errored.
+      setRunSessionStatus(db, runId, session.id, "error");
+    }
+  } catch (err) {
+    setRunSessionStatus(db, runId, session.id, "error");
+    throw err;
   }
 
   return session.id;
+}
+
+// ── Cheap, pollable run progress ─────────────────────────────────────────────
+
+export interface BenchmarkRunProgressPerCase {
+  sourceCaseId: string;
+  name: string | null;
+  completed: number;
+  total: number;
+}
+
+export interface BenchmarkRunProgress {
+  runId: string;
+  benchmarkId: string;
+  benchmarkName: string;
+  status: string;
+  repetitions: number;
+  totalCases: number;
+  totalSessions: number;
+  completedSessions: number;
+  failedSessions: number;
+  perCase: BenchmarkRunProgressPerCase[];
+  currentSessionId: string | null;
+  error: string | null;
+  startedAt: number | null;
+  completedAt: number | null;
+}
+
+/**
+ * Derive cheap, pollable progress from the run record ONLY — no session traces
+ * are loaded (unlike the heavy compute-on-read report). Suitable for frequent
+ * polling while a run is in flight.
+ */
+export function getBenchmarkRunProgress(
+  db: BackendDatabase,
+  runId: string,
+): BenchmarkRunProgress {
+  const run = getBenchmarkRun(db.connection, runId);
+  if (!run) {
+    throw new OperationError(
+      `Benchmark run "${runId}" not found.`,
+      "benchmark_run_not_found",
+    );
+  }
+
+  const totalCases = run.cases.length;
+  const totalSessions = totalCases * run.repetitions;
+  const completedSessions = run.sessions.filter(
+    (s) => s.status === "complete" || s.status === "error",
+  ).length;
+  const failedSessions = run.sessions.filter(
+    (s) => s.status === "error",
+  ).length;
+
+  const perCase: BenchmarkRunProgressPerCase[] = run.cases.map((snapshot) => {
+    const completed = run.sessions.filter(
+      (s) =>
+        s.sourceCaseId === snapshot.sourceCaseId &&
+        (s.status === "complete" || s.status === "error"),
+    ).length;
+    return {
+      sourceCaseId: snapshot.sourceCaseId,
+      name: snapshot.name,
+      completed,
+      total: run.repetitions,
+    };
+  });
+
+  const currentSessionId =
+    run.sessions.find((s) => s.status === "running")?.sessionId ?? null;
+
+  return {
+    runId: run.id,
+    benchmarkId: run.benchmarkId,
+    benchmarkName: run.benchmarkName,
+    status: run.status,
+    repetitions: run.repetitions,
+    totalCases,
+    totalSessions,
+    completedSessions,
+    failedSessions,
+    perCase,
+    currentSessionId,
+    error: run.error,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
+  };
 }
 
 // ── Compute-on-read report ──────────────────────────────────────────────────

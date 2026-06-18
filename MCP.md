@@ -16,7 +16,9 @@ The transport operates in **stateless mode** — no server-side session is maint
 
 ## Tool surface
 
-Seven tools mirror the shipped CLI surface exactly. Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
+Fifteen tools mirror the shipped CLI surface exactly — every operation in the backend catalog is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP parity). Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
+
+Seven session/config tools:
 
 | MCP tool name               | CLI command                        | Description |
 |-----------------------------|------------------------------------|-------------|
@@ -27,6 +29,21 @@ Seven tools mirror the shipped CLI surface exactly. Tool names are generated mec
 | `mcpscope_inspect`          | `mcpscope inspect`                 | Inspect any object by hierarchical ID |
 | `mcpscope_list_model_configs` | `mcpscope list_model_configs`    | List all model configs |
 | `mcpscope_list_mcp_profiles`  | `mcpscope list_mcp_profiles`     | List all MCP server profiles |
+
+Eight benchmark tools (the agent-facing benchmark surface — see [BENCHMARK.md](BENCHMARK.md)):
+
+| MCP tool name                           | CLI command                                | Description |
+|-----------------------------------------|--------------------------------------------|-------------|
+| `mcpscope_benchmark_create`             | `mcpscope benchmark_create`                | Create a new empty benchmark blueprint |
+| `mcpscope_benchmark_list`               | `mcpscope benchmark_list`                  | List all benchmarks with case and run counts |
+| `mcpscope_benchmark_inspect`            | `mcpscope benchmark_inspect`               | Inspect a benchmark: its cases and runs |
+| `mcpscope_benchmark_add_case`           | `mcpscope benchmark_add_case`              | Add a case (prompt + optional tool expectations) |
+| `mcpscope_benchmark_add_case_from_session` | `mcpscope benchmark_add_case_from_session` | Add a case from an existing session's first prompt |
+| `mcpscope_benchmark_run`                | `mcpscope benchmark_run`                   | Launch a run in the background; returns the run immediately |
+| `mcpscope_benchmark_run_status`         | `mcpscope benchmark_run_status`            | Cheap, pollable run progress (no session traces loaded) |
+| `mcpscope_benchmark_run_report`         | `mcpscope benchmark_run_report`            | Full compute-on-read metrics report (loads session traces) |
+
+`mcpscope_benchmark_run_status` returns lightweight **progress** (overall and per-case completion, the currently running session, terminal status), whereas `mcpscope_benchmark_run_report` returns the **full metrics** (per-case pass rates, tool-call/token stats, per-session metrics, and a cross-case per-tool rollup). Poll status; fetch the report once complete.
 
 ## Tool inputs
 
@@ -73,6 +90,69 @@ No inputs. Returns a list of all model configs with id, name, connection name, m
 ### `mcpscope_list_mcp_profiles`
 
 No inputs. Returns a list of all MCP server profiles with id, name, URL, and default-enabled status.
+
+### `mcpscope_benchmark_create`
+
+| Field         | Type           | Required | Description |
+|---------------|----------------|----------|-------------|
+| `name`        | string         | ✓        | Human-readable benchmark name |
+| `description` | string \| null |          | Optional description |
+
+### `mcpscope_benchmark_list`
+
+No inputs. Returns all benchmarks with id, name, description, case count, and run count.
+
+### `mcpscope_benchmark_inspect`
+
+| Field          | Type   | Required | Description |
+|----------------|--------|----------|-------------|
+| `benchmark_id` | string | ✓        | Benchmark to inspect (returns the benchmark, its cases, and its runs) |
+
+### `mcpscope_benchmark_add_case`
+
+| Field                       | Type           | Required | Description |
+|-----------------------------|----------------|----------|-------------|
+| `benchmark_id`              | string         | ✓        | Benchmark to add the case to |
+| `prompt`                    | string         | ✓        | The user prompt the case sends |
+| `name`                      | string \| null |          | Optional human label |
+| `expected_tools_called`     | string[]       |          | Tools that should be called (deterministic check) |
+| `expected_tools_not_called` | string[]       |          | Tools that should NOT be called (deterministic check) |
+
+### `mcpscope_benchmark_add_case_from_session`
+
+| Field          | Type           | Required | Description |
+|----------------|----------------|----------|-------------|
+| `benchmark_id` | string         | ✓        | Benchmark to add the case to |
+| `session_id`   | string         | ✓        | Session to extract the initiating prompt from; pre-fills `expected_tools_called` with the tools that session actually called |
+| `name`         | string \| null |          | Optional human label |
+
+### `mcpscope_benchmark_run`
+
+| Field             | Type     | Required | Description |
+|-------------------|----------|----------|-------------|
+| `benchmark_id`    | string   | ✓        | Benchmark to run |
+| `case_ids`        | string[] |          | Subset of case ids to run (default: all cases) |
+| `repetitions`     | number   |          | Times to run each case (default: 1) |
+| `model_config_id` | string   |          | Model config to use (default: the configured default) |
+| `mcp_profile_ids` | string[] |          | MCP profiles to enable (default: the configured defaults) |
+
+Returns the run immediately with `status: "pending"`; poll `mcpscope_benchmark_run_status` for progress and `mcpscope_benchmark_run_report` for the full report.
+
+### `mcpscope_benchmark_run_status`
+
+| Field    | Type   | Required | Description |
+|----------|--------|----------|-------------|
+| `run_id` | string | ✓        | Run id to poll |
+
+Returns progress derived from the run record only: `status`, `total_cases`, `total_sessions`, `completed_sessions`, `failed_sessions`, `per_case` completion, `current_session_id`, `error`, and timestamps.
+
+### `mcpscope_benchmark_run_report`
+
+| Field    | Type   | Required | Description |
+|----------|--------|----------|-------------|
+| `run_id` | string | ✓        | Run id to report on |
+
+Heavier than status (loads session traces). Returns the run plus the full metrics report.
 
 ## Tool results
 

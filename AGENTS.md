@@ -22,7 +22,15 @@ The docs above are references, not pre-read requirements. Keep context lean and 
 - The frontend is a thin client over backend state.
 - The CLI is a remote adapter over the backend API.
 - The MCP interface executes backend operations directly and does not use loopback HTTP.
-- Shared CLI/MCP behavior comes from the backend operation catalog in [backend/src/operations/](backend/src/operations/).
+- **CLI/MCP parity is a hard principle: the CLI and the MCP interface expose exactly the
+  same agent-facing capabilities — the same functions through two technical interfaces,
+  function-for-function.** Both derive from the shared backend operation catalog in
+  [backend/src/operations/](backend/src/operations/): every catalog operation becomes a
+  `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool. Never add an agent-facing
+  capability to only one of them. Add new agent-facing capabilities as catalog operations
+  (snake_case ids and result shapes); `cli/src/commands/commandCatalog.test.ts` and
+  `backend/src/mcp/mcp.test.ts` enforce the mirror. (The Svelte frontend is a separate
+  surface and may use its own camelCase HTTP routes; it is not bound by this parity rule.)
 
 ## Working Style
 
