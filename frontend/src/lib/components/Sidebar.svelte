@@ -35,6 +35,14 @@
   let runsExpanded = $state(true)
   let sessionsExpanded = $state(true)
 
+  // Manually-resizable section heights (px); null = auto (flex). Sessions stays
+  // elastic and absorbs the remaining space. Session-only (resets on reload).
+  let benchHeight = $state<number | null>(null)
+  let runsHeight = $state<number | null>(null)
+  let treeAreaEl = $state<HTMLElement | null>(null)
+  let benchSection = $state<HTMLElement | null>(null)
+  let runsSection = $state<HTMLElement | null>(null)
+
   // New-benchmark dialog
   let showNewBenchmark = $state(false)
   let newName = $state('')
@@ -63,6 +71,32 @@
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    e.preventDefault()
+  }
+
+  function startPaneResize(
+    e: MouseEvent,
+    section: HTMLElement | null,
+    apply: (height: number) => void,
+  ) {
+    if (!section) return
+    const startY = e.clientY
+    const startH = section.offsetHeight
+    const maxH = (treeAreaEl?.clientHeight ?? 800) - 120
+
+    function onMove(ev: MouseEvent) {
+      apply(Math.max(60, Math.min(maxH, startH + ev.clientY - startY)))
+    }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.body.style.cursor = 'ns-resize'
+    document.body.style.userSelect = 'none'
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
     e.preventDefault()
@@ -140,9 +174,14 @@
       onchange={handleImportChange}
     />
 
-    <div class="tree-area">
+    <div class="tree-area" bind:this={treeAreaEl}>
       <!-- Benchmarks ─────────────────────────────────────────── -->
-      <section class="tree-section" class:expanded={benchmarksExpanded}>
+      <section
+        class="tree-section"
+        class:expanded={benchmarksExpanded}
+        bind:this={benchSection}
+        style:flex={benchmarksExpanded && benchHeight ? `0 0 ${benchHeight}px` : null}
+      >
         <div class="section-header">
           <button
             class="section-toggle"
@@ -177,11 +216,23 @@
               </ul>
             {/if}
           </div>
+          <button
+            type="button"
+            class="pane-resize"
+            class:sized={benchHeight !== null}
+            aria-label="Resize benchmarks section"
+            onmousedown={(e) => startPaneResize(e, benchSection, (h) => (benchHeight = h))}
+          ></button>
         {/if}
       </section>
 
       <!-- Benchmark runs ─────────────────────────────────────── -->
-      <section class="tree-section" class:expanded={runsExpanded}>
+      <section
+        class="tree-section"
+        class:expanded={runsExpanded}
+        bind:this={runsSection}
+        style:flex={runsExpanded && runsHeight ? `0 0 ${runsHeight}px` : null}
+      >
         <div class="section-header">
           <button
             class="section-toggle"
@@ -198,6 +249,13 @@
           <div class="section-body">
             <RunList />
           </div>
+          <button
+            type="button"
+            class="pane-resize"
+            class:sized={runsHeight !== null}
+            aria-label="Resize benchmark runs section"
+            onmousedown={(e) => startPaneResize(e, runsSection, (h) => (runsHeight = h))}
+          ></button>
         {/if}
       </section>
 
@@ -550,5 +608,23 @@
   .resize-handle.dragging {
     background: var(--amber-bright);
     opacity: 0.35;
+  }
+
+  /* Drag the bottom edge of a section to set its height; Sessions stays elastic. */
+  .pane-resize {
+    flex-shrink: 0;
+    width: 100%;
+    height: 5px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: ns-resize;
+  }
+  .pane-resize.sized {
+    background: var(--border);
+  }
+  .pane-resize:hover {
+    background: var(--amber-bright);
+    opacity: 0.3;
   }
 </style>
