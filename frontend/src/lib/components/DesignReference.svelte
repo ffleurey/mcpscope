@@ -228,9 +228,10 @@
     </div>
 
     <p class="ref-note">
-      Default and Danger: transparent bg, accent border + text; hover adds a subtle tinted background.
-      Primary: filled amber bg with dark text; hover lifts to <code class="mono">--amber-glow</code>.
-      Only one primary button per view/dialog.
+      Default and Danger: transparent bg, accent border + text; hover adds a subtle tinted
+      background. Primary: filled amber bg with dark text; hover lifts to <code class="mono"
+        >--amber-glow</code
+      >. Only one primary button per view/dialog.
     </p>
 
     <h3 class="group-title">With icon</h3>
