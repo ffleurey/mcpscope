@@ -43,6 +43,28 @@
   let benchSection = $state<HTMLElement | null>(null)
   let runsSection = $state<HTMLElement | null>(null)
 
+  // Layout: the bottom-most EXPANDED section always grows to absorb slack, so
+  // collapsed sections sit flush above the config (no gap) and manual heights
+  // never overflow past it. When every section is collapsed, a spacer pins the
+  // collapsed headers to the bottom.
+  const lastExpanded = $derived(
+    sessionsExpanded
+      ? 'sessions'
+      : runsExpanded
+        ? 'runs'
+        : benchmarksExpanded
+          ? 'benchmarks'
+          : null,
+  )
+  const allCollapsed = $derived(!benchmarksExpanded && !runsExpanded && !sessionsExpanded)
+
+  function sectionFlex(expanded: boolean, manualHeight: number | null, isLast: boolean): string {
+    if (!expanded) return '0 0 auto' // collapsed: header only
+    if (isLast) return '1 1 0' // bottom-most expanded fills remaining space
+    if (manualHeight !== null) return `0 1 ${manualHeight}px` // sized, shrinkable
+    return '1 1 0' // unsized expanded: share
+  }
+
   // New-benchmark dialog
   let showNewBenchmark = $state(false)
   let newName = $state('')
@@ -175,12 +197,13 @@
     />
 
     <div class="tree-area" bind:this={treeAreaEl}>
+      {#if allCollapsed}<div class="tree-spacer"></div>{/if}
       <!-- Benchmarks ─────────────────────────────────────────── -->
       <section
         class="tree-section"
         class:expanded={benchmarksExpanded}
         bind:this={benchSection}
-        style:flex={benchmarksExpanded && benchHeight ? `0 0 ${benchHeight}px` : null}
+        style:flex={sectionFlex(benchmarksExpanded, benchHeight, lastExpanded === 'benchmarks')}
       >
         <div class="section-header">
           <button
@@ -216,13 +239,15 @@
               </ul>
             {/if}
           </div>
-          <button
-            type="button"
-            class="pane-resize"
-            class:sized={benchHeight !== null}
-            aria-label="Resize benchmarks section"
-            onmousedown={(e) => startPaneResize(e, benchSection, (h) => (benchHeight = h))}
-          ></button>
+          {#if lastExpanded !== 'benchmarks'}
+            <button
+              type="button"
+              class="pane-resize"
+              class:sized={benchHeight !== null}
+              aria-label="Resize benchmarks section"
+              onmousedown={(e) => startPaneResize(e, benchSection, (h) => (benchHeight = h))}
+            ></button>
+          {/if}
         {/if}
       </section>
 
@@ -231,7 +256,7 @@
         class="tree-section"
         class:expanded={runsExpanded}
         bind:this={runsSection}
-        style:flex={runsExpanded && runsHeight ? `0 0 ${runsHeight}px` : null}
+        style:flex={sectionFlex(runsExpanded, runsHeight, lastExpanded === 'runs')}
       >
         <div class="section-header">
           <button
@@ -249,18 +274,24 @@
           <div class="section-body">
             <RunList />
           </div>
-          <button
-            type="button"
-            class="pane-resize"
-            class:sized={runsHeight !== null}
-            aria-label="Resize benchmark runs section"
-            onmousedown={(e) => startPaneResize(e, runsSection, (h) => (runsHeight = h))}
-          ></button>
+          {#if lastExpanded !== 'runs'}
+            <button
+              type="button"
+              class="pane-resize"
+              class:sized={runsHeight !== null}
+              aria-label="Resize benchmark runs section"
+              onmousedown={(e) => startPaneResize(e, runsSection, (h) => (runsHeight = h))}
+            ></button>
+          {/if}
         {/if}
       </section>
 
       <!-- Sessions ───────────────────────────────────────────── -->
-      <section class="tree-section session-section" class:expanded={sessionsExpanded}>
+      <section
+        class="tree-section session-section"
+        class:expanded={sessionsExpanded}
+        style:flex={sectionFlex(sessionsExpanded, null, lastExpanded === 'sessions')}
+      >
         <div class="section-header">
           <button
             class="section-toggle"
@@ -417,13 +448,13 @@
     flex-direction: column;
     min-height: 0;
     border-bottom: 1px solid var(--border);
+    /* flex is computed inline via sectionFlex(): the bottom-most expanded section
+       grows to absorb slack so collapsed sections stay flush above the config. */
   }
-  .tree-section.expanded {
-    flex: 1;
-  }
-  /* Sessions is the primary list — give it more room when several are open. */
-  .session-section.expanded {
-    flex: 2;
+  /* Pins the collapsed-section headers to the bottom when every section is collapsed. */
+  .tree-spacer {
+    flex: 1 1 0;
+    min-height: 0;
   }
 
   .section-header {
