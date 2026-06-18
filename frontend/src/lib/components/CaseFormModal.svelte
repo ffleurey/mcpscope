@@ -5,6 +5,9 @@
   import DialogShell from './DialogShell.svelte'
   import InlineAppError from './InlineAppError.svelte'
   import IdBadge from './IdBadge.svelte'
+  import Icon from './Icon.svelte'
+  import ToolPickerModal from './ToolPickerModal.svelte'
+  import { iconPlus } from '../design/icons'
   import type { BenchmarkCase } from '../backendTypes'
 
   interface Props {
@@ -32,6 +35,23 @@
       .split(/[\n,]/)
       .map((t) => t.trim())
       .filter(Boolean)
+  }
+
+  // Tool picker: tracks which field is currently being edited via the picker.
+  let pickerField = $state<'expect' | 'forbid' | null>(null)
+
+  function pickerTarget(): string {
+    return pickerField === 'expect' ? formExpectCalled : formExpectNotCalled
+  }
+
+  function handlePicked(selected: string[]): void {
+    const field = pickerField
+    if (!field) return
+    const current = field === 'expect' ? formExpectCalled : formExpectNotCalled
+    const merged = [...new Set([...parseTools(current), ...selected])]
+    const value = merged.join(', ')
+    if (field === 'expect') formExpectCalled = value
+    else formExpectNotCalled = value
   }
 
   async function handleSave() {
@@ -95,25 +115,49 @@
       <label class="field-label" for="case-expect"
         >Expected tools called <span class="optional">(comma/line separated)</span></label
       >
-      <input
-        id="case-expect"
-        class="field-input"
-        type="text"
-        bind:value={formExpectCalled}
-        disabled={saving}
-      />
+      <div class="tool-field-row">
+        <input
+          id="case-expect"
+          class="field-input"
+          type="text"
+          bind:value={formExpectCalled}
+          disabled={saving}
+        />
+        <button
+          type="button"
+          class="icon-btn"
+          title="Pick from MCP servers"
+          aria-label="Pick from MCP servers"
+          onclick={() => (pickerField = 'expect')}
+          disabled={saving}
+        >
+          <Icon path={iconPlus} />
+        </button>
+      </div>
     </div>
     <div class="field">
       <label class="field-label" for="case-forbid"
         >Forbidden tools <span class="optional">(comma/line separated)</span></label
       >
-      <input
-        id="case-forbid"
-        class="field-input"
-        type="text"
-        bind:value={formExpectNotCalled}
-        disabled={saving}
-      />
+      <div class="tool-field-row">
+        <input
+          id="case-forbid"
+          class="field-input"
+          type="text"
+          bind:value={formExpectNotCalled}
+          disabled={saving}
+        />
+        <button
+          type="button"
+          class="icon-btn"
+          title="Pick from MCP servers"
+          aria-label="Pick from MCP servers"
+          onclick={() => (pickerField = 'forbid')}
+          disabled={saving}
+        >
+          <Icon path={iconPlus} />
+        </button>
+      </div>
     </div>
     <div class="form-actions">
       <button class="btn" onclick={onClose} disabled={saving}>Cancel</button>
@@ -124,7 +168,24 @@
   </div>
 </DialogShell>
 
+{#if pickerField}
+  <ToolPickerModal
+    alreadySelected={parseTools(pickerTarget())}
+    onConfirm={handlePicked}
+    onClose={() => (pickerField = null)}
+  />
+{/if}
+
 <style>
+  .tool-field-row {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .tool-field-row .field-input {
+    flex: 1;
+    min-width: 0;
+  }
   .optional {
     font-weight: 400;
     text-transform: none;
