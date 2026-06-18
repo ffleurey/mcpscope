@@ -49,9 +49,12 @@
     if (job.target.kind === 'session') {
       return job.prompt
         ? `"${job.prompt.slice(0, 40)}${job.prompt.length > 40 ? '…' : ''}"`
-        : `Session ${job.target.sessionId.slice(0, 8)}`
+        : `Session ${job.target.sessionId}`
     }
-    return `Step ${job.target.stepId?.slice(0, 8) ?? '?'}`
+    if (job.target.kind === 'init') {
+      return `Initializing ${job.target.sessionId}`
+    }
+    return `Step ${job.target.stepId?.slice(0, 8) ?? job.target.sessionId}`
   }
 </script>
 

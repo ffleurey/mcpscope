@@ -305,7 +305,18 @@ export async function selectChat(sessionId: string): Promise<void> {
           const sessionSummary = get(chatSessions).find((s) => s.id === sessionId) ?? null
           const isAnalysis = sessionSummary?.session_type === 'session_analysis'
           for (const event of eventsToReplay) {
-            if (isAnalysis && sessionSummary) {
+            // Route prelude (init) events to the prelude handler — mirror the live
+            // router in executionStore. Feeding them to the turn handler used to
+            // fall through to a phantom "turn-failed" (empty error) and kill the
+            // freshly-primed stream, which is why a session opened mid-init showed
+            // a blank error and only streamed after switching away and back.
+            if (
+              event.type === 'part-committed' ||
+              event.type === 'prelude-complete' ||
+              event.type === 'prelude-failed'
+            ) {
+              applyPreludeStreamEvent(event as PreludeStreamEvent)
+            } else if (isAnalysis && sessionSummary) {
               applyAnalysisStreamEvent(sessionSummary, event as AnalysisStreamEvent)
             } else if (!isAnalysis && sessionSummary) {
               applyTurnStreamEvent(
@@ -464,7 +475,11 @@ function applyPreludeStreamEvent(event: PreludeStreamEvent): void {
 
   // prelude-failed
   setSessionError(
-    new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0),
+    new AppError(
+      event.message || 'Session initialization failed.',
+      (event.errorType as AppError['errorType']) ?? 'internal',
+      0,
+    ),
   )
 }
 
@@ -593,11 +608,18 @@ export function applyTurnStreamEvent(
     return
   }
 
-  activeTurnStream.set(null)
-  // turn-failed event
-  setSessionError(
-    new AppError(event.message, (event.errorType as AppError['errorType']) ?? 'internal', 0),
-  )
+  // turn-failed event. Guard on the type so a mis-routed event can never
+  // manufacture a phantom failure, and never surface a blank error message.
+  if (event.type === 'turn-failed') {
+    activeTurnStream.set(null)
+    setSessionError(
+      new AppError(
+        event.message || 'Turn execution failed.',
+        (event.errorType as AppError['errorType']) ?? 'internal',
+        0,
+      ),
+    )
+  }
 }
 
 /**
