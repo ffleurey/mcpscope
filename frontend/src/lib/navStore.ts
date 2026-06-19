@@ -2,4 +2,4 @@
 import { writable } from 'svelte/store'
 import type { NavView } from './types'
 
-export const currentView = writable<NavView>('chats')
+export const currentView = writable<NavView>('home')

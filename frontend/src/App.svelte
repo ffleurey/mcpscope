@@ -6,12 +6,11 @@
   import { initBenchmarkStore, activeRunId, activeBenchmarkId } from './lib/benchmarkStore'
   import { initExecutionStore, destroyExecutionStore } from './lib/executionStore'
   import Sidebar from './lib/components/Sidebar.svelte'
-  import LmConnections from './lib/components/LmConnections.svelte'
-  import ModelConfigs from './lib/components/ModelConfigs.svelte'
-  import McpProfiles from './lib/components/McpProfiles.svelte'
   import BenchmarkDetailView from './lib/components/BenchmarkDetailView.svelte'
   import RunReportView from './lib/components/RunReportView.svelte'
   import ChatView from './lib/components/ChatView.svelte'
+  import HomeView from './lib/components/HomeView.svelte'
+  import ConfigView from './lib/components/ConfigView.svelte'
   import DesignReference from './lib/components/DesignReference.svelte'
   import ErrorDialog from './lib/components/ErrorDialog.svelte'
   import ExecutionBar from './lib/components/ExecutionBar.svelte'
@@ -52,14 +51,12 @@
       <BenchmarkDetailView />
     {:else if $activeRunId}
       <RunReportView />
+    {:else if $currentView === 'home'}
+      <HomeView />
+    {:else if $currentView === 'configuration'}
+      <ConfigView />
     {:else if $currentView === 'chats'}
       <ChatView />
-    {:else if $currentView === 'model-configs'}
-      <ModelConfigs />
-    {:else if $currentView === 'connections'}
-      <LmConnections />
-    {:else if $currentView === 'mcp-profiles'}
-      <McpProfiles />
     {:else if $currentView === 'design'}
       <DesignReference />
     {/if}

@@ -463,10 +463,19 @@ select {
 
 /* Dense data table. Header: uppercase dim labels; rows: thin separators, hover lift. */
 .data-table {
-  width: max-content; /* exactly the sum of <colgroup> widths; .table-scroll scrolls if wider than the view */
+  width: 100%; /* fill the container; the single auto-width col.col-flex absorbs the slack */
   border-collapse: collapse;
   font-size: 0.82rem;
-  table-layout: fixed; /* column widths from <colgroup>, stable regardless of content */
+  table-layout: fixed; /* fixed widths from <colgroup>; col.col-flex (no width) flexes */
+}
+
+/* The one elastic column per table: it has no <col> width, so it absorbs leftover
+   space (table fills its container) and yields first when space is tight. The other
+   columns keep their fixed <col> widths, so resizing one shifts only it + this column
+   (no proportional redistribution). When fixed widths exceed the container the table
+   overflows and .table-scroll scrolls instead of crushing the columns. */
+.data-table col.col-flex {
+  width: auto;
 }
 
 .data-table th {
@@ -495,13 +504,11 @@ select {
   background: var(--bg-hover);
 }
 
-/* Numeric columns: monospace; cells right-aligned, but headers stay left-aligned
-   like every other header (consistent title alignment across the table). */
+/* Numeric columns: monospace; header AND cells right-aligned so the label sits
+   directly above its numbers (header/cell alignment matches within the column). */
 .data-table th.col-num,
 .data-table td.col-num {
   font-family: var(--mono);
-}
-.data-table td.col-num {
   text-align: right;
 }
 

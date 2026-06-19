@@ -26,6 +26,7 @@ import type {
 } from './backendTypes'
 import { sessionTraceBundleSchema } from './backendTypes'
 import { AppError, toAppError } from './errors'
+import { currentView } from './navStore'
 import {
   applyStreamingDelta,
   bindStreamingTurnId,
@@ -258,6 +259,12 @@ export function clearChatSelection(): void {
 export async function selectChat(sessionId: string): Promise<void> {
   clearSessionError()
   activeChatId.set(sessionId)
+
+  // Selecting a session always shows the chat view. This is set here (not just in
+  // the sidebar's session list) so opening a run's child session — or a session
+  // from the run report — navigates correctly even when a config screen or the
+  // run report is currently open.
+  currentView.set('chats')
 
   // Mutual reset: opening a chat closes any open benchmark run report and
   // benchmark detail view.

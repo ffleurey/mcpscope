@@ -172,7 +172,7 @@
         <div class="table-scroll">
           <table class="data-table" use:columnResize>
             <colgroup>
-              <col style="width: 9rem" />
+              <col class="col-flex" />
               <col style="width: 7rem" />
               <col style="width: 7rem" />
               <col style="width: 7rem" />

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 48" width="250" height="48" role="img" aria-label="mcpscope">
+  <g>
+    <rect width="48" height="48" rx="11" fill="#141414"></rect>
+    <path d="M11 13 L20 24 L11 35" fill="none" stroke="#E49000" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"></path>
+    <g fill="#E49000">
+      <rect x="25" y="11" width="14" height="7.2" rx="1.8"></rect>
+      <rect x="25" y="20.4" width="14" height="7.2" rx="1.8"></rect>
+      <rect x="25" y="29.8" width="14" height="7.2" rx="1.8"></rect>
+    </g>
+  </g>
+  <text x="64" y="33" font-family="-apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Helvetica, Arial, sans-serif" font-size="34" font-weight="600" letter-spacing="-1">
+    <tspan fill="#E49000">mcp</tspan><tspan fill="#A36000">scope</tspan>
+  </text>
+</svg>

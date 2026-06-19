@@ -184,22 +184,27 @@ rounded status label.
 
 The shared **`.data-table`** primitive (config admin pages, run reports; live demo in the Reference):
 
-- Wrap in `.table-scroll` (`overflow-x:auto`); `table-layout: fixed` with a `<colgroup>` of widths;
-  `width: max-content` — the table is exactly the sum of its column widths and the wrapper scrolls
-  horizontally when that exceeds the view (it does **not** stretch to fill, so columns never redistribute).
-- **Every `.data-table` is resizable** — always add `use:columnResize`. **Each column resizes
-  independently**: dragging a header border changes only that column's width; the table grows/shrinks and
-  scrolls (no proportional resizing of the other columns). A persistent thin divider marks every column
-  border and turns amber on hover, so the grab point is always visible. Widths are session-only.
-- Header: `--text-dim` 0.68rem uppercase, **always left-aligned** (including `.col-num` headers — only the
-  numeric *cells* are right-aligned, so titles stay consistent). Dense rows, `--border` horizontal
-  separators only, `--bg-hover` hover. Cells truncate with ellipsis (add `title=`).
-- Column roles: `.col-num` (right-aligned mono cells, left header), `.col-mono` (IDs/URLs),
-  `.col-toggle` (first-column control), `.col-actions` (trailing). Layout reads **static data → state
-  indicator → actions**; state is a `.status-dot` or amber icon toggle, actions are always-visible
-  `.icon-btn`s in `.row-actions`.
+- Wrap in `.table-scroll` (`overflow-x:auto`); `table-layout: fixed` with a `<colgroup>`. The table is
+  `width: 100%` so it **fills (justifies to) its container**. Give each column a fixed `<col style="width:…">`
+  **except exactly one**, which is the elastic column — `<col class="col-flex">` with no width. That one
+  column absorbs the leftover space (so the table fills) and yields first when space is tight; when the
+  fixed widths exceed the container the wrapper scrolls instead of crushing the columns. Pick the column
+  that benefits most from width (a name, URL, model, or path) as `col-flex`.
+- **Every `.data-table` is resizable** — always add `use:columnResize`. Dragging a fixed column's header
+  border changes only that column; the **`col-flex` column absorbs the difference**, so the table stays
+  justified and the other fixed columns don't move. The `col-flex` column has no handle (resizing it would
+  defeat the fill). A persistent thin divider marks each resizable border and turns amber on hover, so the
+  grab point is always visible. Widths are session-only.
+- Header: `--text-dim` 0.68rem uppercase. **A column's header and cells share the same alignment** — text
+  columns left, `.col-num` right (header *and* cells, so the label sits above its numbers), `.col-actions`
+  right, `.col-toggle` centered. Dense rows, `--border` horizontal separators only, `--bg-hover` hover.
+  Cells truncate with ellipsis (add `title=`).
+- Column roles: `.col-num` (right-aligned mono header + cells), `.col-mono` (IDs/URLs), `.col-toggle`
+  (first-column control), `.col-actions` (trailing), `.col-flex` (the one elastic column). Layout reads
+  **static data → state indicator → actions**; state is a `.status-dot` or amber icon toggle, actions are
+  always-visible `.icon-btn`s in `.row-actions`.
 - **Columns holding a single number use `.col-num` and are narrow by default** — give them tight
-  `<col>` widths so numeric data doesn't waste horizontal space; let text/label columns be wide.
+  `<col>` widths so numeric data doesn't waste horizontal space; let the `col-flex` text column be wide.
 
 ### Token pill, disclosure, other primitives
 
@@ -218,8 +223,19 @@ for `<details>` and button-toggle expand/collapse. See the Reference for the ful
 
 ## Logo
 
-Wordmark "mcpscope" in 2-tone amber (`--amber-bright` + `--amber-dim`). Icon is a simple oscilloscope
-waveform trace (see `public/favicon.svg`) — never a crosshair or weapon/scope imagery.
+Master brand SVGs live in [`design-assets/`](design-assets/); the app serves working copies from
+`frontend/public/` and references them by path (`/logo.svg`, `/favicon.svg`, …). The live demo is the
+**Brand & logo** section of the Design System Reference. Variants:
+
+- **Mark** — `logo-mark.svg` / `favicon.svg`: an amber `>` prompt chevron beside three stacked bars
+  (a tool list) on a dark rounded square. Used as the favicon and app icon.
+- **Wordmark** — `logo-wordmark.svg`: "mcpscope" in 2-tone amber (`mcp` bright `#E49000`, `scope`
+  dim `#A36000`) — the "text icon".
+- **Lockup** — `logo.svg` / `logo-lockup.svg`: mark + wordmark, the primary horizontal logo (e.g. the
+  Home hero).
+
+Amber only, on the dark square — never a crosshair or weapon/scope imagery. If a logo changes, update
+the master in `design-assets/` **and** the served copy in `frontend/public/`.
 
 ---
 

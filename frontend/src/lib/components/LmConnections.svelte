@@ -100,7 +100,7 @@
 <div class="config-view">
   <div class="config-view-header">
     <h2>Connections</h2>
-    <button class="btn btn-primary" onclick={startNew}>
+    <button class="btn" onclick={startNew}>
       <span class="btn-icon"><Icon path={iconPlus} /></span> New connection
     </button>
   </div>
@@ -115,7 +115,7 @@
         <colgroup>
           <col style="width: 12rem" />
           <col style="width: 7.5rem" />
-          <col style="width: 18rem" />
+          <col class="col-flex" />
           <col style="width: 6.5rem" />
           <col style="width: 16rem" />
           <col style="width: 8.5rem" />
