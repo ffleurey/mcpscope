@@ -152,7 +152,14 @@ code {
 
 .btn-primary {
   --btn-accent: var(--amber-bright);
-  --btn-hover-bg: color-mix(in srgb, var(--amber-bright) 12%, var(--bg-base));
+  --btn-hover-bg: var(--amber-glow);
+  background: var(--amber-bright);
+  border-color: var(--amber-bright);
+  color: var(--bg-base);
+}
+
+.btn-primary:hover {
+  color: var(--bg-base);
 }
 
 .btn-danger {
