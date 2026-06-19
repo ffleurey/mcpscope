@@ -136,6 +136,40 @@
     </p>
   </header>
 
+  <!-- ─── BRAND / LOGO ───────────────────────────────────────────────── -->
+  <section class="ref-section" id="brand">
+    <h2>Brand &amp; logo</h2>
+    <p class="ref-note">
+      Master SVGs live in <code class="mono">design-assets/</code>; the app serves copies from
+      <code class="mono">frontend/public/</code> and references them by path. Amber mark on a dark
+      rounded square — a <code class="mono">&gt;</code> prompt chevron beside a three-bar tool list; never
+      crosshair or weapon-scope imagery.
+    </p>
+    <div class="logo-grid">
+      <figure class="logo-card">
+        <img class="logo-img" style="height: 40px" src="/logo.svg" alt="mcpscope lockup" />
+        <figcaption>Lockup — <code class="mono">logo.svg</code></figcaption>
+      </figure>
+      <figure class="logo-card">
+        <img class="logo-img" style="height: 48px" src="/logo-mark.svg" alt="mcpscope mark" />
+        <figcaption>Mark — <code class="mono">logo-mark.svg</code></figcaption>
+      </figure>
+      <figure class="logo-card">
+        <img
+          class="logo-img"
+          style="height: 26px"
+          src="/logo-wordmark.svg"
+          alt="mcpscope wordmark"
+        />
+        <figcaption>Wordmark — <code class="mono">logo-wordmark.svg</code></figcaption>
+      </figure>
+      <figure class="logo-card">
+        <img class="logo-img" style="height: 40px" src="/favicon.svg" alt="favicon" />
+        <figcaption>Favicon — <code class="mono">favicon.svg</code></figcaption>
+      </figure>
+    </div>
+  </section>
+
   <!-- ─── COLORS ─────────────────────────────────────────────────────── -->
   <section class="ref-section" id="colors">
     <h2>Colors</h2>
@@ -494,11 +528,17 @@
       Dense admin table: <code class="mono">.data-table</code> inside a
       <code class="mono">.table-scroll</code> wrapper, fixed layout via a
       <code class="mono">&lt;colgroup&gt;</code>, and <code class="mono">use:columnResize</code>
-      — drag a header's right border to resize. First column is a single-control
-      <code class="mono">.col-toggle</code>; <code class="mono">.col-num</code> for numerics,
-      <code class="mono">.col-mono</code> for IDs/URLs, trailing
+      — drag a fixed column's right border to resize. The table is
+      <code class="mono">width:100%</code> and fills its container: every column has a fixed
+      <code class="mono">&lt;col&gt;</code> width except one
+      <code class="mono">.col-flex</code> (here <em>Endpoint</em>), which has no width and absorbs
+      the slack — so resizing a column shifts only it and the flex column, never the rest. First
+      column is a single-control <code class="mono">.col-toggle</code>;
+      <code class="mono">.col-num</code>
+      for numerics (header and cells right-aligned), <code class="mono">.col-mono</code> for
+      IDs/URLs, trailing
       <code class="mono">.col-actions</code> holding <code class="mono">.row-actions</code> icon buttons.
-      Cells truncate with ellipsis (full value on hover).
+      A column's header and cells share alignment; cells truncate with ellipsis (full value on hover).
     </p>
 
     <div class="table-scroll">
@@ -506,7 +546,7 @@
         <colgroup>
           <col style="width: 3rem" />
           <col style="width: 12rem" />
-          <col style="width: 16rem" />
+          <col class="col-flex" />
           <col style="width: 6rem" />
           <col style="width: 13rem" />
           <col style="width: 7rem" />
@@ -847,6 +887,34 @@
     color: var(--text-dim);
     margin: 0.5rem 0 0;
     line-height: 1.5;
+  }
+
+  .logo-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  .logo-card {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 1.1rem 1.25rem;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    min-width: 10rem;
+  }
+  .logo-img {
+    display: block;
+    width: auto;
+  }
+  .logo-card figcaption {
+    font-size: 0.72rem;
+    color: var(--text-dim);
   }
 
   .mono {
