@@ -6,11 +6,14 @@
  *     <colgroup>…</colgroup>
  *     <thead>…</thead>
  *
- * Each column resizes INDEPENDENTLY — dragging a handle changes only that
- * column's width; the table grows/shrinks and its `.table-scroll` wrapper
- * scrolls horizontally as needed (no proportional redistribution across the
- * other columns). Widths are applied to the matching <col> elements (px) and
- * are session-only — they reset when the view unmounts.
+ * The table fills its container (`width: 100%`); exactly one column — the
+ * `<col class="col-flex">` — has no fixed width and absorbs the slack. Dragging a
+ * handle changes only that column's width, and the flex column takes up (or yields)
+ * the difference, so the table stays justified and the other fixed columns don't
+ * move. When fixed widths exceed the container the `.table-scroll` wrapper scrolls.
+ * The flex column has no handle (resizing it would defeat the fill), and neither
+ * does the last column (its right edge is the table border, not a column divider).
+ * Widths are applied to the matching <col> elements (px) and are session-only.
  */
 export function columnResize(table: HTMLTableElement) {
   const cols = Array.from(table.querySelectorAll('col'))
@@ -21,6 +24,13 @@ export function columnResize(table: HTMLTableElement) {
 
   Array.from(headRow.cells).forEach((th, i) => {
     if (i >= cols.length) return // no matching <col> for this header cell
+    // The last column's right edge is the table border, not a border between two
+    // columns: a handle there resizes nothing and would protrude a few px past the
+    // table, showing a spurious horizontal scrollbar in the .table-scroll wrapper.
+    if (i === cols.length - 1) return
+    // The elastic column must stay auto-width to absorb slack — never give it a
+    // fixed width via a drag handle.
+    if (cols[i].classList.contains('col-flex')) return
 
     th.style.position = 'relative'
     const handle = document.createElement('div')

@@ -191,7 +191,7 @@
         <div class="table-scroll">
           <table class="data-table" use:columnResize>
             <colgroup>
-              <col style="width: 16rem" />
+              <col class="col-flex" />
               <col style="width: 4.5rem" />
               <col style="width: 4.5rem" />
               <col style="width: 5.5rem" />
@@ -234,7 +234,7 @@
         <div class="table-scroll">
           <table class="data-table" use:columnResize>
             <colgroup>
-              <col style="width: 16rem" />
+              <col class="col-flex" />
               <col style="width: 5rem" />
               <col style="width: 4.5rem" />
               <col style="width: 4.5rem" />
@@ -303,7 +303,7 @@
         <div class="table-scroll">
           <table class="data-table" use:columnResize>
             <colgroup>
-              <col style="width: 9rem" />
+              <col class="col-flex" />
               <col style="width: 3.5rem" />
               <col style="width: 7rem" />
               <col style="width: 4rem" />
