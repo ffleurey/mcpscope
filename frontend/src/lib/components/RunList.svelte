@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
   import { chatSessions, selectChat } from '../sessionStore'
   import { activeChatId } from '../sessionStore'
   import { runs, activeRunId, selectRun, removeRun } from '../benchmarkStore'
   import type { BenchmarkRun, BenchmarkRunStatus } from '../backendTypes'
   import type { SessionSummary } from '../backendTypes'
+  import { formatTreeTimestamp } from '../format'
+  import { iconChevronRight, iconChevronDown } from '../design/icons'
+  import Icon from './Icon.svelte'
 
   const sortedRuns = $derived([...$runs].sort((a, b) => b.createdAt - a.createdAt))
 
@@ -14,18 +16,9 @@
       .sort((a, b) => a.created_at - b.created_at)
   }
 
+  // Expansion is purely manual (a normal treeview) and independent of selection:
+  // clicking a run selects it; only the chevron toggles its sessions.
   let expandedIds = $state(new Set<string>())
-
-  $effect(() => {
-    // Auto-expand runs that have produced sessions.
-    const toExpand = sortedRuns.filter((r) => sessionsOf(r.id).length > 0).map((r) => r.id)
-    if (toExpand.length > 0) {
-      const current = untrack(() => expandedIds)
-      if (toExpand.some((id) => !current.has(id))) {
-        expandedIds = new Set([...current, ...toExpand])
-      }
-    }
-  })
 
   function toggleExpand(runId: string, e: MouseEvent) {
     e.stopPropagation()
@@ -69,13 +62,18 @@
             aria-label={isExpanded ? 'Collapse sessions' : 'Expand sessions'}
             title={isExpanded ? 'Hide run sessions' : 'Show run sessions'}
           >
-            {isExpanded ? '▾' : '▸'}
+            <Icon path={isExpanded ? iconChevronDown : iconChevronRight} />
           </button>
 
           <button class="run-button" onclick={() => handleSelectRun(run)}>
             <span class="run-id">[{run.id}]</span>
             <span class="run-title">{run.benchmarkName}</span>
-            <span class="status-dot {dotClass(run.status)}"></span>
+            <!-- A completed run needs no status dot; the timestamp carries the info.
+                 Keep the dot only for in-progress (running/pending) and error. -->
+            {#if run.status !== 'complete'}
+              <span class="status-dot {dotClass(run.status)}"></span>
+            {/if}
+            <span class="run-date">{formatTreeTimestamp(run.createdAt)}</span>
           </button>
 
           <div class="row-actions">
@@ -94,8 +92,9 @@
                 <div class="run-row">
                   <span class="child-indent"></span>
                   <button class="run-button" onclick={() => selectChat(child.id)}>
-                    <span class="run-id child-id">[{child.id}]</span>
-                    <span class="run-title child-title">{child.title}</span>
+                    <span class="run-id">[{child.id}]</span>
+                    <span class="run-title">{child.title}</span>
+                    <span class="run-date">{formatTreeTimestamp(child.created_at)}</span>
                   </button>
                 </div>
               </li>
@@ -164,11 +163,14 @@
 
   .expand-btn {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
     color: var(--text-dim);
     cursor: pointer;
-    font-size: 0.7rem;
+    font-size: 0.9rem; /* same chevron size as the sidebar group toggles */
     line-height: 1;
     padding: 0 0.25rem;
     width: 1.1rem;
@@ -200,9 +202,6 @@
     font-size: 0.75rem;
     opacity: 0.7;
   }
-  .child-id {
-    font-size: 0.72rem;
-  }
 
   .run-title {
     flex: 1;
@@ -211,10 +210,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .child-title {
-    font-size: 0.79rem;
-    font-style: italic;
-    opacity: 0.9;
+
+  .run-date {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    opacity: 0.55;
+    white-space: nowrap;
   }
 
   .child-indent {

@@ -1,10 +1,12 @@
 <script lang="ts">
   import { activeChatId, chatSessions, deleteChat, selectChat } from '../sessionStore'
-  import { currentView } from '../navStore'
   import { modelConfigs } from '../connectionStore'
   import { untrack } from 'svelte'
   import AnalysisLaunchModal from './AnalysisLaunchModal.svelte'
   import type { SessionSummary } from '../backendTypes'
+  import { formatTreeTimestamp } from '../format'
+  import { iconChevronRight, iconChevronDown } from '../design/icons'
+  import Icon from './Icon.svelte'
 
   // ─── Modal state ────────────────────────────────────────────────────────────
   let analysisTarget = $state<{ id: string; title: string } | null>(null)
@@ -12,9 +14,12 @@
   // ─── Tree shaping ────────────────────────────────────────────────────────────
   // Primary sessions sorted by creation time newest-first; for each primary
   // session, collect its child sessions newest-first as well.
+  // Benchmark run sessions are primary too, but they belong under their run in
+  // the Benchmark runs section — excluded here to avoid duplication. They remain
+  // fully inspectable by id via the CLI/MCP and under the run in the UI.
   const primarySessions = $derived(
     [...$chatSessions]
-      .filter((s) => s.session_type === 'primary')
+      .filter((s) => s.session_type === 'primary' && s.parent_kind !== 'benchmark')
       .sort((a, b) => b.created_at - a.created_at),
   )
 
@@ -53,8 +58,8 @@
 
   // ─── Navigation ─────────────────────────────────────────────────────────────
   async function handleSelect(id: string) {
+    // selectChat switches to the chat view and clears any run/benchmark selection.
     await selectChat(id)
-    currentView.set('chats')
   }
 
   async function handleDelete(e: MouseEvent, id: string) {
@@ -66,15 +71,6 @@
   function openAnalysis(e: MouseEvent, session: SessionSummary) {
     e.stopPropagation()
     analysisTarget = { id: session.id, title: session.title }
-  }
-
-  function formatDate(ts: number): string {
-    const d = new Date(ts)
-    const dd = String(d.getDate()).padStart(2, '0')
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    const HH = String(d.getHours()).padStart(2, '0')
-    const MM = String(d.getMinutes()).padStart(2, '0')
-    return `${dd}/${mm} ${HH}:${MM}`
   }
 </script>
 
@@ -107,7 +103,7 @@
             aria-label={isExpanded ? 'Collapse children' : 'Expand children'}
             title={isExpanded ? 'Hide analysis sessions' : 'Show analysis sessions'}
           >
-            {isExpanded ? '▾' : '▸'}
+            <Icon path={isExpanded ? iconChevronDown : iconChevronRight} />
           </button>
 
           <button
@@ -117,7 +113,7 @@
           >
             <span class="session-id">[{session.id}]</span>
             <span class="session-title">{session.title}</span>
-            <span class="session-date">{formatDate(session.updated_at)}</span>
+            <span class="session-date">{formatTreeTimestamp(session.updated_at)}</span>
           </button>
 
           <div class="row-actions">
@@ -150,7 +146,7 @@
                   >
                     <span class="session-id child-id">[{child.id}]</span>
                     <span class="session-title child-title">{child.title}</span>
-                    <span class="session-date">{formatDate(child.created_at)}</span>
+                    <span class="session-date">{formatTreeTimestamp(child.created_at)}</span>
                   </button>
                   <div class="row-actions">
                     <button
@@ -236,11 +232,14 @@
 
   .expand-btn {
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
     color: var(--text-dim);
     cursor: pointer;
-    font-size: 0.7rem;
+    font-size: 0.9rem; /* same chevron size as the sidebar group toggles */
     line-height: 1;
     padding: 0 0.25rem;
     width: 1.1rem;
