@@ -7,7 +7,9 @@
   import { columnResize } from '../actions/columnResize'
   import { formatTreeTimestamp } from '../format'
   import { iconPlus, iconRun } from '../design/icons'
+  import { toAppError, type AppError } from '../errors'
   import Icon from './Icon.svelte'
+  import InlineAppError from './InlineAppError.svelte'
   import BenchmarkFormModal from './BenchmarkFormModal.svelte'
   import RunLaunchModal from './RunLaunchModal.svelte'
   import type { BenchmarkCase } from '../backendTypes'
@@ -29,12 +31,16 @@
   // carry — fetch the detail on demand, then open the run dialog.
   let runTarget = $state<{ id: string; name: string; cases: BenchmarkCase[] } | null>(null)
   let loadingRunFor = $state<string | null>(null)
+  let runError = $state<AppError | null>(null)
 
   async function openRun(id: string, name: string) {
     loadingRunFor = id
+    runError = null
     try {
       const detail = await getBenchmark(id)
       runTarget = { id, name, cases: detail.cases }
+    } catch (e) {
+      runError = toAppError(e)
     } finally {
       loadingRunFor = null
     }
@@ -89,6 +95,8 @@
         A benchmark is a reusable suite of prompts. Run it against a model/MCP combination to get
         repeatable, per-tool metrics.
       </p>
+
+      <InlineAppError error={runError} />
 
       {#if $benchmarks.length === 0}
         <p class="card-note muted">No benchmarks yet.</p>
