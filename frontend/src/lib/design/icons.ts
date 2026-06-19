@@ -44,6 +44,7 @@ import {
   mdiClipboardListOutline,
   mdiRocketLaunchOutline,
   mdiEyeOutline,
+  mdiHomeOutline,
 } from '@mdi/js'
 
 // ── Navigation & layout ────────────────────────────────────────────
@@ -81,3 +82,4 @@ export const iconDot = mdiCircle
 export const iconSpinner = mdiDotsHorizontal
 export const iconBenchmark = mdiClipboardListOutline
 export const iconRun = mdiRocketLaunchOutline
+export const iconHome = mdiHomeOutline

@@ -7,4 +7,4 @@ export type {
 
 export type ProviderType = 'lmstudio' | 'openrouter' | 'ollama'
 
-export type NavView = 'chats' | 'connections' | 'model-configs' | 'mcp-profiles' | 'design'
+export type NavView = 'home' | 'chats' | 'configuration' | 'design'

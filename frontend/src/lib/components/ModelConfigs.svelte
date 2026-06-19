@@ -233,7 +233,7 @@
         <span class="btn-icon"><Icon path={iconRefresh} /></span>
         {statusLoading ? 'Refreshing…' : 'Refresh'}
       </button>
-      <button class="btn btn-primary" onclick={startNew}>
+      <button class="btn" onclick={startNew}>
         <span class="btn-icon"><Icon path={iconPlus} /></span> New model config
       </button>
     </div>
@@ -251,7 +251,7 @@
           <col style="width: 3rem" />
           <col style="width: 12rem" />
           <col style="width: 9.5rem" />
-          <col style="width: 15rem" />
+          <col class="col-flex" />
           <col style="width: 5rem" />
           <col style="width: 7rem" />
           <col style="width: 12rem" />

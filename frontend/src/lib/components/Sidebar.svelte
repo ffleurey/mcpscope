@@ -9,6 +9,7 @@
     clearBenchmarkSelection,
     selectBenchmark,
     activeBenchmarkId,
+    activeRunId,
   } from '../benchmarkStore'
   import { modelConfigs } from '../connectionStore'
   import {
@@ -17,7 +18,7 @@
     isPrimaryLaunchDialogOpen,
     openPrimaryLaunchDialog,
   } from '../sessionStore'
-  import { iconChevronRight, iconChevronDown, iconPlus } from '../design/icons'
+  import { iconChevronRight, iconChevronDown, iconPlus, iconHome } from '../design/icons'
   import Icon from './Icon.svelte'
   import PrimarySessionLaunchModal from './PrimarySessionLaunchModal.svelte'
   import BenchmarkFormModal from './BenchmarkFormModal.svelte'
@@ -173,6 +174,15 @@
       onchange={handleImportChange}
     />
 
+    <button
+      class="home-item"
+      class:active={$currentView === 'home' && !$activeBenchmarkId && !$activeRunId}
+      onclick={() => navigate('home')}
+    >
+      <span class="home-icon"><Icon path={iconHome} /></span>
+      <span>Home</span>
+    </button>
+
     <div class="tree-area" bind:this={treeAreaEl}>
       {#if allCollapsed}<div class="tree-spacer"></div>{/if}
       <!-- Benchmarks ─────────────────────────────────────────── -->
@@ -309,27 +319,12 @@
     </div>
 
     <div class="config-section">
-      <div class="config-label">Configuration</div>
       <button
         class="nav-item"
-        class:active={$currentView === 'model-configs'}
-        onclick={() => navigate('model-configs')}
+        class:active={$currentView === 'configuration'}
+        onclick={() => navigate('configuration')}
       >
-        Model Configs
-      </button>
-      <button
-        class="nav-item"
-        class:active={$currentView === 'connections'}
-        onclick={() => navigate('connections')}
-      >
-        Connections
-      </button>
-      <button
-        class="nav-item"
-        class:active={$currentView === 'mcp-profiles'}
-        onclick={() => navigate('mcp-profiles')}
-      >
-        MCP Servers
+        Configuration
       </button>
     </div>
 
@@ -374,6 +369,38 @@
   .sidebar.collapsed {
     align-items: center;
     padding-top: 0.5rem;
+  }
+
+  /* Top-level Home entry — the default landing view, above the tree sections. */
+  .home-item {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    padding: 0.6rem 0.75rem;
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    transition:
+      background 0.1s,
+      color 0.1s;
+  }
+  .home-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-bright);
+  }
+  .home-item.active {
+    color: var(--text-bright);
+    background: var(--bg-hover);
+  }
+  .home-icon {
+    display: inline-flex;
+    font-size: 1.05rem;
   }
 
   /* Stacked collapsible sections share the available vertical space; each
@@ -536,15 +563,6 @@
   }
   .design-section .nav-item.active {
     opacity: 1;
-  }
-  .config-label {
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    padding: 0.5rem 0.75rem 0.2rem;
-    opacity: 0.55;
   }
   .nav-item {
     display: block;
