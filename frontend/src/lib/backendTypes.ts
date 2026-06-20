@@ -217,7 +217,12 @@ export const sessionSummarySchema = z.object({
   loaded_context_length: z.number().int().positive().nullable(),
   compaction_strategy: compactionStrategyWithFallbackSchema,
   workflow_kind: z
-    .enum(['full_session_analysis', 'fast_session_analysis', 'fast_tool_analysis'])
+    .enum([
+      'full_session_analysis',
+      'fast_session_analysis',
+      'fast_tool_analysis',
+      'benchmark_evaluation',
+    ])
     .optional(),
   workflow_phase: z
     .enum([
@@ -558,6 +563,12 @@ export const benchmarkSummarySchema = benchmarkSchema.extend({
   runCount: z.number().int().nonnegative(),
 })
 
+export const rubricCriterionSchema = z.object({
+  id: z.number().int(),
+  description: z.string(),
+  points: z.number().int(),
+})
+
 export const benchmarkCaseSchema = z.object({
   id: z.string(),
   benchmarkId: z.string(),
@@ -566,6 +577,7 @@ export const benchmarkCaseSchema = z.object({
   orderIndex: z.number().int().nonnegative(),
   expectedToolsCalled: z.array(z.string()).default([]),
   expectedToolsNotCalled: z.array(z.string()).default([]),
+  rubric: z.array(rubricCriterionSchema).default([]),
   sourceSessionId: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
@@ -577,6 +589,7 @@ export const benchmarkRunCaseSnapshotSchema = z.object({
   prompt: z.string(),
   expectedToolsCalled: z.array(z.string()),
   expectedToolsNotCalled: z.array(z.string()),
+  rubric: z.array(rubricCriterionSchema).default([]),
 })
 
 export const benchmarkRunSessionRefSchema = z.object({
@@ -701,6 +714,71 @@ export const benchmarkRunReportResponseSchema = z.object({
   report: runReportSchema,
 })
 
+// ── Evaluation shapes (LLM rubric judging; computed scores on read) ──
+
+export const evaluationSessionRefSchema = z.object({
+  runSessionId: z.string(),
+  analysisSessionId: z.string(),
+  status: z.string(),
+})
+
+export const evaluationCriterionScoreSchema = z.object({
+  id: z.number(),
+  description: z.string(),
+  max: z.number(),
+  points: z.number().nullable(),
+  note: z.string().default(''),
+})
+
+export const evaluationSessionScoreSchema = z.object({
+  runSessionId: z.string(),
+  analysisSessionId: z.string(),
+  sourceCaseId: z.string(),
+  status: z.string(),
+  awarded: z.number().nullable(),
+  max: z.number().nullable(),
+  pct: z.number().nullable(),
+  criteria: z.array(evaluationCriterionScoreSchema).default([]),
+})
+
+export const evaluationCaseScoreSchema = z.object({
+  sourceCaseId: z.string(),
+  name: z.string().nullable(),
+  pctStats: numberStatsSchema.nullable(),
+  sessions: z.array(evaluationSessionScoreSchema),
+})
+
+export const evaluationScoreSchema = z.object({
+  overallPct: z.number().nullable(),
+  cases: z.array(evaluationCaseScoreSchema),
+})
+
+export const benchmarkEvaluationSchema = z.object({
+  id: z.string(),
+  runId: z.string(),
+  judgeModelConfigId: z.string(),
+  judgeTemperature: z.number().default(0),
+  status: z.string(),
+  error: z.string().nullable().default(null),
+  sessions: z.array(evaluationSessionRefSchema).default([]),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+})
+
+export const benchmarkEvaluationReportSchema = benchmarkEvaluationSchema.extend({
+  expectedSessions: z.number().int().nonnegative().default(0),
+  judgedSessions: z.number().int().nonnegative().default(0),
+  score: evaluationScoreSchema,
+})
+
+export const benchmarkEvaluationResponseSchema = z.object({
+  evaluation: benchmarkEvaluationSchema,
+})
+
+export const benchmarkEvaluationsResponseSchema = z.object({
+  evaluations: z.array(benchmarkEvaluationReportSchema),
+})
+
 export type BenchmarkRunStatus = z.infer<typeof benchmarkRunStatusSchema>
 export type Benchmark = z.infer<typeof benchmarkSchema>
 export type BenchmarkSummary = z.infer<typeof benchmarkSummarySchema>
@@ -711,6 +789,11 @@ export type BenchmarkDetailResponse = z.infer<typeof benchmarkDetailResponseSche
 export type NumberStats = z.infer<typeof numberStatsSchema>
 export type CaseReport = z.infer<typeof caseReportSchema>
 export type RunReport = z.infer<typeof runReportSchema>
+export type RubricCriterion = z.infer<typeof rubricCriterionSchema>
+export type BenchmarkEvaluation = z.infer<typeof benchmarkEvaluationSchema>
+export type BenchmarkEvaluationReport = z.infer<typeof benchmarkEvaluationReportSchema>
+export type EvaluationScore = z.infer<typeof evaluationScoreSchema>
+export type EvaluationCaseScore = z.infer<typeof evaluationCaseScoreSchema>
 
 export const listSessionsResponseSchema = z.object({
   api_version: z.literal(1),
@@ -737,9 +820,26 @@ export const createSessionResponseSchema = z.object({
   initJobId: z.string().optional(),
 })
 
+// Every `type` the backend `inspect` operation can return. Must stay in sync with
+// the runtime resolver (hierarchicalLookup) + resolveBenchmarkInspect. The
+// id-pill, CLI, and MCP all consume this; a missing value rejects the response
+// client-side with a ZodError. Guarded by backendTypes.test.ts.
+export const inspectTypeSchema = z.enum([
+  'session',
+  'setup',
+  'step',
+  'turn',
+  'round',
+  'part',
+  'benchmark',
+  'benchmark_case',
+  'benchmark_run',
+  'benchmark_evaluation',
+])
+
 export const hierarchicalLookupResponseSchema = z.object({
   id: z.string(),
-  type: z.enum(['session', 'setup', 'step', 'turn', 'round', 'part']),
+  type: inspectTypeSchema,
   mode: z.enum(['summary', 'full']),
   data: z.unknown(),
 })
@@ -761,6 +861,9 @@ export const sessionCreationDefaultsSchema = z.object({
   updatedAt: z.number().int().nonnegative(),
 })
 
+// NOTE: benchmark_evaluation is intentionally absent — it is launched only by a
+// benchmark run, never from the manual analysis-launch UI. The session-summary
+// workflow_kind enum above does include it (for parsing those spawned sessions).
 export const analysisWorkflowKindSchema = z.enum([
   'full_session_analysis',
   'fast_session_analysis',

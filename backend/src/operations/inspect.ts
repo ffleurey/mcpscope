@@ -1,14 +1,16 @@
 import { z } from 'zod'
 import { OperationError } from './errors.js'
 import { resolveHierarchicalId } from '../runtime/hierarchicalLookup.js'
+import { resolveBenchmarkInspect } from './benchmarkOperations.js'
 import type { OperationContext } from './context.js'
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
 export const inspectInputSchema = z.object({
   id: z.string().describe(
-    'Hierarchical ID to inspect. Formats: SSS (session), SSS.S (setup), '
+    'ID to inspect. Runtime formats: SSS (session), SSS.S (setup), '
     + 'SSS.NT (turn), SSS.NW or SSS.CN (deterministic step), SSS.W.NT.N (round), SSS.W.NT.N.N-X (part). Example: QGWA.4W.1T, QGWA.4W.1T.2, or QGWA.4W.1T.2.3-R. '
+    + 'Benchmark formats: B-XXXX (benchmark), B-XXXX.N (case), R-XXXX (run; full mode adds the metrics report), E-XXXX (evaluation with scores). '
     + 'Inspecting a session, setup, turn, step, or round is useful for finding child IDs; '
     + 'inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content.',
   ),
@@ -37,7 +39,8 @@ export const inspectOutputSchema = {
 export const inspectOperation = {
   id: 'inspect' as const,
   description:
-    'Inspect any object by hierarchical ID. Supports sessions, setups, deterministic steps, turns, rounds, and parts. '
+    'Inspect any object by ID. Supports sessions, setups, deterministic steps, turns, rounds, and parts, '
+    + 'plus benchmarks (B-), cases (B-.N), runs (R-), and evaluations (E-). '
     + 'Use session, turn, step, or round inspection to map the tree, then inspect returned part IDs directly for detailed evidence. '
     + 'Direct part inspection is how you read exact tool payloads/results and full part content. '
     + 'Use short=true to get token counts only without part content. '
@@ -47,6 +50,12 @@ export const inspectOperation = {
   async execute(ctx: OperationContext, input: InspectInput): Promise<InspectResult> {
     const { db } = ctx
     const mode = input.short === true ? 'summary' : 'full'
+
+    // Benchmark-family IDs (B-/R-/E-) resolve through the same snake_case payloads
+    // as the dedicated benchmark_* operations; runtime IDs fall through below.
+    const benchmark = resolveBenchmarkInspect(ctx, input.id, mode)
+    if (benchmark) return benchmark
+
     const resolved = resolveHierarchicalId(db.connection, input.id, mode)
 
     if (resolved.status === 'invalid') {

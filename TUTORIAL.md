@@ -210,7 +210,31 @@ For each MCP change:
 
 Fresh sessions matter because each session keeps a snapshot of the model and MCP configuration used at creation time.
 
-## 7. Copy-paste quick reference
+For a **repeatable** version of this loop — a saved suite you re-run with one command — use benchmarks (next).
+
+## 7. Repeatable testing with benchmarks
+
+The loop above is manual and one-off. A **benchmark** turns it into a reusable suite: a set of prompts (**cases**) you re-run against a model + MCP server with a single command. You get a per-tool "which tools cause issues" scorecard plus pass/fail reliability across repetitions, and — optionally — a separate **judge model** that scores answer quality against a per-case **rubric**.
+
+Minimal CLI flow (same `mcpscope` helper, defaults from the config you set in step 3):
+
+```bash
+# Create a suite and add a case (optionally assert which tools must / must not be called)
+mcpscope benchmark_create "weather server"          # → B-7K3M
+mcpscope benchmark_add_case B-7K3M "What's the forecast for Paris tomorrow?" --expect-tool get_forecast   # → B-7K3M.1
+
+# Run it 5× and block until done (defaults: configured model + MCP, all cases)
+mcpscope benchmark_run B-7K3M --repetitions 5 --wait    # → R-9QX4
+
+# Read the scorecard (per-tool errors/usage + per-case pass rates and token stats)
+mcpscope benchmark_run_report R-9QX4
+```
+
+Iterate on your MCP server and re-run: each run is an **immutable snapshot**, so past results stay valid as you edit the suite. Benchmark IDs (`B-` suite, `B-.N` case, `R-` run, `E-` evaluation) inspect just like a session — `mcpscope inspect R-9QX4`.
+
+To also score **answer quality**, give a case a rubric and launch a judging pass with a *separate* model (`mcpscope benchmark_evaluate R-9QX4 --judge-model <id>`). The full workflow — rubric authoring, LLM evaluation, every report field, and the same steps over MCP for coding agents — lives in **[BENCHMARK.md](BENCHMARK.md)**.
+
+## 8. Copy-paste quick reference
 
 ```bash
 export GITHUB_USER=YOUR_GITHUB_USERNAME

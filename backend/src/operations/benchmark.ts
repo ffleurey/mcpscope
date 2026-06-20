@@ -12,6 +12,8 @@ import type {
   BenchmarkCaseRecord,
   BenchmarkRunRecord,
   BenchmarkRunCaseSnapshot,
+  BenchmarkEvaluationRecord,
+  RubricCriterion,
 } from "../domain/model.js";
 import {
   createBenchmark,
@@ -29,6 +31,11 @@ import {
   listBenchmarkRuns,
   updateBenchmarkRun,
   deleteBenchmarkRun,
+  createBenchmarkEvaluation,
+  getBenchmarkEvaluation,
+  listBenchmarkEvaluationsByRun,
+  updateBenchmarkEvaluation,
+  deleteBenchmarkEvaluation,
   getSessionRecord,
   deleteSessionRecord,
   listPartRecordsBySession,
@@ -37,9 +44,14 @@ import {
 import {
   generateBenchmarkId,
   generateRunId,
+  generateEvaluationId,
   formatBenchmarkCaseId,
 } from "../domain/hierarchicalIds.js";
 import { createSession } from "../runtime/modelTurns.js";
+import { executeAnalysisLaunch } from "./launchAnalysis.js";
+import { ANALYSIS_WORKFLOW_KIND } from "../analysis/workflowKinds.js";
+import { getLatestArtifactBySchemaKey } from "../analysis/artifactRepository.js";
+import { SCHEMA_KEY as BENCHMARK_EVAL_KEY } from "../analysis/benchmarkEvaluation/schemas.js";
 import type { OperationContext } from "./context.js";
 import { OperationError } from "./errors.js";
 import {
@@ -54,6 +66,12 @@ import {
   type RunReport,
   type SessionMetrics,
 } from "./benchmarkMetrics.js";
+import {
+  scorePct,
+  aggregateEvaluationScore,
+  type EvaluationScore,
+  type EvaluationSessionScore,
+} from "./benchmarkEvaluationMetrics.js";
 
 function now(): number {
   return Date.now();
@@ -182,6 +200,18 @@ export function deleteBenchmarkRunEntry(db: BackendDatabase, runId: string): voi
       "benchmark_run_not_found",
     );
   }
+  // Each evaluation's judge sessions are generic session children (no FK cascade) →
+  // delete them and the evaluation rows explicitly before the run goes.
+  for (const evaluation of listBenchmarkEvaluationsByRun(db.connection, runId)) {
+    for (const judge of evaluation.sessions) {
+      try {
+        deleteSessionRecord(db.connection, judge.analysisSessionId);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    deleteBenchmarkEvaluation(db.connection, evaluation.id);
+  }
   // Remove the produced sessions (generic untyped parent ref → no cascade), then the run.
   for (const session of run.sessions) {
     try {
@@ -191,6 +221,31 @@ export function deleteBenchmarkRunEntry(db: BackendDatabase, runId: string): voi
     }
   }
   deleteBenchmarkRun(db.connection, runId);
+}
+
+/**
+ * Delete a single evaluation pass and the judge analysis sessions it spawned. The
+ * underlying run, its sessions, and their verdict-bearing analysis stay untouched.
+ */
+export function deleteBenchmarkEvaluationEntry(
+  db: BackendDatabase,
+  evaluationId: string,
+): void {
+  const evaluation = getBenchmarkEvaluation(db.connection, evaluationId);
+  if (!evaluation) {
+    throw new OperationError(
+      `Benchmark evaluation "${evaluationId}" not found.`,
+      "benchmark_evaluation_not_found",
+    );
+  }
+  for (const judge of evaluation.sessions) {
+    try {
+      deleteSessionRecord(db.connection, judge.analysisSessionId);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+  deleteBenchmarkEvaluation(db.connection, evaluationId);
 }
 
 // ── Case CRUD ─────────────────────────────────────────────────────────────────
@@ -203,6 +258,7 @@ export function addBenchmarkCase(
     name?: string | null | undefined;
     expectedToolsCalled?: string[] | undefined;
     expectedToolsNotCalled?: string[] | undefined;
+    rubric?: RubricCriterion[] | undefined;
   },
 ): BenchmarkCaseRecord {
   requireBenchmark(db, benchmarkId);
@@ -216,6 +272,7 @@ export function addBenchmarkCase(
     orderIndex: existing.length,
     expectedToolsCalled: input.expectedToolsCalled ?? [],
     expectedToolsNotCalled: input.expectedToolsNotCalled ?? [],
+    rubric: input.rubric ?? [],
     sourceSessionId: null,
     createdAt: ts,
     updatedAt: ts,
@@ -278,6 +335,7 @@ export function addBenchmarkCaseFromSession(
     orderIndex: existing.length,
     expectedToolsCalled,
     expectedToolsNotCalled: [],
+    rubric: [],
     sourceSessionId: sessionId,
     createdAt: ts,
     updatedAt: ts,
@@ -295,6 +353,7 @@ export function updateBenchmarkCaseEntry(
     orderIndex?: number | undefined;
     expectedToolsCalled?: string[] | undefined;
     expectedToolsNotCalled?: string[] | undefined;
+    rubric?: RubricCriterion[] | undefined;
   },
 ): BenchmarkCaseRecord {
   const existing = getBenchmarkCase(db.connection, caseId);
@@ -313,6 +372,7 @@ export function updateBenchmarkCaseEntry(
       input.expectedToolsCalled ?? existing.expectedToolsCalled,
     expectedToolsNotCalled:
       input.expectedToolsNotCalled ?? existing.expectedToolsNotCalled,
+    rubric: input.rubric ?? existing.rubric,
     updatedAt: now(),
   };
   updateBenchmarkCase(db.connection, updated);
@@ -399,6 +459,7 @@ export function launchBenchmarkRun(
       prompt: c.prompt,
       expectedToolsCalled: c.expectedToolsCalled,
       expectedToolsNotCalled: c.expectedToolsNotCalled,
+      rubric: c.rubric,
     };
   });
 
@@ -730,4 +791,439 @@ export function getBenchmarkRunReport(
       perTool: buildPerToolRollup(cases),
     },
   };
+}
+
+// ── Evaluation: judge a completed run with the benchmark_evaluation analysis ───
+
+export interface EvaluateBenchmarkRunInput {
+  runId: string;
+  judgeModelConfigId: string;
+  /** Judge sampling temperature; defaults to 0 (deterministic). */
+  temperature?: number;
+}
+
+/**
+ * Launch a new evaluation pass over a COMPLETED run: judge every completed
+ * run-session against its snapshotted rubric with the chosen judge model
+ * (reusing the benchmark_evaluation analysis type). Repeatable — a run carries
+ * 0..N evaluations. Returns immediately; a background coordinator drives the
+ * per-session judges sequentially through the scheduler.
+ */
+export function evaluateBenchmarkRun(
+  ctx: OperationContext,
+  input: EvaluateBenchmarkRunInput,
+): BenchmarkEvaluationRecord {
+  const { db } = ctx;
+  const run = getBenchmarkRun(db.connection, input.runId);
+  if (!run) {
+    throw new OperationError(
+      `Benchmark run "${input.runId}" not found.`,
+      "benchmark_run_not_found",
+    );
+  }
+  if (run.status !== "complete" && run.status !== "error") {
+    throw new OperationError(
+      `Benchmark run "${input.runId}" is not finished (status '${run.status}').`,
+      "benchmark_run_not_finished",
+    );
+  }
+  if (!ctx.scheduler) {
+    throw new OperationError(
+      "Execution scheduler is not available.",
+      "scheduler_unavailable",
+    );
+  }
+
+  const ts = now();
+  const evaluation: BenchmarkEvaluationRecord = {
+    id: requireGeneratedId(
+      generateEvaluationId((c) => getBenchmarkEvaluation(db.connection, c) !== null),
+      "evaluation",
+      `run ${input.runId}`,
+    ),
+    runId: input.runId,
+    judgeModelConfigId: input.judgeModelConfigId,
+    judgeTemperature: input.temperature ?? 0,
+    status: "pending",
+    sessions: [],
+    error: null,
+    createdAt: ts,
+    updatedAt: ts,
+  };
+  createBenchmarkEvaluation(db.connection, evaluation);
+
+  // Fire-and-forget; the HTTP caller gets the evaluation id and polls.
+  void runEvaluationCoordinator(ctx, evaluation.id).catch((err) => {
+    ctx.logger?.error(
+      {
+        err: err instanceof Error ? err.message : String(err),
+        evaluationId: evaluation.id,
+      },
+      "benchmark evaluation coordinator crashed",
+    );
+  });
+
+  return evaluation;
+}
+
+/**
+ * Re-run a failed/incomplete evaluation: re-judges only the run-sessions that don't
+ * yet have a verdict (clearing their stale judge sessions first), keeping the scored
+ * ones. The recovery path for a transient failure (e.g. the judge model wasn't loaded)
+ * — judging goes through the same init+step launch, so a now-loaded model succeeds.
+ */
+export function retryBenchmarkEvaluation(
+  ctx: OperationContext,
+  evaluationId: string,
+): BenchmarkEvaluationRecord {
+  const { db } = ctx;
+  const evaluation = getBenchmarkEvaluation(db.connection, evaluationId);
+  if (!evaluation) {
+    throw new OperationError(
+      `Benchmark evaluation "${evaluationId}" not found.`,
+      "benchmark_evaluation_not_found",
+    );
+  }
+  if (!ctx.scheduler) {
+    throw new OperationError(
+      "Execution scheduler is not available.",
+      "scheduler_unavailable",
+    );
+  }
+
+  void runEvaluationCoordinator(ctx, evaluationId, { retry: true }).catch((err) => {
+    ctx.logger?.error(
+      {
+        err: err instanceof Error ? err.message : String(err),
+        evaluationId,
+      },
+      "benchmark evaluation retry coordinator crashed",
+    );
+  });
+
+  return { ...evaluation, status: "running", error: null };
+}
+
+export interface BenchmarkEvaluationReport extends BenchmarkEvaluationRecord {
+  /** Computed-on-read scores from the per-session verdict artifacts. */
+  score: EvaluationScore;
+  /** Run sessions the pass should judge (the run's completed sessions). */
+  expectedSessions: number;
+  /** How many of those produced a verdict. The pass is incomplete when < expected. */
+  judgedSessions: number;
+}
+
+/**
+ * List a run's evaluations, each enriched with scores computed on read from its
+ * per-session verdict artifacts (Σ awarded / Σ max → pct, with per-case
+ * distribution). Nothing is cached.
+ */
+export function getBenchmarkRunEvaluationReports(
+  db: BackendDatabase,
+  runId: string,
+): BenchmarkEvaluationReport[] {
+  const run = getBenchmarkRun(db.connection, runId);
+  if (!run) {
+    throw new OperationError(
+      `Benchmark run "${runId}" not found.`,
+      "benchmark_run_not_found",
+    );
+  }
+  const caseNames = new Map(run.cases.map((c) => [c.sourceCaseId, c.name]));
+  const runSessionToCase = new Map(
+    run.sessions.map((s) => [s.sessionId, s.sourceCaseId]),
+  );
+  // A pass should judge every completed run-session; it is incomplete (and
+  // retryable) until each of those has a verdict.
+  const expectedSessions = run.sessions.filter(
+    (s) => s.status === "complete",
+  ).length;
+  // Snapshot rubric per case — joined with each verdict to build the per-criterion grid.
+  const caseRubric = new Map(run.cases.map((c) => [c.sourceCaseId, c.rubric]));
+
+  return listBenchmarkEvaluationsByRun(db.connection, runId).map((ev) => {
+    const sessions: EvaluationSessionScore[] = ev.sessions.map((es) => {
+      const sourceCaseId = runSessionToCase.get(es.runSessionId) ?? "";
+      const verdict = getLatestArtifactBySchemaKey(
+        db.connection,
+        es.analysisSessionId,
+        BENCHMARK_EVAL_KEY.VERDICT,
+      );
+      const meta = verdict?.metadata as
+        | { awarded_points?: number; max_points?: number }
+        | undefined;
+      const awarded =
+        typeof meta?.awarded_points === "number" ? meta.awarded_points : null;
+      const max = typeof meta?.max_points === "number" ? meta.max_points : null;
+
+      // Per-criterion breakdown: rubric criteria (order + description + max) joined
+      // with the judge's awarded points + note (clamped). Empty when no verdict.
+      const verdictContent = verdict?.content as
+        | { criteria?: Array<{ id: number; points: number; note: string }> }
+        | undefined;
+      const byId = new Map(
+        (verdictContent?.criteria ?? []).map((c) => [c.id, c]),
+      );
+      const criteria = (caseRubric.get(sourceCaseId) ?? []).map((rc) => {
+        const v = byId.get(rc.id);
+        return {
+          id: rc.id,
+          description: rc.description,
+          max: rc.points,
+          points: v ? Math.max(0, Math.min(rc.points, Math.round(v.points))) : null,
+          note: v?.note ?? "",
+        };
+      });
+
+      return {
+        runSessionId: es.runSessionId,
+        analysisSessionId: es.analysisSessionId,
+        sourceCaseId,
+        status: es.status,
+        awarded,
+        max,
+        pct: scorePct(awarded, max),
+        criteria,
+      };
+    });
+    const judgedSessions = sessions.filter((s) => s.pct != null).length;
+    return {
+      ...ev,
+      score: aggregateEvaluationScore(sessions, caseNames),
+      expectedSessions,
+      judgedSessions,
+    };
+  });
+}
+
+async function runEvaluationCoordinator(
+  ctx: OperationContext,
+  evaluationId: string,
+  opts: { retry?: boolean } = {},
+): Promise<void> {
+  const { db } = ctx;
+  const initial = getBenchmarkEvaluation(db.connection, evaluationId);
+  if (!initial) return;
+
+  updateBenchmarkEvaluation(db.connection, {
+    ...initial,
+    status: "running",
+    error: null,
+    updatedAt: now(),
+  });
+
+  // Sequential, mirroring the run coordinator: each run-session is judged to
+  // completion before the next. A per-session failure (model not loaded, launch /
+  // scheduler error, or no verdict produced) is recorded on that session entry and
+  // does NOT abort the pass; the evaluation ends `error` if any session failed. On
+  // retry (opts.retry) sessions that already produced a verdict are kept, and only the
+  // failed/incomplete ones are re-judged (after clearing their stale judge session) —
+  // so a now-loaded model recovers. We never auto-recover here.
+  try {
+    const run = getBenchmarkRun(db.connection, initial.runId);
+    if (!run) throw new Error(`Run "${initial.runId}" not found`);
+    const completed = run.sessions.filter((s) => s.status === "complete");
+
+    let lastError: string | null = null;
+    for (const runSession of completed) {
+      if (opts.retry) {
+        const current = getBenchmarkEvaluation(db.connection, evaluationId);
+        const entry = current?.sessions.find(
+          (e) => e.runSessionId === runSession.sessionId,
+        );
+        const verdict = entry
+          ? getLatestArtifactBySchemaKey(
+              db.connection,
+              entry.analysisSessionId,
+              BENCHMARK_EVAL_KEY.VERDICT,
+            )
+          : null;
+        // Keep any session that already produced a verdict (even if its entry
+        // status is stale, e.g. left 'running' by an interrupted pass); re-judge
+        // only the genuinely missing/failed ones.
+        if (verdict) continue;
+        if (entry) {
+          try {
+            deleteSessionRecord(db.connection, entry.analysisSessionId);
+          } catch {
+            // best-effort cleanup of the stale judge session
+          }
+          removeEvaluationSessionEntry(db, evaluationId, runSession.sessionId);
+        }
+      }
+      try {
+        await judgeOneSession(
+          ctx,
+          evaluationId,
+          run,
+          runSession,
+          initial.judgeModelConfigId,
+          initial.judgeTemperature,
+        );
+      } catch (err) {
+        // judgeOneSession marks the session entry 'error' before throwing; keep going.
+        lastError = err instanceof Error ? err.message : String(err);
+        ctx.logger?.error(
+          { err: lastError, evaluationId, runSessionId: runSession.sessionId },
+          "benchmark judge session failed (continuing)",
+        );
+      }
+    }
+
+    const done = getBenchmarkEvaluation(db.connection, evaluationId);
+    if (done) {
+      // The pass attempted every session. It is 'error' if any judge session failed
+      // (or never got recorded), otherwise 'complete'. Failed judge sessions are
+      // retried individually; this status reflects the pass outcome.
+      const failed = done.sessions.filter((s) => s.status === "error").length;
+      const missing = completed.length - done.sessions.length;
+      const anyError = failed > 0 || missing > 0;
+      updateBenchmarkEvaluation(db.connection, {
+        ...done,
+        status: anyError ? "error" : "complete",
+        error: anyError
+          ? (lastError ??
+            `${failed + missing} of ${completed.length} judge sessions failed.`)
+          : null,
+        updatedAt: now(),
+      });
+    }
+  } catch (err) {
+    // Setup-level failure (e.g. run missing) — hard error for the whole pass.
+    const current = getBenchmarkEvaluation(db.connection, evaluationId);
+    if (current) {
+      updateBenchmarkEvaluation(db.connection, {
+        ...current,
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+        updatedAt: now(),
+      });
+    }
+  }
+}
+
+/** Append or patch a single evaluation-session entry (matched by analysisSessionId). */
+function upsertEvaluationSession(
+  db: BackendDatabase,
+  evaluationId: string,
+  entry: {
+    runSessionId: string;
+    analysisSessionId: string;
+    status: "running" | "complete" | "error";
+  },
+): void {
+  const current = getBenchmarkEvaluation(db.connection, evaluationId);
+  if (!current) return;
+  const exists = current.sessions.some(
+    (s) => s.analysisSessionId === entry.analysisSessionId,
+  );
+  const sessions = exists
+    ? current.sessions.map((s) =>
+        s.analysisSessionId === entry.analysisSessionId ? entry : s,
+      )
+    : [...current.sessions, entry];
+  updateBenchmarkEvaluation(db.connection, {
+    ...current,
+    sessions,
+    updatedAt: now(),
+  });
+}
+
+/** Drop the session entry for a run-session (used before re-judging it on retry). */
+function removeEvaluationSessionEntry(
+  db: BackendDatabase,
+  evaluationId: string,
+  runSessionId: string,
+): void {
+  const current = getBenchmarkEvaluation(db.connection, evaluationId);
+  if (!current) return;
+  updateBenchmarkEvaluation(db.connection, {
+    ...current,
+    sessions: current.sessions.filter((s) => s.runSessionId !== runSessionId),
+    updatedAt: now(),
+  });
+}
+
+async function judgeOneSession(
+  ctx: OperationContext,
+  evaluationId: string,
+  run: BenchmarkRunRecord,
+  runSession: BenchmarkRunRecord["sessions"][number],
+  judgeModelConfigId: string,
+  judgeTemperature: number,
+): Promise<void> {
+  const { db, scheduler } = ctx;
+  if (!scheduler)
+    throw new OperationError("scheduler unavailable", "scheduler_unavailable");
+
+  // Analysis target: the last completed turn, else the last turn of any status — so a
+  // run-session that errored (e.g. hit the tool-round cap with no final answer) is still
+  // judged against what it produced; the rubric scores it accordingly. Throwing when a
+  // session is genuinely unjudgeable surfaces it as a failed judge (counted by the
+  // coordinator) rather than a silent skip that leaves the pass mysteriously incomplete.
+  const turns = listTurnRecordsBySession(
+    db.connection,
+    runSession.sessionId,
+  ).sort((a, b) => a.turnNumber - b.turnNumber);
+  // Prefer the last completed turn; else the last terminal (error/aborted) turn so a
+  // failed run-session is judged against what it produced. Never an in-flight turn.
+  const lastTurn =
+    turns.filter((t) => t.status === "complete").at(-1) ??
+    turns.filter((t) => t.status === "error" || t.status === "aborted").at(-1);
+  const snapshot = run.cases.find(
+    (c) => c.sourceCaseId === runSession.sourceCaseId,
+  );
+  if (!snapshot) {
+    throw new Error(
+      `No case snapshot for run-session ${runSession.sessionId} (case ${runSession.sourceCaseId}).`,
+    );
+  }
+  if (!lastTurn) {
+    throw new Error(`Run-session ${runSession.sessionId} has no turn to judge.`);
+  }
+
+  const { session: analysisSession } = await executeAnalysisLaunch(
+    ctx,
+    runSession.sessionId,
+    {
+      target_turn_id: lastTurn.id,
+      model_config_id: judgeModelConfigId,
+      workflow_kind: ANALYSIS_WORKFLOW_KIND.BENCHMARK_EVALUATION,
+      analysis_goal: "Score the session against the rubric.",
+      rubric: snapshot.rubric,
+      temperature: judgeTemperature,
+      // A failed run-session's last turn is terminal-but-not-complete; judge it anyway.
+      allow_incomplete_target: true,
+    },
+  );
+
+  upsertEvaluationSession(db, evaluationId, {
+    runSessionId: runSession.sessionId,
+    analysisSessionId: analysisSession.id,
+    status: "running",
+  });
+
+  try {
+    const job = scheduler.enqueueSession(ctx, analysisSession.id);
+    await scheduler.awaitJob(job.jobId);
+  } catch (err) {
+    upsertEvaluationSession(db, evaluationId, {
+      runSessionId: runSession.sessionId,
+      analysisSessionId: analysisSession.id,
+      status: "error",
+    });
+    throw err;
+  }
+
+  // Soft success criterion: a verdict artifact was produced for this session.
+  const verdict = getLatestArtifactBySchemaKey(
+    db.connection,
+    analysisSession.id,
+    BENCHMARK_EVAL_KEY.VERDICT,
+  );
+  upsertEvaluationSession(db, evaluationId, {
+    runSessionId: runSession.sessionId,
+    analysisSessionId: analysisSession.id,
+    status: verdict ? "complete" : "error",
+  });
 }

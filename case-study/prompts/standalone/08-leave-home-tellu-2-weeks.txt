@@ -1,0 +1,1 @@
+Hello, can you help me dive in the data from home assistant to figure out some routines I have. Can you check what time I have left home (I am Franck) to go to work in the last 2 weeks? My work place is Tellu.

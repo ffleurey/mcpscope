@@ -25,6 +25,10 @@ import type {
   BenchmarkRunLaunchResult,
   BenchmarkRunStatusResult,
   BenchmarkRunReportResult,
+  BenchmarkEvaluateResult,
+  BenchmarkRunEvaluationsResult,
+  BenchmarkDeleteCaseResult,
+  RubricCriterion,
 } from "./types.js";
 
 // ─── HTTP primitives ──────────────────────────────────────────────────────────
@@ -259,6 +263,38 @@ export async function cliBenchmarkAddCaseFromSession(
   );
 }
 
+/** POST /api/operations/benchmark-update-case → BenchmarkAddCaseResult */
+export async function cliBenchmarkUpdateCase(
+  baseUrl: string,
+  body: {
+    case_id: string;
+    name?: string | null;
+    prompt?: string;
+    order_index?: number;
+    expected_tools_called?: string[];
+    expected_tools_not_called?: string[];
+    rubric?: RubricCriterion[];
+  },
+): Promise<BenchmarkAddCaseResult> {
+  return post<BenchmarkAddCaseResult>(
+    baseUrl,
+    "/api/operations/benchmark-update-case",
+    body,
+  );
+}
+
+/** POST /api/operations/benchmark-delete-case → BenchmarkDeleteCaseResult */
+export async function cliBenchmarkDeleteCase(
+  baseUrl: string,
+  body: { case_id: string },
+): Promise<BenchmarkDeleteCaseResult> {
+  return post<BenchmarkDeleteCaseResult>(
+    baseUrl,
+    "/api/operations/benchmark-delete-case",
+    body,
+  );
+}
+
 /** POST /api/operations/benchmark-run → BenchmarkRunLaunchResult */
 export async function cliBenchmarkRun(
   baseUrl: string,
@@ -296,5 +332,28 @@ export async function cliBenchmarkRunReport(
   return request<BenchmarkRunReportResult>(
     baseUrl,
     `/api/operations/benchmark-runs/${encodeURIComponent(runId)}/report`,
+  );
+}
+
+/** POST /api/operations/benchmark-evaluate → BenchmarkEvaluateResult */
+export async function cliBenchmarkEvaluate(
+  baseUrl: string,
+  body: { run_id: string; judge_model_config_id: string; temperature?: number },
+): Promise<BenchmarkEvaluateResult> {
+  return post<BenchmarkEvaluateResult>(
+    baseUrl,
+    "/api/operations/benchmark-evaluate",
+    body,
+  );
+}
+
+/** GET /api/operations/benchmark-runs/:runId/evaluations → BenchmarkRunEvaluationsResult */
+export async function cliBenchmarkRunEvaluations(
+  baseUrl: string,
+  runId: string,
+): Promise<BenchmarkRunEvaluationsResult> {
+  return request<BenchmarkRunEvaluationsResult>(
+    baseUrl,
+    `/api/operations/benchmark-runs/${encodeURIComponent(runId)}/evaluations`,
   );
 }

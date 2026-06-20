@@ -2,7 +2,7 @@ import { z } from "zod";
 import { providerTypeValues } from "./configuration.js";
 
 /** Single schema/domain version recorded in schema_meta and reported on /api/system. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 3;
 
 export const sessionTypeValues = ["primary", "session_analysis"] as const;
 export const parentKindValues = ["session", "benchmark"] as const;
@@ -303,6 +303,19 @@ export const rawExchangeRecordSchema = z.object({
 
 export const benchmarkRunStatusSchema = z.enum(benchmarkRunStatusValues);
 
+// One scored rubric criterion: a natural-language condition checked by the LLM
+// judge against the session trace, worth up to `points`. `id` is 1-based and
+// stable within a case's rubric (the judge references it). Shared by the
+// benchmark domain (case rubric, run snapshot) and the analysis layer (the
+// benchmark_evaluation judge); defined here in the domain layer so analysis can
+// import it without a cycle.
+export const rubricCriterionSchema = z.object({
+  id: z.number().int().positive(),
+  description: z.string().min(1),
+  points: z.number().int().nonnegative(),
+});
+export type RubricCriterion = z.infer<typeof rubricCriterionSchema>;
+
 export const benchmarkRecordSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -321,6 +334,8 @@ export const benchmarkCaseRecordSchema = z.object({
   // Optional deterministic tool-behavior expectations (Phase B checks). Empty = none.
   expectedToolsCalled: z.array(z.string()).default([]),
   expectedToolsNotCalled: z.array(z.string()).default([]),
+  // Optional scored rubric for the LLM judge (Phase C). Empty = no rubric.
+  rubric: z.array(rubricCriterionSchema).default([]),
   // Provenance: the session this case was extracted from, if any.
   sourceSessionId: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
@@ -336,6 +351,9 @@ export const benchmarkRunCaseSnapshotSchema = z.object({
   prompt: z.string(),
   expectedToolsCalled: z.array(z.string()),
   expectedToolsNotCalled: z.array(z.string()),
+  // Snapshot of the case rubric at launch, so an after-the-fact evaluation
+  // scores against the rubric as it was when the run executed.
+  rubric: z.array(rubricCriterionSchema).default([]),
 });
 
 // One run-session: which snapshotted case and repetition a session corresponds to.
@@ -369,6 +387,30 @@ export const benchmarkRunRecordSchema = z.object({
   completedAt: z.number().int().nonnegative().nullable().default(null),
 });
 
+// An evaluation is a separate, repeatable judging pass over a completed run with
+// a chosen judge model. It is a thin grouping/index over the reused
+// session_analysis children (one per run-session); the verdicts live in analysis
+// artifacts and scores are computed on read. A run carries 0..N evaluations.
+export const benchmarkEvaluationSessionSchema = z.object({
+  // The run-session being judged, and the session_analysis child that judges it.
+  runSessionId: z.string(),
+  analysisSessionId: z.string(),
+  status: z.enum(["running", "complete", "error"]).default("running"),
+});
+
+export const benchmarkEvaluationRecordSchema = z.object({
+  id: z.string(),
+  runId: z.string(),
+  judgeModelConfigId: z.string(),
+  /** Sampling temperature for the judge sessions (default 0 = deterministic). */
+  judgeTemperature: z.number().default(0),
+  status: benchmarkRunStatusSchema,
+  sessions: z.array(benchmarkEvaluationSessionSchema).default([]),
+  error: z.string().nullable().default(null),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+});
+
 export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>;
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>;
 
@@ -390,6 +432,12 @@ export type BenchmarkRunCaseSnapshot = z.infer<
 >;
 export type BenchmarkRunSession = z.infer<typeof benchmarkRunSessionSchema>;
 export type BenchmarkRunRecord = z.infer<typeof benchmarkRunRecordSchema>;
+export type BenchmarkEvaluationSession = z.infer<
+  typeof benchmarkEvaluationSessionSchema
+>;
+export type BenchmarkEvaluationRecord = z.infer<
+  typeof benchmarkEvaluationRecordSchema
+>;
 
 export function getDomainModelSummary() {
   return {

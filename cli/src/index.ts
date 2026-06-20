@@ -28,12 +28,20 @@ import {
   runBenchmarkAddCase,
   parseBenchmarkAddCaseFromSessionArgs,
   runBenchmarkAddCaseFromSession,
+  parseBenchmarkUpdateCaseArgs,
+  runBenchmarkUpdateCase,
+  parseBenchmarkDeleteCaseArgs,
+  runBenchmarkDeleteCase,
   parseBenchmarkRunArgs,
   runBenchmarkRun,
   parseBenchmarkRunStatusArgs,
   runBenchmarkRunStatus,
   parseBenchmarkRunReportArgs,
   runBenchmarkRunReport,
+  parseBenchmarkEvaluateArgs,
+  runBenchmarkEvaluate,
+  parseBenchmarkRunEvaluationsArgs,
+  runBenchmarkRunEvaluations,
 } from "./commands/benchmark.js";
 
 function printHelp(): void {
@@ -52,9 +60,13 @@ function printHelp(): void {
   mcpscope benchmark_inspect <benchmark_id> [--json]
   mcpscope benchmark_add_case <benchmark_id> <prompt> [--name <text>] [--expect-tool <name>]... [--forbid-tool <name>]... [--json]
   mcpscope benchmark_add_case_from_session <benchmark_id> <session_id> [--name <text>] [--json]
+  mcpscope benchmark_update_case <case_id> [--name <text>] [--prompt <text>] [--order <n>] [--expect-tool <name>]... [--forbid-tool <name>]... [--rubric-json <json>] [--json]
+  mcpscope benchmark_delete_case <case_id> [--json]
   mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--wait] [--json]
   mcpscope benchmark_run_status <run_id> [--json]
   mcpscope benchmark_run_report <run_id> [--json]
+  mcpscope benchmark_evaluate <run_id> --judge-model <model_config_id> [--temperature <n>] [--json]
+  mcpscope benchmark_run_evaluations <run_id> [--json]
 
 Options:
   --json        emit JSON instead of text
@@ -245,6 +257,22 @@ export async function main(argv: string[]): Promise<void> {
     return;
   }
 
+  if (cmd === "benchmark_update_case") {
+    await dispatchFlat(
+      parseBenchmarkUpdateCaseArgs(benchmarkArgs),
+      runBenchmarkUpdateCase,
+    );
+    return;
+  }
+
+  if (cmd === "benchmark_delete_case") {
+    await dispatchFlat(
+      parseBenchmarkDeleteCaseArgs(benchmarkArgs),
+      runBenchmarkDeleteCase,
+    );
+    return;
+  }
+
   if (cmd === "benchmark_run") {
     await dispatchFlat(parseBenchmarkRunArgs(benchmarkArgs), runBenchmarkRun);
     return;
@@ -262,6 +290,22 @@ export async function main(argv: string[]): Promise<void> {
     await dispatchFlat(
       parseBenchmarkRunReportArgs(benchmarkArgs),
       runBenchmarkRunReport,
+    );
+    return;
+  }
+
+  if (cmd === "benchmark_evaluate") {
+    await dispatchFlat(
+      parseBenchmarkEvaluateArgs(benchmarkArgs),
+      runBenchmarkEvaluate,
+    );
+    return;
+  }
+
+  if (cmd === "benchmark_run_evaluations") {
+    await dispatchFlat(
+      parseBenchmarkRunEvaluationsArgs(benchmarkArgs),
+      runBenchmarkRunEvaluations,
     );
     return;
   }

@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { activeRun, activeRunReport } from '../benchmarkStore'
+  import {
+    activeRun,
+    activeRunReport,
+    activeRunEvaluations,
+    removeEvaluation,
+    retryEvaluation,
+  } from '../benchmarkStore'
   import { chatSessions, selectChat } from '../sessionStore'
   import { modelConfigs } from '../connectionStore'
   import { columnResize } from '../actions/columnResize'
@@ -7,12 +13,52 @@
   import Icon from './Icon.svelte'
   import DialogShell from './DialogShell.svelte'
   import BenchmarkCaseCard from './BenchmarkCaseCard.svelte'
-  import { iconView } from '../design/icons'
-  import type { CaseReport, NumberStats, BenchmarkRunCaseSnapshot } from '../backendTypes'
+  import EvaluationLaunchModal from './EvaluationLaunchModal.svelte'
+  import { iconView, iconAnalysis, iconTrash, iconRefresh } from '../design/icons'
+  import type {
+    CaseReport,
+    NumberStats,
+    BenchmarkRunCaseSnapshot,
+    EvaluationCaseScore,
+    BenchmarkEvaluationReport,
+  } from '../backendTypes'
 
   const run = $derived($activeRun)
   const report = $derived($activeRunReport)
   const isRunning = $derived(run != null && (run.status === 'pending' || run.status === 'running'))
+
+  // ── LLM evaluation ──────────────────────────────────────────────────
+  const evaluations = $derived($activeRunEvaluations)
+  const canEvaluate = $derived(run?.status === 'complete')
+  let showEvalDialog = $state(false)
+  let showSnapshot = $state(false)
+  // Single open per-case verdict drilldown, keyed `${evaluationId}:${caseId}`.
+  let expandedKey = $state<string | null>(null)
+
+  function judgeName(id: string): string {
+    return $modelConfigs.find((c) => c.id === id)?.name ?? id
+  }
+  function caseScoreLabel(c: EvaluationCaseScore): string {
+    return c.name?.trim() || c.sourceCaseId
+  }
+  function toggleExpand(key: string): void {
+    expandedKey = expandedKey === key ? null : key
+  }
+  async function handleDeleteEvaluation(id: string): Promise<void> {
+    await removeEvaluation(id)
+  }
+  async function handleRetryEvaluation(id: string): Promise<void> {
+    await retryEvaluation(id)
+  }
+  function evalIncomplete(ev: BenchmarkEvaluationReport): boolean {
+    return ev.judgedSessions < ev.expectedSessions
+  }
+  // Retry once the pass is settled (not actively judging) and it either failed or
+  // didn't judge every session — covers errored passes and ones orphaned by a restart.
+  function canRetryEvaluation(ev: BenchmarkEvaluationReport): boolean {
+    if (ev.status === 'pending' || ev.status === 'running') return false
+    return ev.status === 'error' || evalIncomplete(ev)
+  }
 
   // Live clock so the elapsed-time of an in-progress run ticks forward.
   let now = $state(Date.now())
@@ -145,6 +191,20 @@
         <h2 class="benchmark-name">{run.benchmarkName}</h2>
         <IdBadge id={run.id} />
         <span class="status-pill {statusPillClass(run.status)}">{run.status}</span>
+        <span class="header-actions">
+          <button
+            class="btn btn-sm"
+            onclick={() => (showSnapshot = true)}
+            title="View the cases + rubric snapshot this run captured"
+          >
+            <Icon path={iconView} /> Cases
+          </button>
+          {#if canEvaluate}
+            <button class="btn btn-sm" onclick={() => (showEvalDialog = true)}>
+              <Icon path={iconAnalysis} /> Evaluate
+            </button>
+          {/if}
+        </span>
       </div>
       <div class="header-meta">
         <span class="meta-item">Model: <span class="meta-value">{modelName}</span></span>
@@ -285,6 +345,155 @@
         </div>
       {/if}
     </section>
+
+    <!-- LLM evaluation passes (rubric judging) -->
+    {#if evaluations.length > 0 || canEvaluate}
+      <section class="report-section">
+        <h3 class="section-title">LLM evaluation</h3>
+        {#if evaluations.length === 0}
+          <p class="config-empty">
+            No evaluation passes yet. Click “Evaluate” to score this run's sessions against their
+            case rubrics with a judge model.
+          </p>
+        {:else}
+          {#each evaluations as ev (ev.id)}
+            <div class="eval-pass">
+              <div class="eval-pass-head">
+                <span class="eval-judge"
+                  >Judge: <span class="meta-value">{judgeName(ev.judgeModelConfigId)}</span></span
+                >
+                <span class="status-pill {statusPillClass(ev.status)}">{ev.status}</span>
+                {#if evalIncomplete(ev)}
+                  <span class="eval-incomplete" title="Not all run sessions have been judged">
+                    {ev.judgedSessions}/{ev.expectedSessions} judged
+                  </span>
+                {/if}
+                {#if ev.score.overallPct != null}
+                  <span class="eval-overall">{pct(ev.score.overallPct)}</span>
+                {/if}
+                <IdBadge id={ev.id} />
+                <span class="eval-actions">
+                  {#if canRetryEvaluation(ev)}
+                    <button
+                      class="icon-btn"
+                      title="Retry: judge the missing/failed sessions"
+                      aria-label="Retry evaluation"
+                      onclick={() => handleRetryEvaluation(ev.id)}
+                    >
+                      <Icon path={iconRefresh} />
+                    </button>
+                  {/if}
+                  <button
+                    class="icon-btn icon-btn-danger"
+                    title="Delete evaluation"
+                    aria-label="Delete evaluation"
+                    onclick={() => handleDeleteEvaluation(ev.id)}
+                  >
+                    <Icon path={iconTrash} />
+                  </button>
+                </span>
+              </div>
+              {#if ev.error}
+                <div class="run-error">{ev.error}</div>
+              {/if}
+              {#if ev.score.cases.length > 0}
+                <div class="table-scroll">
+                  <table class="data-table" use:columnResize>
+                    <colgroup>
+                      <col class="col-flex" />
+                      <col style="width: 5rem" />
+                      <col style="width: 12rem" />
+                      <col style="width: 5rem" />
+                      <col style="width: 4rem" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th>Case</th>
+                        <th class="col-num">Score</th>
+                        <th class="col-num">min/med/max</th>
+                        <th class="col-num">Scored</th>
+                        <th class="col-actions"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each ev.score.cases as c (c.sourceCaseId)}
+                        {@const key = `${ev.id}:${c.sourceCaseId}`}
+                        {@const scored = c.sessions.filter((s) => s.pct != null).length}
+                        <tr>
+                          <td
+                            ><span class="case-name" title={caseScoreLabel(c)}
+                              >{caseScoreLabel(c)}</span
+                            ></td
+                          >
+                          <td class="col-num">{pct(c.pctStats?.mean ?? null)}</td>
+                          <td class="col-num">
+                            {c.pctStats
+                              ? `${pct(c.pctStats.min)} / ${pct(c.pctStats.median)} / ${pct(c.pctStats.max)}`
+                              : '—'}
+                          </td>
+                          <td class="col-num">{scored}/{c.sessions.length}</td>
+                          <td class="col-actions">
+                            <span class="row-actions">
+                              <button
+                                class="icon-btn"
+                                title="Per-session verdicts"
+                                aria-label="Per-session verdicts"
+                                onclick={() => toggleExpand(key)}><Icon path={iconView} /></button
+                              >
+                            </span>
+                          </td>
+                        </tr>
+                        {#if expandedKey === key}
+                          <tr class="verdict-subrow">
+                            <td colspan="5">
+                              <div class="verdict-sessions">
+                                {#each c.sessions as s (s.analysisSessionId)}
+                                  <div class="verdict-session-block">
+                                    <div class="verdict-session">
+                                      <span class="verdict-score"
+                                        >{s.awarded ?? '—'}{s.max != null ? `/${s.max}` : ''}</span
+                                      >
+                                      <span class="verdict-pct">{pct(s.pct)}</span>
+                                      <span class="verdict-ids">
+                                        run <IdBadge id={s.runSessionId} /> · judge
+                                        <IdBadge id={s.analysisSessionId} />
+                                      </span>
+                                      <span class="status-pill {statusPillClass(s.status)}"
+                                        >{s.status}</span
+                                      >
+                                    </div>
+                                    {#if s.criteria.length > 0}
+                                      <ul class="criteria-grid">
+                                        {#each s.criteria as cr (cr.id)}
+                                          <li class="criterion">
+                                            <span class="crit-pts">{cr.points ?? '–'}/{cr.max}</span
+                                            >
+                                            <span class="crit-body">
+                                              <span class="crit-desc">{cr.description}</span>
+                                              {#if cr.note}
+                                                <span class="crit-note">{cr.note}</span>
+                                              {/if}
+                                            </span>
+                                          </li>
+                                        {/each}
+                                      </ul>
+                                    {/if}
+                                  </div>
+                                {/each}
+                              </div>
+                            </td>
+                          </tr>
+                        {/if}
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              {/if}
+            </div>
+          {/each}
+        {/if}
+      </section>
+    {/if}
   </div>
 {/if}
 
@@ -340,6 +549,28 @@
           </table>
         </div>
       {/if}
+    </div>
+  </DialogShell>
+{/if}
+
+{#if showEvalDialog && run}
+  <EvaluationLaunchModal runId={run.id} onClose={() => (showEvalDialog = false)} />
+{/if}
+
+{#if showSnapshot && run}
+  <DialogShell
+    title="Benchmark snapshot — {run.benchmarkName}"
+    onClose={() => (showSnapshot = false)}
+    dialogClass="snapshot-dialog"
+  >
+    <p class="snapshot-note">
+      The cases and rubric exactly as captured when this run launched (read-only). Later edits to
+      the benchmark or its cases do not change a past run.
+    </p>
+    <div class="snapshot-cases">
+      {#each run.cases as c (c.sourceCaseId)}
+        <BenchmarkCaseCard case={c} />
+      {/each}
     </div>
   </DialogShell>
 {/if}
@@ -427,5 +658,126 @@
   .empty-note {
     font-size: 0.82rem;
     color: var(--text-dim);
+  }
+  .header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .eval-pass {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-surface);
+  }
+  .eval-pass-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+  .eval-overall {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--green-bright);
+  }
+  .eval-incomplete {
+    font-size: 0.75rem;
+    color: var(--amber-bright);
+  }
+  .eval-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+  }
+  .verdict-subrow > td {
+    padding: 0.4rem 0.6rem;
+    background: var(--bg-base);
+  }
+  .verdict-sessions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .verdict-session {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.8rem;
+  }
+  .verdict-score {
+    font-weight: 600;
+    color: var(--text-bright);
+    min-width: 3rem;
+  }
+  .verdict-pct {
+    color: var(--green-bright);
+    min-width: 2.5rem;
+  }
+  .verdict-ids {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--text-dim);
+  }
+  .verdict-session-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .criteria-grid {
+    list-style: none;
+    margin: 0 0 0 3.6rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .criterion {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    align-items: baseline;
+  }
+  .crit-pts {
+    flex: none;
+    min-width: 2.5rem;
+    text-align: right;
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--amber-bright);
+  }
+  .crit-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+  .crit-desc {
+    color: var(--text-bright);
+  }
+  .crit-note {
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .snapshot-note {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin: 0 0 0.75rem;
+  }
+  .snapshot-cases {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  :global(.snapshot-dialog) {
+    max-width: min(640px, 95vw);
   }
 </style>

@@ -273,6 +273,7 @@ export function initializeSchema(connection: Database.Database): void {
       order_index INTEGER NOT NULL,
       expected_tools_called_json TEXT NOT NULL DEFAULT '[]',
       expected_tools_not_called_json TEXT NOT NULL DEFAULT '[]',
+      rubric_json TEXT NOT NULL DEFAULT '[]',
       source_session_id TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -300,6 +301,22 @@ export function initializeSchema(connection: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_benchmark_runs_benchmark ON benchmark_runs(benchmark_id);
+
+    -- A run carries 0..N evaluations (judging passes). Thin grouping/index over the
+    -- reused session_analysis children; verdicts live in analysis artifacts.
+    CREATE TABLE IF NOT EXISTS benchmark_evaluations (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES benchmark_runs(id) ON DELETE CASCADE,
+      judge_model_config_id TEXT NOT NULL,
+      judge_temperature REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL CHECK (status IN (${sqlEnum(benchmarkRunStatusValues)})),
+      sessions_json TEXT NOT NULL DEFAULT '[]',
+      error TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_benchmark_evaluations_run ON benchmark_evaluations(run_id);
   `);
 
   const upsertMeta = connection.prepare(`
@@ -441,6 +458,7 @@ export function validateSchema(connection: Database.Database): void {
       "order_index",
       "expected_tools_called_json",
       "expected_tools_not_called_json",
+      "rubric_json",
       "source_session_id",
       "created_at",
       "updated_at",
@@ -460,6 +478,17 @@ export function validateSchema(connection: Database.Database): void {
       "updated_at",
       "started_at",
       "completed_at",
+    ],
+    benchmark_evaluations: [
+      "id",
+      "run_id",
+      "judge_model_config_id",
+      "judge_temperature",
+      "status",
+      "sessions_json",
+      "error",
+      "created_at",
+      "updated_at",
     ],
   };
 

@@ -12,7 +12,7 @@ Read only what the task needs:
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) for the SQLite tables behind that model
 - [TESTING.md](TESTING.md) for regression strategy and test selection
 - [CLI.md](CLI.md) and [MCP.md](MCP.md) for command and tool behavior
-- [BENCHMARK.md](BENCHMARK.md) for the benchmark suite/case/run feature, metrics, and its agent-facing surface
+- [BENCHMARK.md](BENCHMARK.md) for the benchmark suite/case/run feature, deterministic metrics, and LLM rubric evaluation — the latter is implemented **as a `benchmark_evaluation` analysis workflow** (one judge session per run-session), so it shares the analysis subsystem rather than being a separate engine; treat the two as one mechanism when changing either
 - [PROVIDERS.md](PROVIDERS.md) when touching reasoning, token counting, or context-window handling across LM Studio / Ollama / OpenRouter
 - [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) **before any frontend visual change** — tokens, shared primitives, and patterns. Reuse the primitives; keep `DESIGN-SYSTEM.md`, `frontend/src/app.css`, and the live Design System Reference (`DesignReference.svelte`) in sync.
 

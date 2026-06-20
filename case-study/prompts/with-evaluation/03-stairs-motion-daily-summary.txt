@@ -1,0 +1,35 @@
+## Prompt
+
+From the Oslo Home Assistant installation, use the two motion sensors at the top and bottom of the stairs in the entrance to summarize activity over the last 7 days.
+
+Include:
+- total motion sessions for each sensor over the period
+- a compact daily table with date, top sensor sessions, bottom sensor sessions, top last trigger, and bottom last trigger
+- a short conclusion on which sensor was busier overall.
+
+Do not ask me for entity IDs. Resolve the correct sensors yourself and keep the answer concise.
+
+## Evaluation Criteria
+
+### Success Criteria
+
+- Resolves the two entrance stairs motion sensors correctly without asking the user for entity IDs.
+- Uses binary-sensor history, not numeric statistics, to answer the question.
+- Produces a compact comparison covering both the top and bottom stairs sensors.
+- Includes per-sensor totals for the requested period.
+- Includes a daily comparison table over the requested 7-day window.
+- Ends with a short comparison of which sensor appears busier overall.
+- Does not invent hourly buckets or claim raw-transition analysis that the tool output does not support.
+
+### Expected Tool Path
+
+- Preferred discovery path: one `ha_history_list_devices` call scoped to the entrance/stairs motion concept, then one `ha_history_list_device_entities` call for each of the two motion devices with `metric="motion"`.
+- Acceptable fallback: one `ha_history_list_entities` call with `domain="binary_sensor"` and a tight stairs or entrance search, if it resolves both target entities directly.
+- Preferred analytics path: one `ha_history_get_state_history` call per motion entity with `state_value="on"`, `group_by="day"`, and `start_time="7d"`.
+- Avoids `ha_history_get_sensor_stats` and avoids `ha_history_detect_sessions` for these binary sensors.
+
+### Follow-up Handling
+
+- For follow-ups, reuses the resolved motion sensor entity IDs instead of rediscovering them.
+- A night-oriented follow-up may use `day_start_hour=6` with `group_by="day"` to shift post-midnight activity onto the previous evening, but this only changes the grouping boundary. It does not isolate an exact 20:00 to 08:00 window.
+- If the user asks for longer history than the recorder retains, the assistant should state that the answer is limited by state-history retention instead of implying complete long-range data.

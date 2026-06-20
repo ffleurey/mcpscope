@@ -1,0 +1,1 @@
+what are the entities available in my home assistant installation? I am looking for temperatures.

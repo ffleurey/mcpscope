@@ -106,7 +106,7 @@ Returns the current lifecycle state of a session.
 
 ### `mcpscope inspect <id> [--short] [--json]`
 
-Inspects any object by hierarchical ID. Calls `GET /api/lookup/:id`.
+Inspects any object by ID. Calls `GET /api/lookup/:id` — the same operation the UI's id-pill and the MCP `mcpscope_inspect` tool use, so every surface returns identical payloads.
 
 | ID format       | Type    | Example        |
 |-----------------|---------|----------------|
@@ -119,6 +119,10 @@ Inspects any object by hierarchical ID. Calls `GET /api/lookup/:id`.
 | `SSS.W.NT.N`    | round   | `QGWA.4W.1T.2` |
 | `SSS.NT.N.N-X`  | part    | `QGWA.1T.2.3-U` |
 | `SSS.W.NT.N.N-X`| part    | `QGWA.4W.1T.2.3-R` |
+| `B-XXXX`        | benchmark  | `B-84JK`    |
+| `B-XXXX.N`      | case       | `B-84JK.1`  |
+| `R-XXXX`        | run (full mode adds the metrics report) | `R-C5PV` |
+| `E-XXXX`        | evaluation (with scores) | `E-HGTU` |
 
 `--short` omits part content (token counts only). Parts always return full content regardless of `--short`.
 
@@ -213,6 +217,14 @@ Creates a case from an existing session: uses its first user message as the prom
 
 JSON output: same `{ case }` shape as `benchmark_add_case`.
 
+### `mcpscope benchmark_update_case <case_id> [--name <text>] [--prompt <text>] [--order <n>] [--expect-tool <name>]... [--forbid-tool <name>]... [--rubric-json <json>] [--json]`
+
+Edits an existing case; only the fields you pass change. `--expect-tool` / `--forbid-tool` (repeatable) **replace** the respective check; `--rubric-json` takes a JSON array of `{ id, description, points }` and replaces the rubric. JSON output: same `{ case }` shape as `benchmark_add_case`. (The MCP tool takes the rubric as a structured `rubric` array directly.)
+
+### `mcpscope benchmark_delete_case <case_id> [--json]`
+
+Deletes a case from its benchmark (past runs keep their own snapshot). JSON output: `{ case_id, deleted }`.
+
 ### `mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--wait] [--json]`
 
 Launches a benchmark run in the background and returns the run immediately (`status: "pending"`).
@@ -235,6 +247,14 @@ Text output shows overall and per-case completion, the currently running session
 ### `mcpscope benchmark_run_report <run_id> [--json]`
 
 Returns the full compute-on-read **metrics** report for a run (loads session traces): per-case pass rates, tool-call/token stats, per-session metrics, and a cross-case per-tool rollup. Text output leads with the per-tool rollup, then per-case detail. JSON output: `{ run, report }`. For what the metrics mean (pass@k vs pass^k, the per-tool scorecard, what the checks evaluate), see [BENCHMARK.md → Report and metrics](BENCHMARK.md#report-and-metrics).
+
+### `mcpscope benchmark_evaluate <run_id> --judge-model <model_config_id> [--temperature <n>] [--json]`
+
+Launches an **LLM evaluation** pass over a completed run: a separate judge model scores every session against its case rubric. `--temperature` sets the judge sampling temperature (default `0` = deterministic; raise it to probe judge stability). Returns immediately (`{ evaluation: { id, status, judge_temperature, ... } }`); the pass runs in the background. Repeatable — run it again with a different `--judge-model`/`--temperature` to compare. The judge runs as a `benchmark_evaluation` analysis session per run-session; see [BENCHMARK.md → Evaluation](BENCHMARK.md#evaluation-llm-rubric-judging). Rubrics are authored via the UI or the `rubric` field on `benchmark_add_case` (MCP/HTTP); they are not a CLI flag.
+
+### `mcpscope benchmark_run_evaluations <run_id> [--json]`
+
+Lists a run's evaluation passes with scores computed on read from the judge verdicts. Text output shows, per pass, the judge model, status, overall %, and a per-case min/mean/max line. JSON output: `{ evaluations: [{ id, run_id, judge_model_config_id, status, sessions, score: { overall_pct, cases: [{ source_case_id, name, pct_stats, sessions: [{ analysis_session_id, awarded, max, pct, ... }] }] } }] }`. Open an `analysis_session_id` (e.g. with `mcpscope inspect`) to read the judge's verdict and reasoning.
 
 ### `mcpscope sessions list [--json]`
 
@@ -271,12 +291,17 @@ mcpscope inspect ABCD.1T
 | `--model-config <id>` | `create`, `benchmark_run` | model config ID (instead of default)|
 | `--mcp-profile <id>` | `create`, `benchmark_run` | repeatable; MCP profile IDs (instead of default-enabled) |
 | `--description <text>` | `benchmark_create` | optional benchmark description |
-| `--name <text>`    | `benchmark_add_case`, `benchmark_add_case_from_session` | optional case label |
-| `--expect-tool <name>` | `benchmark_add_case` | repeatable; tool that should be called |
-| `--forbid-tool <name>` | `benchmark_add_case` | repeatable; tool that should NOT be called |
+| `--name <text>`    | `benchmark_add_case`, `benchmark_add_case_from_session`, `benchmark_update_case` | optional case label |
+| `--prompt <text>`  | `benchmark_update_case` | new prompt text |
+| `--order <n>`      | `benchmark_update_case` | new position within the suite |
+| `--expect-tool <name>` | `benchmark_add_case`, `benchmark_update_case` | repeatable; tool that should be called |
+| `--forbid-tool <name>` | `benchmark_add_case`, `benchmark_update_case` | repeatable; tool that should NOT be called |
+| `--rubric-json <json>` | `benchmark_update_case` | JSON array of `{id, description, points}` to replace the rubric |
 | `--case <id>`      | `benchmark_run`    | repeatable; subset of case ids to run |
 | `--repetitions <n>` | `benchmark_run`   | times to run each case (default: 1) |
 | `--wait`           | `benchmark_run`    | poll run status until terminal, then print final progress |
+| `--judge-model <id>` | `benchmark_evaluate` | model config ID for the judge (required) |
+| `--temperature <n>` | `benchmark_evaluate` | judge sampling temperature (default 0 = deterministic) |
 
 ## Exit codes
 

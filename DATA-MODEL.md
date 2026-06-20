@@ -20,15 +20,16 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 - `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records, and may optionally belong to one `WorkflowStep`
 - the runtime tree described below for persisted sessions (unchanged from user perspective)
 - one session contains one setup and zero or more turns
-- hierarchical IDs for session/setup/step/turn/round/part runtime nodes, with `W` for workflow steps, `T` for turns, and `C` for compaction steps. Benchmarks add their own type-tagged IDs (`B-XXXX` benchmark, `B-XXXX.N` case, `R-XXXX` run) — see [BENCHMARK.md](BENCHMARK.md)
+- hierarchical IDs for session/setup/step/turn/round/part runtime nodes, with `W` for workflow steps, `T` for turns, and `C` for compaction steps. Benchmarks add their own type-tagged IDs (`B-XXXX` benchmark, `B-XXXX.N` case, `R-XXXX` run, `E-XXXX` evaluation) — see [BENCHMARK.md](BENCHMARK.md)
 - session ownership through `parent_container_type_key` / `parent_container_id` on `sessions`
 - generic persistence for sessions, steps, and turns (`sessions`, `steps`, `turns`)
 - existing child-session behavior still works through the new model
-- the benchmark suite/case/run feature (Phase A): benchmarks and cases are first-class persisted objects, a run is an immutable snapshot of selected cases + settings, and a session created by a run carries that run as its `benchmark` parent (see [BENCHMARK.md](BENCHMARK.md))
+- the benchmark suite/case/run feature: benchmarks and cases are first-class persisted objects, a run is an immutable snapshot of selected cases + settings, and a session created by a run carries that run as its `benchmark` parent (see [BENCHMARK.md](BENCHMARK.md))
+- benchmark **LLM evaluation**: an optional per-case rubric judged by a separate model after a run. An evaluation reuses the analysis model directly — it spawns one `session_analysis` session (workflow kind `benchmark_evaluation`) per run-session, parented to that run-session — so it adds no new session type or parent rule (see [BENCHMARK.md](BENCHMARK.md))
 
 **Not implemented yet:**
 
-- benchmark Phase B/C (LLM-judged success); Phase A evaluates deterministic tool-behavior checks only
+- richer benchmark scoring beyond compute-on-read per-pass scores (no stored aggregate / cross-run comparison view); deterministic tool-behavior checks and LLM rubric evaluation both ship
 - broader workflow automation for session sequencing beyond the shipped analysis-session workflow
 
 **Current deliberate limits:**
@@ -225,44 +226,27 @@ What this means:
 
 ## Canonical IDs
 
-IDs follow the same tree.
-
-Current target shape:
+IDs mirror the runtime tree, so the shape always tells you the kind:
 
 - `AB12` — session
-- `AB12.S` — setup
-- `AB12.S.1-SP` — setup part
-- `AB12.2` — turn
-- `AB12.2.1` — round
-- `AB12.2.1.3-U` — round part
+- `AB12.S` — setup; `AB12.S.1-SP` — setup part
+- `AB12.1T` — turn; `AB12.1T.1` — round; `AB12.1T.1.3-U` — round part
+- `AB12.3W` — workflow step; `AB12.3W.1T` — a turn it owns
+- `AB12.1C` — compaction step
 
-Part suffixes encode the public part type:
+**Numbering is positional**: the number on each step segment is the node's 1-based position in
+its parent's ordered list (`3W` = step 3, `1T` = turn/round 1). It is shared across all step
+subtypes — workflow (`W`), compaction (`C`), and turn (`T`) all draw from the session's single
+ordered step list. Session IDs stay short, stable, and human-readable.
 
-- `SP` — `system_prompt`
-- `MI` — `mcp_instructions`
-- `TD` — `tool_definitions`
-- `U` — `user_prompt`
-- `R` — `reasoning`
-- `T` — `tool_call`
-- `A` — `assistant_answer`
+Part suffixes encode the public part type: `SP` `system_prompt`, `MI` `mcp_instructions`,
+`TD` `tool_definitions`, `U` `user_prompt`, `R` `reasoning`, `T` `tool_call`,
+`A` `assistant_answer`.
 
-Session IDs should stay short, stable, and human-readable.
-
-## Numbering rule
-
-## Numbering
-
-All numbering is positional: the suffix of the canonical ID encodes the node's
-position within its parent container. For example:
-
-- `SSS.1T` — turn at position 1 in the session's step list
-- `SSS.3W.1T` — turn at position 1 within workflow step at position 3
-- `SSS.3W.1T.2` — round 2 of that turn
-- `SSS.1C` — compaction step at position 1
-
-Numbering is shared across all step subtypes (workflow, compaction, turn) within
-a session. The number is the step's position in the session's ordered step list,
-starting at 1.
+**Benchmark-family IDs** extend the same type-tagged scheme *outside* the runtime tree — a bare
+4-char code is always a session, a prefixed code is a benchmark object: `B-7K3M` (benchmark),
+`B-7K3M.3` (case), `R-9QX4` (run), `E-2F8P` (evaluation). Their structure and lifecycles are
+owned by [BENCHMARK.md → IDs](BENCHMARK.md#ids).
 
 ## Lookup model rules
 
@@ -274,6 +258,8 @@ starting at 1.
 - summary and full mode use the same structure
 - full mode adds allowed content; it does not invent a different object model
 - the tables above describe the canonical properties expected on those nodes
+- **one inspect, every surface**: the UI id-pill (`GET /api/lookup/:id`), the CLI (`mcpscope inspect`), and the MCP `mcpscope_inspect` tool all call the single `inspect` operation, so any given ID inspects to the same payload everywhere — if one surface resolves it, they all do
+- `inspect` also resolves benchmark-family IDs (`B-`/`B-.N`/`R-`/`E-`) to the matching benchmark/case/run/evaluation payload (full mode adds a run's metrics report); see [BENCHMARK.md](BENCHMARK.md)
 
 ## Session classification and parent model
 

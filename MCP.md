@@ -16,7 +16,7 @@ The transport operates in **stateless mode** — no server-side session is maint
 
 ## Tool surface
 
-Fifteen tools mirror the shipped CLI surface exactly — every operation in the backend catalog is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP parity). Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
+Nineteen tools mirror the shipped CLI surface exactly — every operation in the backend catalog is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP parity). Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
 
 Seven session/config tools:
 
@@ -26,24 +26,30 @@ Seven session/config tools:
 | `mcpscope_create`           | `mcpscope create`                  | Create a session from defaults or explicit model/MCP selection |
 | `mcpscope_send`             | `mcpscope send`                    | Start a user turn |
 | `mcpscope_status`           | `mcpscope status`                  | Get session lifecycle state |
-| `mcpscope_inspect`          | `mcpscope inspect`                 | Inspect any object by hierarchical ID |
+| `mcpscope_inspect`          | `mcpscope inspect`                 | Inspect any object by ID (sessions, parts, and benchmarks/cases/runs/evaluations) |
 | `mcpscope_list_model_configs` | `mcpscope list_model_configs`    | List all model configs |
 | `mcpscope_list_mcp_profiles`  | `mcpscope list_mcp_profiles`     | List all MCP server profiles |
 
-Eight benchmark tools (the agent-facing benchmark surface — see [BENCHMARK.md](BENCHMARK.md)):
+Twelve benchmark tools (the agent-facing benchmark surface — see [BENCHMARK.md](BENCHMARK.md)):
 
 | MCP tool name                           | CLI command                                | Description |
 |-----------------------------------------|--------------------------------------------|-------------|
 | `mcpscope_benchmark_create`             | `mcpscope benchmark_create`                | Create a new empty benchmark blueprint |
 | `mcpscope_benchmark_list`               | `mcpscope benchmark_list`                  | List all benchmarks with case and run counts |
 | `mcpscope_benchmark_inspect`            | `mcpscope benchmark_inspect`               | Inspect a benchmark: its cases and runs |
-| `mcpscope_benchmark_add_case`           | `mcpscope benchmark_add_case`              | Add a case (prompt + optional tool expectations) |
+| `mcpscope_benchmark_add_case`           | `mcpscope benchmark_add_case`              | Add a case (prompt + optional tool expectations + optional rubric) |
 | `mcpscope_benchmark_add_case_from_session` | `mcpscope benchmark_add_case_from_session` | Add a case from an existing session's first prompt |
+| `mcpscope_benchmark_update_case`        | `mcpscope benchmark_update_case`           | Edit any field of an existing case (name, prompt, order, checks, rubric) |
+| `mcpscope_benchmark_delete_case`        | `mcpscope benchmark_delete_case`           | Delete a case from a benchmark |
 | `mcpscope_benchmark_run`                | `mcpscope benchmark_run`                   | Launch a run in the background; returns the run immediately |
 | `mcpscope_benchmark_run_status`         | `mcpscope benchmark_run_status`            | Cheap, pollable run progress (no session traces loaded) |
 | `mcpscope_benchmark_run_report`         | `mcpscope benchmark_run_report`            | Full compute-on-read metrics report (loads session traces) |
+| `mcpscope_benchmark_evaluate`           | `mcpscope benchmark_evaluate`              | Launch an LLM evaluation pass over a completed run with a judge model |
+| `mcpscope_benchmark_run_evaluations`    | `mcpscope benchmark_run_evaluations`       | List a run's evaluation passes with computed rubric scores |
 
 `mcpscope_benchmark_run_status` returns lightweight **progress** (overall and per-case completion, the currently running session, terminal status), whereas `mcpscope_benchmark_run_report` returns the **full metrics** (per-case pass rates, tool-call/token stats, per-session metrics, and a cross-case per-tool rollup). Poll status; fetch the report once complete.
+
+`mcpscope_benchmark_evaluate` adds the qualitative dimension: a separate judge model scores each session against its case rubric. It is implemented as a `benchmark_evaluation` **analysis session** per run-session (the same workflow framework as session analysis), so the judge can pull extra evidence via `mcpscope_inspect` on the internal analysis endpoint. Launch returns immediately; poll `mcpscope_benchmark_run_evaluations` for scores. See [BENCHMARK.md → Evaluation](BENCHMARK.md#evaluation-llm-rubric-judging).
 
 ## Tool inputs
 
@@ -80,7 +86,7 @@ No inputs.
 
 | Field  | Type    | Required | Description |
 |--------|---------|----------|-------------|
-| `id`   | string  | ✓        | Hierarchical ID (e.g. `ABCD`, `ABCD.S`, `ABCD.1T`, `ABCD.4W.1T.2`, `ABCD.4W.1T.2.3-R`). Inspecting a session, setup, step, turn, or round is useful for finding child IDs; inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content. |
+| `id`   | string  | ✓        | Any object ID. Runtime: `ABCD`, `ABCD.S`, `ABCD.1T`, `ABCD.4W.1T.2`, `ABCD.4W.1T.2.3-R`. Benchmark family: `B-XXXX` (benchmark), `B-XXXX.N` (case), `R-XXXX` (run; full mode adds the metrics report), `E-XXXX` (evaluation with scores). Inspecting a session, setup, step, turn, or round is useful for finding child IDs; inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content. |
 | `short`| boolean |          | Token counts only, no part content |
 
 ### `mcpscope_list_model_configs`
@@ -117,6 +123,7 @@ No inputs. Returns all benchmarks with id, name, description, case count, and ru
 | `name`                      | string \| null |          | Optional human label |
 | `expected_tools_called`     | string[]       |          | Tools that should be called (deterministic check) |
 | `expected_tools_not_called` | string[]       |          | Tools that should NOT be called (deterministic check) |
+| `rubric`                    | object[]       |          | Scored criteria for LLM evaluation: each `{ id, description, points }`. Judged by `mcpscope_benchmark_evaluate` |
 
 ### `mcpscope_benchmark_add_case_from_session`
 
@@ -125,6 +132,26 @@ No inputs. Returns all benchmarks with id, name, description, case count, and ru
 | `benchmark_id` | string         | ✓        | Benchmark to add the case to |
 | `session_id`   | string         | ✓        | Session to extract the initiating prompt from; pre-fills `expected_tools_called` with the tools that session actually called |
 | `name`         | string \| null |          | Optional human label |
+
+### `mcpscope_benchmark_update_case`
+
+Edit an existing case; only the fields you pass change. Returns the updated `{ case }`.
+
+| Field                       | Type           | Required | Description |
+|-----------------------------|----------------|----------|-------------|
+| `case_id`                   | string         | ✓        | Case to edit |
+| `name`                      | string \| null |          | New label (null clears it) |
+| `prompt`                    | string         |          | New prompt text |
+| `order_index`               | number         |          | New position within the suite |
+| `expected_tools_called`     | string[]       |          | Replace the should-be-called check |
+| `expected_tools_not_called` | string[]       |          | Replace the should-NOT-be-called check |
+| `rubric`                    | object[]       |          | Replace the rubric: each `{ id, description, points }` |
+
+### `mcpscope_benchmark_delete_case`
+
+| Field     | Type   | Required | Description |
+|-----------|--------|----------|-------------|
+| `case_id` | string | ✓        | Case to delete (past runs keep their snapshot) |
 
 ### `mcpscope_benchmark_run`
 
@@ -153,6 +180,24 @@ Returns progress derived from the run record only: `status`, `total_cases`, `tot
 | `run_id` | string | ✓        | Run id to report on |
 
 Heavier than status (loads session traces). Returns the run plus the full metrics report.
+
+### `mcpscope_benchmark_evaluate`
+
+| Field                   | Type   | Required | Description |
+|-------------------------|--------|----------|-------------|
+| `run_id`                | string | ✓        | Completed run to evaluate |
+| `judge_model_config_id` | string | ✓        | Model config for the judge (a separate model; never the task model) |
+| `temperature`           | number |          | Judge sampling temperature (default `0` = deterministic) |
+
+Returns the evaluation immediately with `status: "pending"`; a background coordinator launches one `benchmark_evaluation` analysis session per run-session. Repeatable — call again with a different judge to compare. Poll `mcpscope_benchmark_run_evaluations` for scores.
+
+### `mcpscope_benchmark_run_evaluations`
+
+| Field    | Type   | Required | Description |
+|----------|--------|----------|-------------|
+| `run_id` | string | ✓        | Run id whose evaluation passes to list |
+
+Returns each pass with scores computed on read from the judge verdicts: per-session `awarded`/`max`/`pct`, per-case distribution (`pct_stats`), and `overall_pct`. Each per-session entry carries the `analysis_session_id` of the judge session — inspect it (`mcpscope_inspect`) for the verdict and its reasoning.
 
 ## Tool results
 
@@ -202,7 +247,10 @@ mcpscope also exposes an internal restricted MCP endpoint for analysis sessions:
 http://localhost:3030/mcp/analysis
 ```
 
-This endpoint is backend-owned and used by `session_analysis` sessions.
+This endpoint is backend-owned and used by `session_analysis` sessions — including the
+`benchmark_evaluation` judge sessions that back `mcpscope_benchmark_evaluate`, since benchmark
+evaluation *is* an analysis workflow. The judge is pushed an inspect summary and can pull more
+detail through this endpoint on demand.
 
 Its tool surface is intentionally restricted to:
 
@@ -213,4 +261,5 @@ It is not the general public MCP surface for normal agent use. Its purpose is to
 workflow inspect persisted mcpscope evidence without exposing broader session-management tools.
 
 See [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) for how this restricted endpoint is used in the shipped analysis
-workflow.
+workflow, and [BENCHMARK.md → Evaluation](BENCHMARK.md#evaluation-llm-rubric-judging) for the
+benchmark-evaluation case.

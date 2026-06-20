@@ -1,0 +1,89 @@
+/**
+ * Benchmark evaluation analysis — subclass of AnalysisSessionBase.
+ *
+ * A single-step rubric judge: bootstrap (load + push the target session) →
+ * rubric judge (score against the case rubric, emit a verdict artifact). Reuses
+ * the analysis framework wholesale; the only new behavior is the rubric judge
+ * step. Launched per benchmark run-session with a separate judge model.
+ */
+
+import type { BackendDatabase } from '../../persistence/db.js'
+import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
+import type { McpGateway } from '../../runtime/toolTurns.js'
+import { AnalysisSessionBase } from '../analysisSessionBase.js'
+import type { AnalysisWorkflowInput } from '../analysisWorkflowInput.js'
+import { SCHEMA_KEY as CORE_KEY, type AnalysisSessionState } from '../schemas.js'
+import { ANALYSIS_WORKFLOW_KIND } from '../workflowKinds.js'
+import { BootstrapStep } from '../shared/bootstrapStep.js'
+import { SCHEMA_KEY } from './schemas.js'
+import { RubricJudgeStep } from './rubricJudgeStep.js'
+import { buildBenchmarkEvaluationSystemPrompt } from './systemPrompt.js'
+
+export class BenchmarkEvaluationAnalysis extends AnalysisSessionBase {
+  static readonly workflowKind = ANALYSIS_WORKFLOW_KIND.BENCHMARK_EVALUATION
+  static readonly workflowLabel = 'Benchmark Evaluation'
+
+  static create(
+    db: BackendDatabase,
+    lm: ChatCompletionGateway,
+    mcp: McpGateway,
+    input: AnalysisWorkflowInput,
+  ): BenchmarkEvaluationAnalysis {
+    const state: AnalysisSessionState = {
+      phase: 'bootstrap',
+      analysisSessionId: input.analysisSessionId,
+      targetSessionId: input.targetSessionId,
+      targetTurnId: input.targetTurnId,
+      analysisGoal: input.analysisGoal,
+      selectedToolNames: input.selectedToolNames,
+      onlyFailedToolCalls: input.onlyFailedToolCalls,
+      evaluationCriteria: input.evaluationCriteria,
+      rubric: input.rubric ?? [],
+    }
+    return new BenchmarkEvaluationAnalysis(db, lm, mcp, input, state)
+  }
+
+  static rehydrate(
+    db: BackendDatabase,
+    lm: ChatCompletionGateway,
+    mcp: McpGateway,
+    sessionId: string,
+  ): BenchmarkEvaluationAnalysis | null {
+    const state = AnalysisSessionBase.rehydrateState(db, sessionId)
+    if (!state) return null
+    const input: AnalysisWorkflowInput = {
+      analysisSessionId: sessionId,
+      targetSessionId: state.targetSessionId,
+      targetTurnId: state.targetTurnId,
+      analysisGoal: state.analysisGoal,
+      selectedToolNames: state.selectedToolNames,
+      onlyFailedToolCalls: state.onlyFailedToolCalls,
+      evaluationCriteria: state.evaluationCriteria,
+      rubric: state.rubric ?? [],
+    }
+    return new BenchmarkEvaluationAnalysis(db, lm, mcp, input, state)
+  }
+
+  protected getWorkflowKind(): string {
+    return ANALYSIS_WORKFLOW_KIND.BENCHMARK_EVALUATION
+  }
+
+  static buildSystemPrompt(input: { analysisGoal: string; additionalInstructions?: string }): string {
+    return buildBenchmarkEvaluationSystemPrompt(input)
+  }
+
+  // ── Hooks — called by buildPlan() during tree traversal ───────────────────
+
+  protected onBeforeSession(): void {
+    // Reuse the bootstrap step to materialize analysis_target and push the
+    // target session's evidence into the judge's context.
+    this.addCommand(new BootstrapStep(this.db, this.lm, this.mcp, {
+      indexSchemaKey: SCHEMA_KEY.WORK_INDEX,
+    }))
+  }
+
+  protected onAfterSession(): void {
+    if (!this.readArtifact(CORE_KEY.ANALYSIS_TARGET)) return
+    this.addCommand(new RubricJudgeStep(this.db, this.lm, this.mcp))
+  }
+}

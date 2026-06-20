@@ -11,9 +11,13 @@ import {
   benchmarkInspectOperation,
   benchmarkAddCaseOperation,
   benchmarkAddCaseFromSessionOperation,
+  benchmarkUpdateCaseOperation,
+  benchmarkDeleteCaseOperation,
   benchmarkRunOperation,
   benchmarkRunStatusOperation,
   benchmarkRunReportOperation,
+  benchmarkEvaluateOperation,
+  benchmarkRunEvaluationsOperation,
 } from "./benchmarkOperations.js";
 
 export const operationCatalog = {
@@ -29,9 +33,13 @@ export const operationCatalog = {
   benchmark_inspect: benchmarkInspectOperation,
   benchmark_add_case: benchmarkAddCaseOperation,
   benchmark_add_case_from_session: benchmarkAddCaseFromSessionOperation,
+  benchmark_update_case: benchmarkUpdateCaseOperation,
+  benchmark_delete_case: benchmarkDeleteCaseOperation,
   benchmark_run: benchmarkRunOperation,
   benchmark_run_status: benchmarkRunStatusOperation,
   benchmark_run_report: benchmarkRunReportOperation,
+  benchmark_evaluate: benchmarkEvaluateOperation,
+  benchmark_run_evaluations: benchmarkRunEvaluationsOperation,
 } as const;
 
 export type BackendOperationId = keyof typeof operationCatalog;
@@ -49,7 +57,11 @@ export const operationList = [
   benchmarkInspectOperation,
   benchmarkAddCaseOperation,
   benchmarkAddCaseFromSessionOperation,
+  benchmarkUpdateCaseOperation,
+  benchmarkDeleteCaseOperation,
   benchmarkRunOperation,
   benchmarkRunStatusOperation,
   benchmarkRunReportOperation,
+  benchmarkEvaluateOperation,
+  benchmarkRunEvaluationsOperation,
 ] as const;

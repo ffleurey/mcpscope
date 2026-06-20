@@ -10,6 +10,7 @@
  */
 
 import { z } from 'zod'
+import type { RubricCriterion } from '../domain/model.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Schema key constants
@@ -79,6 +80,14 @@ export interface AnalysisSessionState {
   evaluationCriteria: string[]
   /** The analysis workflow kind, used for rehydration. */
   workflow_kind?: string
+  /** Scored rubric for the benchmark_evaluation judge (empty for other kinds). */
+  rubric?: RubricCriterion[]
+  /**
+   * Allow planning against a terminal-but-failed target turn (`error`/`aborted`) — set by
+   * benchmark evaluation so a failed run-session is still judged. In-flight turns are never
+   * planned against.
+   */
+  allowIncompleteTarget?: boolean
   /** Execution progress derived from the plan (updated after each step). */
   planProgress?: PlanProgress
 }

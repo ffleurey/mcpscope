@@ -23,6 +23,8 @@
   const prompt = $derived(caseData.prompt)
   const expectedToolsCalled = $derived(caseData.expectedToolsCalled ?? [])
   const expectedToolsNotCalled = $derived(caseData.expectedToolsNotCalled ?? [])
+  const rubric = $derived(caseData.rubric ?? [])
+  const rubricTotal = $derived(rubric.reduce((sum, c) => sum + c.points, 0))
 </script>
 
 <article class="case-card">
@@ -57,6 +59,20 @@
       </div>
     {/if}
   </section>
+
+  {#if rubric.length > 0}
+    <section class="card-section">
+      <span class="section-label">Rubric ({rubricTotal} pts)</span>
+      <ul class="rubric-list">
+        {#each rubric as crit (crit.id)}
+          <li class="rubric-item">
+            <span class="rubric-points">{crit.points}</span>
+            <span class="rubric-desc">{crit.description}</span>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
 </article>
 
 <style>
@@ -133,5 +149,33 @@
     font-size: 0.8rem;
     color: var(--text-dim);
     opacity: 0.7;
+  }
+
+  .rubric-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .rubric-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+  .rubric-points {
+    flex: none;
+    min-width: 1.5rem;
+    text-align: right;
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--amber-bright);
+  }
+  .rubric-desc {
+    color: var(--text-bright);
+    word-break: break-word;
   }
 </style>

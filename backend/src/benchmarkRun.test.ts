@@ -343,4 +343,148 @@ describe("benchmark run", () => {
     });
     expect(emptyRun.statusCode).toBe(400);
   });
+
+  it("evaluates a completed run with a judge model and records per-session verdicts", async () => {
+    const config = makeTestConfig();
+    dataDir = config.dataDir;
+
+    // Gateways: stub run turn (streamChatCompletion) + judge verdict
+    // (createChatCompletion) + an analysis-capable MCP gateway (/mcp/analysis).
+    const base = stubGateways() as NonNullable<Parameters<typeof buildBackendApp>[1]>;
+    const mcpRaw = {
+      requestUrl: "http://localhost:3030/mcp/analysis",
+      requestMethod: "POST",
+      requestBodyText: "{}",
+      responseStatus: 200,
+      responseBody: {},
+    };
+    // The judge turn awards 9 to a max-2 criterion (clamping survives the flow).
+    // The shared round runner prefers streamChatCompletion when present, so the
+    // judge verdict must come through the streamed path too (the run task turn
+    // also gets it as its answer — harmless for this test).
+    const verdict = JSON.stringify({
+      criteria: [{ id: 1, points: 9, note: "answer matched, cited part" }],
+      comment: "fine",
+    });
+    const completion = {
+      id: "cmpl-judge",
+      object: "chat.completion",
+      model: "model-key",
+      created: 1,
+      choices: [
+        {
+          index: 0,
+          finish_reason: "stop" as const,
+          message: { role: "assistant" as const, content: verdict },
+        },
+      ],
+      usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+    };
+    const gateways: Parameters<typeof buildBackendApp>[1] = {
+      chatCompletionGateway: {
+        ...base.chatCompletionGateway,
+        async streamChatCompletion() {
+          return {
+            completion,
+            segments: [{ kind: "content" as const, text: verdict }],
+            rawResponseBody:
+              `data: {"choices":[{"delta":{"content":${JSON.stringify(verdict)}}}]}\n\n` +
+              "data: [DONE]\n",
+            chunks: [],
+          };
+        },
+        async createChatCompletion() {
+          return completion;
+        },
+      },
+      mcpGateway: {
+        async initializeSession() {
+          return { sessionId: "mcp-analysis", instructions: undefined, rawExchange: mcpRaw };
+        },
+        async listTools() {
+          return {
+            tools: [
+              { name: "mcpscope_inspect", description: "x", inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } },
+              { name: "mcpscope_status", description: "x", inputSchema: { type: "object", properties: {} } },
+            ],
+            rawResult: {},
+            rawExchange: mcpRaw,
+          };
+        },
+        async callTool(_url, _sid, _name, args: Record<string, unknown>) {
+          return {
+            content: JSON.stringify({ id: args["id"] ?? "x", type: "session", data: {} }),
+            structuredContent: null,
+            isError: false,
+            rawResult: {},
+            rawExchange: mcpRaw,
+          };
+        },
+      },
+    };
+    app = await buildBackendApp(config, gateways);
+    await seedModelConfig(app);
+
+    const benchmarkId = (
+      await app.inject({ method: "POST", url: "/api/benchmarks", payload: { name: "Judge suite" } })
+    ).json().benchmark.id as string;
+
+    // A case WITH a rubric (so the judge has criteria to score).
+    const caseRes = await app.inject({
+      method: "POST",
+      url: `/api/benchmarks/${benchmarkId}/cases`,
+      payload: {
+        prompt: "What is the weather?",
+        rubric: [{ id: 1, description: "Answers the question", points: 2 }],
+      },
+    });
+    expect(caseRes.statusCode).toBe(201);
+    expect(caseRes.json().case.rubric).toHaveLength(1);
+
+    const runId = (
+      await app.inject({
+        method: "POST",
+        url: `/api/benchmarks/${benchmarkId}/runs`,
+        payload: { repetitions: 2, modelConfigId: "model-config-1", mcpProfileIds: [] },
+      })
+    ).json().run.id as string;
+    await pollRunUntilTerminal(app, runId);
+
+    // Launch an evaluation pass with a judge model.
+    const evalRes = await app.inject({
+      method: "POST",
+      url: `/api/benchmark-runs/${runId}/evaluations`,
+      payload: { judgeModelConfigId: "model-config-1" },
+    });
+    expect(evalRes.statusCode).toBe(202);
+    const evaluationId = evalRes.json().evaluation.id as string;
+    expect(evaluationId).toMatch(/^E-[A-HJ-NP-Z2-9]{4}$/);
+
+    // Poll the evaluations list until this pass is terminal.
+    let evaluation: Record<string, unknown> = {};
+    for (let i = 0; i < 100; i++) {
+      const res = await app.inject({ method: "GET", url: `/api/benchmark-runs/${runId}/evaluations` });
+      const found = (res.json().evaluations as Array<Record<string, unknown>>).find((e) => e.id === evaluationId);
+      if (found && (found.status === "complete" || found.status === "error")) {
+        evaluation = found;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(evaluation.status).toBe("complete");
+
+    // One judged analysis child per completed run-session (2), all complete.
+    const sessions = evaluation.sessions as Array<{ analysisSessionId: string; status: string }>;
+    expect(sessions).toHaveLength(2);
+    expect(sessions.every((s) => s.status === "complete")).toBe(true);
+
+    // Each child analysis session produced a verdict artifact.
+    for (const s of sessions) {
+      const rows = app.backendDb.connection
+        .prepare(`SELECT metadata_json FROM artifacts WHERE session_id = ?`)
+        .all(s.analysisSessionId) as Array<{ metadata_json: string }>;
+      const keys = rows.map((r) => (JSON.parse(r.metadata_json) as { schema_key: string }).schema_key);
+      expect(keys).toContain("analysis.benchmark_evaluation_verdict.v1");
+    }
+  });
 });

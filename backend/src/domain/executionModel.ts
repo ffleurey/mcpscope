@@ -164,6 +164,7 @@ export const STEP_TYPE = {
   ANALYSIS_TURN_SUMMARY: stepTypeKey('analysis_turn_summary'),
   ANALYSIS_FINAL_AGGREGATION: stepTypeKey('analysis_final_aggregation'),
   ANALYSIS_COVERAGE_VALIDATION: stepTypeKey('analysis_coverage_validation'),
+  ANALYSIS_BENCHMARK_EVALUATION: stepTypeKey('analysis_benchmark_evaluation'),
 } as const
 
 // ─────────────────────────────────────────────────────────────────────────────

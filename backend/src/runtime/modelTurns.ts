@@ -77,12 +77,14 @@ export interface ChatCompletionGateway {
     baseUrl: string,
     apiKey: string | undefined,
     body: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<OaiChatCompletionResponse>;
   streamChatCompletion?(
     baseUrl: string,
     apiKey: string | undefined,
     body: Record<string, unknown>,
     callbacks?: StreamCallbacks,
+    signal?: AbortSignal,
   ): Promise<OaiStreamedChatCompletionResult>;
   probePromptTokens?(
     baseUrl: string,

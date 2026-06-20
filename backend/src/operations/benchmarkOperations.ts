@@ -8,21 +8,34 @@
 
 import { z } from "zod";
 import type { OperationContext } from "./context.js";
+import { OperationError } from "./errors.js";
 import {
   createBenchmarkEntry,
   listBenchmarkEntries,
   getBenchmarkDetail,
   addBenchmarkCase,
   addBenchmarkCaseFromSession,
+  updateBenchmarkCaseEntry,
+  deleteBenchmarkCaseEntry,
   launchBenchmarkRun,
   getBenchmarkRunProgress,
   getBenchmarkRunReport,
+  evaluateBenchmarkRun,
+  getBenchmarkRunEvaluationReports,
   type BenchmarkRunProgress,
+  type BenchmarkEvaluationReport,
 } from "./benchmark.js";
+import {
+  getBenchmark,
+  getBenchmarkCase,
+  getBenchmarkRun,
+  getBenchmarkEvaluation,
+} from "../persistence/benchmarkRepository.js";
 import type {
   BenchmarkRecord,
   BenchmarkCaseRecord,
   BenchmarkRunRecord,
+  BenchmarkEvaluationRecord,
 } from "../domain/model.js";
 import type {
   RunReport,
@@ -54,9 +67,60 @@ function caseToSnake(c: BenchmarkCaseRecord) {
     order_index: c.orderIndex,
     expected_tools_called: c.expectedToolsCalled,
     expected_tools_not_called: c.expectedToolsNotCalled,
+    rubric: c.rubric,
     source_session_id: c.sourceSessionId,
     created_at: c.createdAt,
     updated_at: c.updatedAt,
+  };
+}
+
+function evaluationToSnake(e: BenchmarkEvaluationRecord) {
+  return {
+    id: e.id,
+    run_id: e.runId,
+    judge_model_config_id: e.judgeModelConfigId,
+    judge_temperature: e.judgeTemperature,
+    status: e.status,
+    error: e.error,
+    sessions: e.sessions.map((s) => ({
+      run_session_id: s.runSessionId,
+      analysis_session_id: s.analysisSessionId,
+      status: s.status,
+    })),
+    created_at: e.createdAt,
+    updated_at: e.updatedAt,
+  };
+}
+
+function evaluationReportToSnake(e: BenchmarkEvaluationReport) {
+  return {
+    ...evaluationToSnake(e),
+    expected_sessions: e.expectedSessions,
+    judged_sessions: e.judgedSessions,
+    score: {
+      overall_pct: e.score.overallPct,
+      cases: e.score.cases.map((c) => ({
+        source_case_id: c.sourceCaseId,
+        name: c.name,
+        pct_stats: numberStatsToSnake(c.pctStats),
+        sessions: c.sessions.map((s) => ({
+          run_session_id: s.runSessionId,
+          analysis_session_id: s.analysisSessionId,
+          source_case_id: s.sourceCaseId,
+          status: s.status,
+          awarded: s.awarded,
+          max: s.max,
+          pct: s.pct,
+          criteria: s.criteria.map((cr) => ({
+            id: cr.id,
+            description: cr.description,
+            max: cr.max,
+            points: cr.points,
+            note: cr.note,
+          })),
+        })),
+      })),
+    },
   };
 }
 
@@ -75,6 +139,7 @@ function runToSnake(r: BenchmarkRunRecord) {
       prompt: c.prompt,
       expected_tools_called: c.expectedToolsCalled,
       expected_tools_not_called: c.expectedToolsNotCalled,
+      rubric: c.rubric,
     })),
     sessions: r.sessions.map((s) => ({
       session_id: s.sessionId,
@@ -200,6 +265,83 @@ function runReportToSnake(report: RunReport) {
   };
 }
 
+// ── Unified inspect dispatch ─────────────────────────────────────────────────
+// The `inspect` operation (shared verbatim by the UI's id-pill lookup, the CLI,
+// and the MCP tool) resolves runtime hierarchical IDs itself. Benchmark-family
+// IDs (B- benchmark, B-X.N case, R- run, E- evaluation) are dispatched here so
+// every surface inspects them through the *same* snake_case payloads as the
+// dedicated benchmark_* operations — if one surface works, they all do.
+
+export interface BenchmarkInspectResult {
+  id: string;
+  type: string;
+  mode: string;
+  data: Record<string, unknown>;
+}
+
+function benchmarkNotFound(kind: string, id: string): never {
+  throw new OperationError(
+    `${kind} not found: ${id}`,
+    "hierarchical_id_not_found",
+  );
+}
+
+/**
+ * Resolve a benchmark-family ID to the same payload its dedicated operation
+ * returns. Returns null when `id` is not a benchmark-family ID, so the caller
+ * can fall through to the runtime hierarchical resolver.
+ */
+export function resolveBenchmarkInspect(
+  ctx: OperationContext,
+  id: string,
+  mode: "summary" | "full",
+): BenchmarkInspectResult | null {
+  if (id.startsWith("B-")) {
+    if (id.includes(".")) {
+      const found = getBenchmarkCase(ctx.db.connection, id);
+      if (!found) benchmarkNotFound("Benchmark case", id);
+      return { id, type: "benchmark_case", mode, data: caseToSnake(found) };
+    }
+    if (!getBenchmark(ctx.db.connection, id)) benchmarkNotFound("Benchmark", id);
+    const detail = getBenchmarkDetail(ctx.db, id);
+    return {
+      id,
+      type: "benchmark",
+      mode,
+      data: {
+        benchmark: benchmarkToSnake(detail.benchmark),
+        cases: detail.cases.map(caseToSnake),
+        runs: detail.runs.map(runToSnake),
+      },
+    };
+  }
+  if (id.startsWith("R-")) {
+    const run = getBenchmarkRun(ctx.db.connection, id);
+    if (!run) benchmarkNotFound("Benchmark run", id);
+    // summary = the run snapshot; full = + the computed metrics report.
+    const data: Record<string, unknown> = { run: runToSnake(run) };
+    if (mode === "full") {
+      data.report = runReportToSnake(getBenchmarkRunReport(ctx.db, id).report);
+    }
+    return { id, type: "benchmark_run", mode, data };
+  }
+  if (id.startsWith("E-")) {
+    const ev = getBenchmarkEvaluation(ctx.db.connection, id);
+    if (!ev) benchmarkNotFound("Benchmark evaluation", id);
+    const report = getBenchmarkRunEvaluationReports(ctx.db, ev.runId).find(
+      (r) => r.id === id,
+    );
+    if (!report) benchmarkNotFound("Benchmark evaluation", id);
+    return {
+      id,
+      type: "benchmark_evaluation",
+      mode,
+      data: { evaluation: evaluationReportToSnake(report) },
+    };
+  }
+  return null;
+}
+
 // ── Shared zod output sub-shapes ─────────────────────────────────────────────
 
 const benchmarkSummaryShape = z.object({
@@ -210,6 +352,12 @@ const benchmarkSummaryShape = z.object({
   updated_at: z.number(),
 });
 
+const rubricCriterionShape = z.object({
+  id: z.number().int(),
+  description: z.string(),
+  points: z.number().int(),
+});
+
 const caseShape = z.object({
   id: z.string(),
   benchmark_id: z.string(),
@@ -218,6 +366,7 @@ const caseShape = z.object({
   order_index: z.number(),
   expected_tools_called: z.array(z.string()),
   expected_tools_not_called: z.array(z.string()),
+  rubric: z.array(rubricCriterionShape),
   source_session_id: z.string().nullable(),
   created_at: z.number(),
   updated_at: z.number(),
@@ -238,6 +387,7 @@ const runShape = z.object({
       prompt: z.string(),
       expected_tools_called: z.array(z.string()),
       expected_tools_not_called: z.array(z.string()),
+      rubric: z.array(rubricCriterionShape),
     }),
   ),
   sessions: z.array(
@@ -391,6 +541,13 @@ export const benchmarkAddCaseInputSchema = z.object({
     .array(z.string())
     .optional()
     .describe("Tools that should NOT be called (deterministic check)."),
+  rubric: z
+    .array(rubricCriterionShape)
+    .optional()
+    .describe(
+      "Optional scored rubric for LLM evaluation: ordered criteria, each {id, "
+      + "description, points}. Judged by benchmark_evaluate against the session trace.",
+    ),
 });
 export type BenchmarkAddCaseInput = z.infer<typeof benchmarkAddCaseInputSchema>;
 
@@ -412,6 +569,7 @@ export const benchmarkAddCaseOperation = {
       ...(input.expected_tools_not_called !== undefined
         ? { expectedToolsNotCalled: input.expected_tools_not_called }
         : {}),
+      ...(input.rubric !== undefined ? { rubric: input.rubric } : {}),
     });
     return { case: caseToSnake(record) };
   },
@@ -451,6 +609,93 @@ export const benchmarkAddCaseFromSessionOperation = {
       { name: input.name ?? null },
     );
     return { case: caseToSnake(record) };
+  },
+};
+
+// ── benchmark_update_case ────────────────────────────────────────────────────
+
+export const benchmarkUpdateCaseInputSchema = z.object({
+  case_id: z.string().describe("Case to edit."),
+  name: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("New human label (null to clear)."),
+  prompt: z.string().min(1).optional().describe("New prompt text."),
+  order_index: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe("New position within the suite."),
+  expected_tools_called: z
+    .array(z.string())
+    .optional()
+    .describe("Replace the tools-that-should-be-called check."),
+  expected_tools_not_called: z
+    .array(z.string())
+    .optional()
+    .describe("Replace the tools-that-should-NOT-be-called check."),
+  rubric: z
+    .array(rubricCriterionShape)
+    .optional()
+    .describe("Replace the scored rubric ({id, description, points}[])."),
+});
+export type BenchmarkUpdateCaseInput = z.infer<
+  typeof benchmarkUpdateCaseInputSchema
+>;
+
+export const benchmarkUpdateCaseOutputSchema = { case: caseShape };
+
+export const benchmarkUpdateCaseOperation = {
+  id: "benchmark_update_case" as const,
+  description:
+    "Edit an existing case: any of name, prompt, order, tool-behavior checks, or "
+    + "rubric. Only the fields you pass change; the rest are left as-is.",
+  schema: benchmarkUpdateCaseInputSchema,
+  outputSchema: benchmarkUpdateCaseOutputSchema,
+  async execute(ctx: OperationContext, input: BenchmarkUpdateCaseInput) {
+    const record = updateBenchmarkCaseEntry(ctx.db, input.case_id, {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+      ...(input.order_index !== undefined
+        ? { orderIndex: input.order_index }
+        : {}),
+      ...(input.expected_tools_called !== undefined
+        ? { expectedToolsCalled: input.expected_tools_called }
+        : {}),
+      ...(input.expected_tools_not_called !== undefined
+        ? { expectedToolsNotCalled: input.expected_tools_not_called }
+        : {}),
+      ...(input.rubric !== undefined ? { rubric: input.rubric } : {}),
+    });
+    return { case: caseToSnake(record) };
+  },
+};
+
+// ── benchmark_delete_case ────────────────────────────────────────────────────
+
+export const benchmarkDeleteCaseInputSchema = z.object({
+  case_id: z.string().describe("Case to delete."),
+});
+export type BenchmarkDeleteCaseInput = z.infer<
+  typeof benchmarkDeleteCaseInputSchema
+>;
+
+export const benchmarkDeleteCaseOutputSchema = {
+  case_id: z.string(),
+  deleted: z.boolean(),
+};
+
+export const benchmarkDeleteCaseOperation = {
+  id: "benchmark_delete_case" as const,
+  description:
+    "Delete a case from a benchmark. Past runs keep their own snapshot of the case.",
+  schema: benchmarkDeleteCaseInputSchema,
+  outputSchema: benchmarkDeleteCaseOutputSchema,
+  async execute(ctx: OperationContext, input: BenchmarkDeleteCaseInput) {
+    deleteBenchmarkCaseEntry(ctx.db, input.case_id);
+    return { case_id: input.case_id, deleted: true };
   },
 };
 
@@ -625,5 +870,122 @@ export const benchmarkRunReportOperation = {
   async execute(ctx: OperationContext, input: BenchmarkRunReportInput) {
     const { run, report } = getBenchmarkRunReport(ctx.db, input.run_id);
     return { run: runToSnake(run), report: runReportToSnake(report) };
+  },
+};
+
+// ── benchmark_evaluate ───────────────────────────────────────────────────────
+
+const evaluationSessionShape = z.object({
+  run_session_id: z.string(),
+  analysis_session_id: z.string(),
+  status: z.string(),
+});
+
+const evaluationShape = z.object({
+  id: z.string(),
+  run_id: z.string(),
+  judge_model_config_id: z.string(),
+  judge_temperature: z.number(),
+  status: z.string(),
+  error: z.string().nullable(),
+  sessions: z.array(evaluationSessionShape),
+  created_at: z.number(),
+  updated_at: z.number(),
+});
+
+export const benchmarkEvaluateInputSchema = z.object({
+  run_id: z.string().describe("Completed run to evaluate."),
+  judge_model_config_id: z
+    .string()
+    .describe("Model config for the judge (a separate model; never the task model)."),
+  temperature: z
+    .number()
+    .optional()
+    .describe("Judge sampling temperature (default 0 = deterministic)."),
+});
+export type BenchmarkEvaluateInput = z.infer<typeof benchmarkEvaluateInputSchema>;
+
+export const benchmarkEvaluateOutputSchema = { evaluation: evaluationShape };
+
+export const benchmarkEvaluateOperation = {
+  id: "benchmark_evaluate" as const,
+  description:
+    "Launch an LLM evaluation pass over a completed run: a separate judge model "
+    + "scores every session against its case rubric. Repeatable (0..N per run; "
+    + "compare judge models). Returns immediately; poll benchmark_run_evaluations "
+    + "for scores.",
+  schema: benchmarkEvaluateInputSchema,
+  outputSchema: benchmarkEvaluateOutputSchema,
+  async execute(ctx: OperationContext, input: BenchmarkEvaluateInput) {
+    const evaluation = evaluateBenchmarkRun(ctx, {
+      runId: input.run_id,
+      judgeModelConfigId: input.judge_model_config_id,
+      ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
+    });
+    return { evaluation: evaluationToSnake(evaluation) };
+  },
+};
+
+// ── benchmark_run_evaluations ────────────────────────────────────────────────
+
+export const benchmarkRunEvaluationsInputSchema = z.object({
+  run_id: z.string().describe("Run id whose evaluations to list."),
+});
+export type BenchmarkRunEvaluationsInput = z.infer<
+  typeof benchmarkRunEvaluationsInputSchema
+>;
+
+export const benchmarkRunEvaluationsOutputSchema = {
+  evaluations: z.array(
+    evaluationShape.extend({
+      expected_sessions: z.number(),
+      judged_sessions: z.number(),
+      score: z.object({
+        overall_pct: z.number().nullable(),
+        cases: z.array(
+          z.object({
+            source_case_id: z.string(),
+            name: z.string().nullable(),
+            pct_stats: numberStatsShape,
+            sessions: z.array(
+              z.object({
+                run_session_id: z.string(),
+                analysis_session_id: z.string(),
+                source_case_id: z.string(),
+                status: z.string(),
+                awarded: z.number().nullable(),
+                max: z.number().nullable(),
+                pct: z.number().nullable(),
+                criteria: z.array(
+                  z.object({
+                    id: z.number(),
+                    description: z.string(),
+                    max: z.number(),
+                    points: z.number().nullable(),
+                    note: z.string(),
+                  }),
+                ),
+              }),
+            ),
+          }),
+        ),
+      }),
+    }),
+  ),
+};
+
+export const benchmarkRunEvaluationsOperation = {
+  id: "benchmark_run_evaluations" as const,
+  description:
+    "List a run's evaluation passes, each with scores computed on read from the "
+    + "judge verdicts: per-session pct, per-case distribution, and overall pct.",
+  schema: benchmarkRunEvaluationsInputSchema,
+  outputSchema: benchmarkRunEvaluationsOutputSchema,
+  async execute(ctx: OperationContext, input: BenchmarkRunEvaluationsInput) {
+    return {
+      evaluations: getBenchmarkRunEvaluationReports(ctx.db, input.run_id).map(
+        evaluationReportToSnake,
+      ),
+    };
   },
 };

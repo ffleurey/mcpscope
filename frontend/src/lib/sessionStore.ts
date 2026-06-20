@@ -16,6 +16,7 @@ import {
   modelConfigs,
   sessionCreationDefaults,
 } from './connectionStore'
+import { followRunning } from './followStore'
 import type {
   AnalysisStreamEvent,
   PreludeStreamEvent,
@@ -256,7 +257,13 @@ export function clearChatSelection(): void {
   activeTurnStream.set(null)
 }
 
-export async function selectChat(sessionId: string): Promise<void> {
+export async function selectChat(
+  sessionId: string,
+  opts?: { fromFollow?: boolean },
+): Promise<void> {
+  // Any user-initiated navigation disengages "follow running"; the follow driver
+  // passes fromFollow so its own auto-open does not turn itself off.
+  if (!opts?.fromFollow) followRunning.set(false)
   clearSessionError()
   activeChatId.set(sessionId)
 
@@ -375,6 +382,8 @@ export async function deleteChat(sessionId: string): Promise<void> {
       activeChatId.set(null)
       activeTrace.set(null)
       activeTurnStream.set(null)
+      // The chat view has no standalone empty state; return to home.
+      currentView.set('home')
     }
   } catch (error) {
     setSessionError(toAppError(error))

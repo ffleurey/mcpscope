@@ -520,6 +520,27 @@ export function recoverInterruptedState(connection: Database.Database): void {
       SET init_status = 'error', updated_at = ?
       WHERE init_status = 'initializing'
     `).run(now)
+
+    // Benchmark runs and evaluations are driven by in-process coordinators that do
+    // not survive a restart. Any left non-terminal is orphaned → mark it 'error' so
+    // it shows as failed/incomplete (and, for evaluations, becomes retryable) rather
+    // than spinning forever as 'running'.
+    connection.prepare(`
+      UPDATE benchmark_runs
+      SET status = 'error',
+          error = COALESCE(error, 'Interrupted by a server restart; re-run to recover.'),
+          updated_at = ?,
+          completed_at = COALESCE(completed_at, ?)
+      WHERE status IN ('pending', 'running')
+    `).run(now, now)
+
+    connection.prepare(`
+      UPDATE benchmark_evaluations
+      SET status = 'error',
+          error = COALESCE(error, 'Interrupted by a server restart; retry to resume.'),
+          updated_at = ?
+      WHERE status IN ('pending', 'running')
+    `).run(now)
   })()
 }
 

@@ -16,6 +16,7 @@ import {
   pauseScheduler,
   resumeScheduler,
   removeSchedulerJob,
+  abortScheduler,
   enqueueSession,
   enqueueStep,
 } from './api/backendClient'
@@ -248,6 +249,11 @@ export async function pauseExecution(): Promise<void> {
 
 export async function resumeExecution(): Promise<void> {
   await resumeScheduler()
+}
+
+/** Hard stop: abort the active job's in-flight model call (the kill switch). */
+export async function abortExecution(): Promise<void> {
+  await abortScheduler()
 }
 
 export async function removePendingJob(jobId: string): Promise<void> {

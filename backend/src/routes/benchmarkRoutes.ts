@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { RouteDeps } from "./types.js";
+import { rubricCriterionSchema } from "../domain/model.js";
 import {
   createBenchmarkEntry,
   listBenchmarkEntries,
@@ -13,6 +14,10 @@ import {
   launchBenchmarkRun,
   getBenchmarkRunReport,
   deleteBenchmarkRunEntry,
+  evaluateBenchmarkRun,
+  getBenchmarkRunEvaluationReports,
+  deleteBenchmarkEvaluationEntry,
+  retryBenchmarkEvaluation,
 } from "../operations/benchmark.js";
 import {
   benchmarkCreateOperation,
@@ -20,9 +25,13 @@ import {
   benchmarkInspectOperation,
   benchmarkAddCaseOperation,
   benchmarkAddCaseFromSessionOperation,
+  benchmarkUpdateCaseOperation,
+  benchmarkDeleteCaseOperation,
   benchmarkRunOperation,
   benchmarkRunStatusOperation,
   benchmarkRunReportOperation,
+  benchmarkEvaluateOperation,
+  benchmarkRunEvaluationsOperation,
 } from "../operations/index.js";
 
 /**
@@ -98,6 +107,7 @@ export function registerBenchmarkRoutes({
         name: z.string().nullable().optional(),
         expectedToolsCalled: z.array(z.string()).optional(),
         expectedToolsNotCalled: z.array(z.string()).optional(),
+        rubric: z.array(rubricCriterionSchema).optional(),
       })
       .parse(request.body);
     try {
@@ -134,6 +144,7 @@ export function registerBenchmarkRoutes({
         orderIndex: z.number().int().nonnegative().optional(),
         expectedToolsCalled: z.array(z.string()).optional(),
         expectedToolsNotCalled: z.array(z.string()).optional(),
+        rubric: z.array(rubricCriterionSchema).optional(),
       })
       .parse(request.body);
     try {
@@ -186,6 +197,63 @@ export function registerBenchmarkRoutes({
     const { runId } = z.object({ runId: z.string() }).parse(request.params);
     try {
       deleteBenchmarkRunEntry(database, runId);
+      reply.code(204);
+      return null;
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  // Launch a new evaluation pass over a completed run (repeatable; one per judge model).
+  app.post("/api/benchmark-runs/:runId/evaluations", async (request, reply) => {
+    const { runId } = z.object({ runId: z.string() }).parse(request.params);
+    const body = z
+      .object({
+        judgeModelConfigId: z.string().min(1),
+        temperature: z.number().min(0).optional(),
+      })
+      .parse(request.body);
+    try {
+      const evaluation = evaluateBenchmarkRun(opCtx, {
+        runId,
+        judgeModelConfigId: body.judgeModelConfigId,
+        ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
+      });
+      reply.code(202);
+      return { evaluation };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.get("/api/benchmark-runs/:runId/evaluations", async (request, reply) => {
+    const { runId } = z.object({ runId: z.string() }).parse(request.params);
+    try {
+      return { evaluations: getBenchmarkRunEvaluationReports(database, runId) };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.post("/api/benchmark-evaluations/:evaluationId/retry", async (request, reply) => {
+    const { evaluationId } = z
+      .object({ evaluationId: z.string() })
+      .parse(request.params);
+    try {
+      const evaluation = retryBenchmarkEvaluation(opCtx, evaluationId);
+      reply.code(202);
+      return { evaluation };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.delete("/api/benchmark-evaluations/:evaluationId", async (request, reply) => {
+    const { evaluationId } = z
+      .object({ evaluationId: z.string() })
+      .parse(request.params);
+    try {
+      deleteBenchmarkEvaluationEntry(database, evaluationId);
       reply.code(204);
       return null;
     } catch (err) {
@@ -252,6 +320,28 @@ export function registerBenchmarkRoutes({
     },
   );
 
+  app.post("/api/operations/benchmark-update-case", async (request, reply) => {
+    try {
+      return await benchmarkUpdateCaseOperation.execute(
+        opCtx,
+        request.body as never,
+      );
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.post("/api/operations/benchmark-delete-case", async (request, reply) => {
+    try {
+      return await benchmarkDeleteCaseOperation.execute(
+        opCtx,
+        request.body as never,
+      );
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
   app.post("/api/operations/benchmark-run", async (request, reply) => {
     try {
       return await benchmarkRunOperation.execute(opCtx, request.body as never);
@@ -280,6 +370,28 @@ export function registerBenchmarkRoutes({
       const { runId } = z.object({ runId: z.string() }).parse(request.params);
       try {
         return await benchmarkRunReportOperation.execute(opCtx, {
+          run_id: runId,
+        });
+      } catch (err) {
+        return handleOperationError(err, reply);
+      }
+    },
+  );
+
+  app.post("/api/operations/benchmark-evaluate", async (request, reply) => {
+    try {
+      return await benchmarkEvaluateOperation.execute(opCtx, request.body as never);
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.get(
+    "/api/operations/benchmark-runs/:runId/evaluations",
+    async (request, reply) => {
+      const { runId } = z.object({ runId: z.string() }).parse(request.params);
+      try {
+        return await benchmarkRunEvaluationsOperation.execute(opCtx, {
           run_id: runId,
         });
       } catch (err) {

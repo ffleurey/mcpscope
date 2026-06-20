@@ -78,6 +78,10 @@
     background: none;
     cursor: pointer;
     font-family: var(--mono);
+    /* Slightly larger than a plain .token-pill: this is an interactive,
+       copy/inspect target, not dim metadata. */
+    font-size: 0.74rem;
+    padding: 0.16rem 0.55rem;
     max-width: 260px;
     overflow: hidden;
     text-overflow: ellipsis;

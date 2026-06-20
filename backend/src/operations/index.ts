@@ -63,6 +63,12 @@ export {
   benchmarkAddCaseFromSessionOperation,
   benchmarkAddCaseFromSessionInputSchema,
   benchmarkAddCaseFromSessionOutputSchema,
+  benchmarkUpdateCaseOperation,
+  benchmarkUpdateCaseInputSchema,
+  benchmarkUpdateCaseOutputSchema,
+  benchmarkDeleteCaseOperation,
+  benchmarkDeleteCaseInputSchema,
+  benchmarkDeleteCaseOutputSchema,
   benchmarkRunOperation,
   benchmarkRunInputSchema,
   benchmarkRunOutputSchema,
@@ -72,6 +78,12 @@ export {
   benchmarkRunReportOperation,
   benchmarkRunReportInputSchema,
   benchmarkRunReportOutputSchema,
+  benchmarkEvaluateOperation,
+  benchmarkEvaluateInputSchema,
+  benchmarkEvaluateOutputSchema,
+  benchmarkRunEvaluationsOperation,
+  benchmarkRunEvaluationsInputSchema,
+  benchmarkRunEvaluationsOutputSchema,
 } from "./benchmarkOperations.js";
 
 export { operationCatalog, operationList } from "./catalog.js";

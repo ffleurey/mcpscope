@@ -1,0 +1,1 @@
+Hello, I wonder what was the lower temperature outdoors in april this year. Can you look it up in home assistant?

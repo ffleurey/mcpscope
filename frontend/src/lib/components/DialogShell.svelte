@@ -97,13 +97,16 @@
   }
 
   .shell-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.55);
+    background: rgba(0, 0, 0, 0.62);
   }
 
   .dialog-inner {
     background: var(--bg-surface);
-    border: 1px solid var(--border);
+    /* Amber-dim edge marks the active/focused surface; the elevation shadow lifts
+       it off the dark backdrop (dark-on-dark needs both color + depth to separate). */
+    border: 1px solid var(--amber-dim);
     border-radius: 8px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
     display: flex;
     flex-direction: column;
     max-height: 85vh;

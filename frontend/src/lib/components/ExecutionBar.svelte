@@ -7,8 +7,13 @@
     queueLength,
     pauseExecution,
     resumeExecution,
+    abortExecution,
     removePendingJob,
   } from '../executionStore'
+  import { followRunning } from '../followStore'
+  import { selectChat, activeChatId, chatSessions } from '../sessionStore'
+  import Icon from './Icon.svelte'
+  import { iconView } from '../design/icons'
 
   let showQueue = $state(false)
   let isActioning = $state(false)
@@ -17,6 +22,22 @@
   const currentActiveJob = $derived($activeJob)
   const queuedJobs = $derived($pendingJobs)
   const connected = $derived($schedulerConnected)
+
+  // "Follow running": while engaged, auto-open whichever session is currently
+  // streaming so the user can watch run / evaluation progress hands-free. Any manual
+  // navigation clears the flag (see selectChat / selectRun / selectBenchmark).
+  $effect(() => {
+    if (!$followRunning) return
+    const sid = currentActiveJob?.target.sessionId
+    if (!sid || $activeChatId === sid) return
+    // Only open sessions we actually know about (skip unknown/transient ids).
+    if (!$chatSessions.some((s) => s.id === sid)) return
+    void selectChat(sid, { fromFollow: true })
+  })
+
+  function toggleFollow() {
+    followRunning.set(!$followRunning)
+  }
 
   async function handlePauseResume() {
     if (isActioning) return
@@ -31,6 +52,19 @@
       // ignore
     } finally {
       isActioning = false
+    }
+  }
+
+  let isAborting = $state(false)
+  async function handleAbort() {
+    if (isAborting) return
+    isAborting = true
+    try {
+      await abortExecution()
+    } catch {
+      // ignore
+    } finally {
+      isAborting = false
     }
   }
 
@@ -80,6 +114,17 @@
     <!-- Controls -->
     <div class="exec-controls">
       <button
+        class="btn btn-sm follow-btn"
+        class:follow-on={$followRunning}
+        onclick={toggleFollow}
+        title={$followRunning
+          ? 'Following the running session — click to stop (also stops when you navigate away)'
+          : 'Follow the running session: auto-open it in the main view as it streams'}
+      >
+        <span class="follow-icon"><Icon path={iconView} /></span> Follow
+      </button>
+
+      <button
         class="btn btn-sm"
         onclick={handlePauseResume}
         disabled={isActioning}
@@ -89,6 +134,17 @@
       >
         {snapshot.controlState === 'running' ? '⏸' : '▶'}
       </button>
+
+      {#if currentActiveJob !== null}
+        <button
+          class="btn btn-sm btn-danger"
+          onclick={handleAbort}
+          disabled={isAborting}
+          title="Hard stop: abort the running model call now (cancels the in-flight request, not just future turns)"
+        >
+          {isAborting ? 'Stopping…' : 'Stop'}
+        </button>
+      {/if}
 
       <!-- Queue button -->
       {#if queuedJobs.length > 0}
@@ -161,6 +217,22 @@
 
   .chevron {
     font-size: 0.6rem;
+  }
+
+  .follow-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .follow-icon {
+    display: inline-flex;
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+  /* Engaged toggle uses the amber accent (the sanctioned active-state signal). */
+  .follow-btn.follow-on {
+    border-color: var(--amber-bright);
+    color: var(--amber-bright);
   }
 
   .queue-panel {

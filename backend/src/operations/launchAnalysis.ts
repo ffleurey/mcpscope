@@ -19,6 +19,7 @@ import {
 import { createSession } from "../runtime/modelTurns.js";
 import { mapSessionIdError } from "./sessionCreationShared.js";
 import {
+  rubricCriterionSchema,
   sessionRecordSchema,
   type McpProfileSnapshot,
   type ModelProfileSnapshot,
@@ -56,8 +57,16 @@ export const launchAnalysisInputSchema = z.object({
   only_failed_tool_calls: z.boolean().optional(),
   /** Optional additional evaluation criteria. */
   evaluation_criteria: z.array(z.string().min(1)).optional(),
+  /** Scored rubric for the benchmark_evaluation judge (ignored by other kinds). */
+  rubric: z.array(rubricCriterionSchema).optional(),
   /** The analysis workflow to run. */
   workflow_kind: z.string().optional(),
+  /**
+   * Allow a target turn that is terminal-but-not-complete (`error`/`aborted`) — used by
+   * benchmark evaluation to judge a run-session that failed (e.g. hit the tool-round cap
+   * with no answer). Still rejects in-flight turns (draft/streaming/awaiting-tools).
+   */
+  allow_incomplete_target: z.boolean().optional(),
 });
 
 export type LaunchAnalysisInput = z.infer<typeof launchAnalysisInputSchema>;
@@ -153,11 +162,17 @@ export async function executeAnalysisLaunch(
       };
     }
 
-    // Validate target turn
+    // Validate target turn. Normally it must be `complete`; with
+    // allow_incomplete_target, a terminal-but-failed turn (`error`/`aborted`) is also
+    // accepted (benchmark evaluation judges failed run-sessions). In-flight turns
+    // (draft/streaming/awaiting-tools) are never valid targets.
     const targetTurn = getTurnRecord(db.connection, input.target_turn_id);
     if (!targetTurn) return { kind: "target_turn_not_found" };
-    if (targetTurn.status !== "complete")
-      return { kind: "target_turn_not_complete" };
+    const targetTurnOk =
+      targetTurn.status === "complete" ||
+      (input.allow_incomplete_target === true &&
+        (targetTurn.status === "error" || targetTurn.status === "aborted"));
+    if (!targetTurnOk) return { kind: "target_turn_not_complete" };
 
     // Resolve model config and LM connection
     const modelConfigs = listModelConfigs();
@@ -262,6 +277,8 @@ export async function executeAnalysisLaunch(
         selectedToolNames,
         onlyFailedToolCalls,
         evaluationCriteria,
+        rubric: input.rubric ?? [],
+        allowIncompleteTarget: input.allow_incomplete_target === true,
         workflow_kind: wk,
       };
       updateSessionAnalysisState(

@@ -1,0 +1,33 @@
+## Prompt
+
+From the Oslo Home Assistant installation, can you give me a compact climate statistics table for 
+Cave, Kitchen, Salon, and Outdoor over the last 7 days.
+
+For each area, we need the average, minimum and maximum temperature as well as the average humidity.
+
+Output a single table which allows comparing the data across days and areas.
+
+## Evaluation Criteria
+
+### Success Criteria
+
+- Resolves the relevant entities without asking the user for entity IDs.
+- Finds all target areas in one discovery call when possible, or two discovery calls at most.
+- Uses only ambient room or outdoor climate entities, not batteries, printer temperatures, litter box internal temperatures, setpoints, or other appliance/internal sensors.
+- Produces a compact comparative table covering Cave, Kitchen, Salon, and Outdoor.
+- Includes average, minimum, and maximum temperature, plus average humidity, for the requested period.
+- If the requested daily shape cannot be fully satisfied in one response because of tool limitations, states the limitation clearly instead of making up unsupported daily min/max output.
+
+### Expected Tool Path
+
+- Preferred first step: one `ha_history_list_entities` call with `areas=["Cave","Kitchen","Salon","Outdoor"]` and `device_classes=["temperature","humidity"]`.
+- Acceptable fallback: two `ha_history_list_entities` calls total, one for `device_class="temperature"` and one for `device_class="humidity"`.
+- Preferred stats path for the initial answer: one `ha_history_get_sensor_stats` call for temperature with `aggregations=["mean","min","max"]` and one `ha_history_get_sensor_stats` call for humidity with `aggregation="mean"` or `aggregations=["mean"]`, using whole-period comparison.
+- Avoids per-area discovery loops and avoids per-area stats loops unless a follow-up explicitly asks for daily breakdowns.
+
+### Follow-up Handling
+
+- For follow-up questions, reuses already resolved entity IDs instead of rediscovering them.
+- A daily follow-up may expand to separate `interval="day"` calls because `aggregations` is only supported with `interval="none"`.
+- Acceptable daily follow-up path: one daily temperature-mean call, one daily humidity-mean call, then if asked, one daily temperature-min call and one daily temperature-max call.
+- The assistant should explain the daily aggregation limitation accurately and keep the extra calls bounded.

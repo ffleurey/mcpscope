@@ -9,6 +9,9 @@ import type {
   BenchmarkCaseRecord,
   BenchmarkRunRecord,
   BenchmarkRunSession,
+  BenchmarkEvaluationRecord,
+  BenchmarkEvaluationSession,
+  RubricCriterion,
 } from "../domain/model.js";
 
 // ── benchmarks ────────────────────────────────────────────────────────────────
@@ -104,6 +107,7 @@ interface BenchmarkCaseRow {
   order_index: number;
   expected_tools_called_json: string;
   expected_tools_not_called_json: string;
+  rubric_json: string;
   source_session_id: string | null;
   created_at: number;
   updated_at: number;
@@ -120,6 +124,7 @@ function mapBenchmarkCaseRow(row: BenchmarkCaseRow): BenchmarkCaseRecord {
     expectedToolsNotCalled: JSON.parse(
       row.expected_tools_not_called_json,
     ) as string[],
+    rubric: JSON.parse(row.rubric_json) as RubricCriterion[],
     sourceSessionId: row.source_session_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -134,11 +139,11 @@ export function createBenchmarkCase(
     .prepare(
       `INSERT INTO benchmark_cases (
          id, benchmark_id, name, prompt, order_index,
-         expected_tools_called_json, expected_tools_not_called_json,
+         expected_tools_called_json, expected_tools_not_called_json, rubric_json,
          source_session_id, created_at, updated_at
        ) VALUES (
          @id, @benchmarkId, @name, @prompt, @orderIndex,
-         @expectedToolsCalled, @expectedToolsNotCalled,
+         @expectedToolsCalled, @expectedToolsNotCalled, @rubric,
          @sourceSessionId, @createdAt, @updatedAt
        )`,
     )
@@ -152,6 +157,7 @@ export function createBenchmarkCase(
       expectedToolsNotCalled: JSON.stringify(
         benchmarkCase.expectedToolsNotCalled,
       ),
+      rubric: JSON.stringify(benchmarkCase.rubric),
       sourceSessionId: benchmarkCase.sourceSessionId,
       createdAt: benchmarkCase.createdAt,
       updatedAt: benchmarkCase.updatedAt,
@@ -192,6 +198,7 @@ export function updateBenchmarkCase(
            order_index = @orderIndex,
            expected_tools_called_json = @expectedToolsCalled,
            expected_tools_not_called_json = @expectedToolsNotCalled,
+           rubric_json = @rubric,
            updated_at = @updatedAt
        WHERE id = @id`,
     )
@@ -204,6 +211,7 @@ export function updateBenchmarkCase(
       expectedToolsNotCalled: JSON.stringify(
         benchmarkCase.expectedToolsNotCalled,
       ),
+      rubric: JSON.stringify(benchmarkCase.rubric),
       updatedAt: benchmarkCase.updatedAt,
     });
 }
@@ -336,4 +344,110 @@ function serializeRun(run: BenchmarkRunRecord) {
     startedAt: run.startedAt,
     completedAt: run.completedAt,
   };
+}
+
+// ── benchmark_evaluations ─────────────────────────────────────────────────────
+
+interface BenchmarkEvaluationRow {
+  id: string;
+  run_id: string;
+  judge_model_config_id: string;
+  judge_temperature: number;
+  status: string;
+  sessions_json: string;
+  error: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+function mapBenchmarkEvaluationRow(
+  row: BenchmarkEvaluationRow,
+): BenchmarkEvaluationRecord {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    judgeModelConfigId: row.judge_model_config_id,
+    judgeTemperature: row.judge_temperature,
+    status: row.status as BenchmarkEvaluationRecord["status"],
+    sessions: JSON.parse(row.sessions_json) as BenchmarkEvaluationSession[],
+    error: row.error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function serializeEvaluation(evaluation: BenchmarkEvaluationRecord) {
+  return {
+    id: evaluation.id,
+    runId: evaluation.runId,
+    judgeModelConfigId: evaluation.judgeModelConfigId,
+    judgeTemperature: evaluation.judgeTemperature,
+    status: evaluation.status,
+    sessions: JSON.stringify(evaluation.sessions),
+    error: evaluation.error,
+    createdAt: evaluation.createdAt,
+    updatedAt: evaluation.updatedAt,
+  };
+}
+
+export function createBenchmarkEvaluation(
+  connection: Database.Database,
+  evaluation: BenchmarkEvaluationRecord,
+): void {
+  connection
+    .prepare(
+      `INSERT INTO benchmark_evaluations (
+         id, run_id, judge_model_config_id, judge_temperature, status, sessions_json, error,
+         created_at, updated_at
+       ) VALUES (
+         @id, @runId, @judgeModelConfigId, @judgeTemperature, @status, @sessions, @error,
+         @createdAt, @updatedAt
+       )`,
+    )
+    .run(serializeEvaluation(evaluation));
+}
+
+export function getBenchmarkEvaluation(
+  connection: Database.Database,
+  id: string,
+): BenchmarkEvaluationRecord | null {
+  const row = connection
+    .prepare(`SELECT * FROM benchmark_evaluations WHERE id = ?`)
+    .get(id) as BenchmarkEvaluationRow | undefined;
+  return row ? mapBenchmarkEvaluationRow(row) : null;
+}
+
+export function listBenchmarkEvaluationsByRun(
+  connection: Database.Database,
+  runId: string,
+): BenchmarkEvaluationRecord[] {
+  const rows = connection
+    .prepare(
+      `SELECT * FROM benchmark_evaluations WHERE run_id = ? ORDER BY created_at ASC`,
+    )
+    .all(runId) as BenchmarkEvaluationRow[];
+  return rows.map(mapBenchmarkEvaluationRow);
+}
+
+export function updateBenchmarkEvaluation(
+  connection: Database.Database,
+  evaluation: BenchmarkEvaluationRecord,
+): void {
+  connection
+    .prepare(
+      `UPDATE benchmark_evaluations
+       SET status = @status,
+           sessions_json = @sessions,
+           error = @error,
+           updated_at = @updatedAt
+       WHERE id = @id`,
+    )
+    .run(serializeEvaluation(evaluation));
+}
+
+export function deleteBenchmarkEvaluation(
+  connection: Database.Database,
+  id: string,
+): void {
+  connection.prepare(`DELETE FROM benchmark_evaluations WHERE id = ?`).run(id);
 }

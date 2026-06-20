@@ -166,9 +166,12 @@ Sizes: default `0.4rem 0.85rem`; `.btn-sm` (`0.28rem 0.65rem`); `.btn-xs` (dense
 
 ### Dialogs
 
-Use the shared **`DialogShell.svelte`** — never hand-roll `<dialog>`. Backdrop `rgba(0,0,0,0.55)`,
-`--bg-surface` surface + `--border`, 8px radius, header & body `0.75rem 1rem`, `min(720px,95vw)` / 85vh,
-draggable header. Error content: the **`InlineAppError.svelte`** component.
+Use the shared **`DialogShell.svelte`** — never hand-roll `<dialog>`. Backdrop `rgba(0,0,0,0.62)`,
+`--bg-surface` surface, 8px radius, header & body `0.75rem 1rem`, `min(720px,95vw)` / 85vh,
+draggable header. **Separation from the dark background:** a `--amber-dim` border (marks the active/
+focused surface — a sanctioned use of the amber accent) plus an elevation shadow
+(`0 10px 40px rgba(0,0,0,0.55)`); dark-on-dark needs both color and depth. Error content: the
+**`InlineAppError.svelte`** component.
 
 ### Tabs / navigation
 

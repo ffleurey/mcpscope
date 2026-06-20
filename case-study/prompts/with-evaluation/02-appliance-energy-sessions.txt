@@ -1,0 +1,35 @@
+## Prompt
+
+In the Oslo Home Assistant installation, give me a car charging summary for the last 30 days.
+The car charger is on a metered electric plug.
+
+Include:
+- total charging energy over the period
+- number of charging sessions
+- a compact session table with date, start time, end time, duration, peak power and energy.
+
+Do not ask me for entity IDs. Resolve the correct device and entities yourself and keep the answer concise.
+
+## Evaluation Criteria
+
+### Success Criteria
+
+- Resolves the outdoor EV charger correctly even if the device is named differently, such as a charging plug.
+- Uses the correct power and energy entities without asking the user for entity IDs.
+- Returns total charging energy for the last 30 days.
+- Returns the number of charging sessions (something like above 100 W and at least 5 minutes long).
+- Returns a compact session table with date, start time, end time, duration, peak power, and energy.
+- Keeps the answer concise and avoids exploratory noise.
+
+### Expected Tool Path
+
+- Preferred discovery path: one `ha_history_list_entities` or `ha_history_list_devices` call scoped to the outdoor charger concept.
+- If `ha_history_list_devices` is used first, at most one follow-up discovery call should be needed to confirm the exact entities.
+- One `ha_history_get_consumption` call for total energy.
+- One `ha_history_detect_sessions` call for session count and compact session details.
+- Avoids unrelated tools and avoids repeated device-by-device exploration.
+
+### Follow-up Handling
+
+- For follow-ups, reuses the resolved charger entities instead of rediscovering them.
+- If the user asks for narrower thresholds, different date ranges, or different session columns, the assistant should answer with the minimal additional analytics calls needed.
