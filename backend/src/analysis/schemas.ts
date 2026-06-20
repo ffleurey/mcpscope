@@ -82,6 +82,12 @@ export interface AnalysisSessionState {
   workflow_kind?: string
   /** Scored rubric for the benchmark_evaluation judge (empty for other kinds). */
   rubric?: RubricCriterion[]
+  /**
+   * Allow planning against a terminal-but-failed target turn (`error`/`aborted`) — set by
+   * benchmark evaluation so a failed run-session is still judged. In-flight turns are never
+   * planned against.
+   */
+  allowIncompleteTarget?: boolean
   /** Execution progress derived from the plan (updated after each step). */
   planProgress?: PlanProgress
 }

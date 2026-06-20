@@ -278,6 +278,7 @@ export async function executeAnalysisLaunch(
         onlyFailedToolCalls,
         evaluationCriteria,
         rubric: input.rubric ?? [],
+        allowIncompleteTarget: input.allow_incomplete_target === true,
         workflow_kind: wk,
       };
       updateSessionAnalysisState(

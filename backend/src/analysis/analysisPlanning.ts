@@ -29,7 +29,15 @@ export function collectAnalysisPlanningData(
     selectedToolNames,
     onlyFailedToolCalls,
     evaluationCriteria,
+    allowIncompleteTarget,
   } = state
+
+  // A turn is "analyzable" once it is terminal. Normally that means `complete`; with
+  // allowIncompleteTarget (benchmark evaluation of a failed run-session) a terminal-but-
+  // failed turn (`error`/`aborted`) is also analyzable. In-flight turns never are.
+  const TERMINAL_FAILED = new Set(['error', 'aborted'])
+  const isAnalyzable = (status: string): boolean =>
+    status === 'complete' || (allowIncompleteTarget === true && TERMINAL_FAILED.has(status))
 
   const targetSession = getSessionRecord(database.connection, targetSessionId)
   if (!targetSession) {
@@ -40,8 +48,8 @@ export function collectAnalysisPlanningData(
   if (!targetTurn) {
     throw new Error(`Planning: target turn not found: ${targetTurnId}`)
   }
-  if (targetTurn.status !== 'complete') {
-    throw new Error(`Planning: target turn ${targetTurnId} is not complete (status: ${targetTurn.status})`)
+  if (!isAnalyzable(targetTurn.status)) {
+    throw new Error(`Planning: target turn ${targetTurnId} is not analyzable (status: ${targetTurn.status})`)
   }
 
   const allTurns = listTurnRecordsBySession(database.connection, targetSessionId)
@@ -49,7 +57,9 @@ export function collectAnalysisPlanningData(
   if (targetTurnIndex === -1) {
     throw new Error(`Planning: target turn ${targetTurnId} not found in session ${targetSessionId}`)
   }
-  const inScopeTurns = allTurns.slice(0, targetTurnIndex + 1).filter(turn => turn.status === 'complete')
+  const inScopeTurns = allTurns
+    .slice(0, targetTurnIndex + 1)
+    .filter(turn => isAnalyzable(turn.status))
   const inScopeTurnIds = inScopeTurns.map(turn => turn.id)
 
   const allRounds = listRoundRecordsBySession(database.connection, targetSessionId)
