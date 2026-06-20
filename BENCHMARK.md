@@ -56,7 +56,10 @@ hierarchical-ID scheme (a bare 4-char code is a session):
 
 A run is **inspectable like a session** (its report + child sessions) and shows up in the
 left-pane tree as a container of its sessions. The verdict notes cite these hierarchical IDs,
-so a finding always points back at the exact session/turn/tool-call it refers to.
+so a finding always points back at the exact session/turn/tool-call it refers to. Every
+benchmark ID resolves through the one shared `inspect` operation, so it inspects identically
+from the UI id-pill, the CLI, and MCP (see
+[DATA-MODEL.md → Lookup model rules](DATA-MODEL.md#lookup-model-rules)).
 
 ## Data model
 
@@ -195,7 +198,7 @@ the identical operations as `mcpscope_<id>` tools.
 
 ## CLI / MCP
 
-The eight `benchmark_*` operations are flat, catalog-backed commands, each exposed identically
+The twelve `benchmark_*` operations are flat, catalog-backed commands, each exposed identically
 as a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool. The exact per-command flags,
 arguments, and text/JSON output live in one place — [CLI.md](CLI.md) (Benchmark commands) and
 [MCP.md](MCP.md) (tool inputs/results) — and are not repeated here to avoid drift. The

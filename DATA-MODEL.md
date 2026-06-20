@@ -226,16 +226,15 @@ What this means:
 
 ## Canonical IDs
 
-IDs follow the same tree.
-
-Current target shape:
+Runtime IDs follow the same tree (numbering is positional — see [Numbering](#numbering)):
 
 - `AB12` — session
 - `AB12.S` — setup
 - `AB12.S.1-SP` — setup part
-- `AB12.2` — turn
-- `AB12.2.1` — round
-- `AB12.2.1.3-U` — round part
+- `AB12.1T` — turn
+- `AB12.3W` — workflow step; `AB12.3W.1T` — a turn it owns
+- `AB12.1T.1` — round
+- `AB12.1T.1.3-U` — round part
 
 Part suffixes encode the public part type:
 
@@ -249,7 +248,10 @@ Part suffixes encode the public part type:
 
 Session IDs should stay short, stable, and human-readable.
 
-## Numbering rule
+**Benchmark-family IDs** extend the same type-tagged scheme *outside* the runtime tree — a bare
+4-char code is always a session, a prefixed code is a benchmark object: `B-7K3M` (benchmark),
+`B-7K3M.3` (case), `R-9QX4` (run), `E-2F8P` (evaluation). Their structure and lifecycles are
+owned by [BENCHMARK.md → IDs](BENCHMARK.md#ids).
 
 ## Numbering
 
@@ -275,6 +277,8 @@ starting at 1.
 - summary and full mode use the same structure
 - full mode adds allowed content; it does not invent a different object model
 - the tables above describe the canonical properties expected on those nodes
+- **one inspect, every surface**: the UI id-pill (`GET /api/lookup/:id`), the CLI (`mcpscope inspect`), and the MCP `mcpscope_inspect` tool all call the single `inspect` operation, so any given ID inspects to the same payload everywhere — if one surface resolves it, they all do
+- `inspect` also resolves benchmark-family IDs (`B-`/`B-.N`/`R-`/`E-`) to the matching benchmark/case/run/evaluation payload (full mode adds a run's metrics report); see [BENCHMARK.md](BENCHMARK.md)
 
 ## Session classification and parent model
 
