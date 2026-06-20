@@ -12,6 +12,7 @@ import type {
   BenchmarkCaseRecord,
   BenchmarkRunRecord,
   BenchmarkRunCaseSnapshot,
+  RubricCriterion,
 } from "../domain/model.js";
 import {
   createBenchmark,
@@ -203,6 +204,7 @@ export function addBenchmarkCase(
     name?: string | null | undefined;
     expectedToolsCalled?: string[] | undefined;
     expectedToolsNotCalled?: string[] | undefined;
+    rubric?: RubricCriterion[] | undefined;
   },
 ): BenchmarkCaseRecord {
   requireBenchmark(db, benchmarkId);
@@ -216,6 +218,7 @@ export function addBenchmarkCase(
     orderIndex: existing.length,
     expectedToolsCalled: input.expectedToolsCalled ?? [],
     expectedToolsNotCalled: input.expectedToolsNotCalled ?? [],
+    rubric: input.rubric ?? [],
     sourceSessionId: null,
     createdAt: ts,
     updatedAt: ts,
@@ -278,6 +281,7 @@ export function addBenchmarkCaseFromSession(
     orderIndex: existing.length,
     expectedToolsCalled,
     expectedToolsNotCalled: [],
+    rubric: [],
     sourceSessionId: sessionId,
     createdAt: ts,
     updatedAt: ts,
@@ -295,6 +299,7 @@ export function updateBenchmarkCaseEntry(
     orderIndex?: number | undefined;
     expectedToolsCalled?: string[] | undefined;
     expectedToolsNotCalled?: string[] | undefined;
+    rubric?: RubricCriterion[] | undefined;
   },
 ): BenchmarkCaseRecord {
   const existing = getBenchmarkCase(db.connection, caseId);
@@ -313,6 +318,7 @@ export function updateBenchmarkCaseEntry(
       input.expectedToolsCalled ?? existing.expectedToolsCalled,
     expectedToolsNotCalled:
       input.expectedToolsNotCalled ?? existing.expectedToolsNotCalled,
+    rubric: input.rubric ?? existing.rubric,
     updatedAt: now(),
   };
   updateBenchmarkCase(db.connection, updated);
@@ -399,6 +405,7 @@ export function launchBenchmarkRun(
       prompt: c.prompt,
       expectedToolsCalled: c.expectedToolsCalled,
       expectedToolsNotCalled: c.expectedToolsNotCalled,
+      rubric: c.rubric,
     };
   });
 

@@ -9,6 +9,7 @@ import type {
   BenchmarkCaseRecord,
   BenchmarkRunRecord,
   BenchmarkRunSession,
+  RubricCriterion,
 } from "../domain/model.js";
 
 // ── benchmarks ────────────────────────────────────────────────────────────────
@@ -104,6 +105,7 @@ interface BenchmarkCaseRow {
   order_index: number;
   expected_tools_called_json: string;
   expected_tools_not_called_json: string;
+  rubric_json: string;
   source_session_id: string | null;
   created_at: number;
   updated_at: number;
@@ -120,6 +122,7 @@ function mapBenchmarkCaseRow(row: BenchmarkCaseRow): BenchmarkCaseRecord {
     expectedToolsNotCalled: JSON.parse(
       row.expected_tools_not_called_json,
     ) as string[],
+    rubric: JSON.parse(row.rubric_json) as RubricCriterion[],
     sourceSessionId: row.source_session_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -134,11 +137,11 @@ export function createBenchmarkCase(
     .prepare(
       `INSERT INTO benchmark_cases (
          id, benchmark_id, name, prompt, order_index,
-         expected_tools_called_json, expected_tools_not_called_json,
+         expected_tools_called_json, expected_tools_not_called_json, rubric_json,
          source_session_id, created_at, updated_at
        ) VALUES (
          @id, @benchmarkId, @name, @prompt, @orderIndex,
-         @expectedToolsCalled, @expectedToolsNotCalled,
+         @expectedToolsCalled, @expectedToolsNotCalled, @rubric,
          @sourceSessionId, @createdAt, @updatedAt
        )`,
     )
@@ -152,6 +155,7 @@ export function createBenchmarkCase(
       expectedToolsNotCalled: JSON.stringify(
         benchmarkCase.expectedToolsNotCalled,
       ),
+      rubric: JSON.stringify(benchmarkCase.rubric),
       sourceSessionId: benchmarkCase.sourceSessionId,
       createdAt: benchmarkCase.createdAt,
       updatedAt: benchmarkCase.updatedAt,
@@ -192,6 +196,7 @@ export function updateBenchmarkCase(
            order_index = @orderIndex,
            expected_tools_called_json = @expectedToolsCalled,
            expected_tools_not_called_json = @expectedToolsNotCalled,
+           rubric_json = @rubric,
            updated_at = @updatedAt
        WHERE id = @id`,
     )
@@ -204,6 +209,7 @@ export function updateBenchmarkCase(
       expectedToolsNotCalled: JSON.stringify(
         benchmarkCase.expectedToolsNotCalled,
       ),
+      rubric: JSON.stringify(benchmarkCase.rubric),
       updatedAt: benchmarkCase.updatedAt,
     });
 }

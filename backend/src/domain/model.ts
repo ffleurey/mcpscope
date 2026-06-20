@@ -2,7 +2,7 @@ import { z } from "zod";
 import { providerTypeValues } from "./configuration.js";
 
 /** Single schema/domain version recorded in schema_meta and reported on /api/system. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const sessionTypeValues = ["primary", "session_analysis"] as const;
 export const parentKindValues = ["session", "benchmark"] as const;
@@ -334,6 +334,8 @@ export const benchmarkCaseRecordSchema = z.object({
   // Optional deterministic tool-behavior expectations (Phase B checks). Empty = none.
   expectedToolsCalled: z.array(z.string()).default([]),
   expectedToolsNotCalled: z.array(z.string()).default([]),
+  // Optional scored rubric for the LLM judge (Phase C). Empty = no rubric.
+  rubric: z.array(rubricCriterionSchema).default([]),
   // Provenance: the session this case was extracted from, if any.
   sourceSessionId: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
@@ -349,6 +351,9 @@ export const benchmarkRunCaseSnapshotSchema = z.object({
   prompt: z.string(),
   expectedToolsCalled: z.array(z.string()),
   expectedToolsNotCalled: z.array(z.string()),
+  // Snapshot of the case rubric at launch, so an after-the-fact evaluation
+  // scores against the rubric as it was when the run executed.
+  rubric: z.array(rubricCriterionSchema).default([]),
 });
 
 // One run-session: which snapshotted case and repetition a session corresponds to.

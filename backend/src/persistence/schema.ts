@@ -273,6 +273,7 @@ export function initializeSchema(connection: Database.Database): void {
       order_index INTEGER NOT NULL,
       expected_tools_called_json TEXT NOT NULL DEFAULT '[]',
       expected_tools_not_called_json TEXT NOT NULL DEFAULT '[]',
+      rubric_json TEXT NOT NULL DEFAULT '[]',
       source_session_id TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -441,6 +442,7 @@ export function validateSchema(connection: Database.Database): void {
       "order_index",
       "expected_tools_called_json",
       "expected_tools_not_called_json",
+      "rubric_json",
       "source_session_id",
       "created_at",
       "updated_at",
