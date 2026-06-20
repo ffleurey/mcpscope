@@ -820,9 +820,26 @@ export const createSessionResponseSchema = z.object({
   initJobId: z.string().optional(),
 })
 
+// Every `type` the backend `inspect` operation can return. Must stay in sync with
+// the runtime resolver (hierarchicalLookup) + resolveBenchmarkInspect. The
+// id-pill, CLI, and MCP all consume this; a missing value rejects the response
+// client-side with a ZodError. Guarded by backendTypes.test.ts.
+export const inspectTypeSchema = z.enum([
+  'session',
+  'setup',
+  'step',
+  'turn',
+  'round',
+  'part',
+  'benchmark',
+  'benchmark_case',
+  'benchmark_run',
+  'benchmark_evaluation',
+])
+
 export const hierarchicalLookupResponseSchema = z.object({
   id: z.string(),
-  type: z.enum(['session', 'setup', 'step', 'turn', 'round', 'part']),
+  type: inspectTypeSchema,
   mode: z.enum(['summary', 'full']),
   data: z.unknown(),
 })
