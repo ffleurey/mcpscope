@@ -22,7 +22,7 @@ The value of the project depends on correctness and inspectability:
 - [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) — shipped `session_analysis` workflow and evidence-loading rules
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) — current SQLite tables, foreign keys, singleton defaults, and ER diagram
 - [CLI.md](CLI.md) and [MCP.md](MCP.md) — the shared operation catalog as CLI commands and MCP tools
-- [BENCHMARK.md](BENCHMARK.md) — benchmark suite/case/run feature: model, metrics, and agent-facing surface
+- [BENCHMARK.md](BENCHMARK.md) — benchmark suite/case/run feature: model, deterministic metrics, LLM rubric evaluation (built on the analysis workflow), and agent-facing surface
 - [PROVIDERS.md](PROVIDERS.md) — provider-specific reasoning, token-counting, and context-window behavior
 - `ARCHITECTURE.md` — system design, persistence model, streaming model, replay model, and API overview
 
@@ -95,9 +95,9 @@ The backend persistence layer is organized around the execution model:
 - `WorkflowStep` — the abstract deterministic step subtype implemented by concrete analysis step classes in `analysis/shared/` and `analysis/fastTool/` (see `backend/src/workflow/workflowStep.ts`); may own zero or more `Turn` children
 - `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records
 
-The persistence-layer record types (`SessionRecord`, `TurnRecord`, `RoundRecord`, `PartRecord`, `RawExchangeRecord`) remain the authoritative source for runtime behavior and replay. They persist to the canonical runtime schema (plain table names, schema version `1`, no migration history). For the record-to-table mapping and column-level details see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
+The persistence-layer record types (`SessionRecord`, `TurnRecord`, `RoundRecord`, `PartRecord`, `RawExchangeRecord`) remain the authoritative source for runtime behavior and replay. They persist to the canonical runtime schema (plain table names, schema version `2`, no migration history). For the record-to-table mapping and column-level details see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
 
-Startup runs a single `initializeSchema()` that creates the snapshot/config tables, the runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`), and the benchmark tables. There is no migration path and no separate legacy schema: the tables use plain names at schema version `1`, and an out-of-date database is started empty rather than migrated.
+Startup runs a single `initializeSchema()` that creates the snapshot/config tables, the runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`), and the benchmark tables (`benchmarks`, `benchmark_cases`, `benchmark_runs`, `benchmark_evaluations`). There is no migration path and no separate legacy schema: the tables use plain names at schema version `2`, and an out-of-date database is started empty rather than migrated.
 
 ### Current implementation
 
@@ -117,19 +117,20 @@ The important distinction is architectural rather than cosmetic:
 The shipped product implements:
 
 - `Session` and `Step` / `Turn` execution model with explicit loop boundaries
-- a `WorkflowStep` abstract class with template-method lifecycle (`execute()` → `run(ctx)`) and five concrete analysis step subclasses (bootstrap, tool-call assessment, turn summary, final aggregation, grouped assessment)
+- a `WorkflowStep` abstract class with template-method lifecycle (`execute()` → `run(ctx)`) and concrete analysis step subclasses (bootstrap, tool-call assessment, turn summary, final aggregation, grouped assessment, and the benchmark rubric judge)
 - a backend-owned sequential execution scheduler with one active slot, one in-memory queue, and one global execution event stream
 - `SessionContainer` ownership: sessions may belong to a parent session or a `Benchmark` container
-- the benchmark suite/case/run feature (Phase A): persisted benchmarks and cases, immutable run snapshots, a sequential run coordinator, and a compute-on-read metrics report — shipped across UI, CLI, and MCP (see [BENCHMARK.md](BENCHMARK.md))
+- the benchmark suite/case/run feature: persisted benchmarks and cases, immutable run snapshots, a sequential run coordinator, and a compute-on-read metrics report — shipped across UI, CLI, and MCP (see [BENCHMARK.md](BENCHMARK.md))
+- benchmark **LLM evaluation**: a per-case rubric, judged after a run by a separate judge model. Implemented **as an analysis workflow** (`benchmark_evaluation`) — one judge session per run-session — reusing the analysis subsystem rather than adding a parallel judging engine (see below and [BENCHMARK.md](BENCHMARK.md))
 - generic container/session/step persistence without table-per-subtype growth
 - a registry-based analysis workflow factory (`registerAnalysisWorkflow()` / Map lookup) replacing `switch(workflowKind)`
-- self-contained analysis subclasses (`fullSession/`, `fastSession/`, `fastTool/`) each owning its own prompt builders, schema keys, Zod schemas, and system prompt
+- self-contained analysis subclasses (`fullSession/`, `fastSession/`, `fastTool/`, `benchmarkEvaluation/`) each owning its own prompt builders, schema keys, Zod schemas, and system prompt
 - zero analysis-type knowledge in shared step classes — all behavior injected via constructor functions
 - constrained one-level workflow-step-owned-turn grouping for workflow-oriented traces
 
 What is **not** implemented yet:
 
-- benchmark Phase B/C: LLM-judged success and richer scoring (Phase A ships deterministic tool-behavior checks only — see [BENCHMARK.md](BENCHMARK.md))
+- richer benchmark scoring beyond compute-on-read per-pass scores: no stored aggregate, no cross-run / cross-judge comparison view (deterministic checks + LLM rubric evaluation both ship — see [BENCHMARK.md](BENCHMARK.md))
 - public generic step enqueue across all adapters and client helpers
 - broader workflow automation and cleanup beyond the shipped analysis-session workflow
 
@@ -183,12 +184,14 @@ The backend structure is intentionally split so architectural seams are visible 
 - `backend/src/analysis/` owns analysis-specific behavior built on top of the workflow layer:
 	- `analysisSessionBase.ts` — abstract base class with tree-traversal `buildPlan()` (drives 22 hooks that call `addCommand()`), `findFirstIncomplete()` (artifact-derived position), `resumeOneStep()` (Interpreter). Commands are `WorkflowStep` instances (they implement `AnalysisCommand` from `workflowStep.ts`).
 	- `shared/` — reusable `WorkflowStep` subclasses (`BootstrapStep`, `ToolCallAssessmentStep`, `TurnSummaryStep`, `FinalAggregationStep`) that accept behavior via constructor-injected functions (zero knowledge of analysis types)
-	- `fullSession/`, `fastSession/`, `fastTool/` — self-contained analysis subclasses, each owning its own prompt builders, schema keys, Zod schemas, and system prompt
-	- `analysisWorkflowFactory.ts` — registry-based factory (`registerAnalysisWorkflow()`) instead of a `switch` on workflow kind. Adding a new analysis type only requires creating a new directory and calling the registration function.
+	- `fullSession/`, `fastSession/`, `fastTool/`, `benchmarkEvaluation/` — self-contained analysis subclasses, each owning its own prompt builders, schema keys, Zod schemas, and system prompt. `benchmarkEvaluation/` is the benchmark rubric judge (a single-step `benchmark_evaluation` workflow); it is registered exactly like the others, which is why benchmark evaluation needs no judging infrastructure of its own.
+	- `analysisWorkflowFactory.ts` — registry-based factory (`registerAnalysisWorkflow()`) instead of a `switch` on workflow kind. Adding a new analysis type only requires creating a new directory and calling the registration function (`benchmarkEvaluation/` is the most recent example).
 
 This split is deliberate: route modules should stay thin HTTP adapters over backend-owned operations and scheduler entrypoints, while scheduler submodules separate queue ownership from admission and execution behavior.
 
-**Benchmark support note**: benchmark orchestration (Phase A) is implemented exactly as a thin layer above sessions and queue jobs, with no new execution infrastructure — the run coordinator enqueues ordinary `session` jobs on the existing sequential scheduler and reads results back from persisted runtime records. The scheduler's sequential control plane, job kinds, and event stream were already the right primitives.
+**Benchmark support note**: benchmark orchestration is implemented exactly as a thin layer above sessions and queue jobs, with no new execution infrastructure — the run coordinator enqueues ordinary `session` jobs on the existing sequential scheduler and reads results back from persisted runtime records. The scheduler's sequential control plane, job kinds, and event stream were already the right primitives.
+
+This composition extends cleanly to **benchmark LLM evaluation**, which deliberately reuses the *analysis* subsystem rather than standing up a parallel judging path. An evaluation coordinator launches one `benchmark_evaluation` **analysis session** per run-session (via the same `executeAnalysisLaunch` + scheduler-await path used for any analysis), and each judge session runs the standard analysis loop against the read-only `/mcp/analysis` endpoint — pushed inspect-summary evidence plus pull-on-demand `mcpscope_inspect`, structured-output verdict written as an artifact. Benchmark evaluation and session analysis are therefore **one mechanism, not two**: the rubric judge is just another registered `WorkflowStep`/workflow kind, so improvements to the analysis framework (prompting, evidence loading, scheduling, persistence) accrue to both and the two cannot drift into separate implementations.
 
 The important rule is that mcpscope keeps one canonical model across persistence, API, UI, and
 CLI. Provider-specific transport structures are normalized into that model at the integration

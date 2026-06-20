@@ -236,6 +236,14 @@ Text output shows overall and per-case completion, the currently running session
 
 Returns the full compute-on-read **metrics** report for a run (loads session traces): per-case pass rates, tool-call/token stats, per-session metrics, and a cross-case per-tool rollup. Text output leads with the per-tool rollup, then per-case detail. JSON output: `{ run, report }`. For what the metrics mean (pass@k vs pass^k, the per-tool scorecard, what the checks evaluate), see [BENCHMARK.md → Report and metrics](BENCHMARK.md#report-and-metrics).
 
+### `mcpscope benchmark_evaluate <run_id> --judge-model <model_config_id> [--json]`
+
+Launches an **LLM evaluation** pass over a completed run: a separate judge model scores every session against its case rubric. Returns immediately (`{ evaluation: { id, status, ... } }`); the pass runs in the background. Repeatable — run it again with a different `--judge-model` to compare judges. The judge runs as a `benchmark_evaluation` analysis session per run-session; see [BENCHMARK.md → Evaluation](BENCHMARK.md#evaluation-llm-rubric-judging). Rubrics are authored via the UI or the `rubric` field on `benchmark_add_case` (MCP/HTTP); they are not a CLI flag.
+
+### `mcpscope benchmark_run_evaluations <run_id> [--json]`
+
+Lists a run's evaluation passes with scores computed on read from the judge verdicts. Text output shows, per pass, the judge model, status, overall %, and a per-case min/mean/max line. JSON output: `{ evaluations: [{ id, run_id, judge_model_config_id, status, sessions, score: { overall_pct, cases: [{ source_case_id, name, pct_stats, sessions: [{ analysis_session_id, awarded, max, pct, ... }] }] } }] }`. Open an `analysis_session_id` (e.g. with `mcpscope inspect`) to read the judge's verdict and reasoning.
+
 ### `mcpscope sessions list [--json]`
 
 Legacy form of `list`. Kept for backward compatibility.
@@ -277,6 +285,7 @@ mcpscope inspect ABCD.1T
 | `--case <id>`      | `benchmark_run`    | repeatable; subset of case ids to run |
 | `--repetitions <n>` | `benchmark_run`   | times to run each case (default: 1) |
 | `--wait`           | `benchmark_run`    | poll run status until terminal, then print final progress |
+| `--judge-model <id>` | `benchmark_evaluate` | model config ID for the judge (required) |
 
 ## Exit codes
 

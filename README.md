@@ -18,8 +18,8 @@ separate substrate.
 - [PROVIDERS.md](PROVIDERS.md) - provider-specific behavior (LM Studio, Ollama, OpenRouter): reasoning tokens, token counting, context windows
 - [MCP.md](MCP.md) - MCP interface reference: transport, tool surface, and structured results
 - [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
-- [BENCHMARK.md](BENCHMARK.md) - benchmark feature reference: suite/case/run model, HTTP API, CLI, and the metrics report
-- [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) - shipped `session_analysis` workflow and evidence-loading contract
+- [BENCHMARK.md](BENCHMARK.md) - benchmark feature reference: suite/case/run model, deterministic metrics, LLM rubric evaluation (built on the analysis workflow), HTTP API, and CLI
+- [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) - shipped `session_analysis` workflow and evidence-loading contract (also the engine behind benchmark evaluation)
 - [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
 - [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) - frontend design system: brand, tokens, shared primitives, patterns, and the live Design System Reference (read before any frontend visual change)
 
@@ -67,7 +67,7 @@ Those surfaces share the same backend-owned session model and canonical hierarch
 - runtime state persists on the SQLite runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`); container ownership is recorded on `sessions` columns rather than a separate container table
 - session parent rules remain intentionally narrow: a `primary` session may optionally have a `benchmark` parent, and a `session_analysis` session requires a `session` parent
 - analysis-session deterministic workflow steps are shipped inside the normal session model; broader generalization and cleanup remain future work
-- the benchmark feature ships Phase A: repeatable suite/case/run execution with deterministic tool-behavior checks and a compute-on-read metrics report; LLM-judged success (Phase B/C) is future work (see [BENCHMARK.md](BENCHMARK.md))
+- the benchmark feature ships repeatable suite/case/run execution with deterministic tool-behavior checks and a compute-on-read metrics report, plus optional **LLM rubric evaluation** — a separate judge model scores each session against a per-case rubric, implemented as a `benchmark_evaluation` analysis session (not a separate engine), so benchmark evaluation and session analysis are one mechanism (see [BENCHMARK.md](BENCHMARK.md))
 
 ## Developer setup
 
