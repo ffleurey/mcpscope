@@ -387,6 +387,28 @@ export const benchmarkRunRecordSchema = z.object({
   completedAt: z.number().int().nonnegative().nullable().default(null),
 });
 
+// An evaluation is a separate, repeatable judging pass over a completed run with
+// a chosen judge model. It is a thin grouping/index over the reused
+// session_analysis children (one per run-session); the verdicts live in analysis
+// artifacts and scores are computed on read. A run carries 0..N evaluations.
+export const benchmarkEvaluationSessionSchema = z.object({
+  // The run-session being judged, and the session_analysis child that judges it.
+  runSessionId: z.string(),
+  analysisSessionId: z.string(),
+  status: z.enum(["running", "complete", "error"]).default("running"),
+});
+
+export const benchmarkEvaluationRecordSchema = z.object({
+  id: z.string(),
+  runId: z.string(),
+  judgeModelConfigId: z.string(),
+  status: benchmarkRunStatusSchema,
+  sessions: z.array(benchmarkEvaluationSessionSchema).default([]),
+  error: z.string().nullable().default(null),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+});
+
 export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>;
 export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>;
 
@@ -408,6 +430,12 @@ export type BenchmarkRunCaseSnapshot = z.infer<
 >;
 export type BenchmarkRunSession = z.infer<typeof benchmarkRunSessionSchema>;
 export type BenchmarkRunRecord = z.infer<typeof benchmarkRunRecordSchema>;
+export type BenchmarkEvaluationSession = z.infer<
+  typeof benchmarkEvaluationSessionSchema
+>;
+export type BenchmarkEvaluationRecord = z.infer<
+  typeof benchmarkEvaluationRecordSchema
+>;
 
 export function getDomainModelSummary() {
   return {

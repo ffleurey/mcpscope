@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import type Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openBackendDatabase, type BackendDatabase } from './db.js'
 import {
@@ -9,8 +10,17 @@ import {
   updateBenchmarkCase,
   createBenchmarkRun,
   getBenchmarkRun,
+  createBenchmarkEvaluation,
+  getBenchmarkEvaluation,
+  listBenchmarkEvaluationsByRun,
+  updateBenchmarkEvaluation,
 } from './benchmarkRepository.js'
-import type { BenchmarkCaseRecord, BenchmarkRunRecord, RubricCriterion } from '../domain/model.js'
+import type {
+  BenchmarkCaseRecord,
+  BenchmarkEvaluationRecord,
+  BenchmarkRunRecord,
+  RubricCriterion,
+} from '../domain/model.js'
 
 let dataDir: string | undefined
 let db: BackendDatabase | undefined
@@ -114,5 +124,60 @@ describe('benchmark run rubric snapshot', () => {
 
     const reloaded = getBenchmarkRun(d.connection, 'R-TEST')
     expect(reloaded?.cases[0]?.rubric).toEqual(RUBRIC)
+  })
+})
+
+describe('benchmark evaluation grouping CRUD', () => {
+  function seedRun(connection: Database.Database): void {
+    createBenchmark(connection, { id: 'B-TEST', name: 'B', description: null, createdAt: 1, updatedAt: 1 })
+    const run: BenchmarkRunRecord = {
+      id: 'R-TEST', benchmarkId: 'B-TEST', benchmarkName: 'B', status: 'complete',
+      modelConfigId: 'mc-1', mcpProfileIds: [], cases: [], repetitions: 1, sessions: [],
+      error: null, createdAt: 1, updatedAt: 1, startedAt: null, completedAt: null,
+    }
+    createBenchmarkRun(connection, run)
+  }
+
+  function evaluation(overrides: Partial<BenchmarkEvaluationRecord> = {}): BenchmarkEvaluationRecord {
+    return {
+      id: 'E-TEST', runId: 'R-TEST', judgeModelConfigId: 'judge-1', status: 'running',
+      sessions: [{ runSessionId: 'AB12', analysisSessionId: 'CD34', status: 'running' }],
+      error: null, createdAt: 1, updatedAt: 1,
+      ...overrides,
+    }
+  }
+
+  it('round-trips an evaluation and lists it by run', () => {
+    const d = openTempDb()
+    seedRun(d.connection)
+    createBenchmarkEvaluation(d.connection, evaluation())
+
+    expect(getBenchmarkEvaluation(d.connection, 'E-TEST')).toEqual(evaluation())
+    expect(listBenchmarkEvaluationsByRun(d.connection, 'R-TEST').map((e) => e.id)).toEqual(['E-TEST'])
+  })
+
+  it('updates status + session entries', () => {
+    const d = openTempDb()
+    seedRun(d.connection)
+    createBenchmarkEvaluation(d.connection, evaluation())
+    updateBenchmarkEvaluation(
+      d.connection,
+      evaluation({
+        status: 'complete',
+        sessions: [{ runSessionId: 'AB12', analysisSessionId: 'CD34', status: 'complete' }],
+        updatedAt: 2,
+      }),
+    )
+    const reloaded = getBenchmarkEvaluation(d.connection, 'E-TEST')
+    expect(reloaded?.status).toBe('complete')
+    expect(reloaded?.sessions[0]?.status).toBe('complete')
+  })
+
+  it('supports multiple evaluations per run (different judge models)', () => {
+    const d = openTempDb()
+    seedRun(d.connection)
+    createBenchmarkEvaluation(d.connection, evaluation({ id: 'E-AAA', judgeModelConfigId: 'judge-a' }))
+    createBenchmarkEvaluation(d.connection, evaluation({ id: 'E-BBB', judgeModelConfigId: 'judge-b' }))
+    expect(listBenchmarkEvaluationsByRun(d.connection, 'R-TEST').map((e) => e.id).sort()).toEqual(['E-AAA', 'E-BBB'])
   })
 })

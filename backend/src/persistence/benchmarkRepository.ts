@@ -9,6 +9,8 @@ import type {
   BenchmarkCaseRecord,
   BenchmarkRunRecord,
   BenchmarkRunSession,
+  BenchmarkEvaluationRecord,
+  BenchmarkEvaluationSession,
   RubricCriterion,
 } from "../domain/model.js";
 
@@ -342,4 +344,107 @@ function serializeRun(run: BenchmarkRunRecord) {
     startedAt: run.startedAt,
     completedAt: run.completedAt,
   };
+}
+
+// ── benchmark_evaluations ─────────────────────────────────────────────────────
+
+interface BenchmarkEvaluationRow {
+  id: string;
+  run_id: string;
+  judge_model_config_id: string;
+  status: string;
+  sessions_json: string;
+  error: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+function mapBenchmarkEvaluationRow(
+  row: BenchmarkEvaluationRow,
+): BenchmarkEvaluationRecord {
+  return {
+    id: row.id,
+    runId: row.run_id,
+    judgeModelConfigId: row.judge_model_config_id,
+    status: row.status as BenchmarkEvaluationRecord["status"],
+    sessions: JSON.parse(row.sessions_json) as BenchmarkEvaluationSession[],
+    error: row.error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function serializeEvaluation(evaluation: BenchmarkEvaluationRecord) {
+  return {
+    id: evaluation.id,
+    runId: evaluation.runId,
+    judgeModelConfigId: evaluation.judgeModelConfigId,
+    status: evaluation.status,
+    sessions: JSON.stringify(evaluation.sessions),
+    error: evaluation.error,
+    createdAt: evaluation.createdAt,
+    updatedAt: evaluation.updatedAt,
+  };
+}
+
+export function createBenchmarkEvaluation(
+  connection: Database.Database,
+  evaluation: BenchmarkEvaluationRecord,
+): void {
+  connection
+    .prepare(
+      `INSERT INTO benchmark_evaluations (
+         id, run_id, judge_model_config_id, status, sessions_json, error,
+         created_at, updated_at
+       ) VALUES (
+         @id, @runId, @judgeModelConfigId, @status, @sessions, @error,
+         @createdAt, @updatedAt
+       )`,
+    )
+    .run(serializeEvaluation(evaluation));
+}
+
+export function getBenchmarkEvaluation(
+  connection: Database.Database,
+  id: string,
+): BenchmarkEvaluationRecord | null {
+  const row = connection
+    .prepare(`SELECT * FROM benchmark_evaluations WHERE id = ?`)
+    .get(id) as BenchmarkEvaluationRow | undefined;
+  return row ? mapBenchmarkEvaluationRow(row) : null;
+}
+
+export function listBenchmarkEvaluationsByRun(
+  connection: Database.Database,
+  runId: string,
+): BenchmarkEvaluationRecord[] {
+  const rows = connection
+    .prepare(
+      `SELECT * FROM benchmark_evaluations WHERE run_id = ? ORDER BY created_at ASC`,
+    )
+    .all(runId) as BenchmarkEvaluationRow[];
+  return rows.map(mapBenchmarkEvaluationRow);
+}
+
+export function updateBenchmarkEvaluation(
+  connection: Database.Database,
+  evaluation: BenchmarkEvaluationRecord,
+): void {
+  connection
+    .prepare(
+      `UPDATE benchmark_evaluations
+       SET status = @status,
+           sessions_json = @sessions,
+           error = @error,
+           updated_at = @updatedAt
+       WHERE id = @id`,
+    )
+    .run(serializeEvaluation(evaluation));
+}
+
+export function deleteBenchmarkEvaluation(
+  connection: Database.Database,
+  id: string,
+): void {
+  connection.prepare(`DELETE FROM benchmark_evaluations WHERE id = ?`).run(id);
 }

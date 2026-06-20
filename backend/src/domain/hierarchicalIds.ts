@@ -271,6 +271,21 @@ export function generateRunId(
   return generatePrefixedId('R-', exists, maxAttempts, random)
 }
 
+// `E-9QX4` — a benchmark evaluation pass (judge model applied to a run). Flat /
+// first-class, like a run.
+export const EVALUATION_ID_REGEX = /^E-[A-HJ-NP-Z2-9]{4}$/
+export function isEvaluationId(value: string): boolean {
+  return EVALUATION_ID_REGEX.test(value)
+}
+
+export function generateEvaluationId(
+  exists: (id: string) => boolean,
+  maxAttempts = 5,
+  random: () => number = Math.random,
+): string | null {
+  return generatePrefixedId('E-', exists, maxAttempts, random)
+}
+
 /** Case ID = `<benchmarkId>.<caseNumber>`; caseNumber is a stable 1-based sequence. */
 export function formatBenchmarkCaseId(benchmarkId: string, caseNumber: number): string {
   return `${benchmarkId}.${caseNumber}`
