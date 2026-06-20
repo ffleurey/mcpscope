@@ -277,6 +277,9 @@ artifact on the judge session.
 
 - **Separate judge model, never self-judge** — you choose the `judgeModelConfigId`; it is a
   distinct model selection from the one under test.
+- **A delivered answer is required for credit** — a session that errored / never produced a final
+  answer scores ~0 on every criterion regardless of how correct its intermediate steps were
+  (correct process without a result does not satisfy the rubric).
 - **Deterministic judging by default** — the judge runs at temperature 0 with structured output;
   the temperature is selectable per pass (stored on the evaluation) if you want to probe judge
   stability, but 0 is the recommended default.
@@ -292,8 +295,13 @@ judge-session verdict artifacts and computes, per pass:
 - **Per case:** the distribution of session `pct` across repetitions (min/median/mean/max/
   stddev — the spread is the reliability signal).
 - **Overall:** the mean session `pct` across the pass.
+- **Per criterion:** each scored session also carries the full criterion breakdown
+  (`{id, description, max, points, note}`) — the rubric joined with the judge's awarded points +
+  ID-citing note — so the UI/CLI can show the scoring grid, not just the total.
 
-A session whose judge errored (no verdict) is listed but excluded from the stats.
+A session whose judge errored (no verdict) is listed but excluded from the stats. The run also
+exposes its **case snapshot incl. rubric** (`benchmark_inspect` / the run report's "Cases" view),
+so you can always see exactly what a past run was scored against.
 
 ### Failure handling & retry
 

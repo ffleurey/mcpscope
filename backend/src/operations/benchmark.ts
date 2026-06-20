@@ -938,9 +938,12 @@ export function getBenchmarkRunEvaluationReports(
   const expectedSessions = run.sessions.filter(
     (s) => s.status === "complete",
   ).length;
+  // Snapshot rubric per case — joined with each verdict to build the per-criterion grid.
+  const caseRubric = new Map(run.cases.map((c) => [c.sourceCaseId, c.rubric]));
 
   return listBenchmarkEvaluationsByRun(db.connection, runId).map((ev) => {
     const sessions: EvaluationSessionScore[] = ev.sessions.map((es) => {
+      const sourceCaseId = runSessionToCase.get(es.runSessionId) ?? "";
       const verdict = getLatestArtifactBySchemaKey(
         db.connection,
         es.analysisSessionId,
@@ -952,14 +955,35 @@ export function getBenchmarkRunEvaluationReports(
       const awarded =
         typeof meta?.awarded_points === "number" ? meta.awarded_points : null;
       const max = typeof meta?.max_points === "number" ? meta.max_points : null;
+
+      // Per-criterion breakdown: rubric criteria (order + description + max) joined
+      // with the judge's awarded points + note (clamped). Empty when no verdict.
+      const verdictContent = verdict?.content as
+        | { criteria?: Array<{ id: number; points: number; note: string }> }
+        | undefined;
+      const byId = new Map(
+        (verdictContent?.criteria ?? []).map((c) => [c.id, c]),
+      );
+      const criteria = (caseRubric.get(sourceCaseId) ?? []).map((rc) => {
+        const v = byId.get(rc.id);
+        return {
+          id: rc.id,
+          description: rc.description,
+          max: rc.points,
+          points: v ? Math.max(0, Math.min(rc.points, Math.round(v.points))) : null,
+          note: v?.note ?? "",
+        };
+      });
+
       return {
         runSessionId: es.runSessionId,
         analysisSessionId: es.analysisSessionId,
-        sourceCaseId: runSessionToCase.get(es.runSessionId) ?? "",
+        sourceCaseId,
         status: es.status,
         awarded,
         max,
         pct: scorePct(awarded, max),
+        criteria,
       };
     });
     const judgedSessions = sessions.filter((s) => s.pct != null).length;

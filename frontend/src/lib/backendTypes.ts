@@ -722,6 +722,14 @@ export const evaluationSessionRefSchema = z.object({
   status: z.string(),
 })
 
+export const evaluationCriterionScoreSchema = z.object({
+  id: z.number(),
+  description: z.string(),
+  max: z.number(),
+  points: z.number().nullable(),
+  note: z.string().default(''),
+})
+
 export const evaluationSessionScoreSchema = z.object({
   runSessionId: z.string(),
   analysisSessionId: z.string(),
@@ -730,6 +738,7 @@ export const evaluationSessionScoreSchema = z.object({
   awarded: z.number().nullable(),
   max: z.number().nullable(),
   pct: z.number().nullable(),
+  criteria: z.array(evaluationCriterionScoreSchema).default([]),
 })
 
 export const evaluationCaseScoreSchema = z.object({

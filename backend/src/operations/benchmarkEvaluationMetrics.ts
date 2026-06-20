@@ -6,6 +6,16 @@
 
 import { numberStats, type NumberStats } from "./benchmarkMetrics.js";
 
+/** One rubric criterion's awarded score + the judge's note (for the per-criterion grid). */
+export interface EvaluationCriterionScore {
+  id: number;
+  description: string;
+  max: number;
+  /** Points awarded for this criterion (clamped to [0, max]); null if no verdict. */
+  points: number | null;
+  note: string;
+}
+
 export interface EvaluationSessionScore {
   runSessionId: string;
   analysisSessionId: string;
@@ -15,6 +25,8 @@ export interface EvaluationSessionScore {
   max: number | null;
   /** awarded / max in [0,1], or null when no verdict was produced. */
   pct: number | null;
+  /** Per-criterion breakdown from the verdict, joined with the rubric (empty if no verdict). */
+  criteria: EvaluationCriterionScore[];
 }
 
 export interface EvaluationCaseScore {

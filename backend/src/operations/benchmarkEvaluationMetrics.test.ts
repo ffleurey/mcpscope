@@ -30,6 +30,7 @@ function s(
     awarded: pct == null ? null : pct * 4,
     max: pct == null ? null : 4,
     pct,
+    criteria: [],
     ...overrides,
   };
 }

@@ -31,6 +31,7 @@
   const evaluations = $derived($activeRunEvaluations)
   const canEvaluate = $derived(run?.status === 'complete')
   let showEvalDialog = $state(false)
+  let showSnapshot = $state(false)
   // Single open per-case verdict drilldown, keyed `${evaluationId}:${caseId}`.
   let expandedKey = $state<string | null>(null)
 
@@ -190,11 +191,20 @@
         <h2 class="benchmark-name">{run.benchmarkName}</h2>
         <IdBadge id={run.id} />
         <span class="status-pill {statusPillClass(run.status)}">{run.status}</span>
-        {#if canEvaluate}
-          <button class="btn btn-sm header-evaluate" onclick={() => (showEvalDialog = true)}>
-            <Icon path={iconAnalysis} /> Evaluate
+        <span class="header-actions">
+          <button
+            class="btn btn-sm"
+            onclick={() => (showSnapshot = true)}
+            title="View the cases + rubric snapshot this run captured"
+          >
+            <Icon path={iconView} /> Cases
           </button>
-        {/if}
+          {#if canEvaluate}
+            <button class="btn btn-sm" onclick={() => (showEvalDialog = true)}>
+              <Icon path={iconAnalysis} /> Evaluate
+            </button>
+          {/if}
+        </span>
       </div>
       <div class="header-meta">
         <span class="meta-item">Model: <span class="meta-value">{modelName}</span></span>
@@ -438,18 +448,36 @@
                             <td colspan="5">
                               <div class="verdict-sessions">
                                 {#each c.sessions as s (s.analysisSessionId)}
-                                  <div class="verdict-session">
-                                    <span class="verdict-score"
-                                      >{s.awarded ?? '—'}{s.max != null ? `/${s.max}` : ''}</span
-                                    >
-                                    <span class="verdict-pct">{pct(s.pct)}</span>
-                                    <span class="verdict-ids">
-                                      run <IdBadge id={s.runSessionId} /> · judge
-                                      <IdBadge id={s.analysisSessionId} />
-                                    </span>
-                                    <span class="status-pill {statusPillClass(s.status)}"
-                                      >{s.status}</span
-                                    >
+                                  <div class="verdict-session-block">
+                                    <div class="verdict-session">
+                                      <span class="verdict-score"
+                                        >{s.awarded ?? '—'}{s.max != null ? `/${s.max}` : ''}</span
+                                      >
+                                      <span class="verdict-pct">{pct(s.pct)}</span>
+                                      <span class="verdict-ids">
+                                        run <IdBadge id={s.runSessionId} /> · judge
+                                        <IdBadge id={s.analysisSessionId} />
+                                      </span>
+                                      <span class="status-pill {statusPillClass(s.status)}"
+                                        >{s.status}</span
+                                      >
+                                    </div>
+                                    {#if s.criteria.length > 0}
+                                      <ul class="criteria-grid">
+                                        {#each s.criteria as cr (cr.id)}
+                                          <li class="criterion">
+                                            <span class="crit-pts">{cr.points ?? '–'}/{cr.max}</span
+                                            >
+                                            <span class="crit-body">
+                                              <span class="crit-desc">{cr.description}</span>
+                                              {#if cr.note}
+                                                <span class="crit-note">{cr.note}</span>
+                                              {/if}
+                                            </span>
+                                          </li>
+                                        {/each}
+                                      </ul>
+                                    {/if}
                                   </div>
                                 {/each}
                               </div>
@@ -527,6 +555,24 @@
 
 {#if showEvalDialog && run}
   <EvaluationLaunchModal runId={run.id} onClose={() => (showEvalDialog = false)} />
+{/if}
+
+{#if showSnapshot && run}
+  <DialogShell
+    title="Benchmark snapshot — {run.benchmarkName}"
+    onClose={() => (showSnapshot = false)}
+    dialogClass="snapshot-dialog"
+  >
+    <p class="snapshot-note">
+      The cases and rubric exactly as captured when this run launched (read-only). Later edits to
+      the benchmark or its cases do not change a past run.
+    </p>
+    <div class="snapshot-cases">
+      {#each run.cases as c (c.sourceCaseId)}
+        <BenchmarkCaseCard case={c} />
+      {/each}
+    </div>
+  </DialogShell>
 {/if}
 
 <style>
@@ -613,8 +659,11 @@
     font-size: 0.82rem;
     color: var(--text-dim);
   }
-  .header-evaluate {
+  .header-actions {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
   }
   .eval-pass {
     margin-bottom: 1rem;
@@ -675,5 +724,60 @@
     align-items: center;
     gap: 0.3rem;
     color: var(--text-dim);
+  }
+  .verdict-session-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .criteria-grid {
+    list-style: none;
+    margin: 0 0 0 3.6rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .criterion {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    align-items: baseline;
+  }
+  .crit-pts {
+    flex: none;
+    min-width: 2.5rem;
+    text-align: right;
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--amber-bright);
+  }
+  .crit-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+  .crit-desc {
+    color: var(--text-bright);
+  }
+  .crit-note {
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  .snapshot-note {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin: 0 0 0.75rem;
+  }
+  .snapshot-cases {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  :global(.snapshot-dialog) {
+    max-width: min(640px, 95vw);
   }
 </style>

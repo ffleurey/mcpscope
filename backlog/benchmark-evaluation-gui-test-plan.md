@@ -152,11 +152,31 @@ Same scores in snake_case → CLI/MCP parity holds.
 
 ## Triage / follow-ups
 
+- **TR-19 (scoring policy — no output ⇒ ~0).** Path criteria currently earn points without a
+  delivered answer (SSMS 6/10, no output). Fix: instruct the benchmark_evaluation judge prompt
+  that a session with no final answer scores ~0 (output is a precondition). Soft/prompt (lean) vs
+  hard deterministic clamp. Build (soft) pending confirm.
+- **TR-20 (GUI — per-criterion scoring grid).** Report carries only awarded/max/pct per session;
+  add per-criterion verdict ({id, description, max, points, note}) by joining the verdict artifact
+  with the snapshot rubric, and a 2nd drill level in the eval card showing the criterion grid.
+- **TR-21 (GUI — view run's benchmark snapshot, read-only).** "View cases" button on the run →
+  modal of run.cases via BenchmarkCaseCard (prompt/tools/rubric). Also close TR-7: include rubric
+  in runToSnake case snapshots so benchmark_inspect shows what a past run was judged against.
+- **TR-22 (combined score per case — needs clarification).** Eval already shows per-case mean +
+  min/med/max. Options: (a) merge deterministic checks (pass@k/success) with rubric % into one
+  per-case score; (b) surface the existing per-case mean more clearly; (c) benchmark-level roll-up.
+  Awaiting user choice (lean (a) is the interesting one; weighting is a design decision).
+
 - **TR-18 (FIXED) — errored run-sessions silently skipped by the judge.** judgeOneSession now
   targets the last complete turn ELSE the last turn of any status (errored sessions are judged
   against what they produced; rubric scores them low); genuinely unjudgeable sessions throw →
   counted as failed (visible) instead of silent. E-HGTU's 3 errored sessions become judgeable on
-  retry. Original notes below. In
+  retry. Needed relaxing TWO guards (launch-level + collectAnalysisPlanningData) via an
+  `allowIncompleteTarget` flag on analysis state; in-scope-turn filter also widened to terminal
+  so the failed turn's evidence is judged. Verified live on E-HGTU: 5/8 → 7/8 (A3TH/MG2F now
+  judge). Remaining 1 (SSMS) = judge model returned EMPTY response (json_parse_error) — a
+  model-quality issue on a heavy failed-session trace, handled as a retryable failed judge; fix
+  is retry or a stronger judge model, not code. Original notes below. In
   E-HGTU, 3 run-sessions (A3TH/SSMS/MG2F) ended `terminal_status=error`, no final answer (hit max
   tool rounds, 10 calls). `judgeOneSession` selects the last **complete** turn as the analysis
   target and `return`s silently if none — so errored sessions get no judge, no entry, no error

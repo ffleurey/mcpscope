@@ -104,6 +104,13 @@ function evaluationReportToSnake(e: BenchmarkEvaluationReport) {
           awarded: s.awarded,
           max: s.max,
           pct: s.pct,
+          criteria: s.criteria.map((cr) => ({
+            id: cr.id,
+            description: cr.description,
+            max: cr.max,
+            points: cr.points,
+            note: cr.note,
+          })),
         })),
       })),
     },
@@ -125,6 +132,7 @@ function runToSnake(r: BenchmarkRunRecord) {
       prompt: c.prompt,
       expected_tools_called: c.expectedToolsCalled,
       expected_tools_not_called: c.expectedToolsNotCalled,
+      rubric: c.rubric,
     })),
     sessions: r.sessions.map((s) => ({
       session_id: s.sessionId,
@@ -295,6 +303,7 @@ const runShape = z.object({
       prompt: z.string(),
       expected_tools_called: z.array(z.string()),
       expected_tools_not_called: z.array(z.string()),
+      rubric: z.array(rubricCriterionShape),
     }),
   ),
   sessions: z.array(
@@ -863,6 +872,15 @@ export const benchmarkRunEvaluationsOutputSchema = {
                 awarded: z.number().nullable(),
                 max: z.number().nullable(),
                 pct: z.number().nullable(),
+                criteria: z.array(
+                  z.object({
+                    id: z.number(),
+                    description: z.string(),
+                    max: z.number(),
+                    points: z.number().nullable(),
+                    note: z.string(),
+                  }),
+                ),
               }),
             ),
           }),
