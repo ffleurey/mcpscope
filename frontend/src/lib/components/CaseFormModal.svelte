@@ -7,7 +7,7 @@
   import IdBadge from './IdBadge.svelte'
   import Icon from './Icon.svelte'
   import ToolPickerModal from './ToolPickerModal.svelte'
-  import { iconPlus } from '../design/icons'
+  import { iconPlus, iconTrash } from '../design/icons'
   import type { BenchmarkCase } from '../backendTypes'
 
   interface Props {
@@ -27,8 +27,20 @@
   let formPrompt = $state(seed?.prompt ?? '')
   let formExpectCalled = $state(seed?.expectedToolsCalled.join(', ') ?? '')
   let formExpectNotCalled = $state(seed?.expectedToolsNotCalled.join(', ') ?? '')
+  // Rubric criteria are edited without ids; ids are (re)assigned sequentially on save.
+  let formRubric = $state<Array<{ description: string; points: number }>>(
+    seed?.rubric.map((r) => ({ description: r.description, points: r.points })) ?? [],
+  )
   let saving = $state(false)
   let formError = $state<AppError | null>(null)
+
+  function addCriterion(): void {
+    formRubric = [...formRubric, { description: '', points: 1 }]
+  }
+
+  function removeCriterion(index: number): void {
+    formRubric = formRubric.filter((_, i) => i !== index)
+  }
 
   function parseTools(text: string): string[] {
     return text
@@ -64,6 +76,14 @@
         prompt: formPrompt.trim(),
         expectedToolsCalled: parseTools(formExpectCalled),
         expectedToolsNotCalled: parseTools(formExpectNotCalled),
+        // Drop empty criteria; renumber ids 1..N in display order.
+        rubric: formRubric
+          .filter((c) => c.description.trim())
+          .map((c, i) => ({
+            id: i + 1,
+            description: c.description.trim(),
+            points: Math.max(0, Math.round(c.points) || 0),
+          })),
       }
       if (editCase) {
         await updateCase(editCase.id, payload)
@@ -159,6 +179,50 @@
         </button>
       </div>
     </div>
+    <div class="field">
+      <span class="field-label"
+        >Rubric <span class="optional">(scored criteria for LLM evaluation)</span></span
+      >
+      {#if formRubric.length === 0}
+        <p class="field-hinttext">
+          No criteria. Add criteria to let a judge model score this case after a run.
+        </p>
+      {/if}
+      {#each formRubric as crit, i (i)}
+        <div class="rubric-row">
+          <input
+            class="field-input rubric-desc"
+            type="text"
+            placeholder="What the answer must do…"
+            bind:value={crit.description}
+            disabled={saving}
+          />
+          <input
+            class="field-input rubric-points"
+            type="number"
+            min="0"
+            step="1"
+            aria-label="Points"
+            bind:value={crit.points}
+            disabled={saving}
+          />
+          <span class="rubric-pts">pts</span>
+          <button
+            type="button"
+            class="icon-btn"
+            title="Remove criterion"
+            aria-label="Remove criterion"
+            onclick={() => removeCriterion(i)}
+            disabled={saving}
+          >
+            <Icon path={iconTrash} />
+          </button>
+        </div>
+      {/each}
+      <button type="button" class="btn btn-sm rubric-add" onclick={addCriterion} disabled={saving}>
+        <Icon path={iconPlus} /> Add criterion
+      </button>
+    </div>
     <div class="form-actions">
       <button class="btn" onclick={onClose} disabled={saving}>Cancel</button>
       <button class="btn btn-primary" onclick={handleSave} disabled={saving || !formPrompt.trim()}>
@@ -191,6 +255,28 @@
     text-transform: none;
     letter-spacing: 0;
     font-size: 0.75rem;
+  }
+  .rubric-row {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-bottom: 0.3rem;
+  }
+  .rubric-desc {
+    flex: 1;
+    min-width: 0;
+  }
+  .rubric-points {
+    width: 4rem;
+    flex: none;
+    text-align: right;
+  }
+  .rubric-pts {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+  .rubric-add {
+    margin-top: 0.15rem;
   }
   :global(.case-form-dialog) {
     max-width: min(520px, 95vw);

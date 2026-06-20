@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { activeRun, activeRunReport } from '../benchmarkStore'
+  import { activeRun, activeRunReport, activeRunEvaluations } from '../benchmarkStore'
   import { chatSessions, selectChat } from '../sessionStore'
   import { modelConfigs } from '../connectionStore'
   import { columnResize } from '../actions/columnResize'
@@ -7,12 +7,35 @@
   import Icon from './Icon.svelte'
   import DialogShell from './DialogShell.svelte'
   import BenchmarkCaseCard from './BenchmarkCaseCard.svelte'
-  import { iconView } from '../design/icons'
-  import type { CaseReport, NumberStats, BenchmarkRunCaseSnapshot } from '../backendTypes'
+  import EvaluationLaunchModal from './EvaluationLaunchModal.svelte'
+  import { iconView, iconAnalysis } from '../design/icons'
+  import type {
+    CaseReport,
+    NumberStats,
+    BenchmarkRunCaseSnapshot,
+    EvaluationCaseScore,
+  } from '../backendTypes'
 
   const run = $derived($activeRun)
   const report = $derived($activeRunReport)
   const isRunning = $derived(run != null && (run.status === 'pending' || run.status === 'running'))
+
+  // ── LLM evaluation ──────────────────────────────────────────────────
+  const evaluations = $derived($activeRunEvaluations)
+  const canEvaluate = $derived(run?.status === 'complete')
+  let showEvalDialog = $state(false)
+  // Single open per-case verdict drilldown, keyed `${evaluationId}:${caseId}`.
+  let expandedKey = $state<string | null>(null)
+
+  function judgeName(id: string): string {
+    return $modelConfigs.find((c) => c.id === id)?.name ?? id
+  }
+  function caseScoreLabel(c: EvaluationCaseScore): string {
+    return c.name?.trim() || c.sourceCaseId
+  }
+  function toggleExpand(key: string): void {
+    expandedKey = expandedKey === key ? null : key
+  }
 
   // Live clock so the elapsed-time of an in-progress run ticks forward.
   let now = $state(Date.now())
@@ -145,6 +168,11 @@
         <h2 class="benchmark-name">{run.benchmarkName}</h2>
         <IdBadge id={run.id} />
         <span class="status-pill {statusPillClass(run.status)}">{run.status}</span>
+        {#if canEvaluate}
+          <button class="btn btn-sm header-evaluate" onclick={() => (showEvalDialog = true)}>
+            <Icon path={iconAnalysis} /> Evaluate
+          </button>
+        {/if}
       </div>
       <div class="header-meta">
         <span class="meta-item">Model: <span class="meta-value">{modelName}</span></span>
@@ -285,6 +313,112 @@
         </div>
       {/if}
     </section>
+
+    <!-- LLM evaluation passes (rubric judging) -->
+    {#if evaluations.length > 0 || canEvaluate}
+      <section class="report-section">
+        <h3 class="section-title">LLM evaluation</h3>
+        {#if evaluations.length === 0}
+          <p class="config-empty">
+            No evaluation passes yet. Click “Evaluate” to score this run's sessions against their
+            case rubrics with a judge model.
+          </p>
+        {:else}
+          {#each evaluations as ev (ev.id)}
+            <div class="eval-pass">
+              <div class="eval-pass-head">
+                <span class="eval-judge"
+                  >Judge: <span class="meta-value">{judgeName(ev.judgeModelConfigId)}</span></span
+                >
+                <span class="status-pill {statusPillClass(ev.status)}">{ev.status}</span>
+                {#if ev.score.overallPct != null}
+                  <span class="eval-overall">{pct(ev.score.overallPct)}</span>
+                {/if}
+                <IdBadge id={ev.id} />
+              </div>
+              {#if ev.error}
+                <div class="run-error">{ev.error}</div>
+              {/if}
+              {#if ev.score.cases.length > 0}
+                <div class="table-scroll">
+                  <table class="data-table" use:columnResize>
+                    <colgroup>
+                      <col class="col-flex" />
+                      <col style="width: 5rem" />
+                      <col style="width: 12rem" />
+                      <col style="width: 5rem" />
+                      <col style="width: 4rem" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th>Case</th>
+                        <th class="col-num">Score</th>
+                        <th class="col-num">min/med/max</th>
+                        <th class="col-num">Scored</th>
+                        <th class="col-actions"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each ev.score.cases as c (c.sourceCaseId)}
+                        {@const key = `${ev.id}:${c.sourceCaseId}`}
+                        {@const scored = c.sessions.filter((s) => s.pct != null).length}
+                        <tr>
+                          <td
+                            ><span class="case-name" title={caseScoreLabel(c)}
+                              >{caseScoreLabel(c)}</span
+                            ></td
+                          >
+                          <td class="col-num">{pct(c.pctStats?.mean ?? null)}</td>
+                          <td class="col-num">
+                            {c.pctStats
+                              ? `${pct(c.pctStats.min)} / ${pct(c.pctStats.median)} / ${pct(c.pctStats.max)}`
+                              : '—'}
+                          </td>
+                          <td class="col-num">{scored}/{c.sessions.length}</td>
+                          <td class="col-actions">
+                            <span class="row-actions">
+                              <button
+                                class="icon-btn"
+                                title="Per-session verdicts"
+                                aria-label="Per-session verdicts"
+                                onclick={() => toggleExpand(key)}><Icon path={iconView} /></button
+                              >
+                            </span>
+                          </td>
+                        </tr>
+                        {#if expandedKey === key}
+                          <tr class="verdict-subrow">
+                            <td colspan="5">
+                              <div class="verdict-sessions">
+                                {#each c.sessions as s (s.analysisSessionId)}
+                                  <div class="verdict-session">
+                                    <span class="verdict-score"
+                                      >{s.awarded ?? '—'}{s.max != null ? `/${s.max}` : ''}</span
+                                    >
+                                    <span class="verdict-pct">{pct(s.pct)}</span>
+                                    <span class="verdict-ids">
+                                      run <IdBadge id={s.runSessionId} /> · judge
+                                      <IdBadge id={s.analysisSessionId} />
+                                    </span>
+                                    <span class="status-pill {statusPillClass(s.status)}"
+                                      >{s.status}</span
+                                    >
+                                  </div>
+                                {/each}
+                              </div>
+                            </td>
+                          </tr>
+                        {/if}
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              {/if}
+            </div>
+          {/each}
+        {/if}
+      </section>
+    {/if}
   </div>
 {/if}
 
@@ -342,6 +476,10 @@
       {/if}
     </div>
   </DialogShell>
+{/if}
+
+{#if showEvalDialog && run}
+  <EvaluationLaunchModal runId={run.id} onClose={() => (showEvalDialog = false)} />
 {/if}
 
 <style>
@@ -426,6 +564,59 @@
   }
   .empty-note {
     font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+  .header-evaluate {
+    margin-left: auto;
+  }
+  .eval-pass {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-surface);
+  }
+  .eval-pass-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+  }
+  .eval-overall {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--green-bright);
+  }
+  .verdict-subrow > td {
+    padding: 0.4rem 0.6rem;
+    background: var(--bg-base);
+  }
+  .verdict-sessions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .verdict-session {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.8rem;
+  }
+  .verdict-score {
+    font-weight: 600;
+    color: var(--text-bright);
+    min-width: 3rem;
+  }
+  .verdict-pct {
+    color: var(--green-bright);
+    min-width: 2.5rem;
+  }
+  .verdict-ids {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
     color: var(--text-dim);
   }
 </style>

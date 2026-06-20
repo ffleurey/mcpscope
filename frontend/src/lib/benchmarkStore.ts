@@ -8,6 +8,8 @@ import {
   deleteCase as deleteBackendCase,
   getBenchmark,
   getBenchmarkRun,
+  getEvaluations as getBackendEvaluations,
+  launchEvaluation as launchBackendEvaluation,
   launchRun as launchBackendRun,
   listBenchmarks,
   patchBenchmark as patchBackendBenchmark,
@@ -17,8 +19,10 @@ import type {
   Benchmark,
   BenchmarkCase,
   BenchmarkDetailResponse,
+  BenchmarkEvaluationReport,
   BenchmarkRun,
   BenchmarkSummary,
+  RubricCriterion,
   RunReport,
 } from './backendTypes'
 import { refreshSessions } from './sessionStore'
@@ -28,6 +32,8 @@ export const runs = writable<BenchmarkRun[]>([])
 export const activeRunId = writable<string | null>(null)
 export const activeRunReport = writable<RunReport | null>(null)
 export const activeRun = writable<BenchmarkRun | null>(null)
+/** Evaluation passes for the active run, each with computed scores. */
+export const activeRunEvaluations = writable<BenchmarkEvaluationReport[]>([])
 
 // Active benchmark detail view (mutually exclusive with run/chat selection).
 export const activeBenchmarkId = writable<string | null>(null)
@@ -37,6 +43,7 @@ const TERMINAL_STATUSES = new Set(['complete', 'error'])
 const POLL_INTERVAL_MS = 700
 
 let pollTimer: ReturnType<typeof setTimeout> | null = null
+let evalPollTimer: ReturnType<typeof setTimeout> | null = null
 
 function sortByUpdatedAtDesc<T extends { updatedAt: number }>(records: T[]): T[] {
   return [...records].sort((left, right) => right.updatedAt - left.updatedAt)
@@ -72,6 +79,41 @@ function stopPolling(): void {
   }
 }
 
+function stopEvalPolling(): void {
+  if (evalPollTimer != null) {
+    clearTimeout(evalPollTimer)
+    evalPollTimer = null
+  }
+}
+
+function evaluationsInFlight(evals: BenchmarkEvaluationReport[]): boolean {
+  return evals.some((e) => e.status === 'pending' || e.status === 'running')
+}
+
+async function refreshActiveRunEvaluations(runId: string): Promise<BenchmarkEvaluationReport[]> {
+  const { evaluations } = await getBackendEvaluations(runId)
+  if (get(activeRunId) !== runId) return []
+  activeRunEvaluations.set(evaluations)
+  return evaluations
+}
+
+async function pollActiveRunEvaluations(runId: string): Promise<void> {
+  if (get(activeRunId) !== runId) return
+  try {
+    const evals = await refreshActiveRunEvaluations(runId)
+    // Surface the spawned judge child sessions in the sidebar as they appear.
+    await refreshSessions().catch(() => undefined)
+    if (!evaluationsInFlight(evals)) {
+      stopEvalPolling()
+      return
+    }
+  } catch {
+    // transient — keep polling while this run stays active
+  }
+  if (get(activeRunId) !== runId) return
+  evalPollTimer = setTimeout(() => void pollActiveRunEvaluations(runId), POLL_INTERVAL_MS)
+}
+
 async function pollActiveRun(runId: string): Promise<void> {
   if (get(activeRunId) !== runId) return
   try {
@@ -96,9 +138,11 @@ async function pollActiveRun(runId: string): Promise<void> {
 /** Open a run report. Clears chat + benchmark selection (mutual reset). */
 export async function selectRun(runId: string): Promise<void> {
   stopPolling()
+  stopEvalPolling()
   activeRunId.set(runId)
   activeRun.set(null)
   activeRunReport.set(null)
+  activeRunEvaluations.set([])
   clearBenchmarkSelection()
 
   // Mutual reset: opening a run clears the chat selection.
@@ -115,14 +159,24 @@ export async function selectRun(runId: string): Promise<void> {
     await refreshSessions().catch(() => undefined)
     pollTimer = setTimeout(() => void pollActiveRun(runId), POLL_INTERVAL_MS)
   }
+
+  // Load any evaluation passes; keep polling while one is still judging.
+  const evals = await refreshActiveRunEvaluations(runId).catch(
+    () => [] as BenchmarkEvaluationReport[],
+  )
+  if (get(activeRunId) === runId && evaluationsInFlight(evals)) {
+    evalPollTimer = setTimeout(() => void pollActiveRunEvaluations(runId), POLL_INTERVAL_MS)
+  }
 }
 
 /** Clear the active run (called when a chat is selected). */
 export function clearActiveRun(): void {
   stopPolling()
+  stopEvalPolling()
   activeRunId.set(null)
   activeRun.set(null)
   activeRunReport.set(null)
+  activeRunEvaluations.set([])
 }
 
 /** Clear the active benchmark detail (called when a run/chat is selected). */
@@ -190,6 +244,7 @@ export async function createCase(
     name?: string | null
     expectedToolsCalled?: string[]
     expectedToolsNotCalled?: string[]
+    rubric?: RubricCriterion[]
   },
 ): Promise<BenchmarkCase> {
   const { case: created } = await createBackendCase(benchmarkId, input)
@@ -213,6 +268,7 @@ export async function updateCase(
     prompt?: string
     expectedToolsCalled?: string[]
     expectedToolsNotCalled?: string[]
+    rubric?: RubricCriterion[]
   },
 ): Promise<BenchmarkCase> {
   const { case: updated } = await patchBackendCase(caseId, input)
@@ -237,6 +293,20 @@ export async function launchRun(
   upsertRun(run)
   await refreshBenchmarks()
   return run
+}
+
+/**
+ * Launch an evaluation pass over a completed run with the chosen judge model.
+ * The pass runs in the background; we poll its scores until it settles.
+ */
+export async function launchEvaluation(runId: string, judgeModelConfigId: string): Promise<void> {
+  await launchBackendEvaluation(runId, { judgeModelConfigId })
+  if (get(activeRunId) !== runId) return
+  await refreshActiveRunEvaluations(runId).catch(() => undefined)
+  stopEvalPolling()
+  if (get(activeRunId) === runId) {
+    evalPollTimer = setTimeout(() => void pollActiveRunEvaluations(runId), POLL_INTERVAL_MS)
+  }
 }
 
 export async function removeRun(runId: string): Promise<void> {

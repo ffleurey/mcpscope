@@ -21,6 +21,9 @@ import {
   benchmarkCaseResponseSchema,
   benchmarkRunResponseSchema,
   benchmarkRunReportResponseSchema,
+  benchmarkEvaluationResponseSchema,
+  benchmarkEvaluationsResponseSchema,
+  type RubricCriterion,
   type LmStudioConnection,
   type McpServerProfile,
   type ModelConfig,
@@ -547,6 +550,7 @@ export function createCase(
     name?: string | null
     expectedToolsCalled?: string[]
     expectedToolsNotCalled?: string[]
+    rubric?: RubricCriterion[]
   },
 ) {
   return request(`/api/benchmarks/${encodeURIComponent(benchmarkId)}/cases`, {
@@ -575,6 +579,7 @@ export function patchCase(
     orderIndex?: number
     expectedToolsCalled?: string[]
     expectedToolsNotCalled?: string[]
+    rubric?: RubricCriterion[]
   },
 ) {
   return request(`/api/benchmark-cases/${encodeURIComponent(caseId)}`, {
@@ -615,6 +620,20 @@ export function getBenchmarkRun(runId: string) {
 export function deleteBenchmarkRun(runId: string) {
   return request<void>(`/api/benchmark-runs/${encodeURIComponent(runId)}`, {
     method: 'DELETE',
+  })
+}
+
+export function launchEvaluation(runId: string, input: { judgeModelConfigId: string }) {
+  return request(`/api/benchmark-runs/${encodeURIComponent(runId)}/evaluations`, {
+    method: 'POST',
+    body: input,
+    schema: benchmarkEvaluationResponseSchema,
+  })
+}
+
+export function getEvaluations(runId: string) {
+  return request(`/api/benchmark-runs/${encodeURIComponent(runId)}/evaluations`, {
+    schema: benchmarkEvaluationsResponseSchema,
   })
 }
 
