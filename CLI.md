@@ -106,7 +106,7 @@ Returns the current lifecycle state of a session.
 
 ### `mcpscope inspect <id> [--short] [--json]`
 
-Inspects any object by hierarchical ID. Calls `GET /api/lookup/:id`.
+Inspects any object by ID. Calls `GET /api/lookup/:id` — the same operation the UI's id-pill and the MCP `mcpscope_inspect` tool use, so every surface returns identical payloads.
 
 | ID format       | Type    | Example        |
 |-----------------|---------|----------------|
@@ -119,6 +119,10 @@ Inspects any object by hierarchical ID. Calls `GET /api/lookup/:id`.
 | `SSS.W.NT.N`    | round   | `QGWA.4W.1T.2` |
 | `SSS.NT.N.N-X`  | part    | `QGWA.1T.2.3-U` |
 | `SSS.W.NT.N.N-X`| part    | `QGWA.4W.1T.2.3-R` |
+| `B-XXXX`        | benchmark  | `B-84JK`    |
+| `B-XXXX.N`      | case       | `B-84JK.1`  |
+| `R-XXXX`        | run (full mode adds the metrics report) | `R-C5PV` |
+| `E-XXXX`        | evaluation (with scores) | `E-HGTU` |
 
 `--short` omits part content (token counts only). Parts always return full content regardless of `--short`.
 

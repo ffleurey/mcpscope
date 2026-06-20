@@ -8,6 +8,7 @@
 
 import { z } from "zod";
 import type { OperationContext } from "./context.js";
+import { OperationError } from "./errors.js";
 import {
   createBenchmarkEntry,
   listBenchmarkEntries,
@@ -24,6 +25,12 @@ import {
   type BenchmarkRunProgress,
   type BenchmarkEvaluationReport,
 } from "./benchmark.js";
+import {
+  getBenchmark,
+  getBenchmarkCase,
+  getBenchmarkRun,
+  getBenchmarkEvaluation,
+} from "../persistence/benchmarkRepository.js";
 import type {
   BenchmarkRecord,
   BenchmarkCaseRecord,
@@ -256,6 +263,83 @@ function runReportToSnake(report: RunReport) {
     cases: report.cases.map(caseReportToSnake),
     per_tool: perToolRollupToSnake(report.perTool),
   };
+}
+
+// ── Unified inspect dispatch ─────────────────────────────────────────────────
+// The `inspect` operation (shared verbatim by the UI's id-pill lookup, the CLI,
+// and the MCP tool) resolves runtime hierarchical IDs itself. Benchmark-family
+// IDs (B- benchmark, B-X.N case, R- run, E- evaluation) are dispatched here so
+// every surface inspects them through the *same* snake_case payloads as the
+// dedicated benchmark_* operations — if one surface works, they all do.
+
+export interface BenchmarkInspectResult {
+  id: string;
+  type: string;
+  mode: string;
+  data: Record<string, unknown>;
+}
+
+function benchmarkNotFound(kind: string, id: string): never {
+  throw new OperationError(
+    `${kind} not found: ${id}`,
+    "hierarchical_id_not_found",
+  );
+}
+
+/**
+ * Resolve a benchmark-family ID to the same payload its dedicated operation
+ * returns. Returns null when `id` is not a benchmark-family ID, so the caller
+ * can fall through to the runtime hierarchical resolver.
+ */
+export function resolveBenchmarkInspect(
+  ctx: OperationContext,
+  id: string,
+  mode: "summary" | "full",
+): BenchmarkInspectResult | null {
+  if (id.startsWith("B-")) {
+    if (id.includes(".")) {
+      const found = getBenchmarkCase(ctx.db.connection, id);
+      if (!found) benchmarkNotFound("Benchmark case", id);
+      return { id, type: "benchmark_case", mode, data: caseToSnake(found) };
+    }
+    if (!getBenchmark(ctx.db.connection, id)) benchmarkNotFound("Benchmark", id);
+    const detail = getBenchmarkDetail(ctx.db, id);
+    return {
+      id,
+      type: "benchmark",
+      mode,
+      data: {
+        benchmark: benchmarkToSnake(detail.benchmark),
+        cases: detail.cases.map(caseToSnake),
+        runs: detail.runs.map(runToSnake),
+      },
+    };
+  }
+  if (id.startsWith("R-")) {
+    const run = getBenchmarkRun(ctx.db.connection, id);
+    if (!run) benchmarkNotFound("Benchmark run", id);
+    // summary = the run snapshot; full = + the computed metrics report.
+    const data: Record<string, unknown> = { run: runToSnake(run) };
+    if (mode === "full") {
+      data.report = runReportToSnake(getBenchmarkRunReport(ctx.db, id).report);
+    }
+    return { id, type: "benchmark_run", mode, data };
+  }
+  if (id.startsWith("E-")) {
+    const ev = getBenchmarkEvaluation(ctx.db.connection, id);
+    if (!ev) benchmarkNotFound("Benchmark evaluation", id);
+    const report = getBenchmarkRunEvaluationReports(ctx.db, ev.runId).find(
+      (r) => r.id === id,
+    );
+    if (!report) benchmarkNotFound("Benchmark evaluation", id);
+    return {
+      id,
+      type: "benchmark_evaluation",
+      mode,
+      data: { evaluation: evaluationReportToSnake(report) },
+    };
+  }
+  return null;
 }
 
 // ── Shared zod output sub-shapes ─────────────────────────────────────────────

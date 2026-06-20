@@ -26,7 +26,7 @@ Seven session/config tools:
 | `mcpscope_create`           | `mcpscope create`                  | Create a session from defaults or explicit model/MCP selection |
 | `mcpscope_send`             | `mcpscope send`                    | Start a user turn |
 | `mcpscope_status`           | `mcpscope status`                  | Get session lifecycle state |
-| `mcpscope_inspect`          | `mcpscope inspect`                 | Inspect any object by hierarchical ID |
+| `mcpscope_inspect`          | `mcpscope inspect`                 | Inspect any object by ID (sessions, parts, and benchmarks/cases/runs/evaluations) |
 | `mcpscope_list_model_configs` | `mcpscope list_model_configs`    | List all model configs |
 | `mcpscope_list_mcp_profiles`  | `mcpscope list_mcp_profiles`     | List all MCP server profiles |
 
@@ -86,7 +86,7 @@ No inputs.
 
 | Field  | Type    | Required | Description |
 |--------|---------|----------|-------------|
-| `id`   | string  | ✓        | Hierarchical ID (e.g. `ABCD`, `ABCD.S`, `ABCD.1T`, `ABCD.4W.1T.2`, `ABCD.4W.1T.2.3-R`). Inspecting a session, setup, step, turn, or round is useful for finding child IDs; inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content. |
+| `id`   | string  | ✓        | Any object ID. Runtime: `ABCD`, `ABCD.S`, `ABCD.1T`, `ABCD.4W.1T.2`, `ABCD.4W.1T.2.3-R`. Benchmark family: `B-XXXX` (benchmark), `B-XXXX.N` (case), `R-XXXX` (run; full mode adds the metrics report), `E-XXXX` (evaluation with scores). Inspecting a session, setup, step, turn, or round is useful for finding child IDs; inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content. |
 | `short`| boolean |          | Token counts only, no part content |
 
 ### `mcpscope_list_model_configs`
