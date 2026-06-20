@@ -1,0 +1,14 @@
+{
+  // Use the workspace TypeScript (node_modules/typescript, currently 6.0.x) for
+  // editor intellisense, so the IDE matches `npm run check` (svelte-check) exactly.
+  // Without this, VS Code analyzes .ts files with its own bundled TypeScript, which
+  // can be an older version that mis-resolves modules and shows phantom errors
+  // (e.g. "Module '../backendTypes' has no exported member …" on valid imports).
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+
+  // Run Svelte intellisense through the TypeScript language-service plugin so
+  // .svelte and .ts files are type-checked by the SAME (workspace) TS program.
+  // This keeps cross-file resolution consistent with svelte-check.
+  "svelte.enable-ts-plugin": true
+}
