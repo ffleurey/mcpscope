@@ -244,7 +244,11 @@ Issues found, with severity + proposed fix, get listed here as we work through t
   elevation shadow `0 10px 40px rgba(0,0,0,0.55)`, backdrop `0.55→0.62`. All dialogs inherit it
   (they all compose DialogShell); DESIGN-SYSTEM.md updated. **Maintainability check: passed** —
   one-file change, no per-dialog edits. check/lint/prettier clean.
-- **TR-13 (decision pending — eval-level retry; supersedes TR-11's recovery claim).** Confirmed the
+- **TR-13 (FIXED) — eval-level retry.** `POST /api/benchmark-evaluations/:id/retry` re-judges only
+  failed/incomplete run-sessions (clears stale judge session, re-runs init+step via judgeOneSession),
+  keeps scored ones, recomputes status; store `retryEvaluation` + Retry button beside the error on a
+  failed pass in RunReportView. Recovers a now-loaded model; scores fill in on read. Original notes below.
+- **TR-13 (original) — eval-level retry; supersedes TR-11's recovery claim.** Confirmed the
   per-session retry does NOT recover a judge session that died at **init** (model not loaded → first
   gateway call is init's token probe). `executeAnalysisLaunch` inits but doesn't enqueue the judge
   workflow (the coordinator does); `retry-init` re-runs init only → no judge step → no verdict → eval

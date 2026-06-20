@@ -28,6 +28,7 @@ import type {
   RunReport,
 } from './backendTypes'
 import { refreshSessions } from './sessionStore'
+import { followRunning } from './followStore'
 
 export const benchmarks = writable<BenchmarkSummary[]>([])
 export const runs = writable<BenchmarkRun[]>([])
@@ -139,6 +140,7 @@ async function pollActiveRun(runId: string): Promise<void> {
 
 /** Open a run report. Clears chat + benchmark selection (mutual reset). */
 export async function selectRun(runId: string): Promise<void> {
+  followRunning.set(false)
   stopPolling()
   stopEvalPolling()
   activeRunId.set(runId)
@@ -192,6 +194,7 @@ export function clearBenchmarkSelection(): void {
  * the active run + chat selection so exactly one main-pane entity renders.
  */
 export async function selectBenchmark(benchmarkId: string): Promise<void> {
+  followRunning.set(false)
   activeBenchmarkId.set(benchmarkId)
   activeBenchmarkDetail.set(null)
 
