@@ -226,46 +226,27 @@ What this means:
 
 ## Canonical IDs
 
-Runtime IDs follow the same tree (numbering is positional — see [Numbering](#numbering)):
+IDs mirror the runtime tree, so the shape always tells you the kind:
 
 - `AB12` — session
-- `AB12.S` — setup
-- `AB12.S.1-SP` — setup part
-- `AB12.1T` — turn
+- `AB12.S` — setup; `AB12.S.1-SP` — setup part
+- `AB12.1T` — turn; `AB12.1T.1` — round; `AB12.1T.1.3-U` — round part
 - `AB12.3W` — workflow step; `AB12.3W.1T` — a turn it owns
-- `AB12.1T.1` — round
-- `AB12.1T.1.3-U` — round part
+- `AB12.1C` — compaction step
 
-Part suffixes encode the public part type:
+**Numbering is positional**: the number on each step segment is the node's 1-based position in
+its parent's ordered list (`3W` = step 3, `1T` = turn/round 1). It is shared across all step
+subtypes — workflow (`W`), compaction (`C`), and turn (`T`) all draw from the session's single
+ordered step list. Session IDs stay short, stable, and human-readable.
 
-- `SP` — `system_prompt`
-- `MI` — `mcp_instructions`
-- `TD` — `tool_definitions`
-- `U` — `user_prompt`
-- `R` — `reasoning`
-- `T` — `tool_call`
-- `A` — `assistant_answer`
-
-Session IDs should stay short, stable, and human-readable.
+Part suffixes encode the public part type: `SP` `system_prompt`, `MI` `mcp_instructions`,
+`TD` `tool_definitions`, `U` `user_prompt`, `R` `reasoning`, `T` `tool_call`,
+`A` `assistant_answer`.
 
 **Benchmark-family IDs** extend the same type-tagged scheme *outside* the runtime tree — a bare
 4-char code is always a session, a prefixed code is a benchmark object: `B-7K3M` (benchmark),
 `B-7K3M.3` (case), `R-9QX4` (run), `E-2F8P` (evaluation). Their structure and lifecycles are
 owned by [BENCHMARK.md → IDs](BENCHMARK.md#ids).
-
-## Numbering
-
-All numbering is positional: the suffix of the canonical ID encodes the node's
-position within its parent container. For example:
-
-- `SSS.1T` — turn at position 1 in the session's step list
-- `SSS.3W.1T` — turn at position 1 within workflow step at position 3
-- `SSS.3W.1T.2` — round 2 of that turn
-- `SSS.1C` — compaction step at position 1
-
-Numbering is shared across all step subtypes (workflow, compaction, turn) within
-a session. The number is the step's position in the session's ordered step list,
-starting at 1.
 
 ## Lookup model rules
 
