@@ -7,7 +7,9 @@ plan and the rationale behind it. Supersedes the framing in
 
 Related prior candidates (cross-reference, do not duplicate):
 `benchmark-automation.md`, `session-batch-runs.md`, `session-analysis-agent.md`,
-`session-analysis-hybrid-workflow-v1.md`.
+`session-analysis-hybrid-workflow-v1.md`. The concrete V1 evaluation/scoring design now lives
+in `benchmark-llm-evaluation-v1.md` (per-case scored rubric + separate judge model with
+push+pull observability) — that is the next V1 increment.
 
 ## Framing
 
