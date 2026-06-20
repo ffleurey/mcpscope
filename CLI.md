@@ -213,6 +213,14 @@ Creates a case from an existing session: uses its first user message as the prom
 
 JSON output: same `{ case }` shape as `benchmark_add_case`.
 
+### `mcpscope benchmark_update_case <case_id> [--name <text>] [--prompt <text>] [--order <n>] [--expect-tool <name>]... [--forbid-tool <name>]... [--rubric-json <json>] [--json]`
+
+Edits an existing case; only the fields you pass change. `--expect-tool` / `--forbid-tool` (repeatable) **replace** the respective check; `--rubric-json` takes a JSON array of `{ id, description, points }` and replaces the rubric. JSON output: same `{ case }` shape as `benchmark_add_case`. (The MCP tool takes the rubric as a structured `rubric` array directly.)
+
+### `mcpscope benchmark_delete_case <case_id> [--json]`
+
+Deletes a case from its benchmark (past runs keep their own snapshot). JSON output: `{ case_id, deleted }`.
+
 ### `mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--wait] [--json]`
 
 Launches a benchmark run in the background and returns the run immediately (`status: "pending"`).
@@ -279,9 +287,12 @@ mcpscope inspect ABCD.1T
 | `--model-config <id>` | `create`, `benchmark_run` | model config ID (instead of default)|
 | `--mcp-profile <id>` | `create`, `benchmark_run` | repeatable; MCP profile IDs (instead of default-enabled) |
 | `--description <text>` | `benchmark_create` | optional benchmark description |
-| `--name <text>`    | `benchmark_add_case`, `benchmark_add_case_from_session` | optional case label |
-| `--expect-tool <name>` | `benchmark_add_case` | repeatable; tool that should be called |
-| `--forbid-tool <name>` | `benchmark_add_case` | repeatable; tool that should NOT be called |
+| `--name <text>`    | `benchmark_add_case`, `benchmark_add_case_from_session`, `benchmark_update_case` | optional case label |
+| `--prompt <text>`  | `benchmark_update_case` | new prompt text |
+| `--order <n>`      | `benchmark_update_case` | new position within the suite |
+| `--expect-tool <name>` | `benchmark_add_case`, `benchmark_update_case` | repeatable; tool that should be called |
+| `--forbid-tool <name>` | `benchmark_add_case`, `benchmark_update_case` | repeatable; tool that should NOT be called |
+| `--rubric-json <json>` | `benchmark_update_case` | JSON array of `{id, description, points}` to replace the rubric |
 | `--case <id>`      | `benchmark_run`    | repeatable; subset of case ids to run |
 | `--repetitions <n>` | `benchmark_run`   | times to run each case (default: 1) |
 | `--wait`           | `benchmark_run`    | poll run status until terminal, then print final progress |

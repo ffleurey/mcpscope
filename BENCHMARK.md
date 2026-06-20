@@ -121,16 +121,20 @@ case can have checks, a rubric, both, or neither.
 The agent-facing benchmark capabilities now live in the shared **operation catalog**
 (`backend/src/operations/catalog.ts`), so each is exposed identically through both adapters:
 every operation is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP
-parity). These ops return **snake_case** results, the operation-catalog convention. The ten
+parity). These ops return **snake_case** results, the operation-catalog convention. The twelve
 benchmark operations are:
 
 `benchmark_create`, `benchmark_list`, `benchmark_inspect`, `benchmark_add_case`,
-`benchmark_add_case_from_session`, `benchmark_run`, `benchmark_run_status`,
-`benchmark_run_report`, `benchmark_evaluate`, `benchmark_run_evaluations`.
+`benchmark_add_case_from_session`, `benchmark_update_case`, `benchmark_delete_case`,
+`benchmark_run`, `benchmark_run_status`, `benchmark_run_report`, `benchmark_evaluate`,
+`benchmark_run_evaluations`.
 
-`benchmark_add_case` accepts an optional `rubric`; `benchmark_evaluate` launches an LLM
-evaluation pass and `benchmark_run_evaluations` reads back the scored passes. See
-[CLI.md](CLI.md) for the CLI commands and [MCP.md](MCP.md) for the MCP tools.
+Cases are full read/write/edit for an agent collaborating with a developer:
+`benchmark_add_case` (+ `rubric`) and `benchmark_add_case_from_session` create,
+`benchmark_inspect` reads, `benchmark_update_case` edits any field (name, prompt, order,
+tool-behavior checks, rubric), and `benchmark_delete_case` removes. `benchmark_evaluate`
+launches an LLM evaluation pass and `benchmark_run_evaluations` reads back the scored passes.
+See [CLI.md](CLI.md) for the CLI commands and [MCP.md](MCP.md) for the MCP tools.
 
 The frontend keeps a separate set of **camelCase** HTTP routes (below); those are not part of
 the CLI/MCP parity surface.
@@ -181,6 +185,8 @@ the identical operations as `mcpscope_<id>` tools.
 | `GET` | `/api/operations/benchmarks/:benchmarkId` | `benchmark_inspect` |
 | `POST` | `/api/operations/benchmark-add-case` | `benchmark_add_case` |
 | `POST` | `/api/operations/benchmark-add-case-from-session` | `benchmark_add_case_from_session` |
+| `POST` | `/api/operations/benchmark-update-case` | `benchmark_update_case` |
+| `POST` | `/api/operations/benchmark-delete-case` | `benchmark_delete_case` |
 | `POST` | `/api/operations/benchmark-run` | `benchmark_run` |
 | `GET` | `/api/operations/benchmark-runs/:runId/status` | `benchmark_run_status` |
 | `GET` | `/api/operations/benchmark-runs/:runId/report` | `benchmark_run_report` |

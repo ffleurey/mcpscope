@@ -28,6 +28,10 @@ import {
   runBenchmarkAddCase,
   parseBenchmarkAddCaseFromSessionArgs,
   runBenchmarkAddCaseFromSession,
+  parseBenchmarkUpdateCaseArgs,
+  runBenchmarkUpdateCase,
+  parseBenchmarkDeleteCaseArgs,
+  runBenchmarkDeleteCase,
   parseBenchmarkRunArgs,
   runBenchmarkRun,
   parseBenchmarkRunStatusArgs,
@@ -56,6 +60,8 @@ function printHelp(): void {
   mcpscope benchmark_inspect <benchmark_id> [--json]
   mcpscope benchmark_add_case <benchmark_id> <prompt> [--name <text>] [--expect-tool <name>]... [--forbid-tool <name>]... [--json]
   mcpscope benchmark_add_case_from_session <benchmark_id> <session_id> [--name <text>] [--json]
+  mcpscope benchmark_update_case <case_id> [--name <text>] [--prompt <text>] [--order <n>] [--expect-tool <name>]... [--forbid-tool <name>]... [--rubric-json <json>] [--json]
+  mcpscope benchmark_delete_case <case_id> [--json]
   mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--wait] [--json]
   mcpscope benchmark_run_status <run_id> [--json]
   mcpscope benchmark_run_report <run_id> [--json]
@@ -247,6 +253,22 @@ export async function main(argv: string[]): Promise<void> {
     await dispatchFlat(
       parseBenchmarkAddCaseFromSessionArgs(benchmarkArgs),
       runBenchmarkAddCaseFromSession,
+    );
+    return;
+  }
+
+  if (cmd === "benchmark_update_case") {
+    await dispatchFlat(
+      parseBenchmarkUpdateCaseArgs(benchmarkArgs),
+      runBenchmarkUpdateCase,
+    );
+    return;
+  }
+
+  if (cmd === "benchmark_delete_case") {
+    await dispatchFlat(
+      parseBenchmarkDeleteCaseArgs(benchmarkArgs),
+      runBenchmarkDeleteCase,
     );
     return;
   }

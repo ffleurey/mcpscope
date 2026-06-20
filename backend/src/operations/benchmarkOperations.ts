@@ -14,6 +14,8 @@ import {
   getBenchmarkDetail,
   addBenchmarkCase,
   addBenchmarkCaseFromSession,
+  updateBenchmarkCaseEntry,
+  deleteBenchmarkCaseEntry,
   launchBenchmarkRun,
   getBenchmarkRunProgress,
   getBenchmarkRunReport,
@@ -512,6 +514,93 @@ export const benchmarkAddCaseFromSessionOperation = {
       { name: input.name ?? null },
     );
     return { case: caseToSnake(record) };
+  },
+};
+
+// ── benchmark_update_case ────────────────────────────────────────────────────
+
+export const benchmarkUpdateCaseInputSchema = z.object({
+  case_id: z.string().describe("Case to edit."),
+  name: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("New human label (null to clear)."),
+  prompt: z.string().min(1).optional().describe("New prompt text."),
+  order_index: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe("New position within the suite."),
+  expected_tools_called: z
+    .array(z.string())
+    .optional()
+    .describe("Replace the tools-that-should-be-called check."),
+  expected_tools_not_called: z
+    .array(z.string())
+    .optional()
+    .describe("Replace the tools-that-should-NOT-be-called check."),
+  rubric: z
+    .array(rubricCriterionShape)
+    .optional()
+    .describe("Replace the scored rubric ({id, description, points}[])."),
+});
+export type BenchmarkUpdateCaseInput = z.infer<
+  typeof benchmarkUpdateCaseInputSchema
+>;
+
+export const benchmarkUpdateCaseOutputSchema = { case: caseShape };
+
+export const benchmarkUpdateCaseOperation = {
+  id: "benchmark_update_case" as const,
+  description:
+    "Edit an existing case: any of name, prompt, order, tool-behavior checks, or "
+    + "rubric. Only the fields you pass change; the rest are left as-is.",
+  schema: benchmarkUpdateCaseInputSchema,
+  outputSchema: benchmarkUpdateCaseOutputSchema,
+  async execute(ctx: OperationContext, input: BenchmarkUpdateCaseInput) {
+    const record = updateBenchmarkCaseEntry(ctx.db, input.case_id, {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+      ...(input.order_index !== undefined
+        ? { orderIndex: input.order_index }
+        : {}),
+      ...(input.expected_tools_called !== undefined
+        ? { expectedToolsCalled: input.expected_tools_called }
+        : {}),
+      ...(input.expected_tools_not_called !== undefined
+        ? { expectedToolsNotCalled: input.expected_tools_not_called }
+        : {}),
+      ...(input.rubric !== undefined ? { rubric: input.rubric } : {}),
+    });
+    return { case: caseToSnake(record) };
+  },
+};
+
+// ── benchmark_delete_case ────────────────────────────────────────────────────
+
+export const benchmarkDeleteCaseInputSchema = z.object({
+  case_id: z.string().describe("Case to delete."),
+});
+export type BenchmarkDeleteCaseInput = z.infer<
+  typeof benchmarkDeleteCaseInputSchema
+>;
+
+export const benchmarkDeleteCaseOutputSchema = {
+  case_id: z.string(),
+  deleted: z.boolean(),
+};
+
+export const benchmarkDeleteCaseOperation = {
+  id: "benchmark_delete_case" as const,
+  description:
+    "Delete a case from a benchmark. Past runs keep their own snapshot of the case.",
+  schema: benchmarkDeleteCaseInputSchema,
+  outputSchema: benchmarkDeleteCaseOutputSchema,
+  async execute(ctx: OperationContext, input: BenchmarkDeleteCaseInput) {
+    deleteBenchmarkCaseEntry(ctx.db, input.case_id);
+    return { case_id: input.case_id, deleted: true };
   },
 };
 

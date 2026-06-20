@@ -25,6 +25,8 @@ import {
   benchmarkInspectOperation,
   benchmarkAddCaseOperation,
   benchmarkAddCaseFromSessionOperation,
+  benchmarkUpdateCaseOperation,
+  benchmarkDeleteCaseOperation,
   benchmarkRunOperation,
   benchmarkRunStatusOperation,
   benchmarkRunReportOperation,
@@ -317,6 +319,28 @@ export function registerBenchmarkRoutes({
       }
     },
   );
+
+  app.post("/api/operations/benchmark-update-case", async (request, reply) => {
+    try {
+      return await benchmarkUpdateCaseOperation.execute(
+        opCtx,
+        request.body as never,
+      );
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.post("/api/operations/benchmark-delete-case", async (request, reply) => {
+    try {
+      return await benchmarkDeleteCaseOperation.execute(
+        opCtx,
+        request.body as never,
+      );
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
 
   app.post("/api/operations/benchmark-run", async (request, reply) => {
     try {

@@ -14,6 +14,8 @@ const expectedCommandIds = [
   "benchmark_inspect",
   "benchmark_add_case",
   "benchmark_add_case_from_session",
+  "benchmark_update_case",
+  "benchmark_delete_case",
   "benchmark_run",
   "benchmark_run_status",
   "benchmark_run_report",

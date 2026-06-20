@@ -197,6 +197,11 @@ export interface BenchmarkAddCaseResult {
   case: BenchmarkCaseRecord;
 }
 
+export interface BenchmarkDeleteCaseResult {
+  case_id: string;
+  deleted: boolean;
+}
+
 export interface BenchmarkRunLaunchResult {
   run: BenchmarkRunRecord;
 }

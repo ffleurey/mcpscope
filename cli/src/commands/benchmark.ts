@@ -4,6 +4,8 @@ import {
   cliBenchmarkInspect,
   cliBenchmarkAddCase,
   cliBenchmarkAddCaseFromSession,
+  cliBenchmarkUpdateCase,
+  cliBenchmarkDeleteCase,
   cliBenchmarkRun,
   cliBenchmarkRunStatus,
   cliBenchmarkRunReport,
@@ -20,6 +22,7 @@ import type {
   BenchmarkRunReportResult,
   BenchmarkEvaluateResult,
   BenchmarkRunEvaluationsResult,
+  RubricCriterion,
   NumberStats,
   CaseReport,
 } from "../types.js";
@@ -709,6 +712,177 @@ export function parseBenchmarkRunStatusArgs(
   if (!runId) return { error: "Missing required argument: <run_id>" };
 
   return { opts: { url: url ?? "", json, runId } };
+}
+
+// ─── benchmark_update_case ─────────────────────────────────────────────────────
+
+export interface BenchmarkUpdateCaseOptions {
+  url: string;
+  json: boolean;
+  caseId: string;
+  name?: string | undefined;
+  prompt?: string | undefined;
+  orderIndex?: number | undefined;
+  expectedToolsCalled?: string[] | undefined;
+  expectedToolsNotCalled?: string[] | undefined;
+  rubric?: RubricCriterion[] | undefined;
+}
+
+export async function runBenchmarkUpdateCase(
+  opts: BenchmarkUpdateCaseOptions,
+): Promise<void> {
+  const result = await cliBenchmarkUpdateCase(opts.url, {
+    case_id: opts.caseId,
+    ...(opts.name !== undefined ? { name: opts.name } : {}),
+    ...(opts.prompt !== undefined ? { prompt: opts.prompt } : {}),
+    ...(opts.orderIndex !== undefined ? { order_index: opts.orderIndex } : {}),
+    ...(opts.expectedToolsCalled !== undefined
+      ? { expected_tools_called: opts.expectedToolsCalled }
+      : {}),
+    ...(opts.expectedToolsNotCalled !== undefined
+      ? { expected_tools_not_called: opts.expectedToolsNotCalled }
+      : {}),
+    ...(opts.rubric !== undefined ? { rubric: opts.rubric } : {}),
+  });
+
+  if (opts.json) {
+    emitJson(result);
+    return;
+  }
+
+  renderBenchmarkAddCase(result); // same { case } shape
+}
+
+export function parseBenchmarkUpdateCaseArgs(
+  args: string[],
+): ParseResult<BenchmarkUpdateCaseOptions> {
+  let url: string | undefined;
+  let json = false;
+  let caseId: string | undefined;
+  let name: string | undefined;
+  let prompt: string | undefined;
+  let orderIndex: number | undefined;
+  let expectedToolsCalled: string[] | undefined;
+  let expectedToolsNotCalled: string[] | undefined;
+  let rubric: RubricCriterion[] | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (arg === "-h" || arg === "--help") return { help: true };
+    if (arg === "--url") {
+      url = args[++i];
+      if (!url) return { error: "--url requires a value" };
+    } else if (arg === "--json") {
+      json = true;
+    } else if (arg === "--name") {
+      const val = args[++i];
+      if (val === undefined) return { error: "--name requires a value" };
+      name = val;
+    } else if (arg === "--prompt") {
+      const val = args[++i];
+      if (!val) return { error: "--prompt requires a value" };
+      prompt = val;
+    } else if (arg === "--order") {
+      const val = args[++i];
+      if (!val) return { error: "--order requires a value" };
+      const n = Number(val);
+      if (!Number.isInteger(n) || n < 0) {
+        return { error: "--order must be a non-negative integer" };
+      }
+      orderIndex = n;
+    } else if (arg === "--expect-tool") {
+      const val = args[++i];
+      if (!val) return { error: "--expect-tool requires a value" };
+      if (!expectedToolsCalled) expectedToolsCalled = [];
+      expectedToolsCalled.push(val);
+    } else if (arg === "--forbid-tool") {
+      const val = args[++i];
+      if (!val) return { error: "--forbid-tool requires a value" };
+      if (!expectedToolsNotCalled) expectedToolsNotCalled = [];
+      expectedToolsNotCalled.push(val);
+    } else if (arg === "--rubric-json") {
+      const val = args[++i];
+      if (!val) return { error: "--rubric-json requires a value" };
+      try {
+        const parsed: unknown = JSON.parse(val);
+        if (!Array.isArray(parsed)) {
+          return { error: "--rubric-json must be a JSON array of criteria" };
+        }
+        rubric = parsed as RubricCriterion[];
+      } catch {
+        return { error: "--rubric-json must be valid JSON" };
+      }
+    } else if (!arg.startsWith("-")) {
+      if (caseId !== undefined) return { error: "Too many arguments" };
+      caseId = arg;
+    } else {
+      return { error: `Unknown option: ${arg}` };
+    }
+  }
+
+  if (!caseId) return { error: "Missing required argument: <case_id>" };
+
+  const opts: BenchmarkUpdateCaseOptions = { url: url ?? "", json, caseId };
+  if (name !== undefined) opts.name = name;
+  if (prompt !== undefined) opts.prompt = prompt;
+  if (orderIndex !== undefined) opts.orderIndex = orderIndex;
+  if (expectedToolsCalled !== undefined) {
+    opts.expectedToolsCalled = expectedToolsCalled;
+  }
+  if (expectedToolsNotCalled !== undefined) {
+    opts.expectedToolsNotCalled = expectedToolsNotCalled;
+  }
+  if (rubric !== undefined) opts.rubric = rubric;
+  return { opts };
+}
+
+// ─── benchmark_delete_case ─────────────────────────────────────────────────────
+
+export interface BenchmarkDeleteCaseOptions {
+  url: string;
+  json: boolean;
+  caseId: string;
+}
+
+export async function runBenchmarkDeleteCase(
+  opts: BenchmarkDeleteCaseOptions,
+): Promise<void> {
+  const result = await cliBenchmarkDeleteCase(opts.url, { case_id: opts.caseId });
+
+  if (opts.json) {
+    emitJson(result);
+    return;
+  }
+
+  process.stdout.write(`Deleted case ${result.case_id}\n`);
+}
+
+export function parseBenchmarkDeleteCaseArgs(
+  args: string[],
+): ParseResult<BenchmarkDeleteCaseOptions> {
+  let url: string | undefined;
+  let json = false;
+  let caseId: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (arg === "-h" || arg === "--help") return { help: true };
+    if (arg === "--url") {
+      url = args[++i];
+      if (!url) return { error: "--url requires a value" };
+    } else if (arg === "--json") {
+      json = true;
+    } else if (!arg.startsWith("-")) {
+      if (caseId !== undefined) return { error: "Too many arguments" };
+      caseId = arg;
+    } else {
+      return { error: `Unknown option: ${arg}` };
+    }
+  }
+
+  if (!caseId) return { error: "Missing required argument: <case_id>" };
+
+  return { opts: { url: url ?? "", json, caseId } };
 }
 
 // ─── benchmark_evaluate ───────────────────────────────────────────────────────

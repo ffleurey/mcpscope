@@ -152,6 +152,21 @@ Same scores in snake_case → CLI/MCP parity holds.
 
 ## Triage / follow-ups
 
+- **TR-15 (decision pending — no MCP path to set a rubric on an existing case).** Test result:
+  rubrics can't be added to existing cases via MCP/CLI. `benchmark_add_case` supports `rubric`
+  (create-time only); there is NO edit-case catalog op — case edits go through the camelCase
+  `PATCH /api/benchmark-cases/:caseId` only (frontend surface). So agents can create-with-rubric
+  but not attach a rubric to an existing case (e.g. one made via `add_case_from_session`).
+  Options: (a) add `benchmark_update_case` op (or `rubric` on `add_case_from_session`) — consistent
+  fix, lean yes; (b) accept create-time-only + UI for edits. (Aside: this chat's MCP connection
+  cached the pre-Step-6 `add_case` schema, so even create-with-rubric isn't exercisable here without
+  a reconnect — a session artifact, not the gap.)
+- **TR-14 (FIXED) — "Follow running" mode.** Toggle in the execution bar ("Follow", eye icon,
+  amber when engaged): while on, the main view auto-opens the currently-streaming session
+  (run-sessions, judge sessions, analyses) via a $effect on `activeJob.target.sessionId`.
+  Disengages on any manual navigation (selectChat unless fromFollow; selectRun/selectBenchmark);
+  re-engage from the button. Leaf `followStore`. Frontend-only. Name/icon open to change.
+
 Issues found, with severity + proposed fix, get listed here as we work through the plan.
 
 - **TR-1 (low / won't-do for V1)** — No UI to reorder rubric criteria (T2). Ordering is

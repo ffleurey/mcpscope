@@ -16,7 +16,7 @@ The transport operates in **stateless mode** — no server-side session is maint
 
 ## Tool surface
 
-Seventeen tools mirror the shipped CLI surface exactly — every operation in the backend catalog is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP parity). Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
+Nineteen tools mirror the shipped CLI surface exactly — every operation in the backend catalog is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP parity). Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
 
 Seven session/config tools:
 
@@ -30,7 +30,7 @@ Seven session/config tools:
 | `mcpscope_list_model_configs` | `mcpscope list_model_configs`    | List all model configs |
 | `mcpscope_list_mcp_profiles`  | `mcpscope list_mcp_profiles`     | List all MCP server profiles |
 
-Ten benchmark tools (the agent-facing benchmark surface — see [BENCHMARK.md](BENCHMARK.md)):
+Twelve benchmark tools (the agent-facing benchmark surface — see [BENCHMARK.md](BENCHMARK.md)):
 
 | MCP tool name                           | CLI command                                | Description |
 |-----------------------------------------|--------------------------------------------|-------------|
@@ -39,6 +39,8 @@ Ten benchmark tools (the agent-facing benchmark surface — see [BENCHMARK.md](B
 | `mcpscope_benchmark_inspect`            | `mcpscope benchmark_inspect`               | Inspect a benchmark: its cases and runs |
 | `mcpscope_benchmark_add_case`           | `mcpscope benchmark_add_case`              | Add a case (prompt + optional tool expectations + optional rubric) |
 | `mcpscope_benchmark_add_case_from_session` | `mcpscope benchmark_add_case_from_session` | Add a case from an existing session's first prompt |
+| `mcpscope_benchmark_update_case`        | `mcpscope benchmark_update_case`           | Edit any field of an existing case (name, prompt, order, checks, rubric) |
+| `mcpscope_benchmark_delete_case`        | `mcpscope benchmark_delete_case`           | Delete a case from a benchmark |
 | `mcpscope_benchmark_run`                | `mcpscope benchmark_run`                   | Launch a run in the background; returns the run immediately |
 | `mcpscope_benchmark_run_status`         | `mcpscope benchmark_run_status`            | Cheap, pollable run progress (no session traces loaded) |
 | `mcpscope_benchmark_run_report`         | `mcpscope benchmark_run_report`            | Full compute-on-read metrics report (loads session traces) |
@@ -130,6 +132,26 @@ No inputs. Returns all benchmarks with id, name, description, case count, and ru
 | `benchmark_id` | string         | ✓        | Benchmark to add the case to |
 | `session_id`   | string         | ✓        | Session to extract the initiating prompt from; pre-fills `expected_tools_called` with the tools that session actually called |
 | `name`         | string \| null |          | Optional human label |
+
+### `mcpscope_benchmark_update_case`
+
+Edit an existing case; only the fields you pass change. Returns the updated `{ case }`.
+
+| Field                       | Type           | Required | Description |
+|-----------------------------|----------------|----------|-------------|
+| `case_id`                   | string         | ✓        | Case to edit |
+| `name`                      | string \| null |          | New label (null clears it) |
+| `prompt`                    | string         |          | New prompt text |
+| `order_index`               | number         |          | New position within the suite |
+| `expected_tools_called`     | string[]       |          | Replace the should-be-called check |
+| `expected_tools_not_called` | string[]       |          | Replace the should-NOT-be-called check |
+| `rubric`                    | object[]       |          | Replace the rubric: each `{ id, description, points }` |
+
+### `mcpscope_benchmark_delete_case`
+
+| Field     | Type   | Required | Description |
+|-----------|--------|----------|-------------|
+| `case_id` | string | ✓        | Case to delete (past runs keep their snapshot) |
 
 ### `mcpscope_benchmark_run`
 

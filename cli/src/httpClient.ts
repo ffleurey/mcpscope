@@ -27,6 +27,8 @@ import type {
   BenchmarkRunReportResult,
   BenchmarkEvaluateResult,
   BenchmarkRunEvaluationsResult,
+  BenchmarkDeleteCaseResult,
+  RubricCriterion,
 } from "./types.js";
 
 // ─── HTTP primitives ──────────────────────────────────────────────────────────
@@ -257,6 +259,38 @@ export async function cliBenchmarkAddCaseFromSession(
   return post<BenchmarkAddCaseResult>(
     baseUrl,
     "/api/operations/benchmark-add-case-from-session",
+    body,
+  );
+}
+
+/** POST /api/operations/benchmark-update-case → BenchmarkAddCaseResult */
+export async function cliBenchmarkUpdateCase(
+  baseUrl: string,
+  body: {
+    case_id: string;
+    name?: string | null;
+    prompt?: string;
+    order_index?: number;
+    expected_tools_called?: string[];
+    expected_tools_not_called?: string[];
+    rubric?: RubricCriterion[];
+  },
+): Promise<BenchmarkAddCaseResult> {
+  return post<BenchmarkAddCaseResult>(
+    baseUrl,
+    "/api/operations/benchmark-update-case",
+    body,
+  );
+}
+
+/** POST /api/operations/benchmark-delete-case → BenchmarkDeleteCaseResult */
+export async function cliBenchmarkDeleteCase(
+  baseUrl: string,
+  body: { case_id: string },
+): Promise<BenchmarkDeleteCaseResult> {
+  return post<BenchmarkDeleteCaseResult>(
+    baseUrl,
+    "/api/operations/benchmark-delete-case",
     body,
   );
 }
