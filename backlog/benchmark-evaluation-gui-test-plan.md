@@ -152,7 +152,22 @@ Same scores in snake_case → CLI/MCP parity holds.
 
 ## Triage / follow-ups
 
-- **TR-16 (decision pending — hard "kill" / abort for the active turn).** Pause is cooperative
+- **TR-17 (decision pending — orphaned/incomplete evaluations not recoverable).** Observed: E-BT5T
+  stuck `status: running` with 1 of 8 run-sessions judged (coordinator interrupted by the looping
+  judge + server restarts; fire-and-forget loop never resumed — same class as "restart leaves run
+  running"). Gaps: (a) Retry only shows on `status==='error'`, so a stuck `running` has no UI
+  recovery; (b) completeness isn't computed on read — report trusts stored status + counts only
+  recorded entries, looks "done" with 1 result. **Fix:** (1) startup reconcile: `pending`/`running`
+  evals (and runs) → `error` ("interrupted; retry") since no coordinator survives a restart; (2)
+  `getBenchmarkRunEvaluationReports` reports judged-vs-expected (expected = run completed sessions),
+  pass is incomplete when K<N; (3) retry skip-if-verdict (keep already-judged sessions, e.g. PKW2);
+  (4) UI: Retry on incomplete/error + show "K/N judged". Build pending user OK.
+
+- **TR-16 (FIXED) — hard kill switch.** Scheduler holds a per-job `AbortController` and wraps the
+  job's gateway to inject the signal into every model call (no deep threading); `abortActive()` +
+  `POST /api/scheduler/abort` + a red "Stop" button in the execution bar (active-job only). Aborts
+  the in-flight fetch for any provider; turn fails → session retryable. No schema change. Original
+  notes below. Pause is cooperative
   (stops new turns only); a looping turn (e.g. a judge stuck in reasoning) only dies on context
   exhaustion. No abort plumbing exists (`AbortController` absent). Plan: thread an `AbortSignal`
   scheduler→turn→gateway→`fetch` — one shared gateway fetch site (`services/openai/client.ts`),

@@ -309,6 +309,11 @@ verdict. Scores recompute on read, so the pass's score fills in as the re-judged
 complete. (A whole pass can also just be deleted and re-run, and individual judge sessions remain
 inspectable/retryable in the run tree like any analysis session.)
 
+A pass reports `judgedSessions`/`expectedSessions` (expected = the run's completed sessions), so
+one that didn't judge everything — failed judges, or orphaned by a restart (reconciled to `error`
+on startup) — shows as **incomplete** with a Retry button, rather than appearing done with a
+partial result.
+
 ## Tutorial: benchmark an MCP server via MCP (for coding agents)
 
 You are a coding agent iterating on an MCP server and want a repeatable check. mcpscope
@@ -354,7 +359,10 @@ MCP server profile under test in mcpscope's configuration. Discover their ids wi
 ## Known limitations
 
 - Runs **and** evaluations are sequential (one scheduler queue); no concurrency.
-- A server restart mid-run (or mid-evaluation) leaves it `running` (the in-memory queue is
-  cleared; no resume yet).
+- Their coordinators are in-process and do not survive a restart: a run/evaluation interrupted
+  mid-flight is reconciled to `error` on the next startup (rather than left `running`). A run is
+  re-run; an evaluation is **retried** (it re-judges only the missing/failed sessions). An
+  evaluation also reports `judged/expected` sessions, so a partially-judged pass shows as
+  incomplete with a Retry affordance.
 - Evaluation scores are computed on read from verdict artifacts; there is no stored aggregate
   or cross-run/cross-judge comparison view yet (compare passes by reading each one).

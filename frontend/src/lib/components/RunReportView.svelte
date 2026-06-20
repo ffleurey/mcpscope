@@ -20,6 +20,7 @@
     NumberStats,
     BenchmarkRunCaseSnapshot,
     EvaluationCaseScore,
+    BenchmarkEvaluationReport,
   } from '../backendTypes'
 
   const run = $derived($activeRun)
@@ -47,6 +48,15 @@
   }
   async function handleRetryEvaluation(id: string): Promise<void> {
     await retryEvaluation(id)
+  }
+  function evalIncomplete(ev: BenchmarkEvaluationReport): boolean {
+    return ev.judgedSessions < ev.expectedSessions
+  }
+  // Retry once the pass is settled (not actively judging) and it either failed or
+  // didn't judge every session — covers errored passes and ones orphaned by a restart.
+  function canRetryEvaluation(ev: BenchmarkEvaluationReport): boolean {
+    if (ev.status === 'pending' || ev.status === 'running') return false
+    return ev.status === 'error' || evalIncomplete(ev)
   }
 
   // Live clock so the elapsed-time of an in-progress run ticks forward.
@@ -343,15 +353,20 @@
                   >Judge: <span class="meta-value">{judgeName(ev.judgeModelConfigId)}</span></span
                 >
                 <span class="status-pill {statusPillClass(ev.status)}">{ev.status}</span>
+                {#if evalIncomplete(ev)}
+                  <span class="eval-incomplete" title="Not all run sessions have been judged">
+                    {ev.judgedSessions}/{ev.expectedSessions} judged
+                  </span>
+                {/if}
                 {#if ev.score.overallPct != null}
                   <span class="eval-overall">{pct(ev.score.overallPct)}</span>
                 {/if}
                 <IdBadge id={ev.id} />
                 <span class="eval-actions">
-                  {#if ev.status === 'error'}
+                  {#if canRetryEvaluation(ev)}
                     <button
                       class="icon-btn"
-                      title="Retry failed judge sessions"
+                      title="Retry: judge the missing/failed sessions"
                       aria-label="Retry evaluation"
                       onclick={() => handleRetryEvaluation(ev.id)}
                     >
@@ -620,6 +635,10 @@
     font-size: 0.95rem;
     font-weight: 600;
     color: var(--green-bright);
+  }
+  .eval-incomplete {
+    font-size: 0.75rem;
+    color: var(--amber-bright);
   }
   .eval-actions {
     margin-left: auto;

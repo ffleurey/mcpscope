@@ -88,6 +88,8 @@ function evaluationToSnake(e: BenchmarkEvaluationRecord) {
 function evaluationReportToSnake(e: BenchmarkEvaluationReport) {
   return {
     ...evaluationToSnake(e),
+    expected_sessions: e.expectedSessions,
+    judged_sessions: e.judgedSessions,
     score: {
       overall_pct: e.score.overallPct,
       cases: e.score.cases.map((c) => ({
@@ -843,6 +845,8 @@ export type BenchmarkRunEvaluationsInput = z.infer<
 export const benchmarkRunEvaluationsOutputSchema = {
   evaluations: z.array(
     evaluationShape.extend({
+      expected_sessions: z.number(),
+      judged_sessions: z.number(),
       score: z.object({
         overall_pct: z.number().nullable(),
         cases: z.array(

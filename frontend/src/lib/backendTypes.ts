@@ -757,6 +757,8 @@ export const benchmarkEvaluationSchema = z.object({
 })
 
 export const benchmarkEvaluationReportSchema = benchmarkEvaluationSchema.extend({
+  expectedSessions: z.number().int().nonnegative().default(0),
+  judgedSessions: z.number().int().nonnegative().default(0),
   score: evaluationScoreSchema,
 })
 

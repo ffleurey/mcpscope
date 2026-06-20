@@ -907,6 +907,10 @@ export function retryBenchmarkEvaluation(
 export interface BenchmarkEvaluationReport extends BenchmarkEvaluationRecord {
   /** Computed-on-read scores from the per-session verdict artifacts. */
   score: EvaluationScore;
+  /** Run sessions the pass should judge (the run's completed sessions). */
+  expectedSessions: number;
+  /** How many of those produced a verdict. The pass is incomplete when < expected. */
+  judgedSessions: number;
 }
 
 /**
@@ -929,6 +933,11 @@ export function getBenchmarkRunEvaluationReports(
   const runSessionToCase = new Map(
     run.sessions.map((s) => [s.sessionId, s.sourceCaseId]),
   );
+  // A pass should judge every completed run-session; it is incomplete (and
+  // retryable) until each of those has a verdict.
+  const expectedSessions = run.sessions.filter(
+    (s) => s.status === "complete",
+  ).length;
 
   return listBenchmarkEvaluationsByRun(db.connection, runId).map((ev) => {
     const sessions: EvaluationSessionScore[] = ev.sessions.map((es) => {
@@ -953,7 +962,13 @@ export function getBenchmarkRunEvaluationReports(
         pct: scorePct(awarded, max),
       };
     });
-    return { ...ev, score: aggregateEvaluationScore(sessions, caseNames) };
+    const judgedSessions = sessions.filter((s) => s.pct != null).length;
+    return {
+      ...ev,
+      score: aggregateEvaluationScore(sessions, caseNames),
+      expectedSessions,
+      judgedSessions,
+    };
   });
 }
 
@@ -999,8 +1014,10 @@ async function runEvaluationCoordinator(
               BENCHMARK_EVAL_KEY.VERDICT,
             )
           : null;
-        // Keep sessions that already produced a verdict; re-judge the rest.
-        if (entry && entry.status === "complete" && verdict) continue;
+        // Keep any session that already produced a verdict (even if its entry
+        // status is stale, e.g. left 'running' by an interrupted pass); re-judge
+        // only the genuinely missing/failed ones.
+        if (verdict) continue;
         if (entry) {
           try {
             deleteSessionRecord(db.connection, entry.analysisSessionId);
