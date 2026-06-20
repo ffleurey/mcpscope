@@ -165,6 +165,7 @@ Heavier than status (loads session traces). Returns the run plus the full metric
 |-------------------------|--------|----------|-------------|
 | `run_id`                | string | ✓        | Completed run to evaluate |
 | `judge_model_config_id` | string | ✓        | Model config for the judge (a separate model; never the task model) |
+| `temperature`           | number |          | Judge sampling temperature (default `0` = deterministic) |
 
 Returns the evaluation immediately with `status: "pending"`; a background coordinator launches one `benchmark_evaluation` analysis session per run-session. Repeatable — call again with a different judge to compare. Poll `mcpscope_benchmark_run_evaluations` for scores.
 

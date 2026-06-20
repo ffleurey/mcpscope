@@ -718,6 +718,7 @@ export interface BenchmarkEvaluateOptions {
   json: boolean;
   runId: string;
   judgeModelConfigId: string;
+  temperature?: number | undefined;
 }
 
 export async function runBenchmarkEvaluate(
@@ -726,6 +727,7 @@ export async function runBenchmarkEvaluate(
   const result = await cliBenchmarkEvaluate(opts.url, {
     run_id: opts.runId,
     judge_model_config_id: opts.judgeModelConfigId,
+    ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
   });
 
   if (opts.json) {
@@ -740,7 +742,7 @@ function renderBenchmarkEvaluate(result: BenchmarkEvaluateResult): void {
   const { evaluation: e } = result;
   process.stdout.write(`${bold(e.id)}  ${e.status}\n`);
   process.stdout.write(`  run    ${e.run_id}\n`);
-  process.stdout.write(`  judge  ${e.judge_model_config_id}\n`);
+  process.stdout.write(`  judge  ${e.judge_model_config_id}  (temp ${e.judge_temperature})\n`);
   process.stdout.write(
     `\nRun 'mcpscope benchmark_run_evaluations ${e.run_id}' for scores.\n`,
   );
@@ -753,6 +755,7 @@ export function parseBenchmarkEvaluateArgs(
   let json = false;
   let runId: string | undefined;
   let judgeModelConfigId: string | undefined;
+  let temperature: number | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i] ?? "";
@@ -766,6 +769,14 @@ export function parseBenchmarkEvaluateArgs(
       const val = args[++i];
       if (!val) return { error: "--judge-model requires a value" };
       judgeModelConfigId = val;
+    } else if (arg === "--temperature") {
+      const val = args[++i];
+      if (!val) return { error: "--temperature requires a value" };
+      const n = Number(val);
+      if (!Number.isFinite(n) || n < 0) {
+        return { error: "--temperature must be a non-negative number" };
+      }
+      temperature = n;
     } else if (!arg.startsWith("-")) {
       if (runId !== undefined) {
         return { error: "Too many arguments" };
@@ -781,7 +792,14 @@ export function parseBenchmarkEvaluateArgs(
     return { error: "Missing required option: --judge-model <model_config_id>" };
   }
 
-  return { opts: { url: url ?? "", json, runId, judgeModelConfigId } };
+  const opts: BenchmarkEvaluateOptions = {
+    url: url ?? "",
+    json,
+    runId,
+    judgeModelConfigId,
+  };
+  if (temperature !== undefined) opts.temperature = temperature;
+  return { opts };
 }
 
 // ─── benchmark_run_evaluations ────────────────────────────────────────────────

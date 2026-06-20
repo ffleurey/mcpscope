@@ -204,12 +204,16 @@ export function registerBenchmarkRoutes({
   app.post("/api/benchmark-runs/:runId/evaluations", async (request, reply) => {
     const { runId } = z.object({ runId: z.string() }).parse(request.params);
     const body = z
-      .object({ judgeModelConfigId: z.string().min(1) })
+      .object({
+        judgeModelConfigId: z.string().min(1),
+        temperature: z.number().min(0).optional(),
+      })
       .parse(request.body);
     try {
       const evaluation = evaluateBenchmarkRun(opCtx, {
         runId,
         judgeModelConfigId: body.judgeModelConfigId,
+        ...(body.temperature !== undefined ? { temperature: body.temperature } : {}),
       });
       reply.code(202);
       return { evaluation };

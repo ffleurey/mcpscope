@@ -748,6 +748,7 @@ export const benchmarkEvaluationSchema = z.object({
   id: z.string(),
   runId: z.string(),
   judgeModelConfigId: z.string(),
+  judgeTemperature: z.number().default(0),
   status: z.string(),
   error: z.string().nullable().default(null),
   sessions: z.array(evaluationSessionRefSchema).default([]),

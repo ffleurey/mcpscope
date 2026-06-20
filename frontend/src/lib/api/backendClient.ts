@@ -623,7 +623,10 @@ export function deleteBenchmarkRun(runId: string) {
   })
 }
 
-export function launchEvaluation(runId: string, input: { judgeModelConfigId: string }) {
+export function launchEvaluation(
+  runId: string,
+  input: { judgeModelConfigId: string; temperature?: number },
+) {
   return request(`/api/benchmark-runs/${encodeURIComponent(runId)}/evaluations`, {
     method: 'POST',
     body: input,

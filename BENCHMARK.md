@@ -77,9 +77,10 @@ The backing tables (`benchmarks`, `benchmark_cases`, `benchmark_runs`,
   sessions[{sessionId, sourceCaseId, repetition}], error, createdAt, updatedAt, startedAt,
   completedAt`. The case snapshot includes the rubric, so an evaluation always judges against
   the rubric as it was at run time.
-- **Evaluation** (one judging pass over a run): `id, runId, judgeModelConfigId, status,
-  sessions[{runSessionId, analysisSessionId, status}], error, createdAt, updatedAt`. A thin
-  grouping record: it links each run-session to the `benchmark_evaluation` analysis session
+- **Evaluation** (one judging pass over a run): `id, runId, judgeModelConfigId, judgeTemperature,
+  status, sessions[{runSessionId, analysisSessionId, status}], error, createdAt, updatedAt`. A
+  thin grouping record holding the chosen judge config (model + temperature); it links each
+  run-session to the `benchmark_evaluation` analysis session
   that judged it. **Scores are not stored** — they are computed on read from the judge
   sessions' verdict artifacts (see [Evaluation](#evaluation-llm-rubric-judging)).
 
@@ -152,7 +153,7 @@ surface). These camelCase routes are not part of the MCP operation catalog.
 | `POST` | `/api/benchmarks/:id/runs` | `{ caseIds?, repetitions?, modelConfigId?, mcpProfileIds? }` | `202 { run }` |
 | `GET` | `/api/benchmark-runs/:runId` | — | `{ run, report }` |
 | `DELETE` | `/api/benchmark-runs/:runId` | — | `204` (also deletes the run's sessions + evaluations) |
-| `POST` | `/api/benchmark-runs/:runId/evaluations` | `{ judgeModelConfigId }` | `202 { evaluation }` |
+| `POST` | `/api/benchmark-runs/:runId/evaluations` | `{ judgeModelConfigId, temperature? }` | `202 { evaluation }` |
 | `GET` | `/api/benchmark-runs/:runId/evaluations` | — | `{ evaluations: [{...evaluation, score}] }` |
 
 A run launch returns immediately (`202`); a background coordinator drives the sessions
@@ -266,7 +267,9 @@ artifact on the judge session.
 
 - **Separate judge model, never self-judge** — you choose the `judgeModelConfigId`; it is a
   distinct model selection from the one under test.
-- **Deterministic judging** — the judge runs at temperature 0 with structured output.
+- **Deterministic judging by default** — the judge runs at temperature 0 with structured output;
+  the temperature is selectable per pass (stored on the evaluation) if you want to probe judge
+  stability, but 0 is the recommended default.
 - **After-the-fact and repeatable** — evaluation is decoupled from the run. Launch 0..N passes
   per run, e.g. to compare judge models. Each pass is its own `Evaluation` record.
 

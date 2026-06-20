@@ -760,6 +760,8 @@ export function getBenchmarkRunReport(
 export interface EvaluateBenchmarkRunInput {
   runId: string;
   judgeModelConfigId: string;
+  /** Judge sampling temperature; defaults to 0 (deterministic). */
+  temperature?: number;
 }
 
 /**
@@ -803,6 +805,7 @@ export function evaluateBenchmarkRun(
     ),
     runId: input.runId,
     judgeModelConfigId: input.judgeModelConfigId,
+    judgeTemperature: input.temperature ?? 0,
     status: "pending",
     sessions: [],
     error: null,
@@ -907,6 +910,7 @@ async function runEvaluationCoordinator(
         run,
         runSession,
         initial.judgeModelConfigId,
+        initial.judgeTemperature,
       );
     }
     const done = getBenchmarkEvaluation(db.connection, evaluationId);
@@ -963,6 +967,7 @@ async function judgeOneSession(
   run: BenchmarkRunRecord,
   runSession: BenchmarkRunRecord["sessions"][number],
   judgeModelConfigId: string,
+  judgeTemperature: number,
 ): Promise<void> {
   const { db, scheduler } = ctx;
   if (!scheduler)
@@ -989,7 +994,7 @@ async function judgeOneSession(
       workflow_kind: ANALYSIS_WORKFLOW_KIND.BENCHMARK_EVALUATION,
       analysis_goal: "Score the session against the rubric.",
       rubric: snapshot.rubric,
-      temperature: 0,
+      temperature: judgeTemperature,
     },
   );
 

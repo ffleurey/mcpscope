@@ -140,7 +140,7 @@ describe('benchmark evaluation grouping CRUD', () => {
 
   function evaluation(overrides: Partial<BenchmarkEvaluationRecord> = {}): BenchmarkEvaluationRecord {
     return {
-      id: 'E-TEST', runId: 'R-TEST', judgeModelConfigId: 'judge-1', status: 'running',
+      id: 'E-TEST', runId: 'R-TEST', judgeModelConfigId: 'judge-1', judgeTemperature: 0, status: 'running',
       sessions: [{ runSessionId: 'AB12', analysisSessionId: 'CD34', status: 'running' }],
       error: null, createdAt: 1, updatedAt: 1,
       ...overrides,

@@ -14,9 +14,12 @@
   let { runId, onClose }: Props = $props()
 
   let selectedJudgeId = $state('')
+  let selectedTemperature = $state(0)
   let launching = $state(false)
   let launchError = $state<AppError | null>(null)
   let hasInitialized = $state(false)
+
+  const selectedConfig = $derived($modelConfigs.find((c) => c.id === selectedJudgeId) ?? null)
 
   $effect(() => {
     const defaultId = $sessionCreationDefaults?.defaultModelConfigId ?? null
@@ -32,7 +35,7 @@
     launching = true
     launchError = null
     try {
-      await launchEvaluation(runId, selectedJudgeId)
+      await launchEvaluation(runId, selectedJudgeId, selectedTemperature)
       onClose()
     } catch (e) {
       launchError = toAppError(e)
@@ -75,6 +78,31 @@
         </select>
       {/if}
     </div>
+
+    <div class="field">
+      <label class="field-label" for="eval-temp">Temperature</label>
+      <input
+        id="eval-temp"
+        class="field-input"
+        type="number"
+        min="0"
+        step="0.1"
+        bind:value={selectedTemperature}
+        disabled={launching}
+      />
+      <p class="field-hinttext">0 = deterministic (recommended). Raise to probe judge stability.</p>
+    </div>
+
+    {#if selectedConfig}
+      <div class="field">
+        <span class="field-label">Context size</span>
+        <p class="field-hinttext">
+          {selectedConfig.contextSize
+            ? `${selectedConfig.contextSize.toLocaleString()} tokens`
+            : 'model default'} — configured on the model; reload the model to change.
+        </p>
+      </div>
+    {/if}
 
     <div class="form-actions">
       <button class="btn" onclick={onClose} disabled={launching}>Cancel</button>

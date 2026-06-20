@@ -59,7 +59,7 @@ function printHelp(): void {
   mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--wait] [--json]
   mcpscope benchmark_run_status <run_id> [--json]
   mcpscope benchmark_run_report <run_id> [--json]
-  mcpscope benchmark_evaluate <run_id> --judge-model <model_config_id> [--json]
+  mcpscope benchmark_evaluate <run_id> --judge-model <model_config_id> [--temperature <n>] [--json]
   mcpscope benchmark_run_evaluations <run_id> [--json]
 
 Options:

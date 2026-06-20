@@ -236,9 +236,9 @@ Text output shows overall and per-case completion, the currently running session
 
 Returns the full compute-on-read **metrics** report for a run (loads session traces): per-case pass rates, tool-call/token stats, per-session metrics, and a cross-case per-tool rollup. Text output leads with the per-tool rollup, then per-case detail. JSON output: `{ run, report }`. For what the metrics mean (pass@k vs pass^k, the per-tool scorecard, what the checks evaluate), see [BENCHMARK.md → Report and metrics](BENCHMARK.md#report-and-metrics).
 
-### `mcpscope benchmark_evaluate <run_id> --judge-model <model_config_id> [--json]`
+### `mcpscope benchmark_evaluate <run_id> --judge-model <model_config_id> [--temperature <n>] [--json]`
 
-Launches an **LLM evaluation** pass over a completed run: a separate judge model scores every session against its case rubric. Returns immediately (`{ evaluation: { id, status, ... } }`); the pass runs in the background. Repeatable — run it again with a different `--judge-model` to compare judges. The judge runs as a `benchmark_evaluation` analysis session per run-session; see [BENCHMARK.md → Evaluation](BENCHMARK.md#evaluation-llm-rubric-judging). Rubrics are authored via the UI or the `rubric` field on `benchmark_add_case` (MCP/HTTP); they are not a CLI flag.
+Launches an **LLM evaluation** pass over a completed run: a separate judge model scores every session against its case rubric. `--temperature` sets the judge sampling temperature (default `0` = deterministic; raise it to probe judge stability). Returns immediately (`{ evaluation: { id, status, judge_temperature, ... } }`); the pass runs in the background. Repeatable — run it again with a different `--judge-model`/`--temperature` to compare. The judge runs as a `benchmark_evaluation` analysis session per run-session; see [BENCHMARK.md → Evaluation](BENCHMARK.md#evaluation-llm-rubric-judging). Rubrics are authored via the UI or the `rubric` field on `benchmark_add_case` (MCP/HTTP); they are not a CLI flag.
 
 ### `mcpscope benchmark_run_evaluations <run_id> [--json]`
 
@@ -286,6 +286,7 @@ mcpscope inspect ABCD.1T
 | `--repetitions <n>` | `benchmark_run`   | times to run each case (default: 1) |
 | `--wait`           | `benchmark_run`    | poll run status until terminal, then print final progress |
 | `--judge-model <id>` | `benchmark_evaluate` | model config ID for the judge (required) |
+| `--temperature <n>` | `benchmark_evaluate` | judge sampling temperature (default 0 = deterministic) |
 
 ## Exit codes
 

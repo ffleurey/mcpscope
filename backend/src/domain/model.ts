@@ -2,7 +2,7 @@ import { z } from "zod";
 import { providerTypeValues } from "./configuration.js";
 
 /** Single schema/domain version recorded in schema_meta and reported on /api/system. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const sessionTypeValues = ["primary", "session_analysis"] as const;
 export const parentKindValues = ["session", "benchmark"] as const;
@@ -402,6 +402,8 @@ export const benchmarkEvaluationRecordSchema = z.object({
   id: z.string(),
   runId: z.string(),
   judgeModelConfigId: z.string(),
+  /** Sampling temperature for the judge sessions (default 0 = deterministic). */
+  judgeTemperature: z.number().default(0),
   status: benchmarkRunStatusSchema,
   sessions: z.array(benchmarkEvaluationSessionSchema).default([]),
   error: z.string().nullable().default(null),

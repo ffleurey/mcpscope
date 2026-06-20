@@ -352,6 +352,7 @@ interface BenchmarkEvaluationRow {
   id: string;
   run_id: string;
   judge_model_config_id: string;
+  judge_temperature: number;
   status: string;
   sessions_json: string;
   error: string | null;
@@ -366,6 +367,7 @@ function mapBenchmarkEvaluationRow(
     id: row.id,
     runId: row.run_id,
     judgeModelConfigId: row.judge_model_config_id,
+    judgeTemperature: row.judge_temperature,
     status: row.status as BenchmarkEvaluationRecord["status"],
     sessions: JSON.parse(row.sessions_json) as BenchmarkEvaluationSession[],
     error: row.error,
@@ -379,6 +381,7 @@ function serializeEvaluation(evaluation: BenchmarkEvaluationRecord) {
     id: evaluation.id,
     runId: evaluation.runId,
     judgeModelConfigId: evaluation.judgeModelConfigId,
+    judgeTemperature: evaluation.judgeTemperature,
     status: evaluation.status,
     sessions: JSON.stringify(evaluation.sessions),
     error: evaluation.error,
@@ -394,10 +397,10 @@ export function createBenchmarkEvaluation(
   connection
     .prepare(
       `INSERT INTO benchmark_evaluations (
-         id, run_id, judge_model_config_id, status, sessions_json, error,
+         id, run_id, judge_model_config_id, judge_temperature, status, sessions_json, error,
          created_at, updated_at
        ) VALUES (
-         @id, @runId, @judgeModelConfigId, @status, @sessions, @error,
+         @id, @runId, @judgeModelConfigId, @judgeTemperature, @status, @sessions, @error,
          @createdAt, @updatedAt
        )`,
     )

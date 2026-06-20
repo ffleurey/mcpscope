@@ -70,6 +70,7 @@ function evaluationToSnake(e: BenchmarkEvaluationRecord) {
     id: e.id,
     run_id: e.runId,
     judge_model_config_id: e.judgeModelConfigId,
+    judge_temperature: e.judgeTemperature,
     status: e.status,
     error: e.error,
     sessions: e.sessions.map((s) => ({
@@ -700,6 +701,7 @@ const evaluationShape = z.object({
   id: z.string(),
   run_id: z.string(),
   judge_model_config_id: z.string(),
+  judge_temperature: z.number(),
   status: z.string(),
   error: z.string().nullable(),
   sessions: z.array(evaluationSessionShape),
@@ -712,6 +714,10 @@ export const benchmarkEvaluateInputSchema = z.object({
   judge_model_config_id: z
     .string()
     .describe("Model config for the judge (a separate model; never the task model)."),
+  temperature: z
+    .number()
+    .optional()
+    .describe("Judge sampling temperature (default 0 = deterministic)."),
 });
 export type BenchmarkEvaluateInput = z.infer<typeof benchmarkEvaluateInputSchema>;
 
@@ -730,6 +736,7 @@ export const benchmarkEvaluateOperation = {
     const evaluation = evaluateBenchmarkRun(ctx, {
       runId: input.run_id,
       judgeModelConfigId: input.judge_model_config_id,
+      ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
     });
     return { evaluation: evaluationToSnake(evaluation) };
   },

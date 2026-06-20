@@ -299,8 +299,12 @@ export async function launchRun(
  * Launch an evaluation pass over a completed run with the chosen judge model.
  * The pass runs in the background; we poll its scores until it settles.
  */
-export async function launchEvaluation(runId: string, judgeModelConfigId: string): Promise<void> {
-  await launchBackendEvaluation(runId, { judgeModelConfigId })
+export async function launchEvaluation(
+  runId: string,
+  judgeModelConfigId: string,
+  temperature = 0,
+): Promise<void> {
+  await launchBackendEvaluation(runId, { judgeModelConfigId, temperature })
   if (get(activeRunId) !== runId) return
   await refreshActiveRunEvaluations(runId).catch(() => undefined)
   stopEvalPolling()

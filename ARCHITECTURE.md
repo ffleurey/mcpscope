@@ -95,9 +95,9 @@ The backend persistence layer is organized around the execution model:
 - `WorkflowStep` — the abstract deterministic step subtype implemented by concrete analysis step classes in `analysis/shared/` and `analysis/fastTool/` (see `backend/src/workflow/workflowStep.ts`); may own zero or more `Turn` children
 - `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records
 
-The persistence-layer record types (`SessionRecord`, `TurnRecord`, `RoundRecord`, `PartRecord`, `RawExchangeRecord`) remain the authoritative source for runtime behavior and replay. They persist to the canonical runtime schema (plain table names, schema version `2`, no migration history). For the record-to-table mapping and column-level details see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
+The persistence-layer record types (`SessionRecord`, `TurnRecord`, `RoundRecord`, `PartRecord`, `RawExchangeRecord`) remain the authoritative source for runtime behavior and replay. They persist to the canonical runtime schema (plain table names, schema version `3`, no migration history). For the record-to-table mapping and column-level details see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
 
-Startup runs a single `initializeSchema()` that creates the snapshot/config tables, the runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`), and the benchmark tables (`benchmarks`, `benchmark_cases`, `benchmark_runs`, `benchmark_evaluations`). There is no migration path and no separate legacy schema: the tables use plain names at schema version `2`, and an out-of-date database is started empty rather than migrated.
+Startup runs a single `initializeSchema()` that creates the snapshot/config tables, the runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`), and the benchmark tables (`benchmarks`, `benchmark_cases`, `benchmark_runs`, `benchmark_evaluations`). There is no migration path and no separate legacy schema: the tables use plain names at schema version `3`, and an out-of-date database is started empty rather than migrated.
 
 ### Current implementation
 

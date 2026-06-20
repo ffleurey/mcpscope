@@ -308,6 +308,7 @@ export interface BenchmarkEvaluationRecord {
   id: string;
   run_id: string;
   judge_model_config_id: string;
+  judge_temperature: number;
   status: string;
   error: string | null;
   sessions: BenchmarkEvaluationSession[];
