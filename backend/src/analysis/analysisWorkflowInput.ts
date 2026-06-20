@@ -1,3 +1,5 @@
+import type { RubricCriterion } from '../domain/model.js'
+
 export interface AnalysisWorkflowInput {
   analysisSessionId: string
   targetSessionId: string
@@ -6,4 +8,6 @@ export interface AnalysisWorkflowInput {
   selectedToolNames: string[]
   onlyFailedToolCalls: boolean
   evaluationCriteria: string[]
+  /** Scored rubric for the benchmark_evaluation judge (optional). */
+  rubric?: RubricCriterion[]
 }

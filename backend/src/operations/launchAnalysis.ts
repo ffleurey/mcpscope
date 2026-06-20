@@ -19,6 +19,7 @@ import {
 import { createSession } from "../runtime/modelTurns.js";
 import { mapSessionIdError } from "./sessionCreationShared.js";
 import {
+  rubricCriterionSchema,
   sessionRecordSchema,
   type McpProfileSnapshot,
   type ModelProfileSnapshot,
@@ -56,6 +57,8 @@ export const launchAnalysisInputSchema = z.object({
   only_failed_tool_calls: z.boolean().optional(),
   /** Optional additional evaluation criteria. */
   evaluation_criteria: z.array(z.string().min(1)).optional(),
+  /** Scored rubric for the benchmark_evaluation judge (ignored by other kinds). */
+  rubric: z.array(rubricCriterionSchema).optional(),
   /** The analysis workflow to run. */
   workflow_kind: z.string().optional(),
 });
@@ -262,6 +265,7 @@ export async function executeAnalysisLaunch(
         selectedToolNames,
         onlyFailedToolCalls,
         evaluationCriteria,
+        rubric: input.rubric ?? [],
         workflow_kind: wk,
       };
       updateSessionAnalysisState(

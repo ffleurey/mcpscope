@@ -303,6 +303,19 @@ export const rawExchangeRecordSchema = z.object({
 
 export const benchmarkRunStatusSchema = z.enum(benchmarkRunStatusValues);
 
+// One scored rubric criterion: a natural-language condition checked by the LLM
+// judge against the session trace, worth up to `points`. `id` is 1-based and
+// stable within a case's rubric (the judge references it). Shared by the
+// benchmark domain (case rubric, run snapshot) and the analysis layer (the
+// benchmark_evaluation judge); defined here in the domain layer so analysis can
+// import it without a cycle.
+export const rubricCriterionSchema = z.object({
+  id: z.number().int().positive(),
+  description: z.string().min(1),
+  points: z.number().int().nonnegative(),
+});
+export type RubricCriterion = z.infer<typeof rubricCriterionSchema>;
+
 export const benchmarkRecordSchema = z.object({
   id: z.string(),
   name: z.string(),

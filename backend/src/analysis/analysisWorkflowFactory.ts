@@ -6,6 +6,7 @@ import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
 import { FullSessionAnalysis } from './fullSession/fullSessionAnalysis.js'
 import { FastSessionAnalysis } from './fastSession/fastSessionAnalysis.js'
 import { FastToolAnalysis } from './fastTool/fastToolAnalysis.js'
+import { BenchmarkEvaluationAnalysis } from './benchmarkEvaluation/benchmarkEvaluationAnalysis.js'
 import { ANALYSIS_WORKFLOW_KIND } from './workflowKinds.js'
 import type { AnalysisSessionState } from './schemas.js'
 import type { AnalysisSessionBase } from './analysisSessionBase.js'
@@ -35,6 +36,7 @@ export function registerAnalysisWorkflow(ctor: AnalysisSubclassCtor): void {
 registerAnalysisWorkflow(FullSessionAnalysis as unknown as AnalysisSubclassCtor)
 registerAnalysisWorkflow(FastSessionAnalysis as unknown as AnalysisSubclassCtor)
 registerAnalysisWorkflow(FastToolAnalysis as unknown as AnalysisSubclassCtor)
+registerAnalysisWorkflow(BenchmarkEvaluationAnalysis as unknown as AnalysisSubclassCtor)
 
 export function rehydrateAnalysisWorkflow(
   database: BackendDatabase,

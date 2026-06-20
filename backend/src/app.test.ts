@@ -5298,6 +5298,104 @@ describe("analysis launch", () => {
     expect(schemaKeys).toContain("analysis.final_analysis_report.v1");
   });
 
+  it("benchmark_evaluation: runs the rubric judge and writes a clamped verdict artifact", async () => {
+    const config = makeTestConfig();
+    dataDir = config.dataDir;
+    const base = makeAnalysisMockGateway();
+    app = await buildBackendApp(config, {
+      chatCompletionGateway: {
+        ...base,
+        async createChatCompletion() {
+          // Judge over-awards criterion 1 (max 2) to exercise end-to-end clamping.
+          return {
+            id: "cmpl-verdict",
+            object: "chat.completion",
+            created: Date.now(),
+            model: "test-model",
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: "assistant",
+                  content: JSON.stringify({
+                    criteria: [
+                      { id: 1, points: 5, note: "correct value, cited ABCD.1T" },
+                      { id: 2, points: 1, note: "one discovery call" },
+                    ],
+                    comment: "good overall",
+                  }),
+                },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          };
+        },
+      },
+      mcpGateway: makeAnalysisMcpGateway(),
+    });
+
+    const targetId = await createReadySession(app);
+    await createAnalysisModelConfig(app);
+    const turnId = createCompleteTurn(app, targetId);
+
+    const launchRes = await app.inject({
+      method: "POST",
+      url: `/api/sessions/${targetId}/analyze`,
+      payload: {
+        model_config_id: "mc-1",
+        target_turn_id: turnId,
+        workflow_kind: "benchmark_evaluation",
+        analysis_goal: "Score against the rubric.",
+        rubric: [
+          { id: 1, description: "Correct temperature returned", points: 2 },
+          { id: 2, description: "Sensor resolved in one discovery call", points: 1 },
+        ],
+      },
+    });
+    expect(launchRes.statusCode).toBe(201);
+    const childId = launchRes.json().session.id as string;
+    expect(launchRes.json().session.title).toBe(
+      "Benchmark Evaluation: Target Session",
+    );
+
+    const execRes = await app.inject({
+      method: "POST",
+      url: `/api/sessions/${childId}/execute`,
+    });
+    expect(execRes.statusCode).toBe(200);
+
+    const rows = app.backendDb.connection
+      .prepare(
+        `SELECT content_json, metadata_json FROM artifacts WHERE session_id = ?`,
+      )
+      .all(childId) as Array<{ content_json: string; metadata_json: string }>;
+    const schemaKeyOf = (r: { metadata_json: string }) =>
+      (JSON.parse(r.metadata_json) as { schema_key: string }).schema_key;
+    expect(rows.map(schemaKeyOf)).toContain("analysis.analysis_target.v1");
+
+    const verdictRow = rows.find(
+      (r) => schemaKeyOf(r) === "analysis.benchmark_evaluation_verdict.v1",
+    );
+    expect(verdictRow).toBeDefined();
+    const verdict = JSON.parse(verdictRow!.content_json) as {
+      criteria: Array<{ id: number; points: number; note: string }>;
+      comment?: string;
+    };
+    // Criterion 1 clamped from 5 down to its max of 2; criterion 2 kept at 1.
+    expect(verdict.criteria).toEqual([
+      { id: 1, points: 2, note: "correct value, cited ABCD.1T" },
+      { id: 2, points: 1, note: "one discovery call" },
+    ]);
+    expect(verdict.comment).toBe("good overall");
+    const meta = JSON.parse(verdictRow!.metadata_json) as {
+      awarded_points: number;
+      max_points: number;
+    };
+    expect(meta.awarded_points).toBe(3);
+    expect(meta.max_points).toBe(3);
+  });
+
   it("v2 full flow with tool calls: produces assessment, turn_summary, and final_report artifacts via deterministic inspect turns", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;

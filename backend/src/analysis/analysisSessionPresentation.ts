@@ -97,6 +97,7 @@ export function getRetryPhaseForFailedAnalysisStep(step: Pick<StepRecord, 'stepT
       return 'bootstrap'
     case 'analysis_tool_call_assessment':
     case 'analysis_tool_group_assessment':
+    case 'analysis_benchmark_evaluation':
       return 'assessing'
     case 'analysis_turn_summary':
       return 'turn_summary'

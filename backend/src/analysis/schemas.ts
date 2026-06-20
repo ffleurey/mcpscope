@@ -10,6 +10,7 @@
  */
 
 import { z } from 'zod'
+import type { RubricCriterion } from '../domain/model.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Schema key constants
@@ -79,6 +80,8 @@ export interface AnalysisSessionState {
   evaluationCriteria: string[]
   /** The analysis workflow kind, used for rehydration. */
   workflow_kind?: string
+  /** Scored rubric for the benchmark_evaluation judge (empty for other kinds). */
+  rubric?: RubricCriterion[]
   /** Execution progress derived from the plan (updated after each step). */
   planProgress?: PlanProgress
 }
