@@ -1141,8 +1141,11 @@ async function judgeOneSession(
     db.connection,
     runSession.sessionId,
   ).sort((a, b) => a.turnNumber - b.turnNumber);
+  // Prefer the last completed turn; else the last terminal (error/aborted) turn so a
+  // failed run-session is judged against what it produced. Never an in-flight turn.
   const lastTurn =
-    turns.filter((t) => t.status === "complete").at(-1) ?? turns.at(-1);
+    turns.filter((t) => t.status === "complete").at(-1) ??
+    turns.filter((t) => t.status === "error" || t.status === "aborted").at(-1);
   const snapshot = run.cases.find(
     (c) => c.sourceCaseId === runSession.sourceCaseId,
   );
@@ -1165,6 +1168,8 @@ async function judgeOneSession(
       analysis_goal: "Score the session against the rubric.",
       rubric: snapshot.rubric,
       temperature: judgeTemperature,
+      // A failed run-session's last turn is terminal-but-not-complete; judge it anyway.
+      allow_incomplete_target: true,
     },
   );
 

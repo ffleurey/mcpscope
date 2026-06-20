@@ -152,7 +152,11 @@ Same scores in snake_case → CLI/MCP parity holds.
 
 ## Triage / follow-ups
 
-- **TR-18 (decision pending — judge sessions silently skipped for errored run-sessions).** In
+- **TR-18 (FIXED) — errored run-sessions silently skipped by the judge.** judgeOneSession now
+  targets the last complete turn ELSE the last turn of any status (errored sessions are judged
+  against what they produced; rubric scores them low); genuinely unjudgeable sessions throw →
+  counted as failed (visible) instead of silent. E-HGTU's 3 errored sessions become judgeable on
+  retry. Original notes below. In
   E-HGTU, 3 run-sessions (A3TH/SSMS/MG2F) ended `terminal_status=error`, no final answer (hit max
   tool rounds, 10 calls). `judgeOneSession` selects the last **complete** turn as the analysis
   target and `return`s silently if none — so errored sessions get no judge, no entry, no error
