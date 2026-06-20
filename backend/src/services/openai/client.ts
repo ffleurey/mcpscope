@@ -224,6 +224,7 @@ export async function createChatCompletion(
   baseUrl: string,
   apiKey: string | undefined,
   body: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<OaiChatCompletionResponse> {
   const response = await fetch(buildUrl(baseUrl, "chat/completions"), {
     method: "POST",
@@ -233,6 +234,7 @@ export async function createChatCompletion(
       ...authHeaders(apiKey),
     },
     body: JSON.stringify(body),
+    ...(signal ? { signal } : {}),
   });
 
   if (!response.ok) {
@@ -508,6 +510,7 @@ export async function streamChatCompletion(
   apiKey: string | undefined,
   body: Record<string, unknown>,
   callbacks?: StreamCallbacks,
+  signal?: AbortSignal,
 ): Promise<OaiStreamedChatCompletionResult> {
   const response = await fetch(buildUrl(baseUrl, "chat/completions"), {
     method: "POST",
@@ -523,6 +526,7 @@ export async function streamChatCompletion(
         include_usage: true,
       },
     }),
+    ...(signal ? { signal } : {}),
   });
 
   if (!response.ok) {

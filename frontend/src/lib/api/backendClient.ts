@@ -507,6 +507,10 @@ export function removeSchedulerJob(jobId: string): Promise<void> {
   })
 }
 
+export function abortScheduler(): Promise<{ ok: boolean; aborted: boolean }> {
+  return request('/api/scheduler/abort', { method: 'POST' })
+}
+
 export function retryInitSession(sessionId: string): Promise<{ ok: true }> {
   return request(`/api/sessions/${sessionId}/retry-init`, { method: 'POST' })
 }

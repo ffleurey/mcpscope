@@ -152,7 +152,21 @@ Same scores in snake_case → CLI/MCP parity holds.
 
 ## Triage / follow-ups
 
-- **TR-15 (decision pending — no MCP path to set a rubric on an existing case).** Test result:
+- **TR-16 (decision pending — hard "kill" / abort for the active turn).** Pause is cooperative
+  (stops new turns only); a looping turn (e.g. a judge stuck in reasoning) only dies on context
+  exhaustion. No abort plumbing exists (`AbortController` absent). Plan: thread an `AbortSignal`
+  scheduler→turn→gateway→`fetch` — one shared gateway fetch site (`services/openai/client.ts`),
+  `aborted` already a valid terminal status. Add `signal?` to gateway interface + client fetch,
+  `abortSignal?` on SchedulerContext, per-job `AbortController` + `scheduler.abortActive()`,
+  `POST /api/scheduler/abort`, and a red Stop button in the execution bar (active-job only).
+  Provider-agnostic; ends the turn as `aborted` (retryable). ~7–8 files, additive, low risk.
+  Build pending user OK.
+
+- **TR-15 (FIXED) — agent case editing.** Added `benchmark_update_case` (edit any field incl.
+  rubric; only passed fields change) + `benchmark_delete_case` catalog ops (CLI+MCP, 17→19 ops).
+  Agents now have full read/write/edit/delete on cases. Verified live: populated B-84JK.2/.3/.4
+  rubrics via the op (B-84JK.1's manual rubric left untouched). Original notes below.
+- **TR-15 (original) — no MCP path to set a rubric on an existing case.** Test result:
   rubrics can't be added to existing cases via MCP/CLI. `benchmark_add_case` supports `rubric`
   (create-time only); there is NO edit-case catalog op — case edits go through the camelCase
   `PATCH /api/benchmark-cases/:caseId` only (frontend surface). So agents can create-with-rubric

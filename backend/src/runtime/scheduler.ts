@@ -22,6 +22,7 @@ import {
   reservePrimaryTurn,
 } from './schedulerAdmission.js'
 import { dispatchSchedulerJob } from './schedulerDispatch.js'
+import type { ChatCompletionGateway } from './modelTurns.js'
 import type {
   ActiveExecutionJob,
   ExecutionJob,
@@ -31,6 +32,37 @@ import type {
   SchedulerEventListener,
   TerminalJob,
 } from './schedulerTypes.js'
+
+/**
+ * Wrap a gateway so every chat-completion call carries the active job's abort
+ * signal — the basis of the hard "stop" control. Aborting the signal cancels the
+ * in-flight provider request for any OpenAI-compatible backend (no provider-specific
+ * code). Probe/context calls are forwarded unchanged (they are fast, init-time).
+ */
+function gatewayWithAbortSignal(
+  gateway: ChatCompletionGateway,
+  signal: AbortSignal,
+): ChatCompletionGateway {
+  return {
+    createChatCompletion: (baseUrl, apiKey, body) =>
+      gateway.createChatCompletion(baseUrl, apiKey, body, signal),
+    ...(gateway.streamChatCompletion
+      ? {
+          streamChatCompletion: (baseUrl, apiKey, body, callbacks) =>
+            gateway.streamChatCompletion!(baseUrl, apiKey, body, callbacks, signal),
+        }
+      : {}),
+    ...(gateway.probePromptTokens
+      ? { probePromptTokens: gateway.probePromptTokens.bind(gateway) }
+      : {}),
+    ...(gateway.probePromptTokensDetailed
+      ? { probePromptTokensDetailed: gateway.probePromptTokensDetailed.bind(gateway) }
+      : {}),
+    ...(gateway.getLoadedContextLength
+      ? { getLoadedContextLength: gateway.getLoadedContextLength.bind(gateway) }
+      : {}),
+  }
+}
 
 export type {
   SchedulerContext,
@@ -50,6 +82,8 @@ export type {
 export class ExecutionScheduler {
   private controlState: 'running' | 'paused' = 'running'
   private activeJob: ActiveExecutionJob | null = null
+  /** Abort controller for the in-flight job's model calls (the hard-stop kill switch). */
+  private activeAbort: AbortController | null = null
   private pendingJobs: ExecutionJob[] = []
   private lastTerminalJob: TerminalJob | null = null
   private subscribers: Set<SchedulerEventListener> = new Set()
@@ -86,6 +120,20 @@ export class ExecutionScheduler {
     this.resumeResolve = null
     resolve?.()
     this.emit({ type: 'scheduler-resumed' })
+  }
+
+  /**
+   * Hard stop: abort the active job's in-flight model call immediately (unlike
+   * pause(), which only stops new turns from starting). The aborted request throws,
+   * the turn fails, and the session ends in a retryable terminal state. No-op if
+   * nothing is active. Returns true if an active job was signalled.
+   */
+  abortActive(): boolean {
+    if (this.activeJob && this.activeAbort) {
+      this.activeAbort.abort()
+      return true
+    }
+    return false
   }
 
   /**
@@ -253,11 +301,13 @@ export class ExecutionScheduler {
         ...job,
         startedAt: Date.now(),
       }
+      const abort = new AbortController()
       this.activeJob = activeJob
+      this.activeAbort = abort
       this.emit({ type: 'scheduler-job-started', job: { ...activeJob } })
 
       try {
-        await this.executeJob(activeJob, opCtx)
+        await this.executeJob(activeJob, opCtx, abort.signal)
 
         const terminal: TerminalJob = {
           ...activeJob,
@@ -265,6 +315,7 @@ export class ExecutionScheduler {
           outcome: 'completed',
         }
         this.activeJob = null
+        this.activeAbort = null
         this.lastTerminalJob = terminal
         this.emit({ type: 'scheduler-job-completed', job: { ...terminal } })
       } catch (err) {
@@ -275,6 +326,7 @@ export class ExecutionScheduler {
           error: err instanceof Error ? err.message : String(err),
         }
         this.activeJob = null
+        this.activeAbort = null
         this.lastTerminalJob = terminal
         opCtx.logger?.error(
           {
@@ -314,7 +366,11 @@ export class ExecutionScheduler {
 
   // ── Execution dispatch ────────────────────────────────────────────────────
 
-  private async executeJob(job: ActiveExecutionJob, opCtx: SchedulerContext): Promise<void> {
+  private async executeJob(
+    job: ActiveExecutionJob,
+    opCtx: SchedulerContext,
+    signal: AbortSignal,
+  ): Promise<void> {
     const emitExecutionEvent = (
       event: Extract<SchedulerEvent, { type: 'scheduler-execution-event' }>['event'],
     ) => {
@@ -326,7 +382,15 @@ export class ExecutionScheduler {
       })
     }
 
-    await dispatchSchedulerJob(job, opCtx, {
+    // Per-job context whose gateway carries this job's abort signal, so abortActive()
+    // cancels the in-flight model request without threading a signal through every
+    // execution layer.
+    const jobCtx: SchedulerContext = {
+      ...opCtx,
+      chatCompletionGateway: gatewayWithAbortSignal(opCtx.chatCompletionGateway, signal),
+    }
+
+    await dispatchSchedulerJob(job, jobCtx, {
       emitExecutionEvent,
       shouldPauseAtBoundary: () => this.controlState === 'paused',
     })

@@ -17,6 +17,13 @@ export function registerSchedulerRoutes({ app, database, scheduler, opCtx, handl
     return { ok: true, controlState: 'running' }
   })
 
+  // Hard stop: abort the active job's in-flight model request (vs pause, which only
+  // halts new turns). { aborted: false } when nothing was running.
+  app.post('/api/scheduler/abort', async () => {
+    const aborted = scheduler.abortActive()
+    return { ok: true, aborted }
+  })
+
   app.delete('/api/scheduler/jobs/:jobId', async (request, reply) => {
     const { jobId } = z.object({ jobId: z.string() }).parse(request.params)
     const removed = scheduler.removeJob(jobId)

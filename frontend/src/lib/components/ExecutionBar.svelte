@@ -7,6 +7,7 @@
     queueLength,
     pauseExecution,
     resumeExecution,
+    abortExecution,
     removePendingJob,
   } from '../executionStore'
   import { followRunning } from '../followStore'
@@ -51,6 +52,19 @@
       // ignore
     } finally {
       isActioning = false
+    }
+  }
+
+  let isAborting = $state(false)
+  async function handleAbort() {
+    if (isAborting) return
+    isAborting = true
+    try {
+      await abortExecution()
+    } catch {
+      // ignore
+    } finally {
+      isAborting = false
     }
   }
 
@@ -120,6 +134,17 @@
       >
         {snapshot.controlState === 'running' ? '⏸' : '▶'}
       </button>
+
+      {#if currentActiveJob !== null}
+        <button
+          class="btn btn-sm btn-danger"
+          onclick={handleAbort}
+          disabled={isAborting}
+          title="Hard stop: abort the running model call now (cancels the in-flight request, not just future turns)"
+        >
+          {isAborting ? 'Stopping…' : 'Stop'}
+        </button>
+      {/if}
 
       <!-- Queue button -->
       {#if queuedJobs.length > 0}
