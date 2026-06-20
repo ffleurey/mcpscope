@@ -1,0 +1,17 @@
+{
+  // Project-local Zed settings. Make the language servers use the workspace
+  // TypeScript (node_modules/typescript, currently 6.0.x) so the editor matches
+  // `npm run check` (svelte-check). Otherwise a language server may analyze code
+  // with an older bundled TypeScript and report phantom errors on valid imports
+  // (e.g. "Module '../backendTypes' has no exported member …").
+  "lsp": {
+    // Zed's TypeScript/JavaScript language server.
+    "vtsls": {
+      "settings": {
+        "typescript": {
+          "tsdk": "node_modules/typescript/lib"
+        }
+      }
+    }
+  }
+}
