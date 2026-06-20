@@ -314,6 +314,11 @@ one that didn't judge everything — failed judges, or orphaned by a restart (re
 on startup) — shows as **incomplete** with a Retry button, rather than appearing done with a
 partial result.
 
+A run-session that itself **errored** (e.g. hit the tool-round cap with no final answer) is still
+judged — against its last turn — so the rubric scores it (typically low), which is exactly the
+signal you want. Only a run-session with no turn at all is unjudgeable, and that surfaces as a
+failed judge (counted), never a silent skip.
+
 ## Tutorial: benchmark an MCP server via MCP (for coding agents)
 
 You are a coding agent iterating on an MCP server and want a repeatable check. mcpscope

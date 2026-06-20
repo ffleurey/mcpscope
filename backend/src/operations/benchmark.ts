@@ -1132,17 +1132,28 @@ async function judgeOneSession(
   if (!scheduler)
     throw new OperationError("scheduler unavailable", "scheduler_unavailable");
 
-  // The run-session's last completed turn is the analysis target.
-  const lastTurn = listTurnRecordsBySession(db.connection, runSession.sessionId)
-    .filter((t) => t.status === "complete")
-    .sort((a, b) => a.turnNumber - b.turnNumber)
-    .at(-1);
+  // Analysis target: the last completed turn, else the last turn of any status — so a
+  // run-session that errored (e.g. hit the tool-round cap with no final answer) is still
+  // judged against what it produced; the rubric scores it accordingly. Throwing when a
+  // session is genuinely unjudgeable surfaces it as a failed judge (counted by the
+  // coordinator) rather than a silent skip that leaves the pass mysteriously incomplete.
+  const turns = listTurnRecordsBySession(
+    db.connection,
+    runSession.sessionId,
+  ).sort((a, b) => a.turnNumber - b.turnNumber);
+  const lastTurn =
+    turns.filter((t) => t.status === "complete").at(-1) ?? turns.at(-1);
   const snapshot = run.cases.find(
     (c) => c.sourceCaseId === runSession.sourceCaseId,
   );
-  // A completed run-session always has a completed turn + a snapshotted case;
-  // skip defensively if not (cannot judge).
-  if (!lastTurn || !snapshot) return;
+  if (!snapshot) {
+    throw new Error(
+      `No case snapshot for run-session ${runSession.sessionId} (case ${runSession.sourceCaseId}).`,
+    );
+  }
+  if (!lastTurn) {
+    throw new Error(`Run-session ${runSession.sessionId} has no turn to judge.`);
+  }
 
   const { session: analysisSession } = await executeAnalysisLaunch(
     ctx,

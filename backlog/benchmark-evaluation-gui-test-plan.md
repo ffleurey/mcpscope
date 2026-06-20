@@ -152,6 +152,16 @@ Same scores in snake_case → CLI/MCP parity holds.
 
 ## Triage / follow-ups
 
+- **TR-18 (decision pending — judge sessions silently skipped for errored run-sessions).** In
+  E-HGTU, 3 run-sessions (A3TH/SSMS/MG2F) ended `terminal_status=error`, no final answer (hit max
+  tool rounds, 10 calls). `judgeOneSession` selects the last **complete** turn as the analysis
+  target and `return`s silently if none — so errored sessions get no judge, no entry, no error
+  (eval shows "3 failed" with 5 entries, no detail). **Fix:** target = last complete turn ELSE last
+  turn of any status (judge the failed session against its final turn — rubric scores it low,
+  which is the point); only skip when the session has zero turns, and then record an `error` entry
+  with a reason instead of silent drop. Makes failed sessions judgeable on retry + always visible.
+  Build pending user OK.
+
 - **TR-17 (FIXED) — orphaned/incomplete evaluations now recover.** Startup reconcile marks
   interrupted pending/running runs+evals → `error`; reports expose judged/expected (incomplete
   when K<N); retry keeps any verdict-bearing session (skip-if-verdict); UI shows "K/N judged" +
