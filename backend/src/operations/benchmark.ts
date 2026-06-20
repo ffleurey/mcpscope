@@ -65,6 +65,12 @@ import {
   type RunReport,
   type SessionMetrics,
 } from "./benchmarkMetrics.js";
+import {
+  scorePct,
+  aggregateEvaluationScore,
+  type EvaluationScore,
+  type EvaluationSessionScore,
+} from "./benchmarkEvaluationMetrics.js";
 
 function now(): number {
   return Date.now();
@@ -819,18 +825,57 @@ export function evaluateBenchmarkRun(
   return evaluation;
 }
 
-export function listBenchmarkRunEvaluations(
+export interface BenchmarkEvaluationReport extends BenchmarkEvaluationRecord {
+  /** Computed-on-read scores from the per-session verdict artifacts. */
+  score: EvaluationScore;
+}
+
+/**
+ * List a run's evaluations, each enriched with scores computed on read from its
+ * per-session verdict artifacts (Σ awarded / Σ max → pct, with per-case
+ * distribution). Nothing is cached.
+ */
+export function getBenchmarkRunEvaluationReports(
   db: BackendDatabase,
   runId: string,
-): BenchmarkEvaluationRecord[] {
-  // Require the run to exist so callers get a clear 404 rather than an empty list.
-  if (!getBenchmarkRun(db.connection, runId)) {
+): BenchmarkEvaluationReport[] {
+  const run = getBenchmarkRun(db.connection, runId);
+  if (!run) {
     throw new OperationError(
       `Benchmark run "${runId}" not found.`,
       "benchmark_run_not_found",
     );
   }
-  return listBenchmarkEvaluationsByRun(db.connection, runId);
+  const caseNames = new Map(run.cases.map((c) => [c.sourceCaseId, c.name]));
+  const runSessionToCase = new Map(
+    run.sessions.map((s) => [s.sessionId, s.sourceCaseId]),
+  );
+
+  return listBenchmarkEvaluationsByRun(db.connection, runId).map((ev) => {
+    const sessions: EvaluationSessionScore[] = ev.sessions.map((es) => {
+      const verdict = getLatestArtifactBySchemaKey(
+        db.connection,
+        es.analysisSessionId,
+        BENCHMARK_EVAL_KEY.VERDICT,
+      );
+      const meta = verdict?.metadata as
+        | { awarded_points?: number; max_points?: number }
+        | undefined;
+      const awarded =
+        typeof meta?.awarded_points === "number" ? meta.awarded_points : null;
+      const max = typeof meta?.max_points === "number" ? meta.max_points : null;
+      return {
+        runSessionId: es.runSessionId,
+        analysisSessionId: es.analysisSessionId,
+        sourceCaseId: runSessionToCase.get(es.runSessionId) ?? "",
+        status: es.status,
+        awarded,
+        max,
+        pct: scorePct(awarded, max),
+      };
+    });
+    return { ...ev, score: aggregateEvaluationScore(sessions, caseNames) };
+  });
 }
 
 async function runEvaluationCoordinator(

@@ -15,7 +15,7 @@ import {
   getBenchmarkRunReport,
   deleteBenchmarkRunEntry,
   evaluateBenchmarkRun,
-  listBenchmarkRunEvaluations,
+  getBenchmarkRunEvaluationReports,
 } from "../operations/benchmark.js";
 import {
   benchmarkCreateOperation,
@@ -219,7 +219,7 @@ export function registerBenchmarkRoutes({
   app.get("/api/benchmark-runs/:runId/evaluations", async (request, reply) => {
     const { runId } = z.object({ runId: z.string() }).parse(request.params);
     try {
-      return { evaluations: listBenchmarkRunEvaluations(database, runId) };
+      return { evaluations: getBenchmarkRunEvaluationReports(database, runId) };
     } catch (err) {
       return handleOperationError(err, reply);
     }
