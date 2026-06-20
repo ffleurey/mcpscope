@@ -1,0 +1,38 @@
+## Prompt
+
+From the Oslo Home Assistant installation, find Olivia's person or phone tracker entity and summarize how long she was not at home this week.
+
+Include:
+- the entity you used
+- a day-by-day table with date, number of away sessions, first departure, last return, and total time away
+- the accumulated total time away from home over the week.
+
+Do not ask me for entity IDs. Resolve the correct person-tracking entity yourself and keep the answer concise.
+
+## Evaluation Criteria
+
+### Success Criteria
+
+- Resolves Olivia's actual person-tracking entity without asking the user for entity IDs.
+- Avoids getting distracted by battery, app-version, charger-type, geocoded-location text, or other companion-phone entities that are not the right history source for this question.
+- Uses discrete state history for location states rather than numeric tools.
+- Treats this question as time outside the Home zone, not only raw `not_home` time.
+- Produces a compact daily summary for the requested week.
+- Includes the accumulated total time away from home over the period.
+- Keeps the answer concise and factual.
+
+### Expected Tool Path
+
+- Preferred discovery path: one `ha_history_list_entities` call using `domain="person"` or `domain="device_tracker"` with a tight Olivia-focused search.
+- Acceptable fallback: one discovery call for `domain="person"` and one for `domain="device_tracker"` if the first domain does not resolve a usable entity.
+- Optional confirmation step: one `ha_history_get_state` call on the chosen entity if needed to confirm its current state or attributes.
+- Preferred analytics path: one `ha_history_get_state_history` call on the resolved person or tracker entity with `state_value="!home"`, `group_by="day"`, and `start_time="this week"`.
+- Avoids generic cross-domain search loops and avoids numeric analytics tools.
+
+### Follow-up Handling
+
+- For follow-ups, reuses the resolved person or tracker entity instead of rediscovering it.
+- If the user specifically asks for true `not_home` time, that is narrower than "not at home" and should use `state_value="not_home"`.
+- A later zone-specific follow-up such as asking about time spent at a named place should keep the same entity and switch `state_value` to the exact zone name if that zone exists.
+- If the user asks about a named place that is not already known, one additional discovery step for `domain="zone"` is acceptable before querying state history.
+- If recorder retention is shorter than the requested period, the assistant should state the retention limit clearly instead of implying complete history.

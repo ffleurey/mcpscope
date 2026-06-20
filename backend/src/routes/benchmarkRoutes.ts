@@ -26,6 +26,8 @@ import {
   benchmarkRunOperation,
   benchmarkRunStatusOperation,
   benchmarkRunReportOperation,
+  benchmarkEvaluateOperation,
+  benchmarkRunEvaluationsOperation,
 } from "../operations/index.js";
 
 /**
@@ -312,6 +314,28 @@ export function registerBenchmarkRoutes({
       const { runId } = z.object({ runId: z.string() }).parse(request.params);
       try {
         return await benchmarkRunReportOperation.execute(opCtx, {
+          run_id: runId,
+        });
+      } catch (err) {
+        return handleOperationError(err, reply);
+      }
+    },
+  );
+
+  app.post("/api/operations/benchmark-evaluate", async (request, reply) => {
+    try {
+      return await benchmarkEvaluateOperation.execute(opCtx, request.body as never);
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.get(
+    "/api/operations/benchmark-runs/:runId/evaluations",
+    async (request, reply) => {
+      const { runId } = z.object({ runId: z.string() }).parse(request.params);
+      try {
+        return await benchmarkRunEvaluationsOperation.execute(opCtx, {
           run_id: runId,
         });
       } catch (err) {

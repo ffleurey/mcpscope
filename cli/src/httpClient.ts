@@ -25,6 +25,8 @@ import type {
   BenchmarkRunLaunchResult,
   BenchmarkRunStatusResult,
   BenchmarkRunReportResult,
+  BenchmarkEvaluateResult,
+  BenchmarkRunEvaluationsResult,
 } from "./types.js";
 
 // ─── HTTP primitives ──────────────────────────────────────────────────────────
@@ -296,5 +298,28 @@ export async function cliBenchmarkRunReport(
   return request<BenchmarkRunReportResult>(
     baseUrl,
     `/api/operations/benchmark-runs/${encodeURIComponent(runId)}/report`,
+  );
+}
+
+/** POST /api/operations/benchmark-evaluate → BenchmarkEvaluateResult */
+export async function cliBenchmarkEvaluate(
+  baseUrl: string,
+  body: { run_id: string; judge_model_config_id: string },
+): Promise<BenchmarkEvaluateResult> {
+  return post<BenchmarkEvaluateResult>(
+    baseUrl,
+    "/api/operations/benchmark-evaluate",
+    body,
+  );
+}
+
+/** GET /api/operations/benchmark-runs/:runId/evaluations → BenchmarkRunEvaluationsResult */
+export async function cliBenchmarkRunEvaluations(
+  baseUrl: string,
+  runId: string,
+): Promise<BenchmarkRunEvaluationsResult> {
+  return request<BenchmarkRunEvaluationsResult>(
+    baseUrl,
+    `/api/operations/benchmark-runs/${encodeURIComponent(runId)}/evaluations`,
   );
 }

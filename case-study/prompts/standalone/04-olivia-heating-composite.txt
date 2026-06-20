@@ -1,0 +1,6 @@
+I want to analyse the heating situation in Olivia's bedroom over the last 30 days.
+
+1. At what times of day does the temperature most often exceed 21°C — and on how many days out of the last 30 did it happen at that peak hour?
+2. Is the overheating spread evenly across the week, or are certain days of the week worse?
+3. How much energy has the heater consumed each day over the last 30 days? Were there any days where it used more than 2 kWh? What was the total for the period?
+4. How does the total energy consumption in April compare to March?

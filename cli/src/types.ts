@@ -117,6 +117,12 @@ export interface BenchmarkSummary {
   updated_at: number;
 }
 
+export interface RubricCriterion {
+  id: number;
+  description: string;
+  points: number;
+}
+
 export interface BenchmarkCaseRecord {
   id: string;
   benchmark_id: string;
@@ -125,6 +131,7 @@ export interface BenchmarkCaseRecord {
   order_index: number;
   expected_tools_called: string[];
   expected_tools_not_called: string[];
+  rubric: RubricCriterion[];
   source_session_id: string | null;
   created_at: number;
   updated_at: number;
@@ -289,4 +296,55 @@ export interface RunReport {
 export interface BenchmarkRunReportResult {
   run: BenchmarkRunRecord;
   report: RunReport;
+}
+
+export interface BenchmarkEvaluationSession {
+  run_session_id: string;
+  analysis_session_id: string;
+  status: string;
+}
+
+export interface BenchmarkEvaluationRecord {
+  id: string;
+  run_id: string;
+  judge_model_config_id: string;
+  status: string;
+  error: string | null;
+  sessions: BenchmarkEvaluationSession[];
+  created_at: number;
+  updated_at: number;
+}
+
+export interface BenchmarkEvaluateResult {
+  evaluation: BenchmarkEvaluationRecord;
+}
+
+export interface EvaluationSessionScore {
+  run_session_id: string;
+  analysis_session_id: string;
+  source_case_id: string;
+  status: string;
+  awarded: number | null;
+  max: number | null;
+  pct: number | null;
+}
+
+export interface EvaluationCaseScore {
+  source_case_id: string;
+  name: string | null;
+  pct_stats: NumberStats | null;
+  sessions: EvaluationSessionScore[];
+}
+
+export interface EvaluationScore {
+  overall_pct: number | null;
+  cases: EvaluationCaseScore[];
+}
+
+export interface BenchmarkEvaluationReport extends BenchmarkEvaluationRecord {
+  score: EvaluationScore;
+}
+
+export interface BenchmarkRunEvaluationsResult {
+  evaluations: BenchmarkEvaluationReport[];
 }

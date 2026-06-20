@@ -22,6 +22,8 @@ const EXPECTED_OPERATION_IDS = [
   "benchmark_run",
   "benchmark_run_status",
   "benchmark_run_report",
+  "benchmark_evaluate",
+  "benchmark_run_evaluations",
 ] as const;
 
 // Mock context — never called in these unit tests (no actual execution)
@@ -45,14 +47,14 @@ describe("MCP tool names derived from backend operation IDs", () => {
     });
   }
 
-  it("produces exactly 15 tool names", () => {
+  it("produces exactly 17 tool names", () => {
     const names = operationList.map((op) => `${TOOL_PREFIX}${op.id}`);
     expect(names).toEqual(EXPECTED_OPERATION_IDS.map((id) => `mcpscope_${id}`));
   });
 });
 
-describe("backend operation catalog — 15 operations with execute", () => {
-  it("catalog has all 15 operations", () => {
+describe("backend operation catalog — 17 operations with execute", () => {
+  it("catalog has all 17 operations", () => {
     expect(Object.keys(operationCatalog)).toEqual([...EXPECTED_OPERATION_IDS]);
   });
 
@@ -69,7 +71,7 @@ describe("backend operation catalog — 15 operations with execute", () => {
 });
 
 describe("CLI/MCP parity — backend operation catalog is the source of truth", () => {
-  it("backend catalog contains exactly the 15 shipped operations", () => {
+  it("backend catalog contains exactly the 17 shipped operations", () => {
     const backendIds = operationList.map((op) => op.id);
     expect(backendIds).toEqual([...EXPECTED_OPERATION_IDS]);
   });
@@ -191,7 +193,7 @@ describe("MCP structured output — outputSchema defined for all operations", ()
 });
 
 describe("MCP HTTP endpoint execution", () => {
-  it("responds to JSON-RPC tools/list and returns all 15 mcpscope tools", async () => {
+  it("responds to JSON-RPC tools/list and returns all 17 mcpscope tools", async () => {
     const dataDir = `.tmp-test-data/${crypto.randomUUID()}`;
     const app = await buildBackendApp({
       host: "127.0.0.1",

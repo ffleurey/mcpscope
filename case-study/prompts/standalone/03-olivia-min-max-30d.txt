@@ -1,0 +1,1 @@
+Hello, I suspect that we have some issues with the management of the heating in Olivia's bedroom. Normally I would expect the temperature to be between 16 and 21 degrees. Can you check the min/max in the last 30 days?

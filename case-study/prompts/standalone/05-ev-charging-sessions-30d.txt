@@ -1,0 +1,1 @@
+Can you give me an overview of the car charging this month? I would like to know how many times we charged the car with the start time, end time and kWh for each charge. Output it as a table with one row be charge the date and time of the charge, the duration of the charge and the total energy consumed during the charge. Also indicate the peek charge power reached.

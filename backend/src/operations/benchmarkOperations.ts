@@ -17,12 +17,16 @@ import {
   launchBenchmarkRun,
   getBenchmarkRunProgress,
   getBenchmarkRunReport,
+  evaluateBenchmarkRun,
+  getBenchmarkRunEvaluationReports,
   type BenchmarkRunProgress,
+  type BenchmarkEvaluationReport,
 } from "./benchmark.js";
 import type {
   BenchmarkRecord,
   BenchmarkCaseRecord,
   BenchmarkRunRecord,
+  BenchmarkEvaluationRecord,
 } from "../domain/model.js";
 import type {
   RunReport,
@@ -54,9 +58,50 @@ function caseToSnake(c: BenchmarkCaseRecord) {
     order_index: c.orderIndex,
     expected_tools_called: c.expectedToolsCalled,
     expected_tools_not_called: c.expectedToolsNotCalled,
+    rubric: c.rubric,
     source_session_id: c.sourceSessionId,
     created_at: c.createdAt,
     updated_at: c.updatedAt,
+  };
+}
+
+function evaluationToSnake(e: BenchmarkEvaluationRecord) {
+  return {
+    id: e.id,
+    run_id: e.runId,
+    judge_model_config_id: e.judgeModelConfigId,
+    status: e.status,
+    error: e.error,
+    sessions: e.sessions.map((s) => ({
+      run_session_id: s.runSessionId,
+      analysis_session_id: s.analysisSessionId,
+      status: s.status,
+    })),
+    created_at: e.createdAt,
+    updated_at: e.updatedAt,
+  };
+}
+
+function evaluationReportToSnake(e: BenchmarkEvaluationReport) {
+  return {
+    ...evaluationToSnake(e),
+    score: {
+      overall_pct: e.score.overallPct,
+      cases: e.score.cases.map((c) => ({
+        source_case_id: c.sourceCaseId,
+        name: c.name,
+        pct_stats: numberStatsToSnake(c.pctStats),
+        sessions: c.sessions.map((s) => ({
+          run_session_id: s.runSessionId,
+          analysis_session_id: s.analysisSessionId,
+          source_case_id: s.sourceCaseId,
+          status: s.status,
+          awarded: s.awarded,
+          max: s.max,
+          pct: s.pct,
+        })),
+      })),
+    },
   };
 }
 
@@ -210,6 +255,12 @@ const benchmarkSummaryShape = z.object({
   updated_at: z.number(),
 });
 
+const rubricCriterionShape = z.object({
+  id: z.number().int(),
+  description: z.string(),
+  points: z.number().int(),
+});
+
 const caseShape = z.object({
   id: z.string(),
   benchmark_id: z.string(),
@@ -218,6 +269,7 @@ const caseShape = z.object({
   order_index: z.number(),
   expected_tools_called: z.array(z.string()),
   expected_tools_not_called: z.array(z.string()),
+  rubric: z.array(rubricCriterionShape),
   source_session_id: z.string().nullable(),
   created_at: z.number(),
   updated_at: z.number(),
@@ -391,6 +443,13 @@ export const benchmarkAddCaseInputSchema = z.object({
     .array(z.string())
     .optional()
     .describe("Tools that should NOT be called (deterministic check)."),
+  rubric: z
+    .array(rubricCriterionShape)
+    .optional()
+    .describe(
+      "Optional scored rubric for LLM evaluation: ordered criteria, each {id, "
+      + "description, points}. Judged by benchmark_evaluate against the session trace.",
+    ),
 });
 export type BenchmarkAddCaseInput = z.infer<typeof benchmarkAddCaseInputSchema>;
 
@@ -412,6 +471,7 @@ export const benchmarkAddCaseOperation = {
       ...(input.expected_tools_not_called !== undefined
         ? { expectedToolsNotCalled: input.expected_tools_not_called }
         : {}),
+      ...(input.rubric !== undefined ? { rubric: input.rubric } : {}),
     });
     return { case: caseToSnake(record) };
   },
@@ -625,5 +685,105 @@ export const benchmarkRunReportOperation = {
   async execute(ctx: OperationContext, input: BenchmarkRunReportInput) {
     const { run, report } = getBenchmarkRunReport(ctx.db, input.run_id);
     return { run: runToSnake(run), report: runReportToSnake(report) };
+  },
+};
+
+// ── benchmark_evaluate ───────────────────────────────────────────────────────
+
+const evaluationSessionShape = z.object({
+  run_session_id: z.string(),
+  analysis_session_id: z.string(),
+  status: z.string(),
+});
+
+const evaluationShape = z.object({
+  id: z.string(),
+  run_id: z.string(),
+  judge_model_config_id: z.string(),
+  status: z.string(),
+  error: z.string().nullable(),
+  sessions: z.array(evaluationSessionShape),
+  created_at: z.number(),
+  updated_at: z.number(),
+});
+
+export const benchmarkEvaluateInputSchema = z.object({
+  run_id: z.string().describe("Completed run to evaluate."),
+  judge_model_config_id: z
+    .string()
+    .describe("Model config for the judge (a separate model; never the task model)."),
+});
+export type BenchmarkEvaluateInput = z.infer<typeof benchmarkEvaluateInputSchema>;
+
+export const benchmarkEvaluateOutputSchema = { evaluation: evaluationShape };
+
+export const benchmarkEvaluateOperation = {
+  id: "benchmark_evaluate" as const,
+  description:
+    "Launch an LLM evaluation pass over a completed run: a separate judge model "
+    + "scores every session against its case rubric. Repeatable (0..N per run; "
+    + "compare judge models). Returns immediately; poll benchmark_run_evaluations "
+    + "for scores.",
+  schema: benchmarkEvaluateInputSchema,
+  outputSchema: benchmarkEvaluateOutputSchema,
+  async execute(ctx: OperationContext, input: BenchmarkEvaluateInput) {
+    const evaluation = evaluateBenchmarkRun(ctx, {
+      runId: input.run_id,
+      judgeModelConfigId: input.judge_model_config_id,
+    });
+    return { evaluation: evaluationToSnake(evaluation) };
+  },
+};
+
+// ── benchmark_run_evaluations ────────────────────────────────────────────────
+
+export const benchmarkRunEvaluationsInputSchema = z.object({
+  run_id: z.string().describe("Run id whose evaluations to list."),
+});
+export type BenchmarkRunEvaluationsInput = z.infer<
+  typeof benchmarkRunEvaluationsInputSchema
+>;
+
+export const benchmarkRunEvaluationsOutputSchema = {
+  evaluations: z.array(
+    evaluationShape.extend({
+      score: z.object({
+        overall_pct: z.number().nullable(),
+        cases: z.array(
+          z.object({
+            source_case_id: z.string(),
+            name: z.string().nullable(),
+            pct_stats: numberStatsShape,
+            sessions: z.array(
+              z.object({
+                run_session_id: z.string(),
+                analysis_session_id: z.string(),
+                source_case_id: z.string(),
+                status: z.string(),
+                awarded: z.number().nullable(),
+                max: z.number().nullable(),
+                pct: z.number().nullable(),
+              }),
+            ),
+          }),
+        ),
+      }),
+    }),
+  ),
+};
+
+export const benchmarkRunEvaluationsOperation = {
+  id: "benchmark_run_evaluations" as const,
+  description:
+    "List a run's evaluation passes, each with scores computed on read from the "
+    + "judge verdicts: per-session pct, per-case distribution, and overall pct.",
+  schema: benchmarkRunEvaluationsInputSchema,
+  outputSchema: benchmarkRunEvaluationsOutputSchema,
+  async execute(ctx: OperationContext, input: BenchmarkRunEvaluationsInput) {
+    return {
+      evaluations: getBenchmarkRunEvaluationReports(ctx.db, input.run_id).map(
+        evaluationReportToSnake,
+      ),
+    };
   },
 };

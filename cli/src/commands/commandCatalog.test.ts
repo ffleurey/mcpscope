@@ -17,6 +17,8 @@ const expectedCommandIds = [
   "benchmark_run",
   "benchmark_run_status",
   "benchmark_run_report",
+  "benchmark_evaluate",
+  "benchmark_run_evaluations",
 ] as const;
 
 describe("CLI command catalog matches backend operations", () => {

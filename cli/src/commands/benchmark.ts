@@ -7,6 +7,8 @@ import {
   cliBenchmarkRun,
   cliBenchmarkRunStatus,
   cliBenchmarkRunReport,
+  cliBenchmarkEvaluate,
+  cliBenchmarkRunEvaluations,
 } from "../httpClient.js";
 import { bold } from "../colors.js";
 import type {
@@ -16,6 +18,8 @@ import type {
   BenchmarkAddCaseResult,
   BenchmarkRunStatusResult,
   BenchmarkRunReportResult,
+  BenchmarkEvaluateResult,
+  BenchmarkRunEvaluationsResult,
   NumberStats,
   CaseReport,
 } from "../types.js";
@@ -229,6 +233,12 @@ function renderBenchmarkInspect(result: BenchmarkInspectResult): void {
           `      forbid-tool   ${c.expected_tools_not_called.join(", ")}\n`,
         );
       }
+      if (c.rubric.length > 0) {
+        const pts = c.rubric.reduce((sum, r) => sum + r.points, 0);
+        process.stdout.write(
+          `      rubric        ${c.rubric.length} criteria (${pts} pts)\n`,
+        );
+      }
     }
   }
 
@@ -330,6 +340,12 @@ function renderBenchmarkAddCase(result: BenchmarkAddCaseResult): void {
   if (c.expected_tools_not_called.length > 0) {
     process.stdout.write(
       `  forbid-tool   ${c.expected_tools_not_called.join(", ")}\n`,
+    );
+  }
+  if (c.rubric.length > 0) {
+    const pts = c.rubric.reduce((sum, r) => sum + r.points, 0);
+    process.stdout.write(
+      `  rubric        ${c.rubric.length} criteria (${pts} pts)\n`,
     );
   }
 }
@@ -668,6 +684,162 @@ function renderBenchmarkRunStatus(status: BenchmarkRunStatusResult): void {
 export function parseBenchmarkRunStatusArgs(
   args: string[],
 ): ParseResult<BenchmarkRunStatusOptions> {
+  let url: string | undefined;
+  let json = false;
+  let runId: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (arg === "-h" || arg === "--help") return { help: true };
+    if (arg === "--url") {
+      url = args[++i];
+      if (!url) return { error: "--url requires a value" };
+    } else if (arg === "--json") {
+      json = true;
+    } else if (!arg.startsWith("-")) {
+      if (runId !== undefined) {
+        return { error: "Too many arguments" };
+      }
+      runId = arg;
+    } else {
+      return { error: `Unknown option: ${arg}` };
+    }
+  }
+
+  if (!runId) return { error: "Missing required argument: <run_id>" };
+
+  return { opts: { url: url ?? "", json, runId } };
+}
+
+// ─── benchmark_evaluate ───────────────────────────────────────────────────────
+
+export interface BenchmarkEvaluateOptions {
+  url: string;
+  json: boolean;
+  runId: string;
+  judgeModelConfigId: string;
+}
+
+export async function runBenchmarkEvaluate(
+  opts: BenchmarkEvaluateOptions,
+): Promise<void> {
+  const result = await cliBenchmarkEvaluate(opts.url, {
+    run_id: opts.runId,
+    judge_model_config_id: opts.judgeModelConfigId,
+  });
+
+  if (opts.json) {
+    emitJson(result);
+    return;
+  }
+
+  renderBenchmarkEvaluate(result);
+}
+
+function renderBenchmarkEvaluate(result: BenchmarkEvaluateResult): void {
+  const { evaluation: e } = result;
+  process.stdout.write(`${bold(e.id)}  ${e.status}\n`);
+  process.stdout.write(`  run    ${e.run_id}\n`);
+  process.stdout.write(`  judge  ${e.judge_model_config_id}\n`);
+  process.stdout.write(
+    `\nRun 'mcpscope benchmark_run_evaluations ${e.run_id}' for scores.\n`,
+  );
+}
+
+export function parseBenchmarkEvaluateArgs(
+  args: string[],
+): ParseResult<BenchmarkEvaluateOptions> {
+  let url: string | undefined;
+  let json = false;
+  let runId: string | undefined;
+  let judgeModelConfigId: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (arg === "-h" || arg === "--help") return { help: true };
+    if (arg === "--url") {
+      url = args[++i];
+      if (!url) return { error: "--url requires a value" };
+    } else if (arg === "--json") {
+      json = true;
+    } else if (arg === "--judge-model") {
+      const val = args[++i];
+      if (!val) return { error: "--judge-model requires a value" };
+      judgeModelConfigId = val;
+    } else if (!arg.startsWith("-")) {
+      if (runId !== undefined) {
+        return { error: "Too many arguments" };
+      }
+      runId = arg;
+    } else {
+      return { error: `Unknown option: ${arg}` };
+    }
+  }
+
+  if (!runId) return { error: "Missing required argument: <run_id>" };
+  if (!judgeModelConfigId) {
+    return { error: "Missing required option: --judge-model <model_config_id>" };
+  }
+
+  return { opts: { url: url ?? "", json, runId, judgeModelConfigId } };
+}
+
+// ─── benchmark_run_evaluations ────────────────────────────────────────────────
+
+export interface BenchmarkRunEvaluationsOptions {
+  url: string;
+  json: boolean;
+  runId: string;
+}
+
+export async function runBenchmarkRunEvaluations(
+  opts: BenchmarkRunEvaluationsOptions,
+): Promise<void> {
+  const result = await cliBenchmarkRunEvaluations(opts.url, opts.runId);
+
+  if (opts.json) {
+    emitJson(result);
+    return;
+  }
+
+  renderBenchmarkRunEvaluations(result);
+}
+
+function formatPct(pct: number | null): string {
+  return pct === null ? "n/a" : `${(pct * 100).toFixed(0)}%`;
+}
+
+function renderBenchmarkRunEvaluations(
+  result: BenchmarkRunEvaluationsResult,
+): void {
+  const { evaluations } = result;
+  if (evaluations.length === 0) {
+    process.stdout.write("No evaluations for this run yet.\n");
+    return;
+  }
+
+  for (const e of evaluations) {
+    process.stdout.write(
+      `${bold(e.id)}  ${e.status}  judge ${e.judge_model_config_id}  overall ${formatPct(e.score.overall_pct)}\n`,
+    );
+    if (e.error) {
+      process.stdout.write(`  error  ${e.error}\n`);
+    }
+    for (const c of e.score.cases) {
+      const label = c.name ?? c.source_case_id;
+      const stats =
+        c.pct_stats === null
+          ? "n/a"
+          : `min ${formatPct(c.pct_stats.min)}  mean ${formatPct(c.pct_stats.mean)}  max ${formatPct(c.pct_stats.max)}`;
+      process.stdout.write(`  ${truncate(label, 40).padEnd(40)}  ${stats}\n`);
+    }
+    process.stdout.write("\n");
+  }
+}
+
+export function parseBenchmarkRunEvaluationsArgs(
+  args: string[],
+): ParseResult<BenchmarkRunEvaluationsOptions> {
   let url: string | undefined;
   let json = false;
   let runId: string | undefined;
