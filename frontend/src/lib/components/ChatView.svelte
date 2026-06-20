@@ -26,7 +26,7 @@
   import ExtractCaseModal from './ExtractCaseModal.svelte'
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import IdBadge from './IdBadge.svelte'
-  import NewSessionPanel from './NewSessionPanel.svelte'
+  import { currentView } from '../navStore'
   import SessionCompactionStepBlock from './SessionCompactionStepBlock.svelte'
   import SessionPreludeBlock from './SessionPreludeBlock.svelte'
   import SessionTurnBlock from './SessionTurnBlock.svelte'
@@ -60,6 +60,12 @@
   let titleInputEl = $state<HTMLInputElement | null>(null)
   let showExtractCase = $state(false)
   let session = $derived($activeSession)
+
+  // The chat view has no empty state of its own — if it ends up with no session
+  // (e.g. the open session was deleted), return to home.
+  $effect(() => {
+    if (!session) currentView.set('home')
+  })
   let traceSteps = $derived(
     [...($activeTrace?.steps ?? [])].sort((a, b) => a.childIndex - b.childIndex),
   )
@@ -317,10 +323,7 @@
 </script>
 
 <div class="chat-view">
-  {#if !session}
-    <!-- ── No session: show setup panel ─────────────────────────────────── -->
-    <NewSessionPanel />
-  {:else}
+  {#if session}
     <!-- ── Active session ────────────────────────────────────────────────── -->
     <div class="chat-header">
       <IdBadge id={session.id} />

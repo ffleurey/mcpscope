@@ -152,7 +152,11 @@ Same scores in snake_case → CLI/MCP parity holds.
 
 ## Triage / follow-ups
 
-- **TR-17 (decision pending — orphaned/incomplete evaluations not recoverable).** Observed: E-BT5T
+- **TR-17 (FIXED) — orphaned/incomplete evaluations now recover.** Startup reconcile marks
+  interrupted pending/running runs+evals → `error`; reports expose judged/expected (incomplete
+  when K<N); retry keeps any verdict-bearing session (skip-if-verdict); UI shows "K/N judged" +
+  Retry for any settled errored/incomplete pass. E-BT5T reconciles to error on restart → retry
+  fills the missing judges. Original notes below. Observed: E-BT5T
   stuck `status: running` with 1 of 8 run-sessions judged (coordinator interrupted by the looping
   judge + server restarts; fire-and-forget loop never resumed — same class as "restart leaves run
   running"). Gaps: (a) Retry only shows on `status==='error'`, so a stuck `running` has no UI

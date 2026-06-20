@@ -382,6 +382,8 @@ export async function deleteChat(sessionId: string): Promise<void> {
       activeChatId.set(null)
       activeTrace.set(null)
       activeTurnStream.set(null)
+      // The chat view has no standalone empty state; return to home.
+      currentView.set('home')
     }
   } catch (error) {
     setSessionError(toAppError(error))
