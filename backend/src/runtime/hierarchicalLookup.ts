@@ -527,8 +527,11 @@ export function resolveHierarchicalId(
       session_type: session.sessionType,
       compaction_strategy: session.compactionStrategy,
       model: {
+        id: session.modelProfileSnapshot.id,
         name: session.modelProfileSnapshot.name,
         key: session.modelProfileSnapshot.modelKey,
+        temperature: session.modelProfileSnapshot.temperature,
+        reasoning: session.modelProfileSnapshot.reasoning,
       },
       context_window: {
         available: session.loadedContextLength ?? null,

@@ -16,6 +16,16 @@
       .sort((a, b) => a.created_at - b.created_at)
   }
 
+  // Judge sessions are session_analysis children of a run-session (one per
+  // evaluation pass). They nest under the run-session they scored, mirroring how
+  // analysis sessions nest under primaries — so they open in the normal session
+  // view (context, tool calls, what the judge pulled).
+  function judgesOf(sessionId: string): SessionSummary[] {
+    return [...$chatSessions]
+      .filter((s) => s.parent_kind === 'session' && s.parent_id === sessionId)
+      .sort((a, b) => a.created_at - b.created_at)
+  }
+
   // Expansion is purely manual (a normal treeview) and independent of selection:
   // clicking a run selects it; only the chevron toggles its sessions.
   let expandedIds = $state(new Set<string>())
@@ -88,15 +98,44 @@
         {#if isExpanded && hasChildren}
           <ul class="child-sessions">
             {#each children as child (child.id)}
+              {@const judges = judgesOf(child.id)}
+              {@const childExpanded = expandedIds.has(child.id)}
               <li class="run-item child-item" class:active={$activeChatId === child.id}>
                 <div class="run-row">
                   <span class="child-indent"></span>
+                  <button
+                    class="expand-btn"
+                    class:visible={judges.length > 0}
+                    onclick={(e) => toggleExpand(child.id, e)}
+                    aria-label={childExpanded ? 'Collapse judge sessions' : 'Expand judge sessions'}
+                    title={childExpanded ? 'Hide judge sessions' : 'Show judge sessions'}
+                  >
+                    <Icon path={childExpanded ? iconChevronDown : iconChevronRight} />
+                  </button>
                   <button class="run-button" onclick={() => selectChat(child.id)}>
                     <span class="run-id">[{child.id}]</span>
                     <span class="run-title">{child.title}</span>
                     <span class="run-date">{formatTreeTimestamp(child.created_at)}</span>
                   </button>
                 </div>
+
+                {#if childExpanded && judges.length > 0}
+                  <ul class="child-sessions">
+                    {#each judges as judge (judge.id)}
+                      <li class="run-item child-item" class:active={$activeChatId === judge.id}>
+                        <div class="run-row">
+                          <span class="child-indent"></span>
+                          <span class="child-indent"></span>
+                          <button class="run-button" onclick={() => selectChat(judge.id)}>
+                            <span class="run-id">[{judge.id}]</span>
+                            <span class="run-title judge-title">{judge.title}</span>
+                            <span class="run-date">{formatTreeTimestamp(judge.created_at)}</span>
+                          </button>
+                        </div>
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
               </li>
             {/each}
           </ul>
@@ -209,6 +248,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* Judge (evaluation) sessions read as analysis children, like the Sessions tree. */
+  .judge-title {
+    font-style: italic;
+    opacity: 0.9;
   }
 
   .run-date {

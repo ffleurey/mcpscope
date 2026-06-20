@@ -209,7 +209,7 @@
           <span class="rubric-pts">pts</span>
           <button
             type="button"
-            class="icon-btn"
+            class="icon-btn icon-btn-danger"
             title="Remove criterion"
             aria-label="Remove criterion"
             onclick={() => removeCriterion(i)}
