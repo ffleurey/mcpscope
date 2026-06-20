@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { RouteDeps } from "./types.js";
+import { rubricCriterionSchema } from "../domain/model.js";
 import {
   createBenchmarkEntry,
   listBenchmarkEntries,
@@ -13,6 +14,8 @@ import {
   launchBenchmarkRun,
   getBenchmarkRunReport,
   deleteBenchmarkRunEntry,
+  evaluateBenchmarkRun,
+  listBenchmarkRunEvaluations,
 } from "../operations/benchmark.js";
 import {
   benchmarkCreateOperation,
@@ -98,6 +101,7 @@ export function registerBenchmarkRoutes({
         name: z.string().nullable().optional(),
         expectedToolsCalled: z.array(z.string()).optional(),
         expectedToolsNotCalled: z.array(z.string()).optional(),
+        rubric: z.array(rubricCriterionSchema).optional(),
       })
       .parse(request.body);
     try {
@@ -134,6 +138,7 @@ export function registerBenchmarkRoutes({
         orderIndex: z.number().int().nonnegative().optional(),
         expectedToolsCalled: z.array(z.string()).optional(),
         expectedToolsNotCalled: z.array(z.string()).optional(),
+        rubric: z.array(rubricCriterionSchema).optional(),
       })
       .parse(request.body);
     try {
@@ -188,6 +193,33 @@ export function registerBenchmarkRoutes({
       deleteBenchmarkRunEntry(database, runId);
       reply.code(204);
       return null;
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  // Launch a new evaluation pass over a completed run (repeatable; one per judge model).
+  app.post("/api/benchmark-runs/:runId/evaluations", async (request, reply) => {
+    const { runId } = z.object({ runId: z.string() }).parse(request.params);
+    const body = z
+      .object({ judgeModelConfigId: z.string().min(1) })
+      .parse(request.body);
+    try {
+      const evaluation = evaluateBenchmarkRun(opCtx, {
+        runId,
+        judgeModelConfigId: body.judgeModelConfigId,
+      });
+      reply.code(202);
+      return { evaluation };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.get("/api/benchmark-runs/:runId/evaluations", async (request, reply) => {
+    const { runId } = z.object({ runId: z.string() }).parse(request.params);
+    try {
+      return { evaluations: listBenchmarkRunEvaluations(database, runId) };
     } catch (err) {
       return handleOperationError(err, reply);
     }
