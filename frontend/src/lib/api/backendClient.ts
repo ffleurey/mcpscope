@@ -640,6 +640,12 @@ export function getEvaluations(runId: string) {
   })
 }
 
+export function deleteEvaluation(evaluationId: string) {
+  return request<void>(`/api/benchmark-evaluations/${encodeURIComponent(evaluationId)}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function streamSchedulerEvents(
   onEvent: (event: SchedulerEvent) => void | Promise<void>,
   signal?: AbortSignal,

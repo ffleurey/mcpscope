@@ -10,6 +10,7 @@ import {
   getBenchmarkRun,
   getEvaluations as getBackendEvaluations,
   launchEvaluation as launchBackendEvaluation,
+  deleteEvaluation as deleteBackendEvaluation,
   launchRun as launchBackendRun,
   listBenchmarks,
   patchBenchmark as patchBackendBenchmark,
@@ -310,6 +311,16 @@ export async function launchEvaluation(
   stopEvalPolling()
   if (get(activeRunId) === runId) {
     evalPollTimer = setTimeout(() => void pollActiveRunEvaluations(runId), POLL_INTERVAL_MS)
+  }
+}
+
+/** Delete an evaluation pass (and its judge sessions); refresh the active run's view. */
+export async function removeEvaluation(evaluationId: string): Promise<void> {
+  await deleteBackendEvaluation(evaluationId)
+  const runId = get(activeRunId)
+  if (runId) {
+    await refreshActiveRunEvaluations(runId).catch(() => undefined)
+    await refreshSessions().catch(() => undefined)
   }
 }
 

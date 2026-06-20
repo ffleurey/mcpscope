@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { activeRun, activeRunReport, activeRunEvaluations } from '../benchmarkStore'
+  import {
+    activeRun,
+    activeRunReport,
+    activeRunEvaluations,
+    removeEvaluation,
+  } from '../benchmarkStore'
   import { chatSessions, selectChat } from '../sessionStore'
   import { modelConfigs } from '../connectionStore'
   import { columnResize } from '../actions/columnResize'
@@ -8,7 +13,7 @@
   import DialogShell from './DialogShell.svelte'
   import BenchmarkCaseCard from './BenchmarkCaseCard.svelte'
   import EvaluationLaunchModal from './EvaluationLaunchModal.svelte'
-  import { iconView, iconAnalysis } from '../design/icons'
+  import { iconView, iconAnalysis, iconTrash } from '../design/icons'
   import type {
     CaseReport,
     NumberStats,
@@ -35,6 +40,9 @@
   }
   function toggleExpand(key: string): void {
     expandedKey = expandedKey === key ? null : key
+  }
+  async function handleDeleteEvaluation(id: string): Promise<void> {
+    await removeEvaluation(id)
   }
 
   // Live clock so the elapsed-time of an in-progress run ticks forward.
@@ -335,6 +343,14 @@
                   <span class="eval-overall">{pct(ev.score.overallPct)}</span>
                 {/if}
                 <IdBadge id={ev.id} />
+                <button
+                  class="icon-btn icon-btn-danger eval-delete"
+                  title="Delete evaluation"
+                  aria-label="Delete evaluation"
+                  onclick={() => handleDeleteEvaluation(ev.id)}
+                >
+                  <Icon path={iconTrash} />
+                </button>
               </div>
               {#if ev.error}
                 <div class="run-error">{ev.error}</div>
@@ -588,6 +604,9 @@
     font-size: 0.95rem;
     font-weight: 600;
     color: var(--green-bright);
+  }
+  .eval-delete {
+    margin-left: auto;
   }
   .verdict-subrow > td {
     padding: 0.4rem 0.6rem;

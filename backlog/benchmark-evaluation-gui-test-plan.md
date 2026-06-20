@@ -9,15 +9,15 @@ Manual GUI evaluation of the shipped benchmark LLM-evaluation feature (branch
 
 ## Fixtures (provisioned via MCP)
 
-- **Benchmark `B-266B` — "Oslo HA history — V1 seed"**, 4 cases, deterministic tool-checks set.
+- **Benchmark `B-84JK` — "Oslo HA history — V1 seed"**, 4 cases, deterministic tool-checks set.
   Rubrics intentionally left empty (authored in the GUI — that is Test 2).
 
 | Case | Theme | `expected_tools_called` | `expected_tools_not_called` |
 |---|---|---|---|
-| B-266B.1 | Climate matrix (4 areas, 7d) | `ha_history_list_entities`, `ha_history_get_sensor_stats` | — |
-| B-266B.2 | EV charger energy + sessions | `ha_history_get_consumption`, `ha_history_detect_sessions` | — |
-| B-266B.3 | Stairs motion daily | `ha_history_get_state_history` | `ha_history_get_sensor_stats`, `ha_history_detect_sessions` |
-| B-266B.4 | Olivia away-from-home | `ha_history_get_state_history` | `ha_history_get_sensor_stats`, `ha_history_get_consumption`, `ha_history_detect_sessions` |
+| B-84JK.1 | Climate matrix (4 areas, 7d) | `ha_history_list_entities`, `ha_history_get_sensor_stats` | — |
+| B-84JK.2 | EV charger energy + sessions | `ha_history_get_consumption`, `ha_history_detect_sessions` | — |
+| B-84JK.3 | Stairs motion daily | `ha_history_get_state_history` | `ha_history_get_sensor_stats`, `ha_history_detect_sessions` |
+| B-84JK.4 | Olivia away-from-home | `ha_history_get_state_history` | `ha_history_get_sensor_stats`, `ha_history_get_consumption`, `ha_history_detect_sessions` |
 
 - **Environment:** model configs incl. Qwen3.6 35B APEX (`qwen36-35b-apex`) + Gemmas;
   MCP profile **HA Oslo** (`ha-oslo`, `http://localhost:3011/mcp`).
@@ -31,25 +31,25 @@ Manual GUI evaluation of the shipped benchmark LLM-evaluation feature (branch
 Each criterion is `points` — description. Sum = 10/case. They score **path quality +
 answer quality**, the case study's core ask.
 
-### B-266B.1 — Climate matrix
+### B-84JK.1 — Climate matrix
 - `3` — Resolves the four areas' ambient temp+humidity entities without asking for IDs (≤2 discovery calls); uses only room/outdoor climate sensors, not batteries, setpoints, or litter-box/printer internal temps.
 - `3` — Uses `ha_history_get_sensor_stats` for mean/min/max temp + mean humidity over the 7-day period (real values, not fabricated).
 - `2` — Single compact comparative table covering Cave, Kitchen, Salon, Outdoor with avg/min/max temp + avg humidity.
 - `2` — If the daily shape can't be fully satisfied, states the limitation honestly instead of inventing daily min/max.
 
-### B-266B.2 — EV charger
+### B-84JK.2 — EV charger
 - `3` — Resolves the outdoor EV charger device + power/energy entities without asking for IDs (even though named like a plug).
 - `3` — Returns total charging energy (consumption) **and** session count (detect_sessions) for 30 days.
 - `2` — Compact session table: date, start, end, duration, peak power, energy.
 - `2` — Concise; no device-by-device exploratory wandering.
 
-### B-266B.3 — Stairs motion
+### B-84JK.3 — Stairs motion
 - `3` — Resolves both entrance/stairs motion binary sensors without asking for IDs.
 - `3` — Uses binary-sensor state history (`state_value=on`, `group_by=day`) — not numeric stats or threshold sessions.
 - `2` — Daily comparison table for both sensors over 7 days + per-sensor totals + last-trigger.
 - `2` — Ends with a busier-overall conclusion; doesn't invent hourly buckets / unsupported raw-transition claims.
 
-### B-266B.4 — Olivia away
+### B-84JK.4 — Olivia away
 - `3` — Resolves Olivia's correct person/tracker entity; not distracted by battery/app-version/charger/geocode companion-phone entities.
 - `3` — Uses discrete state history (not numeric tools); treats "not home" as time outside the Home zone.
 - `2` — Day-by-day table (away sessions, first departure, last return, total away) + accumulated weekly total.
@@ -67,7 +67,7 @@ profiles still present (config survived the DB reset).
 - Findings:
 
 ### T1 — Benchmark created via MCP is visible
-Open Benchmarks → "Oslo HA history — V1 seed" (`B-266B`) with 4 cases. Open a case card:
+Open Benchmarks → "Oslo HA history — V1 seed" (`B-84JK`) with 4 cases. Open a case card:
 prompt + expected/forbidden tools render; rubric section empty.
 
 - Status: ⬜
@@ -202,12 +202,15 @@ Issues found, with severity + proposed fix, get listed here as we work through t
   run-snapshot rubric (captured at run launch), not the live case rubric. Pro: reproducible,
   matches the immutable-run philosophy. Con: a rubric added/edited *after* a run does NOT apply to
   that run (would judge against an empty/old rubric) — a real workflow gotcha (author-rubric-then-
-  evaluate-an-existing-run silently uses the stale snapshot). Observed live: B-266B.1's rubric was
+  evaluate-an-existing-run silently uses the stale snapshot). Observed live: B-84JK.1's rubric was
   edited after R-V55D, so the current case rubric differs from what E-3GLL/E-NBLY used. Decide:
   keep snapshot (and message it / warn when snapshot rubric is empty), or evaluate against live
   case rubric, or offer a choice.
-- **TR-9 (feature — judge temperature control + context-size display in the Evaluate modal).**
-  Makes sense; confirmed scope. (a) Judge temperature is hardcoded `0` (benchmark.ts:992) — add
+- **TR-9 (FIXED) — judge temperature control + context-size display in the Evaluate modal.**
+  Shipped: editable judge temperature (default 0) + read-only context size in the launch modal;
+  temperature stored on the evaluation record (schema v2→3, DB reset) and threaded to the judge
+  sessions; `benchmark_evaluate` op + `--temperature` CLI flag; docs updated. Full suite 248 green.
+  Original scope below. (a) Judge temperature is hardcoded `0` (benchmark.ts:992) — add
   an editable field in EvaluationLaunchModal **defaulting to 0** (keep deterministic default),
   thread as optional through store → API body → POST /evaluations → evaluateBenchmarkRun →
   judgeOneSession → executeAnalysisLaunch; add optional `temperature` to the `benchmark_evaluate`
@@ -216,6 +219,19 @@ Issues found, with severity + proposed fix, get listed here as we work through t
   model; reload to change" hint — frontend-only. Sub-decision: store judge temperature on the
   evaluation record so the list can show "judged at temp X" (lean yes) vs rely on the judge
   session snapshot (TR-6). Docs note: temperature default 0, overridable. Build pending user OK.
+- **TR-11 (decision pending — eval error handling + retry).** Launching an evaluation with an
+  unloaded judge model fails the whole pass: `judgeOneSession` re-throws → `runEvaluationCoordinator`
+  marks the evaluation `error` and skips the rest. The general retry concept already exists and
+  (post-TR-4) applies to judge sessions: `POST /api/sessions/:id/retry-init` ("Retry initialization"
+  in ChatView) and `/retry-failed-step` ("Retry failed step"). **Recommended:** coordinator records a
+  judge failure as a per-session error and CONTINUES (no abort, no auto-recover, no pre-validation);
+  failed judges are retried via the existing ChatView buttons; scores recompute on read once a verdict
+  appears. Sub-decision: eval `status` when some judges errored — lean `error` + attempt-all (vs
+  `complete` with per-session pills). Optional later: an eval-level "retry failed judges" button.
+- **TR-12 (ready to build — delete an evaluation).** `deleteBenchmarkEvaluation` repo fn exists but
+  is unexposed. Add route → op (also delete the spawned judge sessions) → store `removeEvaluation` →
+  delete button per evaluation pass in RunReportView, mirroring run-delete. Also fix the related gap:
+  deleting a run orphans its evaluations' judge sessions — clean them up in `deleteBenchmarkRunEntry`.
 - **TR-10 (fixed) — dialogs didn't separate from the dark background.** Dark-on-dark panel with a
   faint `--border`. Fixed in the single shared place (`DialogShell.svelte` `.dialog-inner`):
   `--amber-dim` border (marks the active/focused surface — sanctioned amber-accent use) +

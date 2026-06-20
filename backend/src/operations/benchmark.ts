@@ -35,6 +35,7 @@ import {
   getBenchmarkEvaluation,
   listBenchmarkEvaluationsByRun,
   updateBenchmarkEvaluation,
+  deleteBenchmarkEvaluation,
   getSessionRecord,
   deleteSessionRecord,
   listPartRecordsBySession,
@@ -199,6 +200,18 @@ export function deleteBenchmarkRunEntry(db: BackendDatabase, runId: string): voi
       "benchmark_run_not_found",
     );
   }
+  // Each evaluation's judge sessions are generic session children (no FK cascade) →
+  // delete them and the evaluation rows explicitly before the run goes.
+  for (const evaluation of listBenchmarkEvaluationsByRun(db.connection, runId)) {
+    for (const judge of evaluation.sessions) {
+      try {
+        deleteSessionRecord(db.connection, judge.analysisSessionId);
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    deleteBenchmarkEvaluation(db.connection, evaluation.id);
+  }
   // Remove the produced sessions (generic untyped parent ref → no cascade), then the run.
   for (const session of run.sessions) {
     try {
@@ -208,6 +221,31 @@ export function deleteBenchmarkRunEntry(db: BackendDatabase, runId: string): voi
     }
   }
   deleteBenchmarkRun(db.connection, runId);
+}
+
+/**
+ * Delete a single evaluation pass and the judge analysis sessions it spawned. The
+ * underlying run, its sessions, and their verdict-bearing analysis stay untouched.
+ */
+export function deleteBenchmarkEvaluationEntry(
+  db: BackendDatabase,
+  evaluationId: string,
+): void {
+  const evaluation = getBenchmarkEvaluation(db.connection, evaluationId);
+  if (!evaluation) {
+    throw new OperationError(
+      `Benchmark evaluation "${evaluationId}" not found.`,
+      "benchmark_evaluation_not_found",
+    );
+  }
+  for (const judge of evaluation.sessions) {
+    try {
+      deleteSessionRecord(db.connection, judge.analysisSessionId);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+  deleteBenchmarkEvaluation(db.connection, evaluationId);
 }
 
 // ── Case CRUD ─────────────────────────────────────────────────────────────────
@@ -896,32 +934,57 @@ async function runEvaluationCoordinator(
   });
 
   // Sequential, mirroring the run coordinator: each run-session is judged to
-  // completion before the next. Soft per-session issues (no verdict produced)
-  // are recorded on that session entry and do NOT stop the pass; only a hard
-  // exception (launch / scheduler) propagates and marks the evaluation errored.
+  // completion before the next. A per-session failure (model not loaded, launch /
+  // scheduler error, or no verdict produced) is recorded on that session entry and
+  // does NOT abort the pass — the failed judge session persists and is retryable via
+  // the standard analysis retry (retry-init / retry-failed-step in the session view);
+  // scores recompute on read once a verdict appears. We never auto-recover here.
   try {
     const run = getBenchmarkRun(db.connection, initial.runId);
     if (!run) throw new Error(`Run "${initial.runId}" not found`);
     const completed = run.sessions.filter((s) => s.status === "complete");
+
+    let lastError: string | null = null;
     for (const runSession of completed) {
-      await judgeOneSession(
-        ctx,
-        evaluationId,
-        run,
-        runSession,
-        initial.judgeModelConfigId,
-        initial.judgeTemperature,
-      );
+      try {
+        await judgeOneSession(
+          ctx,
+          evaluationId,
+          run,
+          runSession,
+          initial.judgeModelConfigId,
+          initial.judgeTemperature,
+        );
+      } catch (err) {
+        // judgeOneSession marks the session entry 'error' before throwing; keep going.
+        lastError = err instanceof Error ? err.message : String(err);
+        ctx.logger?.error(
+          { err: lastError, evaluationId, runSessionId: runSession.sessionId },
+          "benchmark judge session failed (continuing)",
+        );
+      }
     }
+
     const done = getBenchmarkEvaluation(db.connection, evaluationId);
     if (done) {
+      // The pass attempted every session. It is 'error' if any judge session failed
+      // (or never got recorded), otherwise 'complete'. Failed judge sessions are
+      // retried individually; this status reflects the pass outcome.
+      const failed = done.sessions.filter((s) => s.status === "error").length;
+      const missing = completed.length - done.sessions.length;
+      const anyError = failed > 0 || missing > 0;
       updateBenchmarkEvaluation(db.connection, {
         ...done,
-        status: "complete",
+        status: anyError ? "error" : "complete",
+        error: anyError
+          ? (lastError ??
+            `${failed + missing} of ${completed.length} judge sessions failed.`)
+          : null,
         updatedAt: now(),
       });
     }
   } catch (err) {
+    // Setup-level failure (e.g. run missing) — hard error for the whole pass.
     const current = getBenchmarkEvaluation(db.connection, evaluationId);
     if (current) {
       updateBenchmarkEvaluation(db.connection, {

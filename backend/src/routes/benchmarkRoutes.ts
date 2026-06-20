@@ -16,6 +16,7 @@ import {
   deleteBenchmarkRunEntry,
   evaluateBenchmarkRun,
   getBenchmarkRunEvaluationReports,
+  deleteBenchmarkEvaluationEntry,
 } from "../operations/benchmark.js";
 import {
   benchmarkCreateOperation,
@@ -226,6 +227,19 @@ export function registerBenchmarkRoutes({
     const { runId } = z.object({ runId: z.string() }).parse(request.params);
     try {
       return { evaluations: getBenchmarkRunEvaluationReports(database, runId) };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.delete("/api/benchmark-evaluations/:evaluationId", async (request, reply) => {
+    const { evaluationId } = z
+      .object({ evaluationId: z.string() })
+      .parse(request.params);
+    try {
+      deleteBenchmarkEvaluationEntry(database, evaluationId);
+      reply.code(204);
+      return null;
     } catch (err) {
       return handleOperationError(err, reply);
     }

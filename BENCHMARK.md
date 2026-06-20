@@ -99,6 +99,8 @@ cases hold only the prompt + expectations.
   them).
 - Deleting a **case** removes it from the blueprint; past runs keep their snapshot (rubric
   included).
+- Deleting an **evaluation** removes that pass and its judge sessions only; the run, its
+  sessions, and other evaluation passes are untouched.
 
 ## Authoring cases
 
@@ -155,6 +157,7 @@ surface). These camelCase routes are not part of the MCP operation catalog.
 | `DELETE` | `/api/benchmark-runs/:runId` | — | `204` (also deletes the run's sessions + evaluations) |
 | `POST` | `/api/benchmark-runs/:runId/evaluations` | `{ judgeModelConfigId, temperature? }` | `202 { evaluation }` |
 | `GET` | `/api/benchmark-runs/:runId/evaluations` | — | `{ evaluations: [{...evaluation, score}] }` |
+| `DELETE` | `/api/benchmark-evaluations/:evaluationId` | — | `204` (also deletes the pass's judge sessions) |
 
 A run launch returns immediately (`202`); a background coordinator drives the sessions
 sequentially through the scheduler. Poll `GET /api/benchmark-runs/:runId` for `run.status`
@@ -284,6 +287,16 @@ judge-session verdict artifacts and computes, per pass:
 - **Overall:** the mean session `pct` across the pass.
 
 A session whose judge errored (no verdict) is listed but excluded from the stats.
+
+### Failure handling & retry
+
+A judge-session failure (e.g. the judge model isn't loaded) does **not** abort the pass: that
+session is marked `error`, the coordinator continues judging the rest, and the evaluation ends
+`error` if any session failed. Nothing is auto-recovered. Because each judge session is an
+ordinary `session_analysis` session (reachable in the run tree), a failed one is retried with
+the **standard analysis retry** — "Retry initialization" (model/init errors) or "Retry failed
+step" — in the normal session view. Scores recompute on read, so once a retried judge produces a
+verdict its case score updates automatically. A whole pass can also just be deleted and re-run.
 
 ## Tutorial: benchmark an MCP server via MCP (for coding agents)
 
