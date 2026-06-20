@@ -11,6 +11,7 @@ import {
   getEvaluations as getBackendEvaluations,
   launchEvaluation as launchBackendEvaluation,
   deleteEvaluation as deleteBackendEvaluation,
+  retryEvaluation as retryBackendEvaluation,
   launchRun as launchBackendRun,
   listBenchmarks,
   patchBenchmark as patchBackendBenchmark,
@@ -321,6 +322,17 @@ export async function removeEvaluation(evaluationId: string): Promise<void> {
   if (runId) {
     await refreshActiveRunEvaluations(runId).catch(() => undefined)
     await refreshSessions().catch(() => undefined)
+  }
+}
+
+/** Re-run a failed/incomplete evaluation; poll its scores while the judges re-run. */
+export async function retryEvaluation(evaluationId: string): Promise<void> {
+  await retryBackendEvaluation(evaluationId)
+  const runId = get(activeRunId)
+  if (runId !== null) {
+    await refreshActiveRunEvaluations(runId).catch(() => undefined)
+    stopEvalPolling()
+    evalPollTimer = setTimeout(() => void pollActiveRunEvaluations(runId), POLL_INTERVAL_MS)
   }
 }
 

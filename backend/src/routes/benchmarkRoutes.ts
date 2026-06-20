@@ -17,6 +17,7 @@ import {
   evaluateBenchmarkRun,
   getBenchmarkRunEvaluationReports,
   deleteBenchmarkEvaluationEntry,
+  retryBenchmarkEvaluation,
 } from "../operations/benchmark.js";
 import {
   benchmarkCreateOperation,
@@ -227,6 +228,19 @@ export function registerBenchmarkRoutes({
     const { runId } = z.object({ runId: z.string() }).parse(request.params);
     try {
       return { evaluations: getBenchmarkRunEvaluationReports(database, runId) };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.post("/api/benchmark-evaluations/:evaluationId/retry", async (request, reply) => {
+    const { evaluationId } = z
+      .object({ evaluationId: z.string() })
+      .parse(request.params);
+    try {
+      const evaluation = retryBenchmarkEvaluation(opCtx, evaluationId);
+      reply.code(202);
+      return { evaluation };
     } catch (err) {
       return handleOperationError(err, reply);
     }

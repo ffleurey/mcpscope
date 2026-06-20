@@ -866,6 +866,44 @@ export function evaluateBenchmarkRun(
   return evaluation;
 }
 
+/**
+ * Re-run a failed/incomplete evaluation: re-judges only the run-sessions that don't
+ * yet have a verdict (clearing their stale judge sessions first), keeping the scored
+ * ones. The recovery path for a transient failure (e.g. the judge model wasn't loaded)
+ * — judging goes through the same init+step launch, so a now-loaded model succeeds.
+ */
+export function retryBenchmarkEvaluation(
+  ctx: OperationContext,
+  evaluationId: string,
+): BenchmarkEvaluationRecord {
+  const { db } = ctx;
+  const evaluation = getBenchmarkEvaluation(db.connection, evaluationId);
+  if (!evaluation) {
+    throw new OperationError(
+      `Benchmark evaluation "${evaluationId}" not found.`,
+      "benchmark_evaluation_not_found",
+    );
+  }
+  if (!ctx.scheduler) {
+    throw new OperationError(
+      "Execution scheduler is not available.",
+      "scheduler_unavailable",
+    );
+  }
+
+  void runEvaluationCoordinator(ctx, evaluationId, { retry: true }).catch((err) => {
+    ctx.logger?.error(
+      {
+        err: err instanceof Error ? err.message : String(err),
+        evaluationId,
+      },
+      "benchmark evaluation retry coordinator crashed",
+    );
+  });
+
+  return { ...evaluation, status: "running", error: null };
+}
+
 export interface BenchmarkEvaluationReport extends BenchmarkEvaluationRecord {
   /** Computed-on-read scores from the per-session verdict artifacts. */
   score: EvaluationScore;
@@ -922,6 +960,7 @@ export function getBenchmarkRunEvaluationReports(
 async function runEvaluationCoordinator(
   ctx: OperationContext,
   evaluationId: string,
+  opts: { retry?: boolean } = {},
 ): Promise<void> {
   const { db } = ctx;
   const initial = getBenchmarkEvaluation(db.connection, evaluationId);
@@ -930,15 +969,17 @@ async function runEvaluationCoordinator(
   updateBenchmarkEvaluation(db.connection, {
     ...initial,
     status: "running",
+    error: null,
     updatedAt: now(),
   });
 
   // Sequential, mirroring the run coordinator: each run-session is judged to
   // completion before the next. A per-session failure (model not loaded, launch /
   // scheduler error, or no verdict produced) is recorded on that session entry and
-  // does NOT abort the pass — the failed judge session persists and is retryable via
-  // the standard analysis retry (retry-init / retry-failed-step in the session view);
-  // scores recompute on read once a verdict appears. We never auto-recover here.
+  // does NOT abort the pass; the evaluation ends `error` if any session failed. On
+  // retry (opts.retry) sessions that already produced a verdict are kept, and only the
+  // failed/incomplete ones are re-judged (after clearing their stale judge session) —
+  // so a now-loaded model recovers. We never auto-recover here.
   try {
     const run = getBenchmarkRun(db.connection, initial.runId);
     if (!run) throw new Error(`Run "${initial.runId}" not found`);
@@ -946,6 +987,29 @@ async function runEvaluationCoordinator(
 
     let lastError: string | null = null;
     for (const runSession of completed) {
+      if (opts.retry) {
+        const current = getBenchmarkEvaluation(db.connection, evaluationId);
+        const entry = current?.sessions.find(
+          (e) => e.runSessionId === runSession.sessionId,
+        );
+        const verdict = entry
+          ? getLatestArtifactBySchemaKey(
+              db.connection,
+              entry.analysisSessionId,
+              BENCHMARK_EVAL_KEY.VERDICT,
+            )
+          : null;
+        // Keep sessions that already produced a verdict; re-judge the rest.
+        if (entry && entry.status === "complete" && verdict) continue;
+        if (entry) {
+          try {
+            deleteSessionRecord(db.connection, entry.analysisSessionId);
+          } catch {
+            // best-effort cleanup of the stale judge session
+          }
+          removeEvaluationSessionEntry(db, evaluationId, runSession.sessionId);
+        }
+      }
       try {
         await judgeOneSession(
           ctx,
@@ -1020,6 +1084,21 @@ function upsertEvaluationSession(
   updateBenchmarkEvaluation(db.connection, {
     ...current,
     sessions,
+    updatedAt: now(),
+  });
+}
+
+/** Drop the session entry for a run-session (used before re-judging it on retry). */
+function removeEvaluationSessionEntry(
+  db: BackendDatabase,
+  evaluationId: string,
+  runSessionId: string,
+): void {
+  const current = getBenchmarkEvaluation(db.connection, evaluationId);
+  if (!current) return;
+  updateBenchmarkEvaluation(db.connection, {
+    ...current,
+    sessions: current.sessions.filter((s) => s.runSessionId !== runSessionId),
     updatedAt: now(),
   });
 }

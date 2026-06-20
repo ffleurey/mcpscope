@@ -157,6 +157,7 @@ surface). These camelCase routes are not part of the MCP operation catalog.
 | `DELETE` | `/api/benchmark-runs/:runId` | — | `204` (also deletes the run's sessions + evaluations) |
 | `POST` | `/api/benchmark-runs/:runId/evaluations` | `{ judgeModelConfigId, temperature? }` | `202 { evaluation }` |
 | `GET` | `/api/benchmark-runs/:runId/evaluations` | — | `{ evaluations: [{...evaluation, score}] }` |
+| `POST` | `/api/benchmark-evaluations/:evaluationId/retry` | — | `202 { evaluation }` (re-judges failed/incomplete sessions) |
 | `DELETE` | `/api/benchmark-evaluations/:evaluationId` | — | `204` (also deletes the pass's judge sessions) |
 
 A run launch returns immediately (`202`); a background coordinator drives the sessions
@@ -292,11 +293,15 @@ A session whose judge errored (no verdict) is listed but excluded from the stats
 
 A judge-session failure (e.g. the judge model isn't loaded) does **not** abort the pass: that
 session is marked `error`, the coordinator continues judging the rest, and the evaluation ends
-`error` if any session failed. Nothing is auto-recovered. Because each judge session is an
-ordinary `session_analysis` session (reachable in the run tree), a failed one is retried with
-the **standard analysis retry** — "Retry initialization" (model/init errors) or "Retry failed
-step" — in the normal session view. Scores recompute on read, so once a retried judge produces a
-verdict its case score updates automatically. A whole pass can also just be deleted and re-run.
+`error` if any session failed. Nothing is auto-recovered.
+
+To recover, fix the cause (e.g. load the judge model) and **Retry the evaluation**
+(`POST .../retry`, or the Retry button on a failed pass). Retry re-judges only the
+failed/incomplete run-sessions — clearing each stale judge session and re-running it through the
+normal launch (init **and** the judge step) — while keeping sessions that already produced a
+verdict. Scores recompute on read, so the pass's score fills in as the re-judged sessions
+complete. (A whole pass can also just be deleted and re-run, and individual judge sessions remain
+inspectable/retryable in the run tree like any analysis session.)
 
 ## Tutorial: benchmark an MCP server via MCP (for coding agents)
 

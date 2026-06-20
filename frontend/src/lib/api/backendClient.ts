@@ -646,6 +646,13 @@ export function deleteEvaluation(evaluationId: string) {
   })
 }
 
+export function retryEvaluation(evaluationId: string) {
+  return request(`/api/benchmark-evaluations/${encodeURIComponent(evaluationId)}/retry`, {
+    method: 'POST',
+    schema: benchmarkEvaluationResponseSchema,
+  })
+}
+
 export async function streamSchedulerEvents(
   onEvent: (event: SchedulerEvent) => void | Promise<void>,
   signal?: AbortSignal,

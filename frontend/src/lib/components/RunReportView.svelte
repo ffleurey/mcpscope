@@ -4,6 +4,7 @@
     activeRunReport,
     activeRunEvaluations,
     removeEvaluation,
+    retryEvaluation,
   } from '../benchmarkStore'
   import { chatSessions, selectChat } from '../sessionStore'
   import { modelConfigs } from '../connectionStore'
@@ -13,7 +14,7 @@
   import DialogShell from './DialogShell.svelte'
   import BenchmarkCaseCard from './BenchmarkCaseCard.svelte'
   import EvaluationLaunchModal from './EvaluationLaunchModal.svelte'
-  import { iconView, iconAnalysis, iconTrash } from '../design/icons'
+  import { iconView, iconAnalysis, iconTrash, iconRefresh } from '../design/icons'
   import type {
     CaseReport,
     NumberStats,
@@ -43,6 +44,9 @@
   }
   async function handleDeleteEvaluation(id: string): Promise<void> {
     await removeEvaluation(id)
+  }
+  async function handleRetryEvaluation(id: string): Promise<void> {
+    await retryEvaluation(id)
   }
 
   // Live clock so the elapsed-time of an in-progress run ticks forward.
@@ -343,14 +347,26 @@
                   <span class="eval-overall">{pct(ev.score.overallPct)}</span>
                 {/if}
                 <IdBadge id={ev.id} />
-                <button
-                  class="icon-btn icon-btn-danger eval-delete"
-                  title="Delete evaluation"
-                  aria-label="Delete evaluation"
-                  onclick={() => handleDeleteEvaluation(ev.id)}
-                >
-                  <Icon path={iconTrash} />
-                </button>
+                <span class="eval-actions">
+                  {#if ev.status === 'error'}
+                    <button
+                      class="icon-btn"
+                      title="Retry failed judge sessions"
+                      aria-label="Retry evaluation"
+                      onclick={() => handleRetryEvaluation(ev.id)}
+                    >
+                      <Icon path={iconRefresh} />
+                    </button>
+                  {/if}
+                  <button
+                    class="icon-btn icon-btn-danger"
+                    title="Delete evaluation"
+                    aria-label="Delete evaluation"
+                    onclick={() => handleDeleteEvaluation(ev.id)}
+                  >
+                    <Icon path={iconTrash} />
+                  </button>
+                </span>
               </div>
               {#if ev.error}
                 <div class="run-error">{ev.error}</div>
@@ -605,8 +621,11 @@
     font-weight: 600;
     color: var(--green-bright);
   }
-  .eval-delete {
+  .eval-actions {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
   }
   .verdict-subrow > td {
     padding: 0.4rem 0.6rem;

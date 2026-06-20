@@ -219,7 +219,10 @@ Issues found, with severity + proposed fix, get listed here as we work through t
   model; reload to change" hint — frontend-only. Sub-decision: store judge temperature on the
   evaluation record so the list can show "judged at temp X" (lean yes) vs rely on the judge
   session snapshot (TR-6). Docs note: temperature default 0, overridable. Build pending user OK.
-- **TR-11 (decision pending — eval error handling + retry).** Launching an evaluation with an
+- **TR-11 (FIXED) — eval error handling + retry.** Coordinator now records a judge failure as a
+  per-session `error` and continues the pass (keeps `error` status if any failed; no auto-recovery).
+  Failed judge sessions retry via the existing analysis retry (retry-init / retry-failed-step) in
+  the session view; scores recompute on read. Only setup failures hard-fail. Original notes below. Launching an evaluation with an
   unloaded judge model fails the whole pass: `judgeOneSession` re-throws → `runEvaluationCoordinator`
   marks the evaluation `error` and skips the rest. The general retry concept already exists and
   (post-TR-4) applies to judge sessions: `POST /api/sessions/:id/retry-init` ("Retry initialization"
@@ -228,7 +231,10 @@ Issues found, with severity + proposed fix, get listed here as we work through t
   failed judges are retried via the existing ChatView buttons; scores recompute on read once a verdict
   appears. Sub-decision: eval `status` when some judges errored — lean `error` + attempt-all (vs
   `complete` with per-session pills). Optional later: an eval-level "retry failed judges" button.
-- **TR-12 (ready to build — delete an evaluation).** `deleteBenchmarkEvaluation` repo fn exists but
+- **TR-12 (FIXED) — delete an evaluation.** DELETE /api/benchmark-evaluations/:id (+ op that
+  deletes the spawned judge sessions) → store removeEvaluation → trash button per evaluation pass
+  in RunReportView. Run-delete now also cleans up its evaluations' judge sessions (were orphaned).
+  Original notes below. `deleteBenchmarkEvaluation` repo fn exists but
   is unexposed. Add route → op (also delete the spawned judge sessions) → store `removeEvaluation` →
   delete button per evaluation pass in RunReportView, mirroring run-delete. Also fix the related gap:
   deleting a run orphans its evaluations' judge sessions — clean them up in `deleteBenchmarkRunEntry`.
@@ -238,3 +244,12 @@ Issues found, with severity + proposed fix, get listed here as we work through t
   elevation shadow `0 10px 40px rgba(0,0,0,0.55)`, backdrop `0.55→0.62`. All dialogs inherit it
   (they all compose DialogShell); DESIGN-SYSTEM.md updated. **Maintainability check: passed** —
   one-file change, no per-dialog edits. check/lint/prettier clean.
+- **TR-13 (decision pending — eval-level retry; supersedes TR-11's recovery claim).** Confirmed the
+  per-session retry does NOT recover a judge session that died at **init** (model not loaded → first
+  gateway call is init's token probe). `executeAnalysisLaunch` inits but doesn't enqueue the judge
+  workflow (the coordinator does); `retry-init` re-runs init only → no judge step → no verdict → eval
+  never recovers; `retry-failed-step` doesn't apply (no failed step). User's only working recovery was
+  delete + re-run. **Fix:** evaluation-level Retry — `retryBenchmarkEvaluation` re-judges
+  failed/incomplete run-sessions (delete stale judge session, re-run via judgeOneSession so init+step
+  both run), keeps scored ones, recomputes status. `POST /api/benchmark-evaluations/:id/retry` → store
+  `retryEvaluation` → Retry button beside the eval error in RunReportView. Build pending user OK.
