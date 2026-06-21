@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="design-assets/logo.svg" alt="mcpscope" width="320" />
+  <img src="design-assets/logo.png" alt="mcpscope" width="320" />
 </p>
 
 An LLM is only as good as the tools it is given and the way you can work with it.
