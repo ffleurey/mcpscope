@@ -1,4 +1,6 @@
-# mcpscope
+<p align="center">
+  <img src="design-assets/logo.svg" alt="mcpscope" width="320" />
+</p>
 
 An LLM is only as good as the tools it is given and the way you can work with it.
 
@@ -87,6 +89,7 @@ The full walkthrough, including the CLI and a repeatable MCP-server testing loop
 - [DATA-MODEL.md](DATA-MODEL.md) - canonical runtime tree, part taxonomy, and IDs
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) - SQLite tables, foreign keys, and ER diagram
 - [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) - frontend design system: brand, tokens, primitives, patterns
+- [design-assets/](design-assets/) - master brand SVGs (logo, mark, wordmark, favicon); see its README
 - [TESTING.md](TESTING.md) - test strategy, replay, and how to add regressions
 - [RELEASING.md](RELEASING.md) - tag-driven release workflow and GHCR publishing
 - [HISTORY.md](HISTORY.md) - chronological log of releases and major decisions
