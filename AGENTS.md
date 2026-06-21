@@ -6,7 +6,7 @@ mcpscope is a backend-centered runtime analysis tool for MCP and multi-turn LLM 
 
 Read only what the task needs:
 
-- [README.md](README.md) for the repo map and dev commands — its **Documentation map** is the complete index of every doc; start there if the right file isn't listed below
+- [README.md](README.md) for the product overview and the **Documentation** index of every doc — start there if the right file isn't listed below; [DEVELOPMENT.md](DEVELOPMENT.md) for run-from-source and dev commands
 - [ARCHITECTURE.md](ARCHITECTURE.md) for runtime flow, persistence, execution, and adapters
 - [DATA-MODEL.md](DATA-MODEL.md) for sessions, turns, rounds, parts, and canonical IDs
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) for the SQLite tables behind that model

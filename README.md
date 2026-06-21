@@ -1,130 +1,67 @@
 # mcpscope
 
-Local-first **runtime analysis and debugging tool** for MCP server development and multi-turn LLM workflows. Built to inspect how models reason, choose tools, and consume context, with trace export, deterministic replay, and auditable token attribution.
+**See exactly how a local LLM uses an MCP server** — every reasoning step, tool call, token, and
+context-window byte. mcpscope is a local-first tool for developing and evaluating MCP servers with
+local models (LM Studio, Ollama) or remote ones (OpenRouter), where context management matters most.
 
-mcpscope is centered on persisted LLM sessions.
+## Install and run
 
-Different session types may steer those sessions with deterministic steps and context policy, but
-that determinism still lives inside the same session model. It is an implementation choice, not a
-separate substrate.
-
-## Documentation map
-
-### Technical reference
-
-- [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence model, streaming model, replay model, and API surface
-- [DATA-MODEL.md](DATA-MODEL.md) - canonical runtime tree, part taxonomy, and canonical IDs
-- [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) - SQLite tables, foreign keys, singleton defaults, and ER diagram
-- [PROVIDERS.md](PROVIDERS.md) - provider-specific behavior (LM Studio, Ollama, OpenRouter): reasoning tokens, token counting, context windows
-- [MCP.md](MCP.md) - MCP interface reference: transport, tool surface, and structured results
-- [CLI.md](CLI.md) - CLI command reference: commands, flags, output format, exit codes
-- [BENCHMARK.md](BENCHMARK.md) - benchmark feature reference: suite/case/run model, deterministic metrics, LLM rubric evaluation (built on the analysis workflow), HTTP API, and CLI
-- [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) - shipped `session_analysis` workflow and evidence-loading contract (also the engine behind benchmark evaluation)
-- [TESTING.md](TESTING.md) - deterministic replay strategy, runtime tests, and live integration captures
-- [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) - frontend design system: brand, tokens, shared primitives, patterns, and the live Design System Reference (read before any frontend visual change)
-
-### Usage and use cases
-
-- [TUTORIAL.md](TUTORIAL.md) - packaged user/tester tutorial for running released mcpscope in Docker
-- [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) - first concrete reference scenario and evaluation target
-- [FRONTEND-TEST.md](FRONTEND-TEST.md) - optional manual UI checks with agent-browser
-
-### Project workflow
-
-- [README.md](README.md) - repository/developer entrypoint for working on mcpscope itself
-- [AGENTS.md](AGENTS.md) - guide for AI coding agents: project shape, parity principle, working style, and validation
-- [HISTORY.md](HISTORY.md) - chronological log of releases and major architectural decisions
-- [RELEASING.md](RELEASING.md) - release workflow and GHCR image publishing
-- [backlog/README.md](backlog/README.md) - backlog workflow, state folders, and promotion rules
-- [backend-data/README.md](backend-data/README.md) - local runtime data and live-test artifact policy
-- [`backlog/research/`](backlog/research/) - archived payload studies and superseded design research kept for context
-
-## Audience
-
-This file is for developers working on mcpscope itself.
-
-If you want to use a released mcpscope build to evaluate an MCP server, start with:
-
-- [TUTORIAL.md](TUTORIAL.md) for the Docker/user workflow
-- [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) for the first concrete evaluation target
-- [RELEASING.md](RELEASING.md) for GHCR image usage and tags
-
-## Product surfaces
-
-mcpscope currently ships as one product with four main surfaces:
-
-- Web UI for human inspection and configuration
-- backend HTTP API as the canonical integration layer
-- packaged CLI for shell-native workflows
-- MCP interface for agent-native interaction
-
-Those surfaces share the same backend-owned session model and canonical hierarchical IDs. The CLI is not a separate product or package line; it is another entrypoint into the same distribution.
-
-## Current deliberate limits
-
-- execution control is now backend-owned through an in-memory sequential scheduler, but explicit public step-target enqueue is still tracked as follow-up work
-- pausing execution is boundary-based: the backend stops after the current turn/step finishes; it does not interrupt an in-flight LM Studio or MCP request
-- runtime state persists on the SQLite runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`); container ownership is recorded on `sessions` columns rather than a separate container table
-- session parent rules remain intentionally narrow: a `primary` session may optionally have a `benchmark` parent, and a `session_analysis` session requires a `session` parent
-- analysis-session deterministic workflow steps are shipped inside the normal session model; broader generalization and cleanup remain future work
-- the benchmark feature ships repeatable suite/case/run execution with deterministic tool-behavior checks and a compute-on-read metrics report, plus optional **LLM rubric evaluation** — a separate judge model scores each session against a per-case rubric, implemented as a `benchmark_evaluation` analysis session (not a separate engine), so benchmark evaluation and session analysis are one mechanism (see [BENCHMARK.md](BENCHMARK.md))
-
-## Developer setup
-
-Clone the repo, install dependencies, then run mcpscope locally from source:
+Requires **Node.js 20+** and a running LLM backend — local ([LM Studio](https://lmstudio.ai),
+[Ollama](https://ollama.com)) or remote ([OpenRouter](https://openrouter.ai)).
 
 ```bash
-npm ci
-npm run dev
+npm install -g mcpscope
+mcpscope serve
 ```
 
-That starts:
+`mcpscope serve` starts mcpscope at **http://localhost:3030** and opens it in your browser. Data
+is stored in `~/.mcpscope`; stop with `Ctrl-C`. Flags: `--port <n>`, `--host <host>`,
+`--data-dir <path>`, `--no-open`.
 
-- the backend on `http://localhost:3030`
-- the Vite frontend on `http://localhost:5173`
+## Other ways to run
 
-In local development, the frontend and backend run as separate dev servers. The backend only serves the built frontend in production-style static mode when `BACKEND_STATIC_DIR` is set.
+- **Docker** — a released image is published to GHCR; see [TUTORIAL.md](TUTORIAL.md) for the step-by-step path and [RELEASING.md](RELEASING.md) for image tags.
+- **From source** — for working on mcpscope itself, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
-Useful variants:
+## First steps
 
-```bash
-npm run dev:backend      # backend only (tsx watch)
-npm run dev:frontend     # frontend only (vite)
-```
+1. In the Web UI, open **Configuration** and add an **LM connection**, a **model config**, and an **MCP server profile**, then set a default model.
+2. Create a session, send a prompt, and inspect the full trace — setup, tool definitions, reasoning, tool calls/results, and a color-coded context breakdown per turn.
+3. Or define a **benchmark** and run it to test an MCP server repeatably across models.
 
-## Development helpers
+The full walkthrough — including the CLI and a repeatable MCP-server testing loop — is in
+[TUTORIAL.md](TUTORIAL.md).
 
-```bash
-npm run seed:dev-config    # seed LM connections, model configs, MCP profiles
-npm run seed:dev-sessions  # seed captured session fixtures
-npm run seed:dev-data      # both of the above
-```
+## What you can do
 
-## Packaged user workflow
+- **Inspect sessions** — watch how a model reads tool definitions, reasons, calls tools, and consumes the context window, with auditable token attribution per part.
+- **Benchmark MCP servers** — a reusable suite of prompts run N× against a chosen model + MCP server, producing a per-tool error/usage scorecard and per-case reliability (pass@k / pass^k).
+- **LLM-evaluate answer quality** — a separate judge model scores each run against a per-case rubric (see [BENCHMARK.md](BENCHMARK.md)).
+- **Drive it from the shell or as MCP tools** — every operation is both a `mcpscope <cmd>` CLI command and a `mcpscope_<cmd>` MCP tool, so coding agents can run the whole loop.
 
-The released/product workflow is Docker.
+## Documentation
 
-Use these docs instead of the developer setup in this file:
+### Getting started
 
-- [TUTORIAL.md](TUTORIAL.md) for the step-by-step Docker path
-- [USECASE-home-assistant-statistics.md](USECASE-home-assistant-statistics.md) for the first concrete use case
-- [RELEASING.md](RELEASING.md) for GHCR image details
+- [TUTORIAL.md](TUTORIAL.md) - install, configure, run a session, and benchmark an MCP server
+- [case-study/USECASE-home-assistant-statistics.md](case-study/USECASE-home-assistant-statistics.md) - a concrete reference scenario and evaluation target
+- [BENCHMARK.md](BENCHMARK.md) - benchmark suite/case/run model, deterministic metrics, and LLM rubric evaluation
 
-## Build
+### Interfaces
 
-```bash
-npm run build            # build frontend (vite)
-npm run build:backend    # compile backend TypeScript
-npm run build:cli        # compile CLI TypeScript
-npm run start:backend    # run compiled backend
-```
+- [MCP.md](MCP.md) - MCP interface: transport, tool surface, and structured results
+- [CLI.md](CLI.md) - CLI commands, flags, output format, and exit codes
+- [PROVIDERS.md](PROVIDERS.md) - provider behavior (LM Studio, Ollama, OpenRouter): reasoning tokens, token counting, context windows
 
-## Testing and type checking
+### Internals & contributing
 
-See [TESTING.md](TESTING.md) for the canonical list of test, type-check, lint, and format commands, the test strategy, and how to add regressions.
-
-## Repository notes
-
-- `backend-data/` is local runtime state and live integration output; only its README is tracked.
-- `backlog/research/` contains reference material and archived investigations, not active implementation specs.
-- `backlog/` is a lightweight historical board and workflow state area, not up-to-date project documentation. Only use a specific backlog file when task instructions explicitly point to it.
+- [DEVELOPMENT.md](DEVELOPMENT.md) - run from source, build, dev helpers, and repository notes
+- [AGENTS.md](AGENTS.md) - guide for AI coding agents: project shape, parity principle, working style, validation
+- [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence, streaming, replay, and API surface
+- [DATA-MODEL.md](DATA-MODEL.md) - canonical runtime tree, part taxonomy, and IDs
+- [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) - SQLite tables, foreign keys, and ER diagram
+- [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) - frontend design system: brand, tokens, primitives, patterns
+- [TESTING.md](TESTING.md) - test strategy, replay, and how to add regressions
+- [RELEASING.md](RELEASING.md) - tag-driven release workflow and GHCR publishing
+- [HISTORY.md](HISTORY.md) - chronological log of releases and major decisions
+- [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) - the `session_analysis` workflow (also the engine behind benchmark evaluation)

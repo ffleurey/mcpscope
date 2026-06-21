@@ -1,43 +1,46 @@
 # mcpscope quick start
 
-Use this guide if you want to **run the released mcpscope Docker image and start testing an MCP server in minutes**.
+Get mcpscope running and start testing an MCP server in minutes. Pick one install method:
 
-This is the recommended user path:
+- **npm** (recommended) — a global CLI with a `serve` command; needs Node.js 20+.
+- **Docker** — a released container image; needs Docker.
 
-- no repo checkout
-- no local build
-- one Docker container
-- one persistent Docker volume
-- one session at a time
+Either way, you then configure mcpscope once in the Web UI and drive it from the UI, the CLI, or
+MCP — **one session at a time**.
 
-If you are developing **mcpscope itself**, use [README.md](README.md) instead.
+If you are developing **mcpscope itself**, see [DEVELOPMENT.md](DEVELOPMENT.md) instead.
 
 ## What you need
 
-- Docker
-- a GitHub PAT with `read:packages` for `ghcr.io`
-- LM Studio running on your machine
+- **npm:** Node.js 20+ — **or** — **Docker:** Docker + a GitHub PAT with `read:packages` for `ghcr.io`
+- LM Studio (or Ollama) running on your machine
 - your MCP server running on your machine
 
 ## 1. Start mcpscope
 
-Log in to GHCR:
+### Option A — npm (recommended)
+
+```bash
+npm install -g mcpscope
+mcpscope serve
+```
+
+`mcpscope serve` starts mcpscope at `http://localhost:3030`, opens your browser, and stores data
+in `~/.mcpscope`. Stop with `Ctrl-C`; run `mcpscope serve` again to resume. Flags: `--port <n>`,
+`--host <host>`, `--data-dir <path>`, `--no-open`.
+
+mcpscope runs natively, so use `localhost` for services on your machine (e.g. LM Studio at
+`http://localhost:1234/v1`).
+
+### Option B — Docker
+
+Log in to GHCR, pull, and run:
 
 ```bash
 export GITHUB_USER=YOUR_GITHUB_USERNAME
 export GITHUB_PAT=YOUR_GITHUB_PAT
 echo "$GITHUB_PAT" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
-```
-
-Pull the image:
-
-```bash
 docker pull ghcr.io/ffleurey/mcpscope:latest
-```
-
-Run the one recommended container command:
-
-```bash
 docker run -d \
   --name mcpscope-app \
   --restart unless-stopped \
@@ -47,45 +50,28 @@ docker run -d \
   ghcr.io/ffleurey/mcpscope:latest
 ```
 
-Open:
-
-```text
-http://localhost:3030
-```
-
-### Why this command
+Then open `http://localhost:3030`.
 
 - `-v mcpscope-data:/data` keeps sessions and config persistent
-- `-p 3030:3030` exposes both the UI and API
-- `--add-host=host.docker.internal:host-gateway` lets the container reach LM Studio and your MCP server on the host machine
+- `--add-host=host.docker.internal:host-gateway` lets the container reach LM Studio and your MCP server on the host — with Docker, use `host.docker.internal` (not `localhost`) for those services
+- restart later with `docker start mcpscope-app`
 
-For pinning a specific version instead of `:latest`, running the CLI inside the container, or the docker-compose variant, see [RELEASING.md → Pulling a released image](RELEASING.md#pulling-a-released-image).
-
-If you stop the container later, start it again with:
-
-```bash
-docker start mcpscope-app
-```
+For version pinning, the in-container CLI, or the docker-compose variant, see
+[RELEASING.md → Pulling a released image](RELEASING.md#pulling-a-released-image).
 
 ## 2. Make the CLI easy to use
 
-Run the CLI inside the container:
+**npm install:** the `mcpscope` CLI is already on your PATH — use it directly:
 
 ```bash
-docker exec -i mcpscope-app mcpscope list
+mcpscope list
 ```
 
-For easier daily use, add this shell helper:
+**Docker install:** run the bundled CLI inside the container, and add a shell helper so the rest
+of this guide's `mcpscope …` commands work as-is:
 
 ```bash
-mcpscope() {
-  docker exec -i mcpscope-app mcpscope "$@"
-}
-```
-
-Then you can use:
-
-```bash
+mcpscope() { docker exec -i mcpscope-app mcpscope "$@"; }
 mcpscope list
 ```
 
@@ -102,14 +88,12 @@ Then set:
 1. the **default model config**
 2. optionally the **default MCP profile**
 
-### Important
+### Important — host addresses
 
-Because mcpscope is running in Docker, use **`host.docker.internal`**, not `localhost`, for services running on your machine.
+Which host to use for services on your machine depends on how you installed mcpscope:
 
-Typical values:
-
-- LM Studio: `http://host.docker.internal:1234/v1`
-- MCP server: `http://host.docker.internal:3001/mcp`
+- **npm:** use `localhost` — e.g. LM Studio `http://localhost:1234/v1`, MCP server `http://localhost:3001/mcp`.
+- **Docker:** use `host.docker.internal` (the container can't see `localhost`) — e.g. `http://host.docker.internal:1234/v1` and `http://host.docker.internal:3001/mcp`.
 
 The CLI `create` command depends on these defaults. Once they are configured, the CLI can create sessions without asking for model or MCP snapshots.
 
@@ -237,23 +221,17 @@ To also score **answer quality**, give a case a rubric and launch a judging pass
 ## 8. Copy-paste quick reference
 
 ```bash
-export GITHUB_USER=YOUR_GITHUB_USERNAME
-export GITHUB_PAT=YOUR_GITHUB_PAT
-echo "$GITHUB_PAT" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
-docker pull ghcr.io/ffleurey/mcpscope:latest
-docker run -d \
-  --name mcpscope-app \
-  --restart unless-stopped \
-  --add-host=host.docker.internal:host-gateway \
-  -p 3030:3030 \
-  -v mcpscope-data:/data \
-  ghcr.io/ffleurey/mcpscope:latest
+# Install + start (npm)
+npm install -g mcpscope
+mcpscope serve            # http://localhost:3030 — configure connections in the UI first
 
-mcpscope() { docker exec -i mcpscope-app mcpscope "$@"; }
-
+# One session (after configuring a default model + MCP profile)
 mcpscope create "temperature-eval"
 mcpscope status ABCD
 mcpscope send ABCD "How did indoor temperature change over the last 7 days?"
 mcpscope status ABCD
 mcpscope inspect ABCD.1T
 ```
+
+Docker instead of npm? Replace the first two lines with the GHCR `docker run` from
+[Option B](#option-b--docker) and define `mcpscope() { docker exec -i mcpscope-app mcpscope "$@"; }`.
