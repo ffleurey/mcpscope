@@ -13,6 +13,14 @@ For that we have to package what we can call a V1 with a simple and useful set o
 > "skill") layered on later — see
 > [candidates/v1-analysis-and-benchmark-plan.md](candidates/v1-analysis-and-benchmark-plan.md).
 > The readiness summary at the bottom is current; the prose sections below are partly historical.
+>
+> **Update (2026-06-21).** LLM rubric **evaluation** shipped (a separate judge model layered on
+> the benchmark — see [BENCHMARK.md](../BENCHMARK.md)) and the project was **released as v0.14.0**.
+> **npm distribution** shipped: `npm i -g mcpscope && mcpscope serve` boots the bundled
+> backend + UI ([improve-distribution.md](improve-distribution.md)). **Production-ready analysis
+> modes (guided + "skill") are settled as post-V1** — they will be designed after we gain real
+> experience from the shipped benchmark + LLM evaluation, which is the better way to get them
+> right. With distribution done, the V1 *build* scope is complete; focus shifts to QA.
 
 We target developers and ai enthusiasts who want to experiment with mcp servers and mcp server development. The core use-case is to allow experimenting with local AI models (LMStudio, Ollama) to help people understand how the context work and how the llm actually picks tools and call them. The reason I built mcpscope in the first place was that I felt that the built-in chat in LMStudio or other tools like OpenWebUI did not give me enough observability on the state of the context at all time. Working with local model with small context windows from 8k to 64k means that context management is very important.
 
@@ -51,15 +59,23 @@ Support for Ollama with full streaming and reasoning like we have with LMStudio.
 This was reframed after experience with the three test-framework strategies (`fullSession` /
 `fastSession` / `fastTool`, none production-ready). The V1 direction is **benchmark-first**: the
 benchmark suite/case/run feature (shipped — repeatable runs + per-tool/per-case deterministic
-metrics) is the primary UC2 value. Session *analysis* becomes two **modes** layered on the
-existing workflow framework, both deferred past this increment:
+metrics) is the primary UC2 value. Session *analysis* would become two **modes** layered on the
+existing workflow framework:
 
 - a **guided** strategy (deterministic injection) to compensate for small/lazy models (e.g. Gemma-class), and
 - a **"skill"** mode (prompt-guided) that lets a more capable model decide what to inspect via the `mcpscope_inspect` tools.
 
-LLM-judged evaluation — using a *separate* judge model, never self-judging — is the future
-success layer on top of the benchmark. Full plan:
-[candidates/v1-analysis-and-benchmark-plan.md](candidates/v1-analysis-and-benchmark-plan.md);
+**Decision (2026-06-21): both modes are post-V1.** The three existing workflows (`fullSession` /
+`fastSession` / `fastTool`) stay as the framework proof but are not the V1 analysis story. We
+will design the production-ready guided + "skill" modes *after* gaining real experience from the
+shipped benchmark + LLM evaluation — that experience is the best input for getting them right,
+and the benchmark + judge already cover the UC2 quality story on their own. V1 does not claim a
+polished session-analysis surface.
+
+LLM-judged evaluation — a *separate* judge model, never self-judging — **shipped** (PR #38,
+v0.14.0) as the success layer on top of the benchmark; it reuses the analysis workflow framework
+(one judge session per run-session). See [BENCHMARK.md → Evaluation](../BENCHMARK.md#evaluation-llm-rubric-judging).
+Full plan: [candidates/v1-analysis-and-benchmark-plan.md](candidates/v1-analysis-and-benchmark-plan.md);
 evaluation research: [research/benchmark-success-criteria.md](research/benchmark-success-criteria.md).
 The original two-strategy text is preserved in git history.
 
@@ -110,13 +126,19 @@ Model config IDs and MCP profile IDs are visible through the UI and documented i
 - When `mcp_profile_ids` is present, use those profiles (with `defaultEnabled` ignored) instead of the default-enabled set
 - Preserve full backward compatibility when both are omitted
 
-### Distribution and developer onboarding
+### Distribution and developer onboarding — ✅ `mcpscope serve` shipped
 
-The current distribution options — Docker and git clone — both require pre-installed tooling. Adding a `mcpscope serve` CLI command would let developers get started with just `npm install -g mcpscope && mcpscope serve`.
+**Status: ✅ Implemented.** A `mcpscope serve` command boots the bundled backend in-process,
+serves the pre-built frontend, creates a per-user data dir (`~/.mcpscope` by default), and opens
+the browser — so the npm path is `npm install -g mcpscope && mcpscope serve`. Flags: `--port`,
+`--host`, `--data-dir`, `--no-open`. The package ships the built artifacts (`files`:
+`cli/dist`, `backend/dist`, `frontend/dist`) and runtime deps were corrected (Fastify moved to
+`dependencies`). The only remaining step to publish to the public npm registry is flipping
+`"private": true` and running `npm publish` (deliberately left as a conscious release action).
 
-See [improve-distribution.md](improve-distribution.md) for the full analysis of packaging options (npm, SEA, Electron) and trade-offs.
-
-**Required change:** Add a `serve` command that starts the backend, serves the compiled frontend, and opens the browser.
+See [improve-distribution.md](improve-distribution.md) for the packaging-options analysis (npm,
+SEA, Electron) — the recommended near-term npm/`serve` path is now done; SEA/Electron remain
+optional future paths only if a single binary or desktop shell becomes a priority.
 
 ## What is already in place
 
@@ -136,7 +158,7 @@ See [improve-distribution.md](improve-distribution.md) for the full analysis of 
 
 ### UC2 — CLI and MCP
 
-- Fifteen shared catalog operations, each exposed identically as a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (Streamable HTTP) — seven core (`create`, `send`, `status`, `list`, `inspect`, `list_model_configs`, `list_mcp_profiles`) plus eight `benchmark_*` ops. Parity (CLI ids == MCP ids) is test-enforced; CLI has text and `--json` output with a polling automation loop
+- Nineteen shared catalog operations, each exposed identically as a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (Streamable HTTP) — seven core (`create`, `send`, `status`, `list`, `inspect`, `list_model_configs`, `list_mcp_profiles`) plus twelve `benchmark_*` ops (suite/case CRUD, run, status/report, evaluate, run_evaluations). Parity (CLI ids == MCP ids) is test-enforced; CLI has text and `--json` output with a polling automation loop. (The local `mcpscope serve` launcher is CLI-only, not a catalog op.)
 - Benchmark suite/case/run via UI, CLI and MCP: define a reusable prompt suite, run it (N repetitions, chosen model/MCP), poll progress, and read a per-tool/per-case report (see [BENCHMARK.md](../BENCHMARK.md))
 - Restricted analysis MCP endpoint at `/mcp/analysis` exposing read-only `inspect` + `status` for agent-driven evaluation
 - Sequential scheduler with init/session/step job types, admission control, pause/resume, and SSE event stream consumed by the frontend
@@ -153,12 +175,13 @@ See [improve-distribution.md](improve-distribution.md) for the full analysis of 
 | Provider support (LM Studio, OpenRouter, Ollama) | ✅ Complete | Minor: generic OpenAI-compatible option |
 | Execution model & scheduler | ✅ Solid | None (explicit public step enqueue still deferred) |
 | Session management (CRUD, lifecycle) | ✅ Complete | None |
-| CLI + MCP surface (15 catalog ops, mirrored) | ✅ Complete | None — parity is test-enforced |
-| **Benchmark (suite/case/run) via UI/CLI/MCP** | ✅ Phase A shipped | LLM-judged evaluation deferred (Phase B/C) |
+| CLI + MCP surface (19 catalog ops, mirrored) | ✅ Complete | None — parity is test-enforced |
+| **Benchmark (suite/case/run) via UI/CLI/MCP** | ✅ Shipped | None |
+| **Benchmark LLM evaluation (judge model + rubric)** | ✅ Shipped (v0.14.0) | None |
 | Docker packaging & tutorial | ✅ Complete | None |
-| **npm distribution + `serve` command** | ❌ Not implemented | **Medium** — needs CLI `serve` command with bundled frontend |
+| **npm distribution + `serve` command** | ✅ Shipped | None (publish = flip `private` + `npm publish`) |
 | Replay harness & test infrastructure | ✅ Strong | None |
-| Session analysis (guided / "skill" modes) | ⏸ Deferred | Reframed behind the benchmark; future increment + LLM judge |
+| Session analysis (guided / "skill" modes) | ⏸ Post-V1 | Settled post-V1 — design after benchmark+eval experience |
 | **UI design & polish** | ✅ Design system shipped | Incremental polish only |
 | Model/MCP selection on CLI and MCP | ✅ Complete | None |
 | Trace export/import | ✅ Complete | None |

@@ -6,6 +6,7 @@ import {
   runSessionsList,
 } from "./commands/sessions/list.js";
 import { parseInspectArgs, runInspect } from "./commands/inspect.js";
+import { parseServeArgs, runServe } from "./commands/serve.js";
 import { parseCreateArgs, runCreate } from "./commands/create.js";
 import { parseSendArgs, runSend } from "./commands/send.js";
 import { parseStatusArgs, runStatus } from "./commands/status.js";
@@ -46,6 +47,8 @@ import {
 
 function printHelp(): void {
   process.stdout.write(`Usage: mcpscope <command> [options]
+
+  mcpscope serve [--port <n>] [--host <host>] [--data-dir <path>] [--no-open]
 
   mcpscope list [--json]
   mcpscope create <title> [--id <session-id>] [--compaction strip-reasoning|none] [--model-config <id>] [--mcp-profile <id>...] [--json]
@@ -98,6 +101,22 @@ export async function main(argv: string[]): Promise<void> {
 
   if (cmd === "--version") {
     process.stdout.write("mcpscope\n");
+    return;
+  }
+
+  // Local launcher (not a catalog operation): boots the bundled backend + frontend.
+  if (cmd === "serve") {
+    const parsed = parseServeArgs([sub, ...rest].filter(Boolean) as string[]);
+    if ("help" in parsed) {
+      printHelp();
+      return;
+    }
+    if ("error" in parsed) {
+      printError(parsed.error);
+      printError("Run `mcpscope --help` for usage.");
+      process.exit(2);
+    }
+    await runServe(parsed.opts);
     return;
   }
 
