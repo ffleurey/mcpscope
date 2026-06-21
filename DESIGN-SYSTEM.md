@@ -12,6 +12,10 @@ anything visual, and keep it in sync (see **Working in this design system** belo
    rendered by `frontend/src/lib/components/DesignReference.svelte`. It renders **live tokens and
    the real components/classes** (not copies), so it cannot silently drift from `app.css`.
 
+Master brand assets (logo, mark, wordmark, favicon) live in [`design-assets/`](design-assets/) —
+see its [README](design-assets/README.md) for the manifest and the [Logo](#logo) section below for
+the rules.
+
 ### Working in this design system
 
 - Reuse the shared primitives. Don't re-implement a button/field/pill/dialog/table that already exists.

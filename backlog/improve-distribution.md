@@ -1,5 +1,12 @@
 # Improve Distribution: Single-executable and desktop packaging
 
+> **Status (2026-06-21): the recommended near-term path shipped.** `mcpscope serve` boots the
+> bundled backend + frontend and opens the browser, so `npm install -g mcpscope && mcpscope serve`
+> works (runtime deps corrected, `files` ships the built artifacts; publishing to the public npm
+> registry is the only remaining step — flip `"private"` + `npm publish`). The SEA / Electron /
+> WASM-SQLite options below remain **future, optional** paths, relevant only if a single binary or
+> a desktop shell becomes a priority. The rest of this doc is kept as the options analysis.
+
 ## Context
 
 mcpscope currently ships two ways for end users:
