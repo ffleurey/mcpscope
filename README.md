@@ -46,24 +46,24 @@ is stored in `~/.mcpscope`; stop with `Ctrl-C`. Flags: `--port <n>`, `--host <ho
 
 ## Other ways to run
 
-- **Docker** — a released image is published to GHCR; see [TUTORIAL.md](TUTORIAL.md) for the step-by-step path and [RELEASING.md](RELEASING.md) for image tags.
-- **From source** — for working on mcpscope itself, see [DEVELOPMENT.md](DEVELOPMENT.md).
+- **Docker**: a released image is published to GHCR. See [TUTORIAL.md](TUTORIAL.md) for the step-by-step path and [RELEASING.md](RELEASING.md) for image tags.
+- **From source**: for working on mcpscope itself, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## First steps
 
 1. In the Web UI, open **Configuration** and add an **LM connection**, a **model config**, and an **MCP server profile**, then set a default model.
-2. Create a session, send a prompt, and inspect the full trace — setup, tool definitions, reasoning, tool calls/results, and a color-coded context breakdown per turn.
+2. Create a session, send a prompt, and inspect the full trace: setup, tool definitions, reasoning, tool calls and results, and a color-coded context breakdown per turn.
 3. Or define a **benchmark** and run it to test an MCP server repeatably across models.
 
-The full walkthrough — including the CLI and a repeatable MCP-server testing loop — is in
+The full walkthrough, including the CLI and a repeatable MCP-server testing loop, is in
 [TUTORIAL.md](TUTORIAL.md).
 
 ## What you can do
 
-- **Inspect sessions** — watch how a model reads tool definitions, reasons, calls tools, and consumes the context window, with auditable token attribution per part.
-- **Benchmark MCP servers** — a reusable suite of prompts run N× against a chosen model + MCP server, producing a per-tool error/usage scorecard and per-case reliability (pass@k / pass^k).
-- **LLM-evaluate answer quality** — a separate judge model scores each run against a per-case rubric (see [BENCHMARK.md](BENCHMARK.md)).
-- **Drive it from the shell or as MCP tools** — every operation is both a `mcpscope <cmd>` CLI command and a `mcpscope_<cmd>` MCP tool, so coding agents can run the whole loop.
+- **Inspect sessions**: watch how a model reads tool definitions, reasons, calls tools, and consumes the context window, with auditable token attribution per part.
+- **Benchmark MCP servers**: a reusable suite of prompts run N× against a chosen model and MCP server, producing a per-tool error/usage scorecard and per-case reliability (pass@k / pass^k).
+- **LLM-evaluate answer quality**: a separate judge model scores each run against a per-case rubric (see [BENCHMARK.md](BENCHMARK.md)).
+- **Drive it from the shell or as MCP tools**: every operation is both a `mcpscope <cmd>` CLI command and a `mcpscope_<cmd>` MCP tool, so coding agents can run the whole loop.
 
 ## Documentation
 
