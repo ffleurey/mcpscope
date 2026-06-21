@@ -1,12 +1,38 @@
 # mcpscope
 
-**See exactly how a local LLM uses an MCP server** — every reasoning step, tool call, token, and
-context-window byte. mcpscope is a local-first tool for developing and evaluating MCP servers with
-local models (LM Studio, Ollama) or remote ones (OpenRouter), where context management matters most.
+An LLM is only as good as the tools it is given and the way you can work with it.
+
+Most MCP servers today are thin wrappers around an existing API: generic, token-hungry, and
+reliant on a large model with a large context window just to produce something useful. That wastes
+the model and leaves most of its capability unused. A good MCP server is not an API wrapper. It is
+a user interface built for an LLM, designed to solve a specific job efficiently even on a small
+local model. It is also an application like any other, so it starts from clear use cases and
+quality criteria, and most of ordinary software engineering applies when you design and build it.
+
+The part that does not carry over is testing. You cannot pin end-to-end behavior down with
+deterministic assertions, because the model is non-deterministic and both its inputs and outputs
+are mostly natural language. So mcpscope measures quality with repeatable benchmarks rather than a
+classical test suite: run a set of prompts many times against a chosen model and MCP server, then
+read back per-tool reliability and token cost, with optional scoring of answer quality by a
+separate judge model. Evaluation becomes statistical and observable instead of pass or fail.
+
+Work like this is empirical, and you rarely do it alone anymore. A coding agent does much of the
+heavy lifting, but it does not replace the developer: the best results come from a tight loop where
+the developer steers and the agent executes. mcpscope is built for that partnership, not as a
+benchmark an agent runs on its own, and not as a GUI a developer drives by hand. It offers the same
+capabilities through three interfaces: a web UI shaped for a person, and a CLI and an MCP interface
+shaped for an agent. All three run over one shared model, so the human can see exactly what the
+agent did and the agent can inspect exactly what the human did, and a shared inspect path with a
+type-tagged ID system lets both point at the same session, turn, or tool call.
+
+You run a prompt, or a repeatable benchmark, against a local (LM Studio, Ollama) or remote
+(OpenRouter) model, watch every reasoning step, tool call, and token of context, then change one
+thing (a tool description, a parameter, an output payload) and run it again. Everything stays on
+your machine.
 
 ## Install and run
 
-Requires **Node.js 20+** and a running LLM backend — local ([LM Studio](https://lmstudio.ai),
+Requires **Node.js 20+** and a running LLM backend, either local ([LM Studio](https://lmstudio.ai),
 [Ollama](https://ollama.com)) or remote ([OpenRouter](https://openrouter.ai)).
 
 ```bash
