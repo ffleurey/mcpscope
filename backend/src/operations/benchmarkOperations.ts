@@ -901,7 +901,10 @@ export const benchmarkEvaluateInputSchema = z.object({
   temperature: z
     .number()
     .optional()
-    .describe("Judge sampling temperature (default 0 = deterministic)."),
+    .describe(
+      "Judge sampling temperature. Defaults to a small non-zero value so retries "
+        + "of a looping judge session can escape (not bitwise-deterministic).",
+    ),
 });
 export type BenchmarkEvaluateInput = z.infer<typeof benchmarkEvaluateInputSchema>;
 

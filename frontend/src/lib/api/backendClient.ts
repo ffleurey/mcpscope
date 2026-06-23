@@ -627,6 +627,29 @@ export function deleteBenchmarkRun(runId: string) {
   })
 }
 
+export function pauseBenchmarkRun(runId: string) {
+  return request(`/api/benchmark-runs/${encodeURIComponent(runId)}/pause`, {
+    method: 'POST',
+    schema: benchmarkRunResponseSchema,
+  })
+}
+
+/** mode 'continue' = run remaining tasks; 'retry' = also re-run cancelled/errored. */
+export function resumeBenchmarkRun(runId: string, mode: 'continue' | 'retry' = 'continue') {
+  return request(`/api/benchmark-runs/${encodeURIComponent(runId)}/resume`, {
+    method: 'POST',
+    body: { mode },
+    schema: benchmarkRunResponseSchema,
+  })
+}
+
+export function stopBenchmarkRun(runId: string) {
+  return request(`/api/benchmark-runs/${encodeURIComponent(runId)}/stop`, {
+    method: 'POST',
+    schema: benchmarkRunResponseSchema,
+  })
+}
+
 export function launchEvaluation(
   runId: string,
   input: { judgeModelConfigId: string; temperature?: number },
@@ -652,6 +675,31 @@ export function deleteEvaluation(evaluationId: string) {
 
 export function retryEvaluation(evaluationId: string) {
   return request(`/api/benchmark-evaluations/${encodeURIComponent(evaluationId)}/retry`, {
+    method: 'POST',
+    schema: benchmarkEvaluationResponseSchema,
+  })
+}
+
+export function pauseEvaluation(evaluationId: string) {
+  return request(`/api/benchmark-evaluations/${encodeURIComponent(evaluationId)}/pause`, {
+    method: 'POST',
+    schema: benchmarkEvaluationResponseSchema,
+  })
+}
+
+export function resumeEvaluation(
+  evaluationId: string,
+  mode: 'continue' | 'retry' = 'continue',
+) {
+  return request(`/api/benchmark-evaluations/${encodeURIComponent(evaluationId)}/resume`, {
+    method: 'POST',
+    body: { mode },
+    schema: benchmarkEvaluationResponseSchema,
+  })
+}
+
+export function stopEvaluation(evaluationId: string) {
+  return request(`/api/benchmark-evaluations/${encodeURIComponent(evaluationId)}/stop`, {
     method: 'POST',
     schema: benchmarkEvaluationResponseSchema,
   })

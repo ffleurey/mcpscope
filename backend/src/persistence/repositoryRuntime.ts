@@ -522,24 +522,26 @@ export function recoverInterruptedState(connection: Database.Database): void {
     `).run(now)
 
     // Benchmark runs and evaluations are driven by in-process coordinators that do
-    // not survive a restart. Any left non-terminal is orphaned → mark it 'error' so
-    // it shows as failed/incomplete (and, for evaluations, becomes retryable) rather
-    // than spinning forever as 'running'.
+    // not survive a restart. Any left non-terminal is orphaned → mark it 'stopped'
+    // (the resumable rest state) so the user can resume/retry the remaining work,
+    // rather than spinning forever as 'running'. Stale per-task sessions left
+    // 'running' inside the record are reconciled to 'cancelled' when the coordinator
+    // resumes. 'paused' runs are equally orphaned (the in-memory gate is gone).
     connection.prepare(`
       UPDATE benchmark_runs
-      SET status = 'error',
-          error = COALESCE(error, 'Interrupted by a server restart; re-run to recover.'),
+      SET status = 'stopped',
+          error = COALESCE(error, 'Interrupted by a server restart; resume to recover.'),
           updated_at = ?,
           completed_at = COALESCE(completed_at, ?)
-      WHERE status IN ('pending', 'running')
+      WHERE status IN ('pending', 'running', 'paused')
     `).run(now, now)
 
     connection.prepare(`
       UPDATE benchmark_evaluations
-      SET status = 'error',
-          error = COALESCE(error, 'Interrupted by a server restart; retry to resume.'),
+      SET status = 'stopped',
+          error = COALESCE(error, 'Interrupted by a server restart; resume to recover.'),
           updated_at = ?
-      WHERE status IN ('pending', 'running')
+      WHERE status IN ('pending', 'running', 'paused')
     `).run(now)
   })()
 }

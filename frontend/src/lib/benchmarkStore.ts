@@ -5,6 +5,9 @@ import {
   createCaseFromSession as createBackendCaseFromSession,
   deleteBenchmark as deleteBackendBenchmark,
   deleteBenchmarkRun as deleteBackendBenchmarkRun,
+  pauseBenchmarkRun as pauseBackendBenchmarkRun,
+  resumeBenchmarkRun as resumeBackendBenchmarkRun,
+  stopBenchmarkRun as stopBackendBenchmarkRun,
   deleteCase as deleteBackendCase,
   getBenchmark,
   getBenchmarkRun,
@@ -12,6 +15,9 @@ import {
   launchEvaluation as launchBackendEvaluation,
   deleteEvaluation as deleteBackendEvaluation,
   retryEvaluation as retryBackendEvaluation,
+  pauseEvaluation as pauseBackendEvaluation,
+  resumeEvaluation as resumeBackendEvaluation,
+  stopEvaluation as stopBackendEvaluation,
   launchRun as launchBackendRun,
   listBenchmarks,
   patchBenchmark as patchBackendBenchmark,
@@ -42,7 +48,10 @@ export const activeRunEvaluations = writable<BenchmarkEvaluationReport[]>([])
 export const activeBenchmarkId = writable<string | null>(null)
 export const activeBenchmarkDetail = writable<BenchmarkDetailResponse | null>(null)
 
-const TERMINAL_STATUSES = new Set(['complete', 'error'])
+// Polling stops at a resting state. 'stopped' is resting (resumable); 'paused'
+// is NOT — the in-flight task may still be settling and the user may resume — so
+// we keep polling while paused.
+const TERMINAL_STATUSES = new Set(['complete', 'error', 'stopped'])
 const POLL_INTERVAL_MS = 700
 
 let pollTimer: ReturnType<typeof setTimeout> | null = null
@@ -90,7 +99,11 @@ function stopEvalPolling(): void {
 }
 
 function evaluationsInFlight(evals: BenchmarkEvaluationReport[]): boolean {
-  return evals.some((e) => e.status === 'pending' || e.status === 'running')
+  // 'paused' counts as in-flight: the current judge may still be settling and the
+  // pass can be resumed, so keep polling. 'stopped' is resting → stop polling.
+  return evals.some(
+    (e) => e.status === 'pending' || e.status === 'running' || e.status === 'paused',
+  )
 }
 
 async function refreshActiveRunEvaluations(runId: string): Promise<BenchmarkEvaluationReport[]> {
@@ -171,6 +184,84 @@ export async function selectRun(runId: string): Promise<void> {
   if (get(activeRunId) === runId && evaluationsInFlight(evals)) {
     evalPollTimer = setTimeout(() => void pollActiveRunEvaluations(runId), POLL_INTERVAL_MS)
   }
+}
+
+function ensureRunPolling(runId: string): void {
+  if (get(activeRunId) !== runId || pollTimer != null) return
+  pollTimer = setTimeout(() => void pollActiveRun(runId), POLL_INTERVAL_MS)
+}
+
+function ensureEvalPolling(runId: string): void {
+  if (get(activeRunId) !== runId || evalPollTimer != null) return
+  evalPollTimer = setTimeout(() => void pollActiveRunEvaluations(runId), POLL_INTERVAL_MS)
+}
+
+function applyRunUpdate(run: BenchmarkRun): void {
+  if (get(activeRunId) === run.id) activeRun.set(run)
+  upsertRun(run)
+}
+
+/** Pause the active run cleanly (the current task finishes, then it holds). */
+export async function pauseActiveRun(): Promise<void> {
+  const runId = get(activeRunId)
+  if (!runId) return
+  const { run } = await pauseBackendBenchmarkRun(runId)
+  applyRunUpdate(run)
+  ensureRunPolling(runId)
+}
+
+/**
+ * Resume a paused/stopped run. 'continue' runs the remaining (never-started)
+ * tasks; 'retry' also re-runs the cancelled/errored ones.
+ */
+export async function resumeActiveRun(
+  mode: 'continue' | 'retry' = 'continue',
+): Promise<void> {
+  const runId = get(activeRunId)
+  if (!runId) return
+  const { run } = await resumeBackendBenchmarkRun(runId, mode)
+  applyRunUpdate(run)
+  await refreshSessions().catch(() => undefined)
+  ensureRunPolling(runId)
+}
+
+/** Stop the active run now (aborts the in-flight task; partial results kept). */
+export async function stopActiveRun(): Promise<void> {
+  const runId = get(activeRunId)
+  if (!runId) return
+  const { run } = await stopBackendBenchmarkRun(runId)
+  applyRunUpdate(run)
+  ensureRunPolling(runId)
+}
+
+/** Pause an evaluation pass of the active run. */
+export async function pauseActiveRunEvaluation(evaluationId: string): Promise<void> {
+  const runId = get(activeRunId)
+  if (!runId) return
+  await pauseBackendEvaluation(evaluationId)
+  await refreshActiveRunEvaluations(runId).catch(() => [])
+  ensureEvalPolling(runId)
+}
+
+/** Resume a paused/stopped evaluation pass of the active run. */
+export async function resumeActiveRunEvaluation(
+  evaluationId: string,
+  mode: 'continue' | 'retry' = 'continue',
+): Promise<void> {
+  const runId = get(activeRunId)
+  if (!runId) return
+  await resumeBackendEvaluation(evaluationId, mode)
+  await refreshActiveRunEvaluations(runId).catch(() => [])
+  ensureEvalPolling(runId)
+}
+
+/** Stop an evaluation pass of the active run now. */
+export async function stopActiveRunEvaluation(evaluationId: string): Promise<void> {
+  const runId = get(activeRunId)
+  if (!runId) return
+  await stopBackendEvaluation(evaluationId)
+  await refreshActiveRunEvaluations(runId).catch(() => [])
+  ensureEvalPolling(runId)
 }
 
 /** Clear the active run (called when a chat is selected). */

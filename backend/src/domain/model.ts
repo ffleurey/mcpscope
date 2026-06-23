@@ -46,6 +46,12 @@ export const compactionStrategyValues = ["none", "strip-reasoning"] as const;
 export const benchmarkRunStatusValues = [
   "pending",
   "running",
+  // Paused between tasks by the user (resumable). Set when a pause is requested;
+  // the coordinator finishes the current task, then holds before the next.
+  "paused",
+  // Stopped by the user (resumable). The in-flight task was cancelled; completed
+  // tasks are kept. Resume re-launches the coordinator over the remaining work.
+  "stopped",
   "complete",
   "error",
 ] as const;
@@ -363,7 +369,10 @@ export const benchmarkRunSessionSchema = z.object({
   sessionId: z.string(),
   sourceCaseId: z.string(),
   repetition: z.number().int().positive(),
-  status: z.enum(["running", "complete", "error"]).default("running"),
+  // 'cancelled' = interrupted by a user stop; kept for review, re-run only on retry.
+  status: z
+    .enum(["running", "complete", "error", "cancelled"])
+    .default("running"),
 });
 
 export const benchmarkRunRecordSchema = z.object({
@@ -387,6 +396,14 @@ export const benchmarkRunRecordSchema = z.object({
   completedAt: z.number().int().nonnegative().nullable().default(null),
 });
 
+/**
+ * Default judge sampling temperature. Deliberately small but non-zero: at exactly
+ * 0 a retry of a judge session that fell into a reasoning loop reproduces the same
+ * loop verbatim, so retry can never recover it. A little entropy lets retries
+ * escape, and for rubric judging there is no real benefit to bitwise determinism.
+ */
+export const DEFAULT_JUDGE_TEMPERATURE = 0.2;
+
 // An evaluation is a separate, repeatable judging pass over a completed run with
 // a chosen judge model. It is a thin grouping/index over the reused
 // session_analysis children (one per run-session); the verdicts live in analysis
@@ -395,15 +412,18 @@ export const benchmarkEvaluationSessionSchema = z.object({
   // The run-session being judged, and the session_analysis child that judges it.
   runSessionId: z.string(),
   analysisSessionId: z.string(),
-  status: z.enum(["running", "complete", "error"]).default("running"),
+  // 'cancelled' = interrupted by a user stop; kept for review, re-run only on retry.
+  status: z
+    .enum(["running", "complete", "error", "cancelled"])
+    .default("running"),
 });
 
 export const benchmarkEvaluationRecordSchema = z.object({
   id: z.string(),
   runId: z.string(),
   judgeModelConfigId: z.string(),
-  /** Sampling temperature for the judge sessions (default 0 = deterministic). */
-  judgeTemperature: z.number().default(0),
+  /** Sampling temperature for the judge sessions. */
+  judgeTemperature: z.number().default(DEFAULT_JUDGE_TEMPERATURE),
   status: benchmarkRunStatusSchema,
   sessions: z.array(benchmarkEvaluationSessionSchema).default([]),
   error: z.string().nullable().default(null),

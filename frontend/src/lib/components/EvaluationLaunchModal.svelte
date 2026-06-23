@@ -14,7 +14,9 @@
   let { runId, onClose }: Props = $props()
 
   let selectedJudgeId = $state('')
-  let selectedTemperature = $state(0)
+  // Default to a small non-zero temperature (mirrors backend DEFAULT_JUDGE_TEMPERATURE):
+  // at exactly 0 a retry of a looping judge session reproduces the same loop and can't recover.
+  let selectedTemperature = $state(0.2)
   let launching = $state(false)
   let launchError = $state<AppError | null>(null)
   let hasInitialized = $state(false)
@@ -90,7 +92,10 @@
         bind:value={selectedTemperature}
         disabled={launching}
       />
-      <p class="field-hinttext">0 = deterministic (recommended). Raise to probe judge stability.</p>
+      <p class="field-hinttext">
+        Small non-zero (0.2) by default, so retrying a stuck judge can escape. Avoid 0 —
+        a retry would reproduce the same result. Raise to probe judge stability.
+      </p>
     </div>
 
     {#if selectedConfig}

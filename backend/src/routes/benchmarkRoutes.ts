@@ -14,10 +14,16 @@ import {
   launchBenchmarkRun,
   getBenchmarkRunReport,
   deleteBenchmarkRunEntry,
+  pauseBenchmarkRun,
+  resumeBenchmarkRun,
+  stopBenchmarkRun,
   evaluateBenchmarkRun,
   getBenchmarkRunEvaluationReports,
   deleteBenchmarkEvaluationEntry,
   retryBenchmarkEvaluation,
+  pauseBenchmarkEvaluation,
+  resumeBenchmarkEvaluation,
+  stopBenchmarkEvaluation,
 } from "../operations/benchmark.js";
 import {
   benchmarkCreateOperation,
@@ -204,6 +210,42 @@ export function registerBenchmarkRoutes({
     }
   });
 
+  // ── Run control: pause / resume / stop ──────────────────────────────────
+  // resume mode=continue runs only never-started tasks; mode=retry also re-runs
+  // cancelled/errored ones. Default is continue.
+  const resumeModeSchema = z.object({
+    mode: z.enum(["continue", "retry"]).optional(),
+  });
+
+  app.post("/api/benchmark-runs/:runId/pause", async (request, reply) => {
+    const { runId } = z.object({ runId: z.string() }).parse(request.params);
+    try {
+      return { run: pauseBenchmarkRun(opCtx, runId) };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.post("/api/benchmark-runs/:runId/resume", async (request, reply) => {
+    const { runId } = z.object({ runId: z.string() }).parse(request.params);
+    const { mode } = resumeModeSchema.parse(request.body ?? {});
+    try {
+      reply.code(202);
+      return { run: resumeBenchmarkRun(opCtx, runId, mode ?? "continue") };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.post("/api/benchmark-runs/:runId/stop", async (request, reply) => {
+    const { runId } = z.object({ runId: z.string() }).parse(request.params);
+    try {
+      return { run: stopBenchmarkRun(opCtx, runId) };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
   // Launch a new evaluation pass over a completed run (repeatable; one per judge model).
   app.post("/api/benchmark-runs/:runId/evaluations", async (request, reply) => {
     const { runId } = z.object({ runId: z.string() }).parse(request.params);
@@ -243,6 +285,43 @@ export function registerBenchmarkRoutes({
       const evaluation = retryBenchmarkEvaluation(opCtx, evaluationId);
       reply.code(202);
       return { evaluation };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.post("/api/benchmark-evaluations/:evaluationId/pause", async (request, reply) => {
+    const { evaluationId } = z
+      .object({ evaluationId: z.string() })
+      .parse(request.params);
+    try {
+      return { evaluation: pauseBenchmarkEvaluation(opCtx, evaluationId) };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.post("/api/benchmark-evaluations/:evaluationId/resume", async (request, reply) => {
+    const { evaluationId } = z
+      .object({ evaluationId: z.string() })
+      .parse(request.params);
+    const { mode } = resumeModeSchema.parse(request.body ?? {});
+    try {
+      reply.code(202);
+      return {
+        evaluation: resumeBenchmarkEvaluation(opCtx, evaluationId, mode ?? "continue"),
+      };
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
+  app.post("/api/benchmark-evaluations/:evaluationId/stop", async (request, reply) => {
+    const { evaluationId } = z
+      .object({ evaluationId: z.string() })
+      .parse(request.params);
+    try {
+      return { evaluation: stopBenchmarkEvaluation(opCtx, evaluationId) };
     } catch (err) {
       return handleOperationError(err, reply);
     }

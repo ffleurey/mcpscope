@@ -33,6 +33,7 @@ import {
   type OperationContext,
 } from "./operations/index.js";
 import { ExecutionScheduler } from "./runtime/scheduler.js";
+import { RunControlRegistry } from "./runtime/runControl.js";
 import type { SchedulerEvent } from "./runtime/schedulerTypes.js";
 import { registerConfigurationRoutes } from "./routes/configurationRoutes.js";
 import { registerBenchmarkRoutes } from "./routes/benchmarkRoutes.js";
@@ -149,6 +150,8 @@ export async function buildBackendApp(
 
   // Backend-owned execution scheduler — created once per app instance.
   const scheduler = new ExecutionScheduler();
+  // Control plane for long-running coordinators (benchmark/evaluation runs).
+  const runControl = new RunControlRegistry(scheduler);
 
   // Initialize the JSON-backed config store.
   // Default path: {dataDir}/mcpscope.config.json, override via MCPSCOPE_CONFIG_PATH.
@@ -181,6 +184,7 @@ export async function buildBackendApp(
     analysisMcpUrl,
     logger: app.log,
     scheduler,
+    runControl,
   };
   registerMcpTransport(app, opCtx);
 

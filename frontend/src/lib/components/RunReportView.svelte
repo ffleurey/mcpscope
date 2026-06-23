@@ -5,6 +5,12 @@
     activeRunEvaluations,
     removeEvaluation,
     retryEvaluation,
+    pauseActiveRun,
+    resumeActiveRun,
+    stopActiveRun,
+    pauseActiveRunEvaluation,
+    resumeActiveRunEvaluation,
+    stopActiveRunEvaluation,
   } from '../benchmarkStore'
   import { chatSessions, selectChat } from '../sessionStore'
   import { modelConfigs } from '../connectionStore'
@@ -14,7 +20,15 @@
   import DialogShell from './DialogShell.svelte'
   import BenchmarkCaseCard from './BenchmarkCaseCard.svelte'
   import EvaluationLaunchModal from './EvaluationLaunchModal.svelte'
-  import { iconView, iconAnalysis, iconTrash, iconRefresh } from '../design/icons'
+  import {
+    iconView,
+    iconAnalysis,
+    iconTrash,
+    iconRefresh,
+    iconPause,
+    iconPlay,
+    iconStop,
+  } from '../design/icons'
   import type {
     CaseReport,
     NumberStats,
@@ -26,6 +40,35 @@
   const run = $derived($activeRun)
   const report = $derived($activeRunReport)
   const isRunning = $derived(run != null && (run.status === 'pending' || run.status === 'running'))
+
+  // ── Run control (pause / resume / stop) ─────────────────────────────
+  const canPauseRun = $derived(run?.status === 'running')
+  const canStopRun = $derived(run?.status === 'running' || run?.status === 'paused')
+  // 'stopped'/'error' are resumable rest states; 'paused' resumes in place.
+  const isAtRest = $derived(run?.status === 'stopped' || run?.status === 'error')
+  // How many (case, rep) tasks have never started (no session recorded for them).
+  const expectedTasks = $derived((run?.cases.length ?? 0) * (run?.repetitions ?? 0))
+  const startedTaskKeys = $derived(
+    new Set((run?.sessions ?? []).map((s) => `${s.sourceCaseId}:${s.repetition}`)),
+  )
+  const hasNeverStarted = $derived(startedTaskKeys.size < expectedTasks)
+  const hasRerunnable = $derived(
+    (run?.sessions ?? []).some((s) => s.status === 'cancelled' || s.status === 'error'),
+  )
+  // Resume (continue): un-pause in place, or run the never-started tasks.
+  const canResumeRun = $derived(run?.status === 'paused' || (isAtRest && hasNeverStarted))
+  // Retry: re-run cancelled/errored tasks — only at rest, and only if any exist.
+  const canRetryRun = $derived(isAtRest && hasRerunnable)
+  let controlBusy = $state(false)
+  async function withControlBusy(fn: () => Promise<void>): Promise<void> {
+    if (controlBusy) return
+    controlBusy = true
+    try {
+      await fn()
+    } finally {
+      controlBusy = false
+    }
+  }
 
   // ── LLM evaluation ──────────────────────────────────────────────────
   const evaluations = $derived($activeRunEvaluations)
@@ -50,14 +93,27 @@
   async function handleRetryEvaluation(id: string): Promise<void> {
     await retryEvaluation(id)
   }
+  async function handlePauseEvaluation(id: string): Promise<void> {
+    await pauseActiveRunEvaluation(id)
+  }
+  async function handleResumeEvaluation(id: string): Promise<void> {
+    await resumeActiveRunEvaluation(id, 'continue')
+  }
+  async function handleStopEvaluation(id: string): Promise<void> {
+    await stopActiveRunEvaluation(id)
+  }
   function evalIncomplete(ev: BenchmarkEvaluationReport): boolean {
     return ev.judgedSessions < ev.expectedSessions
   }
   // Retry once the pass is settled (not actively judging) and it either failed or
   // didn't judge every session — covers errored passes and ones orphaned by a restart.
   function canRetryEvaluation(ev: BenchmarkEvaluationReport): boolean {
-    if (ev.status === 'pending' || ev.status === 'running') return false
-    return ev.status === 'error' || evalIncomplete(ev)
+    // Only at rest: while running/paused the dedicated pause/resume/stop controls
+    // apply. Stopped/errored/incomplete passes can be retried (re-judge failures).
+    if (ev.status === 'pending' || ev.status === 'running' || ev.status === 'paused') {
+      return false
+    }
+    return ev.status === 'error' || ev.status === 'stopped' || evalIncomplete(ev)
   }
 
   // Live clock so the elapsed-time of an in-progress run ticks forward.
@@ -81,7 +137,7 @@
   function statusPillClass(status: string): string {
     if (status === 'complete') return 'success'
     if (status === 'error') return 'error'
-    if (status === 'running') return 'soft'
+    if (status === 'running' || status === 'paused') return 'soft'
     return 'dim'
   }
 
@@ -192,6 +248,46 @@
         <IdBadge id={run.id} />
         <span class="status-pill {statusPillClass(run.status)}">{run.status}</span>
         <span class="header-actions">
+          {#if canPauseRun}
+            <button
+              class="btn btn-sm"
+              disabled={controlBusy}
+              onclick={() => withControlBusy(pauseActiveRun)}
+              title="Pause after the current session finishes"
+            >
+              <Icon path={iconPause} /> Pause
+            </button>
+          {/if}
+          {#if canResumeRun}
+            <button
+              class="btn btn-sm"
+              disabled={controlBusy}
+              onclick={() => withControlBusy(() => resumeActiveRun('continue'))}
+              title="Resume: run the remaining sessions"
+            >
+              <Icon path={iconPlay} /> Resume
+            </button>
+          {/if}
+          {#if canRetryRun}
+            <button
+              class="btn btn-sm"
+              disabled={controlBusy}
+              onclick={() => withControlBusy(() => resumeActiveRun('retry'))}
+              title="Retry: re-run cancelled and failed sessions, then the rest"
+            >
+              <Icon path={iconRefresh} /> Retry
+            </button>
+          {/if}
+          {#if canStopRun}
+            <button
+              class="btn btn-sm danger"
+              disabled={controlBusy}
+              onclick={() => withControlBusy(stopActiveRun)}
+              title="Stop now: aborts the in-flight session; completed ones are kept"
+            >
+              <Icon path={iconStop} /> Stop
+            </button>
+          {/if}
           <button
             class="btn btn-sm"
             onclick={() => (showSnapshot = true)}
@@ -238,6 +334,21 @@
         <div class="running-note">
           <span class="status-dot running"></span>
           Run in progress — metrics update as sessions complete…
+        </div>
+      {:else if run.status === 'paused'}
+        <div class="running-note">
+          <span class="status-dot"></span>
+          Paused — resume to continue the remaining sessions.
+        </div>
+      {:else if run.status === 'stopped'}
+        <div class="running-note">
+          <span class="status-dot"></span>
+          {#if hasNeverStarted}
+            Stopped — resume to run the remaining sessions, or retry to also re-run
+            cancelled/failed ones.
+          {:else}
+            Stopped — some sessions were cancelled or failed. Retry to re-run them.
+          {/if}
         </div>
       {/if}
     </header>
@@ -373,6 +484,36 @@
                 {/if}
                 <IdBadge id={ev.id} />
                 <span class="eval-actions">
+                  {#if ev.status === 'running'}
+                    <button
+                      class="icon-btn"
+                      title="Pause after the current judge finishes"
+                      aria-label="Pause evaluation"
+                      onclick={() => handlePauseEvaluation(ev.id)}
+                    >
+                      <Icon path={iconPause} />
+                    </button>
+                  {/if}
+                  {#if ev.status === 'paused' || ev.status === 'stopped'}
+                    <button
+                      class="icon-btn"
+                      title="Resume: judge the remaining sessions"
+                      aria-label="Resume evaluation"
+                      onclick={() => handleResumeEvaluation(ev.id)}
+                    >
+                      <Icon path={iconPlay} />
+                    </button>
+                  {/if}
+                  {#if ev.status === 'running' || ev.status === 'paused'}
+                    <button
+                      class="icon-btn icon-btn-danger"
+                      title="Stop now: aborts the in-flight judge; scored ones are kept"
+                      aria-label="Stop evaluation"
+                      onclick={() => handleStopEvaluation(ev.id)}
+                    >
+                      <Icon path={iconStop} />
+                    </button>
+                  {/if}
                   {#if canRetryEvaluation(ev)}
                     <button
                       class="icon-btn"
