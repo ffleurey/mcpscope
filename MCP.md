@@ -249,8 +249,10 @@ http://localhost:3030/mcp/analysis
 
 This endpoint is backend-owned and used by `session_analysis` sessions — including the
 `benchmark_evaluation` judge sessions that back `mcpscope_benchmark_evaluate`, since benchmark
-evaluation *is* an analysis workflow. The judge is pushed an inspect summary and can pull more
-detail through this endpoint on demand.
+evaluation *is* an analysis workflow. The judge is given the target session ID and inspects it
+through this endpoint on demand — starting from the inspect summary (request, final answer, and
+per-round tool calls with size-capped parameters) and pulling specific parts only when a criterion
+needs more detail.
 
 Its tool surface is intentionally restricted to:
 
