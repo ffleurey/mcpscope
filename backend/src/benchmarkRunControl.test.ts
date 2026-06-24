@@ -389,6 +389,29 @@ describe("benchmark run control (pause / stop / resume)", () => {
     expect(sessionStatuses(await getRun(runId))).toEqual(["complete", "complete"]);
   });
 
+  it("stops a run via the operation-backed route (CLI/MCP surface)", async () => {
+    const config = makeTestConfig();
+    dataDir = config.dataDir;
+    const ctl = controllableGateways();
+    app = await buildBackendApp(config, ctl.gateways);
+    await seedModelConfig(app);
+
+    const { runId } = await setupRun(2);
+    await waitFor(() => ctl.startedTurns() >= 1, "turn 1 to start");
+
+    // The snake_case catalog op surface (what the CLI + MCP tools call).
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/operations/benchmark-run-control",
+      payload: { run_id: runId, action: "stop" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().run.id).toBe(runId);
+
+    await waitFor(async () => (await getRun(runId)).status === "stopped", "run stopped");
+    expect(sessionStatuses(await getRun(runId))).toContain("cancelled");
+  });
+
   it("stops even when the in-flight job never settles (ignores abort)", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;

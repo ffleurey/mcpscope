@@ -20,8 +20,14 @@ import {
   launchBenchmarkRun,
   getBenchmarkRunProgress,
   getBenchmarkRunReport,
+  pauseBenchmarkRun,
+  resumeBenchmarkRun,
+  stopBenchmarkRun,
   evaluateBenchmarkRun,
   getBenchmarkRunEvaluationReports,
+  pauseBenchmarkEvaluation,
+  resumeBenchmarkEvaluation,
+  stopBenchmarkEvaluation,
   type BenchmarkRunProgress,
   type BenchmarkEvaluationReport,
 } from "./benchmark.js";
@@ -990,5 +996,98 @@ export const benchmarkRunEvaluationsOperation = {
         evaluationReportToSnake,
       ),
     };
+  },
+};
+
+// ── benchmark_run_control ────────────────────────────────────────────────────
+
+export const benchmarkRunControlInputSchema = z.object({
+  run_id: z.string().describe("Run id to control."),
+  action: z
+    .enum(["pause", "resume", "stop"])
+    .describe(
+      "pause: hold after the current session finishes. stop: abort the in-flight "
+        + "session now and rest at 'stopped' (resumable; partial results kept). "
+        + "resume: re-launch the run over its remaining work.",
+    ),
+  mode: z
+    .enum(["continue", "retry"])
+    .optional()
+    .describe(
+      "Resume only. 'continue' (default) runs never-started sessions; 'retry' also "
+        + "re-runs cancelled/errored ones.",
+    ),
+});
+export type BenchmarkRunControlInput = z.infer<
+  typeof benchmarkRunControlInputSchema
+>;
+
+export const benchmarkRunControlOutputSchema = { run: runShape };
+
+export const benchmarkRunControlOperation = {
+  id: "benchmark_run_control" as const,
+  description:
+    "Pause, resume, or stop a benchmark run. Stop rests the run at 'stopped' "
+    + "(resumable, partial results kept); resume re-enqueues its remaining work "
+    + "('continue') or also re-runs cancelled/errored sessions ('retry').",
+  schema: benchmarkRunControlInputSchema,
+  outputSchema: benchmarkRunControlOutputSchema,
+  async execute(ctx: OperationContext, input: BenchmarkRunControlInput) {
+    const run =
+      input.action === "pause"
+        ? pauseBenchmarkRun(ctx, input.run_id)
+        : input.action === "stop"
+          ? stopBenchmarkRun(ctx, input.run_id)
+          : resumeBenchmarkRun(ctx, input.run_id, input.mode ?? "continue");
+    return { run: runToSnake(run) };
+  },
+};
+
+// ── benchmark_evaluation_control ─────────────────────────────────────────────
+
+export const benchmarkEvaluationControlInputSchema = z.object({
+  evaluation_id: z.string().describe("Evaluation pass id to control."),
+  action: z
+    .enum(["pause", "resume", "stop"])
+    .describe(
+      "pause: hold after the current judge finishes. stop: abort the in-flight "
+        + "judge now and rest at 'stopped' (resumable; scored sessions kept). "
+        + "resume: re-judge the pass's remaining sessions.",
+    ),
+  mode: z
+    .enum(["continue", "retry"])
+    .optional()
+    .describe(
+      "Resume only. 'continue' (default) judges never-judged sessions; 'retry' also "
+        + "re-judges cancelled/errored ones.",
+    ),
+});
+export type BenchmarkEvaluationControlInput = z.infer<
+  typeof benchmarkEvaluationControlInputSchema
+>;
+
+export const benchmarkEvaluationControlOutputSchema = {
+  evaluation: evaluationShape,
+};
+
+export const benchmarkEvaluationControlOperation = {
+  id: "benchmark_evaluation_control" as const,
+  description:
+    "Pause, resume, or stop an LLM evaluation pass. Mirrors benchmark_run_control "
+    + "for evaluations (the judging passes over a completed run).",
+  schema: benchmarkEvaluationControlInputSchema,
+  outputSchema: benchmarkEvaluationControlOutputSchema,
+  async execute(ctx: OperationContext, input: BenchmarkEvaluationControlInput) {
+    const evaluation =
+      input.action === "pause"
+        ? pauseBenchmarkEvaluation(ctx, input.evaluation_id)
+        : input.action === "stop"
+          ? stopBenchmarkEvaluation(ctx, input.evaluation_id)
+          : resumeBenchmarkEvaluation(
+              ctx,
+              input.evaluation_id,
+              input.mode ?? "continue",
+            );
+    return { evaluation: evaluationToSnake(evaluation) };
   },
 };

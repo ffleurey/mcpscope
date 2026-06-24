@@ -36,8 +36,10 @@ import {
   benchmarkRunOperation,
   benchmarkRunStatusOperation,
   benchmarkRunReportOperation,
+  benchmarkRunControlOperation,
   benchmarkEvaluateOperation,
   benchmarkRunEvaluationsOperation,
+  benchmarkEvaluationControlOperation,
 } from "../operations/index.js";
 
 /**
@@ -457,6 +459,17 @@ export function registerBenchmarkRoutes({
     },
   );
 
+  app.post("/api/operations/benchmark-run-control", async (request, reply) => {
+    try {
+      return await benchmarkRunControlOperation.execute(
+        opCtx,
+        request.body as never,
+      );
+    } catch (err) {
+      return handleOperationError(err, reply);
+    }
+  });
+
   app.post("/api/operations/benchmark-evaluate", async (request, reply) => {
     try {
       return await benchmarkEvaluateOperation.execute(opCtx, request.body as never);
@@ -473,6 +486,20 @@ export function registerBenchmarkRoutes({
         return await benchmarkRunEvaluationsOperation.execute(opCtx, {
           run_id: runId,
         });
+      } catch (err) {
+        return handleOperationError(err, reply);
+      }
+    },
+  );
+
+  app.post(
+    "/api/operations/benchmark-evaluation-control",
+    async (request, reply) => {
+      try {
+        return await benchmarkEvaluationControlOperation.execute(
+          opCtx,
+          request.body as never,
+        );
       } catch (err) {
         return handleOperationError(err, reply);
       }

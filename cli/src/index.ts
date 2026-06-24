@@ -39,10 +39,14 @@ import {
   runBenchmarkRunStatus,
   parseBenchmarkRunReportArgs,
   runBenchmarkRunReport,
+  parseBenchmarkRunControlArgs,
+  runBenchmarkRunControl,
   parseBenchmarkEvaluateArgs,
   runBenchmarkEvaluate,
   parseBenchmarkRunEvaluationsArgs,
   runBenchmarkRunEvaluations,
+  parseBenchmarkEvaluationControlArgs,
+  runBenchmarkEvaluationControl,
 } from "./commands/benchmark.js";
 
 function printHelp(): void {
@@ -68,8 +72,10 @@ function printHelp(): void {
   mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--wait] [--json]
   mcpscope benchmark_run_status <run_id> [--json]
   mcpscope benchmark_run_report <run_id> [--json]
+  mcpscope benchmark_run_control <run_id> --action <pause|resume|stop> [--mode <continue|retry>] [--json]
   mcpscope benchmark_evaluate <run_id> --judge-model <model_config_id> [--temperature <n>] [--json]
   mcpscope benchmark_run_evaluations <run_id> [--json]
+  mcpscope benchmark_evaluation_control <evaluation_id> --action <pause|resume|stop> [--mode <continue|retry>] [--json]
 
 Options:
   --json        emit JSON instead of text
@@ -313,6 +319,14 @@ export async function main(argv: string[]): Promise<void> {
     return;
   }
 
+  if (cmd === "benchmark_run_control") {
+    await dispatchFlat(
+      parseBenchmarkRunControlArgs(benchmarkArgs),
+      runBenchmarkRunControl,
+    );
+    return;
+  }
+
   if (cmd === "benchmark_evaluate") {
     await dispatchFlat(
       parseBenchmarkEvaluateArgs(benchmarkArgs),
@@ -325,6 +339,14 @@ export async function main(argv: string[]): Promise<void> {
     await dispatchFlat(
       parseBenchmarkRunEvaluationsArgs(benchmarkArgs),
       runBenchmarkRunEvaluations,
+    );
+    return;
+  }
+
+  if (cmd === "benchmark_evaluation_control") {
+    await dispatchFlat(
+      parseBenchmarkEvaluationControlArgs(benchmarkArgs),
+      runBenchmarkEvaluationControl,
     );
     return;
   }

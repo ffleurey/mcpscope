@@ -9,8 +9,10 @@ import {
   cliBenchmarkRun,
   cliBenchmarkRunStatus,
   cliBenchmarkRunReport,
+  cliBenchmarkRunControl,
   cliBenchmarkEvaluate,
   cliBenchmarkRunEvaluations,
+  cliBenchmarkEvaluationControl,
 } from "../httpClient.js";
 import { bold } from "../colors.js";
 import type {
@@ -1166,4 +1168,103 @@ export function parseBenchmarkRunReportArgs(
   if (!runId) return { error: "Missing required argument: <run_id>" };
 
   return { opts: { url: url ?? "", json, runId } };
+}
+
+// ── benchmark_run_control / benchmark_evaluation_control ─────────────────────
+
+interface BenchmarkControlOptions {
+  url: string;
+  json: boolean;
+  id: string;
+  action: "pause" | "resume" | "stop";
+  mode?: "continue" | "retry";
+}
+
+function parseBenchmarkControlArgs(
+  args: string[],
+  idLabel: string,
+): ParseResult<BenchmarkControlOptions> {
+  let url: string | undefined;
+  let json = false;
+  let id: string | undefined;
+  let action: string | undefined;
+  let mode: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (arg === "-h" || arg === "--help") return { help: true };
+    if (arg === "--url") {
+      url = args[++i];
+      if (!url) return { error: "--url requires a value" };
+    } else if (arg === "--json") {
+      json = true;
+    } else if (arg === "--action") {
+      action = args[++i];
+      if (!action) return { error: "--action requires a value" };
+    } else if (arg === "--mode") {
+      mode = args[++i];
+      if (!mode) return { error: "--mode requires a value" };
+    } else if (!arg.startsWith("-")) {
+      if (id !== undefined) return { error: "Too many arguments" };
+      id = arg;
+    } else {
+      return { error: `Unknown option: ${arg}` };
+    }
+  }
+
+  if (!id) return { error: `Missing required argument: <${idLabel}>` };
+  if (action !== "pause" && action !== "resume" && action !== "stop") {
+    return {
+      error: "Missing/invalid required option: --action <pause|resume|stop>",
+    };
+  }
+  if (mode !== undefined && mode !== "continue" && mode !== "retry") {
+    return { error: "--mode must be 'continue' or 'retry'" };
+  }
+
+  const opts: BenchmarkControlOptions = { url: url ?? "", json, id, action };
+  if (mode !== undefined) opts.mode = mode;
+  return { opts };
+}
+
+export function parseBenchmarkRunControlArgs(
+  args: string[],
+): ParseResult<BenchmarkControlOptions> {
+  return parseBenchmarkControlArgs(args, "run_id");
+}
+
+export function parseBenchmarkEvaluationControlArgs(
+  args: string[],
+): ParseResult<BenchmarkControlOptions> {
+  return parseBenchmarkControlArgs(args, "evaluation_id");
+}
+
+export async function runBenchmarkRunControl(
+  opts: BenchmarkControlOptions,
+): Promise<void> {
+  const result = await cliBenchmarkRunControl(opts.url, {
+    run_id: opts.id,
+    action: opts.action,
+    ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
+  });
+  if (opts.json) {
+    emitJson(result);
+    return;
+  }
+  process.stdout.write(`${result.run.id}  ${result.run.status}\n`);
+}
+
+export async function runBenchmarkEvaluationControl(
+  opts: BenchmarkControlOptions,
+): Promise<void> {
+  const result = await cliBenchmarkEvaluationControl(opts.url, {
+    evaluation_id: opts.id,
+    action: opts.action,
+    ...(opts.mode !== undefined ? { mode: opts.mode } : {}),
+  });
+  if (opts.json) {
+    emitJson(result);
+    return;
+  }
+  process.stdout.write(`${result.evaluation.id}  ${result.evaluation.status}\n`);
 }

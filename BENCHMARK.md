@@ -124,19 +124,22 @@ case can have checks, a rubric, both, or neither.
 The agent-facing benchmark capabilities now live in the shared **operation catalog**
 (`backend/src/operations/catalog.ts`), so each is exposed identically through both adapters:
 every operation is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP
-parity). These ops return **snake_case** results, the operation-catalog convention. The twelve
+parity). These ops return **snake_case** results, the operation-catalog convention. The fourteen
 benchmark operations are:
 
 `benchmark_create`, `benchmark_list`, `benchmark_inspect`, `benchmark_add_case`,
 `benchmark_add_case_from_session`, `benchmark_update_case`, `benchmark_delete_case`,
-`benchmark_run`, `benchmark_run_status`, `benchmark_run_report`, `benchmark_evaluate`,
-`benchmark_run_evaluations`.
+`benchmark_run`, `benchmark_run_status`, `benchmark_run_report`, `benchmark_run_control`,
+`benchmark_evaluate`, `benchmark_run_evaluations`, `benchmark_evaluation_control`.
 
 Cases are full read/write/edit for an agent collaborating with a developer:
 `benchmark_add_case` (+ `rubric`) and `benchmark_add_case_from_session` create,
 `benchmark_inspect` reads, `benchmark_update_case` edits any field (name, prompt, order,
 tool-behavior checks, rubric), and `benchmark_delete_case` removes. `benchmark_evaluate`
 launches an LLM evaluation pass and `benchmark_run_evaluations` reads back the scored passes.
+`benchmark_run_control` / `benchmark_evaluation_control` pause/resume/stop a run or pass
+(`{ action: 'pause' | 'resume' | 'stop', mode?: 'continue' | 'retry' }`) — the same controls the
+UI exposes, so an agent or CLI user who launched a run can stop or resume it.
 See [CLI.md](CLI.md) for the CLI commands and [MCP.md](MCP.md) for the MCP tools.
 
 The frontend keeps a separate set of **camelCase** HTTP routes (below); those are not part of
@@ -210,8 +213,10 @@ the identical operations as `mcpscope_<id>` tools.
 | `POST` | `/api/operations/benchmark-run` | `benchmark_run` |
 | `GET` | `/api/operations/benchmark-runs/:runId/status` | `benchmark_run_status` |
 | `GET` | `/api/operations/benchmark-runs/:runId/report` | `benchmark_run_report` |
+| `POST` | `/api/operations/benchmark-run-control` | `benchmark_run_control` |
 | `POST` | `/api/operations/benchmark-evaluate` | `benchmark_evaluate` |
 | `GET` | `/api/operations/benchmark-runs/:runId/evaluations` | `benchmark_run_evaluations` |
+| `POST` | `/api/operations/benchmark-evaluation-control` | `benchmark_evaluation_control` |
 
 ## CLI / MCP
 
