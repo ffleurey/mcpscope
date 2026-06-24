@@ -9,10 +9,7 @@
     abortExecution,
     removePendingJob,
   } from '../executionStore'
-  import {
-    stopBenchmarkRun,
-    stopEvaluation,
-  } from '../api/backendClient'
+  import { stopBenchmarkRun, stopEvaluation } from '../api/backendClient'
   import { followRunning } from '../followStore'
   import { selectChat, activeChatId, chatSessions } from '../sessionStore'
   import Icon from './Icon.svelte'

@@ -214,9 +214,7 @@ export async function pauseActiveRun(): Promise<void> {
  * Resume a paused/stopped run. 'continue' runs the remaining (never-started)
  * tasks; 'retry' also re-runs the cancelled/errored ones.
  */
-export async function resumeActiveRun(
-  mode: 'continue' | 'retry' = 'continue',
-): Promise<void> {
+export async function resumeActiveRun(mode: 'continue' | 'retry' = 'continue'): Promise<void> {
   const runId = get(activeRunId)
   if (!runId) return
   const { run } = await resumeBackendBenchmarkRun(runId, mode)

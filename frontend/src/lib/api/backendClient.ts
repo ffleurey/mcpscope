@@ -687,10 +687,7 @@ export function pauseEvaluation(evaluationId: string) {
   })
 }
 
-export function resumeEvaluation(
-  evaluationId: string,
-  mode: 'continue' | 'retry' = 'continue',
-) {
+export function resumeEvaluation(evaluationId: string, mode: 'continue' | 'retry' = 'continue') {
   return request(`/api/benchmark-evaluations/${encodeURIComponent(evaluationId)}/resume`, {
     method: 'POST',
     body: { mode },

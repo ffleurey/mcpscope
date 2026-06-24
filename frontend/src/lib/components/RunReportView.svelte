@@ -348,8 +348,8 @@
         <div class="running-note">
           <span class="status-dot"></span>
           {#if hasNeverStarted}
-            Stopped — resume to run the remaining sessions, or retry to also re-run
-            cancelled/failed ones.
+            Stopped — resume to run the remaining sessions, or retry to also re-run cancelled/failed
+            ones.
           {:else}
             Stopped — some sessions were cancelled or failed. Retry to re-run them.
           {/if}

@@ -93,8 +93,8 @@
         disabled={launching}
       />
       <p class="field-hinttext">
-        Small non-zero (0.2) by default, so retrying a stuck judge can escape. Avoid 0 —
-        a retry would reproduce the same result. Raise to probe judge stability.
+        Small non-zero (0.2) by default, so retrying a stuck judge can escape. Avoid 0 — a retry
+        would reproduce the same result. Raise to probe judge stability.
       </p>
     </div>
 
