@@ -477,11 +477,18 @@ const executionTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('init'), sessionId: z.string() }),
 ])
 
+const executionJobOwnerSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('benchmark-run'), id: z.string() }),
+  z.object({ kind: z.literal('benchmark-evaluation'), id: z.string() }),
+])
+export type ExecutionJobOwner = z.infer<typeof executionJobOwnerSchema>
+
 const executionJobSchema = z.object({
   jobId: z.string(),
   target: executionTargetSchema,
   prompt: z.string().optional(),
   createdAt: z.number(),
+  owner: executionJobOwnerSchema.optional(),
 })
 
 const activeExecutionJobSchema = executionJobSchema.extend({
@@ -548,7 +555,14 @@ export type SchedulerEvent = z.infer<typeof schedulerEventSchema>
 // ─── Benchmark schemas ───────────────────────────────────────────────────────
 // camelCase, mirroring the backend benchmark HTTP contract (see BENCHMARK.md).
 
-export const benchmarkRunStatusSchema = z.enum(['pending', 'running', 'complete', 'error'])
+export const benchmarkRunStatusSchema = z.enum([
+  'pending',
+  'running',
+  'paused',
+  'stopped',
+  'complete',
+  'error',
+])
 
 export const benchmarkSchema = z.object({
   id: z.string(),
@@ -596,6 +610,8 @@ export const benchmarkRunSessionRefSchema = z.object({
   sessionId: z.string(),
   sourceCaseId: z.string(),
   repetition: z.number().int().positive(),
+  status: z.enum(['running', 'complete', 'error', 'cancelled']).default('running'),
+  error: z.string().nullable().default(null),
 })
 
 export const benchmarkRunSchema = z.object({

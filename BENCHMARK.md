@@ -124,19 +124,22 @@ case can have checks, a rubric, both, or neither.
 The agent-facing benchmark capabilities now live in the shared **operation catalog**
 (`backend/src/operations/catalog.ts`), so each is exposed identically through both adapters:
 every operation is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP
-parity). These ops return **snake_case** results, the operation-catalog convention. The twelve
+parity). These ops return **snake_case** results, the operation-catalog convention. The fourteen
 benchmark operations are:
 
 `benchmark_create`, `benchmark_list`, `benchmark_inspect`, `benchmark_add_case`,
 `benchmark_add_case_from_session`, `benchmark_update_case`, `benchmark_delete_case`,
-`benchmark_run`, `benchmark_run_status`, `benchmark_run_report`, `benchmark_evaluate`,
-`benchmark_run_evaluations`.
+`benchmark_run`, `benchmark_run_status`, `benchmark_run_report`, `benchmark_run_control`,
+`benchmark_evaluate`, `benchmark_run_evaluations`, `benchmark_evaluation_control`.
 
 Cases are full read/write/edit for an agent collaborating with a developer:
 `benchmark_add_case` (+ `rubric`) and `benchmark_add_case_from_session` create,
 `benchmark_inspect` reads, `benchmark_update_case` edits any field (name, prompt, order,
 tool-behavior checks, rubric), and `benchmark_delete_case` removes. `benchmark_evaluate`
 launches an LLM evaluation pass and `benchmark_run_evaluations` reads back the scored passes.
+`benchmark_run_control` / `benchmark_evaluation_control` pause/resume/stop a run or pass
+(`{ action: 'pause' | 'resume' | 'stop', mode?: 'continue' | 'retry' }`) — the same controls the
+UI exposes, so an agent or CLI user who launched a run can stop or resume it.
 See [CLI.md](CLI.md) for the CLI commands and [MCP.md](MCP.md) for the MCP tools.
 
 The frontend keeps a separate set of **camelCase** HTTP routes (below); those are not part of
@@ -162,18 +165,35 @@ surface). These camelCase routes are not part of the MCP operation catalog.
 | `POST` | `/api/benchmarks/:id/runs` | `{ caseIds?, repetitions?, modelConfigId?, mcpProfileIds? }` | `202 { run }` |
 | `GET` | `/api/benchmark-runs/:runId` | — | `{ run, report }` |
 | `DELETE` | `/api/benchmark-runs/:runId` | — | `204` (also deletes the run's sessions + evaluations) |
+| `POST` | `/api/benchmark-runs/:runId/pause` | — | `{ run }` (holds before the next session) |
+| `POST` | `/api/benchmark-runs/:runId/resume` | `{ mode?: 'continue' \| 'retry' }` | `202 { run }` |
+| `POST` | `/api/benchmark-runs/:runId/stop` | — | `{ run }` (aborts the in-flight session; partial results kept) |
 | `POST` | `/api/benchmark-runs/:runId/evaluations` | `{ judgeModelConfigId, temperature? }` | `202 { evaluation }` |
 | `GET` | `/api/benchmark-runs/:runId/evaluations` | — | `{ evaluations: [{...evaluation, score}] }` |
-| `POST` | `/api/benchmark-evaluations/:evaluationId/retry` | — | `202 { evaluation }` (re-judges failed/incomplete sessions) |
+| `POST` | `/api/benchmark-evaluations/:evaluationId/retry` | — | `202 { evaluation }` (re-judges failed/incomplete sessions; alias for `resume` with `mode: 'retry'`) |
+| `POST` | `/api/benchmark-evaluations/:evaluationId/pause` | — | `{ evaluation }` |
+| `POST` | `/api/benchmark-evaluations/:evaluationId/resume` | `{ mode?: 'continue' \| 'retry' }` | `202 { evaluation }` |
+| `POST` | `/api/benchmark-evaluations/:evaluationId/stop` | — | `{ evaluation }` |
 | `DELETE` | `/api/benchmark-evaluations/:evaluationId` | — | `204` (also deletes the pass's judge sessions) |
 
 A run launch returns immediately (`202`); a background coordinator drives the sessions
 sequentially through the scheduler. Poll `GET /api/benchmark-runs/:runId` for `run.status`
 (`pending` → `running` → `complete`/`error`) and the computed report.
 
+**Run control.** A run can be paused, stopped, and resumed at the *run* level (distinct
+from the global scheduler controls, which act on individual jobs). `pause` lets the current
+session finish, then holds before the next (`status: 'paused'`). `stop` aborts the in-flight
+session immediately — that session is marked `cancelled` and kept for review — and rests the
+run at `status: 'stopped'`. Both are resumable: `resume` re-launches the coordinator over the
+remaining work — `mode: 'continue'` (default) runs only never-started sessions, while
+`mode: 'retry'` also re-runs `cancelled`/`error` sessions (superseding them). The coordinators
+are work-list driven, so this also makes runs restart-safe: a run orphaned by a backend restart
+is reconciled to `stopped` and recovered via `resume`.
+
 An evaluation launch likewise returns immediately (`202`); a background coordinator drives one
 judge analysis session per run-session through the same scheduler. Poll
 `GET /api/benchmark-runs/:runId/evaluations` for each pass's `status` and computed `score`.
+Evaluation passes support the same `pause`/`resume`/`stop` controls and resume semantics.
 
 ### Operation-backed routes (snake_case)
 
@@ -193,8 +213,10 @@ the identical operations as `mcpscope_<id>` tools.
 | `POST` | `/api/operations/benchmark-run` | `benchmark_run` |
 | `GET` | `/api/operations/benchmark-runs/:runId/status` | `benchmark_run_status` |
 | `GET` | `/api/operations/benchmark-runs/:runId/report` | `benchmark_run_report` |
+| `POST` | `/api/operations/benchmark-run-control` | `benchmark_run_control` |
 | `POST` | `/api/operations/benchmark-evaluate` | `benchmark_evaluate` |
 | `GET` | `/api/operations/benchmark-runs/:runId/evaluations` | `benchmark_run_evaluations` |
+| `POST` | `/api/operations/benchmark-evaluation-control` | `benchmark_evaluation_control` |
 
 ## CLI / MCP
 
@@ -283,9 +305,11 @@ artifact on the judge session.
 - **A delivered answer is required for credit** — a session that errored / never produced a final
   answer scores ~0 on every criterion regardless of how correct its intermediate steps were
   (correct process without a result does not satisfy the rubric).
-- **Deterministic judging by default** — the judge runs at temperature 0 with structured output;
-  the temperature is selectable per pass (stored on the evaluation) if you want to probe judge
-  stability, but 0 is the recommended default.
+- **Low-temperature judging by default** — the judge runs at a small non-zero temperature (0.2)
+  with structured output. It is deliberately not 0: at exactly 0 a retry of a judge session that
+  fell into a reasoning loop reproduces the same loop verbatim, so it could never recover. The
+  temperature is selectable per pass (stored on the evaluation) if you want to probe judge
+  stability.
 - **After-the-fact and repeatable** — evaluation is decoupled from the run. Launch 0..N passes
   per run, e.g. to compare judge models. Each pass is its own `Evaluation` record.
 

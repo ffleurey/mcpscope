@@ -16,8 +16,10 @@ import {
   benchmarkRunOperation,
   benchmarkRunStatusOperation,
   benchmarkRunReportOperation,
+  benchmarkRunControlOperation,
   benchmarkEvaluateOperation,
   benchmarkRunEvaluationsOperation,
+  benchmarkEvaluationControlOperation,
 } from "./benchmarkOperations.js";
 
 export const operationCatalog = {
@@ -38,8 +40,10 @@ export const operationCatalog = {
   benchmark_run: benchmarkRunOperation,
   benchmark_run_status: benchmarkRunStatusOperation,
   benchmark_run_report: benchmarkRunReportOperation,
+  benchmark_run_control: benchmarkRunControlOperation,
   benchmark_evaluate: benchmarkEvaluateOperation,
   benchmark_run_evaluations: benchmarkRunEvaluationsOperation,
+  benchmark_evaluation_control: benchmarkEvaluationControlOperation,
 } as const;
 
 export type BackendOperationId = keyof typeof operationCatalog;
@@ -62,6 +66,8 @@ export const operationList = [
   benchmarkRunOperation,
   benchmarkRunStatusOperation,
   benchmarkRunReportOperation,
+  benchmarkRunControlOperation,
   benchmarkEvaluateOperation,
   benchmarkRunEvaluationsOperation,
+  benchmarkEvaluationControlOperation,
 ] as const;

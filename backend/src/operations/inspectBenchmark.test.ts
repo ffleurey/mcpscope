@@ -78,7 +78,9 @@ function seed(): BackendDatabase {
       },
     ],
     repetitions: 1,
-    sessions: [{ sessionId: 'AB12', sourceCaseId: 'B-TEST.1', repetition: 0, status: 'complete' }],
+    sessions: [
+      { sessionId: 'AB12', sourceCaseId: 'B-TEST.1', repetition: 0, status: 'complete', error: null },
+    ],
     error: null,
     createdAt: 1,
     updatedAt: 1,

@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { BackendDatabase } from "../persistence/db.js";
+import { DEFAULT_JUDGE_TEMPERATURE } from "../domain/model.js";
 import type {
   BenchmarkRecord,
   BenchmarkCaseRecord,
@@ -53,6 +54,8 @@ import { ANALYSIS_WORKFLOW_KIND } from "../analysis/workflowKinds.js";
 import { getLatestArtifactBySchemaKey } from "../analysis/artifactRepository.js";
 import { SCHEMA_KEY as BENCHMARK_EVAL_KEY } from "../analysis/benchmarkEvaluation/schemas.js";
 import type { OperationContext } from "./context.js";
+import type { ExecutionScheduler, TerminalJob } from "../runtime/scheduler.js";
+import { RunStoppedError, type RunController } from "../runtime/runControl.js";
 import { OperationError } from "./errors.js";
 import {
   mapSessionIdError,
@@ -498,54 +501,188 @@ export function launchBenchmarkRun(
   return run;
 }
 
+/** Resume mode for stopped/interrupted runs and evaluation passes. */
+export type ResumeMode = "continue" | "retry";
+
+/** A single (case, repetition) unit of benchmark work. */
+interface BenchmarkTask {
+  snapshot: BenchmarkRunCaseSnapshot;
+  rep: number;
+}
+
+/**
+ * Decide which (case, rep) tasks the coordinator should run, given the run's
+ * existing per-session results and the resume mode, plus the stale session ids
+ * to supersede (delete) before re-running them.
+ *
+ * - continue: run only tasks with NO session entry yet (the never-started ones).
+ *   Existing 'cancelled'/'error' sessions are left untouched for review.
+ * - retry: additionally re-run tasks whose only sessions are 'cancelled'/'error'
+ *   (superseding those records). A task with a 'complete' session is never re-run.
+ *
+ * Stale 'running' entries are reconciled to 'cancelled' before this is called,
+ * so they count as incomplete in both modes.
+ */
+function computeBenchmarkWorkList(
+  run: BenchmarkRunRecord,
+  mode: ResumeMode,
+): { tasks: BenchmarkTask[]; supersede: string[] } {
+  const tasks: BenchmarkTask[] = [];
+  const supersede: string[] = [];
+  for (const snapshot of run.cases) {
+    for (let rep = 1; rep <= run.repetitions; rep++) {
+      const entries = run.sessions.filter(
+        (s) => s.sourceCaseId === snapshot.sourceCaseId && s.repetition === rep,
+      );
+      if (entries.some((s) => s.status === "complete")) continue; // done; never re-run
+      if (entries.length === 0) {
+        tasks.push({ snapshot, rep }); // never started → run in either mode
+        continue;
+      }
+      // Only incomplete (cancelled/error) entries exist.
+      if (mode === "retry") {
+        for (const e of entries) supersede.push(e.sessionId);
+        tasks.push({ snapshot, rep });
+      }
+      // continue mode: leave the incomplete entries for review, run nothing.
+    }
+  }
+  return { tasks, supersede };
+}
+
 async function runBenchmarkCoordinator(
   ctx: OperationContext,
   runId: string,
+  mode: ResumeMode = "continue",
 ): Promise<void> {
   const { db } = ctx;
-  const initial = getBenchmarkRun(db.connection, runId);
-  if (!initial) return;
+  const controller = ctx.runControl?.acquire(runId);
 
-  updateBenchmarkRun(db.connection, {
-    ...initial,
-    status: "running",
-    startedAt: now(),
-    updatedAt: now(),
-  });
-
-  // Sequential: each repetition is awaited to completion before the next starts,
-  // and its session status (complete/error) is recorded before the next begins.
-  // Soft failures (init never reaches ready, tool errors, non-complete turns) are
-  // recorded on the individual session and do NOT stop the run; only a hard
-  // exception (scheduler / createSession / awaitJob) propagates here and marks the
-  // whole run errored via the catch below.
+  // Sequential: each task is awaited to completion before the next starts. Soft
+  // failures (init never reaches ready, tool errors, non-complete turns) are
+  // recorded on the individual session and do NOT stop the run. A user stop
+  // surfaces as a RunStoppedError and rests the run in the resumable 'stopped'
+  // state; any other hard exception marks the whole run errored.
   try {
-    for (const snapshot of initial.cases) {
-      for (let rep = 1; rep <= initial.repetitions; rep++) {
-        await runOneRepetition(ctx, runId, snapshot, rep);
+    const initial = getBenchmarkRun(db.connection, runId);
+    if (!initial) return;
+
+    // Reconcile any session left 'running' by an interrupted/orphaned pass to
+    // 'cancelled', and mark the run running again (clearing a prior stop note).
+    const reconciled: BenchmarkRunRecord = {
+      ...initial,
+      sessions: initial.sessions.map((s) =>
+        s.status === "running" ? { ...s, status: "cancelled" } : s,
+      ),
+      status: "running",
+      startedAt: initial.startedAt ?? now(),
+      error: null,
+      updatedAt: now(),
+    };
+    updateBenchmarkRun(db.connection, reconciled);
+
+    const { tasks, supersede } = computeBenchmarkWorkList(reconciled, mode);
+
+    // Supersede the stale sessions being re-run on retry: drop their run-session
+    // entries and delete the underlying session records.
+    if (supersede.length > 0) {
+      const supersedeSet = new Set(supersede);
+      const pruned = getBenchmarkRun(db.connection, runId);
+      if (pruned) {
+        updateBenchmarkRun(db.connection, {
+          ...pruned,
+          sessions: pruned.sessions.filter(
+            (s) => !supersedeSet.has(s.sessionId),
+          ),
+          updatedAt: now(),
+        });
+      }
+      for (const sessionId of supersede) {
+        try {
+          deleteSessionRecord(db.connection, sessionId);
+        } catch {
+          // best-effort cleanup of the superseded session record
+        }
       }
     }
+
+    for (const task of tasks) {
+      if (controller) await controller.checkpoint();
+      await runOneRepetition(ctx, runId, task.snapshot, task.rep, controller);
+    }
+
     const done = getBenchmarkRun(db.connection, runId);
     if (done) {
+      // 'complete' only when no task was left interrupted. A 'continue' resume
+      // deliberately leaves prior 'cancelled' sessions untouched, so the run rests
+      // at the resumable 'stopped' state (retry can still re-run them).
+      const hasCancelled = done.sessions.some((s) => s.status === "cancelled");
+      const erroredCount = done.sessions.filter((s) => s.status === "error").length;
+      const completedCount = done.sessions.filter((s) => s.status === "complete").length;
+      // Surface failures: a run where every session failed is itself a failure
+      // ('error' with a summary); a partial failure stays 'complete' but carries a
+      // summary so the failure is visible rather than silent.
+      const failureSummary =
+        erroredCount > 0
+          ? `${erroredCount} of ${done.sessions.length} session(s) failed — see per-session errors.`
+          : null;
+      const status = hasCancelled
+        ? "stopped"
+        : completedCount === 0 && erroredCount > 0
+          ? "error"
+          : "complete";
       updateBenchmarkRun(db.connection, {
         ...done,
-        status: "complete",
-        completedAt: now(),
+        status,
+        error: hasCancelled ? null : failureSummary,
+        completedAt: status === "complete" || status === "error" ? now() : done.completedAt,
         updatedAt: now(),
       });
     }
   } catch (err) {
     const current = getBenchmarkRun(db.connection, runId);
     if (current) {
-      updateBenchmarkRun(db.connection, {
-        ...current,
-        status: "error",
-        error: err instanceof Error ? err.message : String(err),
-        completedAt: now(),
-        updatedAt: now(),
-      });
+      if (err instanceof RunStoppedError) {
+        // User stop: rest in the resumable 'stopped' state, keeping partial results.
+        updateBenchmarkRun(db.connection, {
+          ...current,
+          status: "stopped",
+          error: null,
+          updatedAt: now(),
+        });
+      } else {
+        updateBenchmarkRun(db.connection, {
+          ...current,
+          status: "error",
+          error: err instanceof Error ? err.message : String(err),
+          completedAt: now(),
+          updatedAt: now(),
+        });
+      }
     }
+  } finally {
+    ctx.runControl?.release(runId);
   }
+}
+
+/**
+ * Await a scheduler job, but bail out immediately if the run is stopped — even if
+ * the job itself never settles (a model/MCP call that ignores the abort signal).
+ * Returns { stopped: true } when the stop wins the race, so the coordinator can
+ * unwind to 'stopped' without waiting on a possibly-hung job.
+ */
+async function awaitJobOrStop(
+  scheduler: ExecutionScheduler,
+  controller: RunController | undefined,
+  jobId: string,
+): Promise<{ stopped: boolean; terminal: TerminalJob | null }> {
+  if (!controller) {
+    return { stopped: false, terminal: await scheduler.awaitJob(jobId) };
+  }
+  return Promise.race([
+    scheduler.awaitJob(jobId).then((terminal) => ({ stopped: false, terminal })),
+    controller.whenStopRequested.then(() => ({ stopped: true, terminal: null })),
+  ]);
 }
 
 /** Patch a single run-session entry (matched by sessionId) in place. */
@@ -553,14 +690,15 @@ function setRunSessionStatus(
   db: BackendDatabase,
   runId: string,
   sessionId: string,
-  status: "running" | "complete" | "error",
+  status: "running" | "complete" | "error" | "cancelled",
+  error: string | null = null,
 ): void {
   const current = getBenchmarkRun(db.connection, runId);
   if (!current) return;
   updateBenchmarkRun(db.connection, {
     ...current,
     sessions: current.sessions.map((s) =>
-      s.sessionId === sessionId ? { ...s, status } : s,
+      s.sessionId === sessionId ? { ...s, status, error } : s,
     ),
     updatedAt: now(),
   });
@@ -571,6 +709,7 @@ async function runOneRepetition(
   runId: string,
   snapshot: BenchmarkRunCaseSnapshot,
   rep: number,
+  controller: RunController | undefined,
 ): Promise<string> {
   const { db, scheduler } = ctx;
   if (!scheduler) throw new OperationError("scheduler unavailable", "scheduler_unavailable");
@@ -612,33 +751,209 @@ async function runOneRepetition(
           sourceCaseId: snapshot.sourceCaseId,
           repetition: rep,
           status: "running",
+          error: null,
         },
       ],
       updatedAt: now(),
     });
   }
 
+  const owner = { kind: "benchmark-run" as const, id: runId };
   try {
-    const initJob = scheduler.enqueueInit(ctx, session.id);
-    await scheduler.awaitJob(initJob.jobId);
+    const initJob = scheduler.enqueueInit(ctx, session.id, owner);
+    controller?.setActiveJob(initJob.jobId);
+    const initWait = await awaitJobOrStop(scheduler, controller, initJob.jobId);
+    controller?.clearActiveJob();
+    // A stop signalled during init unwinds the run immediately (even if the init
+    // job never settles); record the partial session as cancelled (kept for review).
+    if (initWait.stopped || controller?.isStopping()) {
+      setRunSessionStatus(db, runId, session.id, "cancelled");
+      throw new RunStoppedError(runId);
+    }
 
     // Only run the prompt if initialization succeeded; a failed-init session is
-    // still recorded and surfaces as a non-completed session in the report.
+    // recorded as errored with the reason so the failure is never silent.
     const initialized = getSessionRecord(db.connection, session.id);
-    if (initialized?.initStatus === "ready") {
-      const turnJob = scheduler.enqueueSession(ctx, session.id, snapshot.prompt);
-      await scheduler.awaitJob(turnJob.jobId);
+    if (initialized?.initStatus !== "ready") {
+      setRunSessionStatus(
+        db,
+        runId,
+        session.id,
+        "error",
+        initWait.terminal?.error ??
+          "Initialization failed — the MCP server may be unreachable or the model unavailable.",
+      );
+      return session.id;
+    }
+
+    const turnJob = scheduler.enqueueSession(ctx, session.id, snapshot.prompt, owner);
+    controller?.setActiveJob(turnJob.jobId);
+    const turnWait = await awaitJobOrStop(scheduler, controller, turnJob.jobId);
+    controller?.clearActiveJob();
+    if (turnWait.stopped || controller?.isStopping()) {
+      setRunSessionStatus(db, runId, session.id, "cancelled");
+      throw new RunStoppedError(runId);
+    }
+
+    // The job settling does NOT mean the turn succeeded: a failed model call is
+    // either recorded on the turn (status 'error') or surfaces as a failed job.
+    // The session is 'complete' only if its last turn actually completed.
+    const lastTurn = listTurnRecordsBySession(db.connection, session.id)
+      .sort((a, b) => a.turnNumber - b.turnNumber)
+      .at(-1);
+    if (lastTurn?.status === "complete") {
       setRunSessionStatus(db, runId, session.id, "complete");
     } else {
-      // Init did not reach ready — mark the session as errored.
-      setRunSessionStatus(db, runId, session.id, "error");
+      setRunSessionStatus(
+        db,
+        runId,
+        session.id,
+        "error",
+        turnWait.terminal?.error ??
+          (lastTurn?.outcome ? `Turn failed (${lastTurn.outcome}).` : "Turn did not complete."),
+      );
     }
   } catch (err) {
-    setRunSessionStatus(db, runId, session.id, "error");
+    controller?.clearActiveJob();
+    if (err instanceof RunStoppedError) throw err;
+    setRunSessionStatus(
+      db,
+      runId,
+      session.id,
+      "error",
+      err instanceof Error ? err.message : String(err),
+    );
     throw err;
   }
 
   return session.id;
+}
+
+// ── Run control: pause / resume / stop ───────────────────────────────────────
+
+function requireRunRecord(
+  ctx: OperationContext,
+  runId: string,
+): BenchmarkRunRecord {
+  const run = getBenchmarkRun(ctx.db.connection, runId);
+  if (!run) {
+    throw new OperationError(
+      `Benchmark run "${runId}" not found.`,
+      "benchmark_run_not_found",
+    );
+  }
+  return run;
+}
+
+/** Pause a running benchmark run cleanly (holds before the next task). */
+export function pauseBenchmarkRun(
+  ctx: OperationContext,
+  runId: string,
+): BenchmarkRunRecord {
+  const run = requireRunRecord(ctx, runId);
+  if (!ctx.runControl?.pause(runId)) {
+    throw new OperationError(
+      `Benchmark run "${runId}" is not running (status '${run.status}').`,
+      "benchmark_run_not_pausable",
+    );
+  }
+  const updated: BenchmarkRunRecord = {
+    ...run,
+    status: "paused",
+    updatedAt: now(),
+  };
+  updateBenchmarkRun(ctx.db.connection, updated);
+  return updated;
+}
+
+/**
+ * Stop a running/paused benchmark run. The live coordinator aborts the in-flight
+ * job and persists 'stopped' as it unwinds; if no coordinator is live (e.g. the
+ * record is orphaned) the status is reconciled to 'stopped' directly.
+ */
+export function stopBenchmarkRun(
+  ctx: OperationContext,
+  runId: string,
+): BenchmarkRunRecord {
+  const run = requireRunRecord(ctx, runId);
+  const signalled = ctx.runControl?.stop(runId) ?? false;
+  if (signalled) {
+    // Coordinator will persist 'stopped' shortly; report it optimistically.
+    return { ...run, status: "stopped" };
+  }
+  if (run.status === "running" || run.status === "paused") {
+    const updated: BenchmarkRunRecord = {
+      ...run,
+      status: "stopped",
+      updatedAt: now(),
+    };
+    updateBenchmarkRun(ctx.db.connection, updated);
+    return updated;
+  }
+  throw new OperationError(
+    `Benchmark run "${runId}" is not running (status '${run.status}').`,
+    "benchmark_run_not_stoppable",
+  );
+}
+
+/**
+ * Resume a paused or stopped benchmark run.
+ *
+ * - A live, paused coordinator is simply un-paused (mode ignored).
+ * - A stopped/errored run is re-launched over its remaining work: 'continue'
+ *   runs only never-started tasks; 'retry' also re-runs cancelled/errored ones.
+ */
+export function resumeBenchmarkRun(
+  ctx: OperationContext,
+  runId: string,
+  mode: ResumeMode = "continue",
+): BenchmarkRunRecord {
+  const run = requireRunRecord(ctx, runId);
+  if (!ctx.scheduler) {
+    throw new OperationError(
+      "Execution scheduler is not available.",
+      "scheduler_unavailable",
+    );
+  }
+
+  // Live, paused coordinator → un-pause in place.
+  if (ctx.runControl?.resume(runId)) {
+    const updated: BenchmarkRunRecord = {
+      ...run,
+      status: "running",
+      updatedAt: now(),
+    };
+    updateBenchmarkRun(ctx.db.connection, updated);
+    return updated;
+  }
+
+  if (run.status === "running" || run.status === "paused") {
+    throw new OperationError(
+      `Benchmark run "${runId}" is already running.`,
+      "benchmark_run_already_running",
+    );
+  }
+  if (run.status === "pending") {
+    throw new OperationError(
+      `Benchmark run "${runId}" is still starting.`,
+      "benchmark_run_already_running",
+    );
+  }
+  if (run.status === "complete") {
+    throw new OperationError(
+      `Benchmark run "${runId}" is already complete.`,
+      "benchmark_run_complete",
+    );
+  }
+
+  // status is 'stopped' or 'error' → re-launch over the remaining work.
+  void runBenchmarkCoordinator(ctx, runId, mode).catch((err) => {
+    ctx.logger?.error(
+      { err: err instanceof Error ? err.message : String(err), runId },
+      "benchmark run resume coordinator crashed",
+    );
+  });
+  return { ...run, status: "running", error: null };
 }
 
 // ── Cheap, pollable run progress ─────────────────────────────────────────────
@@ -686,18 +1001,18 @@ export function getBenchmarkRunProgress(
 
   const totalCases = run.cases.length;
   const totalSessions = totalCases * run.repetitions;
-  const completedSessions = run.sessions.filter(
-    (s) => s.status === "complete" || s.status === "error",
-  ).length;
+  // A session is "processed" once it reaches any terminal state, including
+  // 'cancelled' (interrupted by a user stop) — only 'running' is still in flight.
+  const isProcessed = (s: { status: string }) =>
+    s.status === "complete" || s.status === "error" || s.status === "cancelled";
+  const completedSessions = run.sessions.filter(isProcessed).length;
   const failedSessions = run.sessions.filter(
     (s) => s.status === "error",
   ).length;
 
   const perCase: BenchmarkRunProgressPerCase[] = run.cases.map((snapshot) => {
     const completed = run.sessions.filter(
-      (s) =>
-        s.sourceCaseId === snapshot.sourceCaseId &&
-        (s.status === "complete" || s.status === "error"),
+      (s) => s.sourceCaseId === snapshot.sourceCaseId && isProcessed(s),
     ).length;
     return {
       sourceCaseId: snapshot.sourceCaseId,
@@ -798,7 +1113,7 @@ export function getBenchmarkRunReport(
 export interface EvaluateBenchmarkRunInput {
   runId: string;
   judgeModelConfigId: string;
-  /** Judge sampling temperature; defaults to 0 (deterministic). */
+  /** Judge sampling temperature; defaults to DEFAULT_JUDGE_TEMPERATURE when omitted. */
   temperature?: number;
 }
 
@@ -843,7 +1158,7 @@ export function evaluateBenchmarkRun(
     ),
     runId: input.runId,
     judgeModelConfigId: input.judgeModelConfigId,
-    judgeTemperature: input.temperature ?? 0,
+    judgeTemperature: input.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
     status: "pending",
     sessions: [],
     error: null,
@@ -866,24 +1181,93 @@ export function evaluateBenchmarkRun(
   return evaluation;
 }
 
-/**
- * Re-run a failed/incomplete evaluation: re-judges only the run-sessions that don't
- * yet have a verdict (clearing their stale judge sessions first), keeping the scored
- * ones. The recovery path for a transient failure (e.g. the judge model wasn't loaded)
- * — judging goes through the same init+step launch, so a now-loaded model succeeds.
- */
-export function retryBenchmarkEvaluation(
+function requireEvaluationRecord(
   ctx: OperationContext,
   evaluationId: string,
 ): BenchmarkEvaluationRecord {
-  const { db } = ctx;
-  const evaluation = getBenchmarkEvaluation(db.connection, evaluationId);
+  const evaluation = getBenchmarkEvaluation(ctx.db.connection, evaluationId);
   if (!evaluation) {
     throw new OperationError(
       `Benchmark evaluation "${evaluationId}" not found.`,
       "benchmark_evaluation_not_found",
     );
   }
+  return evaluation;
+}
+
+/**
+ * Re-run a failed/incomplete evaluation: re-judges every run-session without a
+ * verdict (clearing stale judge sessions first), keeping the scored ones. Thin
+ * alias for resumeBenchmarkEvaluation(..., 'retry') — the recovery path for a
+ * transient failure (e.g. the judge model wasn't loaded).
+ */
+export function retryBenchmarkEvaluation(
+  ctx: OperationContext,
+  evaluationId: string,
+): BenchmarkEvaluationRecord {
+  return resumeBenchmarkEvaluation(ctx, evaluationId, "retry");
+}
+
+/** Pause a running evaluation pass cleanly (holds before the next judge session). */
+export function pauseBenchmarkEvaluation(
+  ctx: OperationContext,
+  evaluationId: string,
+): BenchmarkEvaluationRecord {
+  const evaluation = requireEvaluationRecord(ctx, evaluationId);
+  if (!ctx.runControl?.pause(evaluationId)) {
+    throw new OperationError(
+      `Benchmark evaluation "${evaluationId}" is not running (status '${evaluation.status}').`,
+      "benchmark_evaluation_not_pausable",
+    );
+  }
+  const updated: BenchmarkEvaluationRecord = {
+    ...evaluation,
+    status: "paused",
+    updatedAt: now(),
+  };
+  updateBenchmarkEvaluation(ctx.db.connection, updated);
+  return updated;
+}
+
+/** Stop a running/paused evaluation pass (resumable; partial verdicts kept). */
+export function stopBenchmarkEvaluation(
+  ctx: OperationContext,
+  evaluationId: string,
+): BenchmarkEvaluationRecord {
+  const evaluation = requireEvaluationRecord(ctx, evaluationId);
+  const signalled = ctx.runControl?.stop(evaluationId) ?? false;
+  if (signalled) {
+    return { ...evaluation, status: "stopped" };
+  }
+  if (evaluation.status === "running" || evaluation.status === "paused") {
+    const updated: BenchmarkEvaluationRecord = {
+      ...evaluation,
+      status: "stopped",
+      updatedAt: now(),
+    };
+    updateBenchmarkEvaluation(ctx.db.connection, updated);
+    return updated;
+  }
+  throw new OperationError(
+    `Benchmark evaluation "${evaluationId}" is not running (status '${evaluation.status}').`,
+    "benchmark_evaluation_not_stoppable",
+  );
+}
+
+/**
+ * Resume a paused or stopped evaluation pass.
+ *
+ * - A live, paused coordinator is simply un-paused (mode ignored).
+ * - A stopped/errored pass is re-launched over the run-sessions still lacking a
+ *   verdict: 'continue' judges only never-judged sessions; 'retry' also re-judges
+ *   cancelled/errored ones.
+ */
+export function resumeBenchmarkEvaluation(
+  ctx: OperationContext,
+  evaluationId: string,
+  mode: ResumeMode = "continue",
+): BenchmarkEvaluationRecord {
+  const evaluation = requireEvaluationRecord(ctx, evaluationId);
   if (!ctx.scheduler) {
     throw new OperationError(
       "Execution scheduler is not available.",
@@ -891,16 +1275,29 @@ export function retryBenchmarkEvaluation(
     );
   }
 
-  void runEvaluationCoordinator(ctx, evaluationId, { retry: true }).catch((err) => {
+  if (ctx.runControl?.resume(evaluationId)) {
+    const updated: BenchmarkEvaluationRecord = {
+      ...evaluation,
+      status: "running",
+      updatedAt: now(),
+    };
+    updateBenchmarkEvaluation(ctx.db.connection, updated);
+    return updated;
+  }
+
+  if (evaluation.status === "running" || evaluation.status === "paused") {
+    throw new OperationError(
+      `Benchmark evaluation "${evaluationId}" is already running.`,
+      "benchmark_evaluation_already_running",
+    );
+  }
+
+  void runEvaluationCoordinator(ctx, evaluationId, mode).catch((err) => {
     ctx.logger?.error(
-      {
-        err: err instanceof Error ? err.message : String(err),
-        evaluationId,
-      },
-      "benchmark evaluation retry coordinator crashed",
+      { err: err instanceof Error ? err.message : String(err), evaluationId },
+      "benchmark evaluation resume coordinator crashed",
     );
   });
-
   return { ...evaluation, status: "running", error: null };
 }
 
@@ -996,71 +1393,119 @@ export function getBenchmarkRunEvaluationReports(
   });
 }
 
+/**
+ * Decide which completed run-sessions a pass should judge, plus the stale judge
+ * sessions to supersede before re-judging. Completion criterion = a verdict
+ * artifact exists (mirrors how scores are computed on read).
+ *
+ * - continue: judge only run-sessions with NO entry yet. Existing unjudged
+ *   entries (cancelled/error) are left for review.
+ * - retry: additionally re-judge run-sessions whose entry lacks a verdict,
+ *   superseding the stale judge session.
+ */
+function computeEvaluationWorkList(
+  db: BackendDatabase,
+  evaluation: BenchmarkEvaluationRecord,
+  completedRunSessions: BenchmarkRunRecord["sessions"],
+  mode: ResumeMode,
+): {
+  tasks: BenchmarkRunRecord["sessions"];
+  supersede: { runSessionId: string; analysisSessionId: string }[];
+} {
+  const tasks: BenchmarkRunRecord["sessions"] = [];
+  const supersede: { runSessionId: string; analysisSessionId: string }[] = [];
+  for (const runSession of completedRunSessions) {
+    const entry = evaluation.sessions.find(
+      (e) => e.runSessionId === runSession.sessionId,
+    );
+    const verdict = entry
+      ? getLatestArtifactBySchemaKey(
+          db.connection,
+          entry.analysisSessionId,
+          BENCHMARK_EVAL_KEY.VERDICT,
+        )
+      : null;
+    if (verdict) continue; // already judged
+    if (!entry) {
+      tasks.push(runSession); // never judged → judge in either mode
+      continue;
+    }
+    if (mode === "retry") {
+      supersede.push({
+        runSessionId: runSession.sessionId,
+        analysisSessionId: entry.analysisSessionId,
+      });
+      tasks.push(runSession);
+    }
+    // continue: leave the unjudged entry for review.
+  }
+  return { tasks, supersede };
+}
+
 async function runEvaluationCoordinator(
   ctx: OperationContext,
   evaluationId: string,
-  opts: { retry?: boolean } = {},
+  mode: ResumeMode = "continue",
 ): Promise<void> {
   const { db } = ctx;
-  const initial = getBenchmarkEvaluation(db.connection, evaluationId);
-  if (!initial) return;
-
-  updateBenchmarkEvaluation(db.connection, {
-    ...initial,
-    status: "running",
-    error: null,
-    updatedAt: now(),
-  });
+  const controller = ctx.runControl?.acquire(evaluationId);
 
   // Sequential, mirroring the run coordinator: each run-session is judged to
   // completion before the next. A per-session failure (model not loaded, launch /
   // scheduler error, or no verdict produced) is recorded on that session entry and
-  // does NOT abort the pass; the evaluation ends `error` if any session failed. On
-  // retry (opts.retry) sessions that already produced a verdict are kept, and only the
-  // failed/incomplete ones are re-judged (after clearing their stale judge session) —
-  // so a now-loaded model recovers. We never auto-recover here.
+  // does NOT abort the pass; the evaluation ends 'error' if any session is unjudged.
+  // A user stop surfaces as RunStoppedError → resumable 'stopped' state.
   try {
-    const run = getBenchmarkRun(db.connection, initial.runId);
-    if (!run) throw new Error(`Run "${initial.runId}" not found`);
+    const initial = getBenchmarkEvaluation(db.connection, evaluationId);
+    if (!initial) return;
+
+    // Reconcile any entry left 'running' by an interrupted/orphaned pass to
+    // 'cancelled', and mark the pass running again (clearing a prior stop note).
+    const reconciled: BenchmarkEvaluationRecord = {
+      ...initial,
+      sessions: initial.sessions.map((s) =>
+        s.status === "running" ? { ...s, status: "cancelled" } : s,
+      ),
+      status: "running",
+      error: null,
+      updatedAt: now(),
+    };
+    updateBenchmarkEvaluation(db.connection, reconciled);
+
+    const run = getBenchmarkRun(db.connection, reconciled.runId);
+    if (!run) throw new Error(`Run "${reconciled.runId}" not found`);
     const completed = run.sessions.filter((s) => s.status === "complete");
 
-    let lastError: string | null = null;
-    for (const runSession of completed) {
-      if (opts.retry) {
-        const current = getBenchmarkEvaluation(db.connection, evaluationId);
-        const entry = current?.sessions.find(
-          (e) => e.runSessionId === runSession.sessionId,
-        );
-        const verdict = entry
-          ? getLatestArtifactBySchemaKey(
-              db.connection,
-              entry.analysisSessionId,
-              BENCHMARK_EVAL_KEY.VERDICT,
-            )
-          : null;
-        // Keep any session that already produced a verdict (even if its entry
-        // status is stale, e.g. left 'running' by an interrupted pass); re-judge
-        // only the genuinely missing/failed ones.
-        if (verdict) continue;
-        if (entry) {
-          try {
-            deleteSessionRecord(db.connection, entry.analysisSessionId);
-          } catch {
-            // best-effort cleanup of the stale judge session
-          }
-          removeEvaluationSessionEntry(db, evaluationId, runSession.sessionId);
-        }
+    const { tasks, supersede } = computeEvaluationWorkList(
+      db,
+      reconciled,
+      completed,
+      mode,
+    );
+    for (const s of supersede) {
+      try {
+        deleteSessionRecord(db.connection, s.analysisSessionId);
+      } catch {
+        // best-effort cleanup of the stale judge session
       }
+      removeEvaluationSessionEntry(db, evaluationId, s.runSessionId);
+    }
+
+    let lastError: string | null = null;
+    for (const runSession of tasks) {
+      if (controller) await controller.checkpoint();
       try {
         await judgeOneSession(
           ctx,
           evaluationId,
           run,
           runSession,
-          initial.judgeModelConfigId,
-          initial.judgeTemperature,
+          reconciled.judgeModelConfigId,
+          reconciled.judgeTemperature,
+          controller,
         );
       } catch (err) {
+        if (err instanceof RunStoppedError) throw err;
         // judgeOneSession marks the session entry 'error' before throwing; keep going.
         lastError = err instanceof Error ? err.message : String(err);
         ctx.logger?.error(
@@ -1072,33 +1517,57 @@ async function runEvaluationCoordinator(
 
     const done = getBenchmarkEvaluation(db.connection, evaluationId);
     if (done) {
-      // The pass attempted every session. It is 'error' if any judge session failed
-      // (or never got recorded), otherwise 'complete'. Failed judge sessions are
-      // retried individually; this status reflects the pass outcome.
-      const failed = done.sessions.filter((s) => s.status === "error").length;
-      const missing = completed.length - done.sessions.length;
-      const anyError = failed > 0 || missing > 0;
+      const judged = completed.filter((rs) => {
+        const entry = done.sessions.find(
+          (e) => e.runSessionId === rs.sessionId,
+        );
+        return (
+          entry &&
+          getLatestArtifactBySchemaKey(
+            db.connection,
+            entry.analysisSessionId,
+            BENCHMARK_EVAL_KEY.VERDICT,
+          )
+        );
+      }).length;
+      // A 'continue' resume leaves prior 'cancelled' judge sessions untouched →
+      // rest at the resumable 'stopped' state. Otherwise: 'complete' if every
+      // run-session was judged, else 'error' (retry/resume can fill the rest).
+      const hasCancelled = done.sessions.some((s) => s.status === "cancelled");
+      const incomplete = judged < completed.length;
       updateBenchmarkEvaluation(db.connection, {
         ...done,
-        status: anyError ? "error" : "complete",
-        error: anyError
-          ? (lastError ??
-            `${failed + missing} of ${completed.length} judge sessions failed.`)
-          : null,
+        status: hasCancelled ? "stopped" : incomplete ? "error" : "complete",
+        error:
+          !hasCancelled && incomplete
+            ? (lastError ??
+              `${completed.length - judged} of ${completed.length} judge sessions incomplete.`)
+            : null,
         updatedAt: now(),
       });
     }
   } catch (err) {
-    // Setup-level failure (e.g. run missing) — hard error for the whole pass.
     const current = getBenchmarkEvaluation(db.connection, evaluationId);
     if (current) {
-      updateBenchmarkEvaluation(db.connection, {
-        ...current,
-        status: "error",
-        error: err instanceof Error ? err.message : String(err),
-        updatedAt: now(),
-      });
+      if (err instanceof RunStoppedError) {
+        updateBenchmarkEvaluation(db.connection, {
+          ...current,
+          status: "stopped",
+          error: null,
+          updatedAt: now(),
+        });
+      } else {
+        // Setup-level failure (e.g. run missing) — hard error for the whole pass.
+        updateBenchmarkEvaluation(db.connection, {
+          ...current,
+          status: "error",
+          error: err instanceof Error ? err.message : String(err),
+          updatedAt: now(),
+        });
+      }
     }
+  } finally {
+    ctx.runControl?.release(evaluationId);
   }
 }
 
@@ -1109,7 +1578,7 @@ function upsertEvaluationSession(
   entry: {
     runSessionId: string;
     analysisSessionId: string;
-    status: "running" | "complete" | "error";
+    status: "running" | "complete" | "error" | "cancelled";
   },
 ): void {
   const current = getBenchmarkEvaluation(db.connection, evaluationId);
@@ -1151,6 +1620,7 @@ async function judgeOneSession(
   runSession: BenchmarkRunRecord["sessions"][number],
   judgeModelConfigId: string,
   judgeTemperature: number,
+  controller: RunController | undefined,
 ): Promise<void> {
   const { db, scheduler } = ctx;
   if (!scheduler)
@@ -1203,16 +1673,35 @@ async function judgeOneSession(
     status: "running",
   });
 
+  let stopped: boolean;
   try {
-    const job = scheduler.enqueueSession(ctx, analysisSession.id);
-    await scheduler.awaitJob(job.jobId);
+    const job = scheduler.enqueueSession(ctx, analysisSession.id, undefined, {
+      kind: "benchmark-evaluation",
+      id: evaluationId,
+    });
+    controller?.setActiveJob(job.jobId);
+    const wait = await awaitJobOrStop(scheduler, controller, job.jobId);
+    controller?.clearActiveJob();
+    stopped = wait.stopped || (controller?.isStopping() ?? false);
   } catch (err) {
+    controller?.clearActiveJob();
     upsertEvaluationSession(db, evaluationId, {
       runSessionId: runSession.sessionId,
       analysisSessionId: analysisSession.id,
       status: "error",
     });
     throw err;
+  }
+
+  // A stop signalled during judging unwinds the pass immediately (even if the
+  // judge job never settles); record the partial judge session as cancelled.
+  if (stopped) {
+    upsertEvaluationSession(db, evaluationId, {
+      runSessionId: runSession.sessionId,
+      analysisSessionId: analysisSession.id,
+      status: "cancelled",
+    });
+    throw new RunStoppedError(evaluationId);
   }
 
   // Soft success criterion: a verdict artifact was produced for this session.

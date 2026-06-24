@@ -161,6 +161,20 @@ Job kinds:
 
 The scheduler is the only execution owner. No route or operation directly runs a model turn, analysis step, or initialization outside the scheduler in normal runtime flow.
 
+### Run control plane (benchmark runs & evaluations)
+
+A benchmark run or LLM-evaluation pass is a *coordinator* (in `backend/src/operations/benchmark.ts`) that sits above the scheduler and expands into many jobs (init + turn per session). `backend/src/runtime/runControl.ts` gives each coordinator a controllable lifecycle keyed by run/evaluation id — the scheduler controls *jobs*, run-control controls *runs*.
+
+- **The run is the unit of control**, not the session. Run/eval status adds `paused` and `stopped` (resumable rest states); per-session/judge status adds `cancelled` (a task interrupted by a stop, kept for review).
+- **Work-list driven & resumable.** A coordinator computes the tasks still needed and runs only those, so it is restartable. Resume modes: `continue` (never-started tasks) and `retry` (also re-run cancelled/errored). A run reaches `complete` only when no task is left interrupted; a `continue` that leaves cancelled tasks rests at `stopped`.
+- **Pause** is between tasks (current turn/judge finishes, then it holds). **Stop** aborts the in-flight job and rests at `stopped`; it is interruptible — the coordinator races its job-wait against a stop signal (`RunController.whenStopRequested`), so a stop unwinds even if the model/MCP call ignores the abort and never settles.
+- **Resume re-enqueues** the run's remaining work into the same scheduler queue — distinct from the scheduler's *global* pause/resume, which gates the whole queue.
+- Each scheduler job carries an `owner` (`benchmark-run` / `benchmark-evaluation`) set at enqueue, so the execution bar groups jobs by run and its Stop / queue-✕ act at the run level.
+- Control state is in-memory; a run orphaned by a restart is reconciled to `stopped` and recovered via resume.
+- A failed turn ≠ a settled job: a session is `complete` only if its last turn actually completed (a swallowed model error settles the job but leaves the turn `error`). Failures are recorded per session and summarized on the run.
+
+Routes: `POST /api/benchmark-runs/:id/{pause,resume,stop}`, same for `/api/benchmark-evaluations/:id` (see [BENCHMARK.md](BENCHMARK.md)).
+
 ### Backend module map
 
 The backend structure is intentionally split so architectural seams are visible in code, not just in docs:
@@ -176,6 +190,7 @@ The backend structure is intentionally split so architectural seams are visible 
 - `backend/src/runtime/schedulerAdmission.ts` owns enqueue-time validation and turn reservation rules
 - `backend/src/runtime/schedulerDispatch.ts` owns execution dispatch by job/session kind
 - `backend/src/runtime/schedulerTypes.ts` holds shared scheduler contracts and event shapes
+- `backend/src/runtime/runControl.ts` owns the run-level control plane (pause/resume/stop for benchmark runs & evaluations); see "Run control plane" above
 
 - `backend/src/workflow/` provides the reusable step abstraction:
 	- `workflowStep.ts` — abstract `WorkflowStep` class that implements `AnalysisCommand`, combining planning metadata (`kind`, `semanticId`, `isComplete()`) with step-record lifecycle (`execute()` handles `createStep`/`run()`/`completeStep`/`failStep`, concrete steps override `run(ctx)` only)

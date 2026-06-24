@@ -26,6 +26,7 @@ import type { ChatCompletionGateway } from './modelTurns.js'
 import type {
   ActiveExecutionJob,
   ExecutionJob,
+  ExecutionJobOwner,
   ExecutionSnapshot,
   SchedulerContext,
   SchedulerEvent,
@@ -68,6 +69,7 @@ export type {
   SchedulerContext,
   ExecutionTarget,
   ExecutionJob,
+  ExecutionJobOwner,
   ActiveExecutionJob,
   TerminalJob,
   ExecutionSnapshot,
@@ -137,39 +139,43 @@ export class ExecutionScheduler {
   }
 
   /**
-   * Resolves when the given job reaches a terminal state (completed, failed, or
-   * removed). Resolves immediately if the job is already terminal.
+   * Resolves when the given job reaches a terminal state, with the terminal
+   * record (outcome 'completed' | 'failed' + error) so callers can tell success
+   * from failure. Resolves with null if the job was removed from the queue or is
+   * no longer tracked (already drained). Resolves immediately if already terminal.
    *
-   * This is the canonical backend wait helper — use it inside route handlers
-   * that enqueue a job and need to await its outcome without opening an SSE
-   * stream. It removes the repeated subscribe-and-check boilerplate.
+   * This is the canonical backend wait helper — use it inside route handlers and
+   * coordinators that enqueue a job and need to await its outcome without opening
+   * an SSE stream. Callers that only need to wait can ignore the return value.
    */
-  awaitJob(jobId: string): Promise<void> {
+  awaitJob(jobId: string): Promise<TerminalJob | null> {
     // Fast path: already terminal
-    if (this.lastTerminalJob?.jobId === jobId) return Promise.resolve()
+    if (this.lastTerminalJob?.jobId === jobId) {
+      return Promise.resolve({ ...this.lastTerminalJob })
+    }
     const stillPresent = this.activeJob?.jobId === jobId
       || this.pendingJobs.some(j => j.jobId === jobId)
-    if (!stillPresent) return Promise.resolve()
+    if (!stillPresent) return Promise.resolve(null)
 
-    return new Promise<void>(resolve => {
+    return new Promise<TerminalJob | null>(resolve => {
       const unsub = this.subscribe(evt => {
         if (
           (evt.type === 'scheduler-job-completed' || evt.type === 'scheduler-job-failed')
           && evt.job.jobId === jobId
         ) {
-          unsub(); resolve()
+          unsub(); resolve({ ...evt.job })
           return
         }
         if (evt.type === 'scheduler-job-removed' && evt.jobId === jobId) {
-          unsub(); resolve()
+          unsub(); resolve(null)
         }
       })
       // Re-check after subscribing to close the race window
-      if (this.lastTerminalJob?.jobId === jobId) { unsub(); resolve(); return }
+      if (this.lastTerminalJob?.jobId === jobId) { unsub(); resolve({ ...this.lastTerminalJob }); return }
       if (
         this.activeJob?.jobId !== jobId
         && !this.pendingJobs.some(j => j.jobId === jobId)
-      ) { unsub(); resolve() }
+      ) { unsub(); resolve(null) }
     })
   }
 
@@ -199,13 +205,14 @@ export class ExecutionScheduler {
    *
    * Returns the new job.
    */
-  enqueueInit(opCtx: SchedulerContext, sessionId: string): ExecutionJob {
+  enqueueInit(opCtx: SchedulerContext, sessionId: string, owner?: ExecutionJobOwner): ExecutionJob {
     assertInitJobAllowed(opCtx, sessionId, value => this.hasJobForSession(value))
 
     const job: ExecutionJob = {
       jobId: randomUUID(),
       target: { kind: 'init', sessionId },
       createdAt: Date.now(),
+      ...(owner ? { owner } : {}),
     }
     this.pendingJobs.push(job)
     this.emit({ type: 'scheduler-job-enqueued', job: { ...job } })
@@ -226,11 +233,11 @@ export class ExecutionScheduler {
    *
    * Returns the new job.
    */
-  enqueueSession(opCtx: SchedulerContext, sessionId: string, prompt?: string): ExecutionJob {
+  enqueueSession(opCtx: SchedulerContext, sessionId: string, prompt?: string, owner?: ExecutionJobOwner): ExecutionJob {
     const executionKind = getSessionExecutionKind(opCtx, sessionId, prompt, value => this.hasJobForSession(value))
     return executionKind === 'primary'
-      ? this.enqueuePrimarySession(opCtx, sessionId, prompt as string)
-      : this.enqueueAnalysisSession(opCtx, sessionId)
+      ? this.enqueuePrimarySession(opCtx, sessionId, prompt as string, owner)
+      : this.enqueueAnalysisSession(opCtx, sessionId, owner)
   }
 
   // ── Private admission helpers ───────────────────────────────────────────────
@@ -239,6 +246,7 @@ export class ExecutionScheduler {
     opCtx: SchedulerContext,
     sessionId: string,
     prompt: string,
+    owner?: ExecutionJobOwner,
   ): ExecutionJob {
     reservePrimaryTurn(opCtx, sessionId)
 
@@ -248,6 +256,7 @@ export class ExecutionScheduler {
       target: { kind: 'session', sessionId },
       prompt,
       createdAt: Date.now(),
+      ...(owner ? { owner } : {}),
     }
     this.pendingJobs.push(job)
     this.emit({ type: 'scheduler-job-enqueued', job: { ...job } })
@@ -255,11 +264,12 @@ export class ExecutionScheduler {
     return job
   }
 
-  private enqueueAnalysisSession(opCtx: SchedulerContext, sessionId: string): ExecutionJob {
+  private enqueueAnalysisSession(opCtx: SchedulerContext, sessionId: string, owner?: ExecutionJobOwner): ExecutionJob {
     const job: ExecutionJob = {
       jobId: randomUUID(),
       target: { kind: 'session', sessionId },
       createdAt: Date.now(),
+      ...(owner ? { owner } : {}),
     }
     this.pendingJobs.push(job)
     this.emit({ type: 'scheduler-job-enqueued', job: { ...job } })

@@ -357,3 +357,31 @@ export async function cliBenchmarkRunEvaluations(
     `/api/operations/benchmark-runs/${encodeURIComponent(runId)}/evaluations`,
   );
 }
+
+/** POST /api/operations/benchmark-run-control → BenchmarkRunLaunchResult */
+export async function cliBenchmarkRunControl(
+  baseUrl: string,
+  body: { run_id: string; action: "pause" | "resume" | "stop"; mode?: "continue" | "retry" },
+): Promise<BenchmarkRunLaunchResult> {
+  return post<BenchmarkRunLaunchResult>(
+    baseUrl,
+    "/api/operations/benchmark-run-control",
+    body,
+  );
+}
+
+/** POST /api/operations/benchmark-evaluation-control → BenchmarkEvaluateResult */
+export async function cliBenchmarkEvaluationControl(
+  baseUrl: string,
+  body: {
+    evaluation_id: string;
+    action: "pause" | "resume" | "stop";
+    mode?: "continue" | "retry";
+  },
+): Promise<BenchmarkEvaluateResult> {
+  return post<BenchmarkEvaluateResult>(
+    baseUrl,
+    "/api/operations/benchmark-evaluation-control",
+    body,
+  );
+}

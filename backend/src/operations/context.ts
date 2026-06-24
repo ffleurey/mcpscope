@@ -2,6 +2,7 @@ import type { BackendDatabase } from '../persistence/db.js'
 import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import type { ExecutionScheduler } from '../runtime/scheduler.js'
+import type { RunControlRegistry } from '../runtime/runControl.js'
 
 /**
  * Runtime context passed to every backend operation execute function.
@@ -19,4 +20,9 @@ export interface OperationContext {
   logger?: { error: (data: Record<string, unknown>, msg: string) => void }
   /** Backend-owned execution scheduler. Present when the app is initialized normally. */
   scheduler?: ExecutionScheduler
+  /**
+   * Control plane for long-running coordinators (benchmark/evaluation runs):
+   * pause/resume/stop keyed by run id. Present when the app is initialized normally.
+   */
+  runControl?: RunControlRegistry
 }

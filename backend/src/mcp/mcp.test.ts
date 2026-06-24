@@ -24,8 +24,10 @@ const EXPECTED_OPERATION_IDS = [
   "benchmark_run",
   "benchmark_run_status",
   "benchmark_run_report",
+  "benchmark_run_control",
   "benchmark_evaluate",
   "benchmark_run_evaluations",
+  "benchmark_evaluation_control",
 ] as const;
 
 // Mock context — never called in these unit tests (no actual execution)

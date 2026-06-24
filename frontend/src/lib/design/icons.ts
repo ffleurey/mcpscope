@@ -35,6 +35,7 @@ import {
   mdiCheckboxBlankOutline,
   mdiPlay,
   mdiPause,
+  mdiStop,
   mdiImport,
   mdiExport,
   mdiChartBar,
@@ -68,6 +69,7 @@ export const iconInfo = mdiInformationOutline
 export const iconView = mdiEyeOutline
 export const iconPlay = mdiPlay
 export const iconPause = mdiPause
+export const iconStop = mdiStop
 export const iconImport = mdiImport
 export const iconExport = mdiExport
 export const iconRadioMarked = mdiRadioboxMarked

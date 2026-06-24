@@ -78,12 +78,18 @@ export {
   benchmarkRunReportOperation,
   benchmarkRunReportInputSchema,
   benchmarkRunReportOutputSchema,
+  benchmarkRunControlOperation,
+  benchmarkRunControlInputSchema,
+  benchmarkRunControlOutputSchema,
   benchmarkEvaluateOperation,
   benchmarkEvaluateInputSchema,
   benchmarkEvaluateOutputSchema,
   benchmarkRunEvaluationsOperation,
   benchmarkRunEvaluationsInputSchema,
   benchmarkRunEvaluationsOutputSchema,
+  benchmarkEvaluationControlOperation,
+  benchmarkEvaluationControlInputSchema,
+  benchmarkEvaluationControlOutputSchema,
 } from "./benchmarkOperations.js";
 
 export { operationCatalog, operationList } from "./catalog.js";

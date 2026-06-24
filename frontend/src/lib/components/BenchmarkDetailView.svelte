@@ -69,7 +69,7 @@
   }
 
   function dotClass(status: BenchmarkRunStatus): string {
-    if (status === 'running' || status === 'pending') return 'running'
+    if (status === 'running' || status === 'pending' || status === 'paused') return 'running'
     if (status === 'error') return 'error'
     return 'idle'
   }
@@ -77,7 +77,7 @@
   function statusPillClass(status: BenchmarkRunStatus): string {
     if (status === 'complete') return 'success'
     if (status === 'error') return 'error'
-    if (status === 'running') return 'soft'
+    if (status === 'running' || status === 'paused') return 'soft'
     return 'dim'
   }
 
