@@ -1,12 +1,12 @@
 import type { AnalysisTarget } from '../schemas.js'
-import { buildAnalysisFocusInstructions } from '../schemas.js'
 import type { RubricCriterion } from '../../domain/model.js'
 
 /**
- * The judge turn prompt: present the rubric (id, max points, description) and
- * the evaluation focus, and require a single JSON verdict awarding points per
- * criterion with an ID-citing note. The session content is already in context
- * (pushed by the bootstrap step); the judge may pull more via inspect.
+ * The judge turn prompt: name the session to evaluate (by id — never paste its
+ * content), present the rubric, and require a single JSON verdict awarding
+ * points per criterion with an ID-citing note. The judge is tool-enabled and
+ * pulls the session's request/answer/trace via mcpscope_inspect, so we hand it
+ * the id and let it fetch — starting from the inspect summary.
  */
 export function buildRubricJudgePrompt(params: {
   analysisTarget: AnalysisTarget
@@ -22,10 +22,10 @@ export function buildRubricJudgePrompt(params: {
   }
 
   return [
-    'Score the in-scope session against the rubric below.',
+    'Score the session below against the rubric.',
     '',
-    'Evaluation focus:',
-    buildAnalysisFocusInstructions(params.analysisTarget),
+    `Session under evaluation: ${params.analysisTarget.target_session_id} (grade the final answer of in-scope turn ${params.analysisTarget.target_turn_id}).`,
+    `Inspect it to read the request, the final answer, and the trace — call mcpscope_inspect with id "${params.analysisTarget.target_session_id}" first (default, not short); that returns the user request, the final answer, and each tool call with its parameters. Fetch a specific turn or part id only when a tool-use criterion needs a detail the session view omits (a tool result's values/row count, or a truncated parameter value).`,
     '',
     'Rubric (award 0..max points per criterion):',
     ...rubricLines,

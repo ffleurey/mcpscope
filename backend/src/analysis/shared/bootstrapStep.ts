@@ -35,6 +35,15 @@ function now(): number { return Date.now() }
 export interface BootstrapStepConfig {
   indexSchemaKey: string
   buildIndexContent?: (packets: EvidencePacket[]) => unknown
+  /**
+   * When true (default), the bootstrap turn deterministically inspects the
+   * target session and pushes that evidence into the analysis session's context.
+   * Set false for interactive, tool-enabled workflows (e.g. the benchmark
+   * evaluation judge) that should pull evidence on demand via the inspect tool
+   * instead of having it pre-injected — keeping context lean and dog-fooding the
+   * inspect surface. Planning artifacts are still written either way.
+   */
+  injectEvidence?: boolean
 }
 
 function defaultIndexContent(packets: EvidencePacket[]): EvidencePacketIndex {
@@ -90,19 +99,23 @@ export class BootstrapStep extends WorkflowStep {
       })
     })()
 
-    const analysisSession = getSessionRecord(this.db.connection, analysisSessionId)
-    if (!analysisSession) {
-      throw new Error(`Bootstrap: analysis session not found: ${analysisSessionId}`)
-    }
+    // Interactive judges pull evidence themselves via the inspect tool; only
+    // pre-inject the trace when the workflow relies on it being in context.
+    if (this.config.injectEvidence !== false) {
+      const analysisSession = getSessionRecord(this.db.connection, analysisSessionId)
+      if (!analysisSession) {
+        throw new Error(`Bootstrap: analysis session not found: ${analysisSessionId}`)
+      }
 
-    await runDeterministicMcpToolCallsInSingleTurn(
-      this.db,
-      this.mcp,
-      analysisSession,
-      bootstrapInspectIds.map(id => ({ toolName: 'mcpscope_inspect', toolArgs: { id } })),
-      ctx.emitSink,
-      this.stepId,
-    )
+      await runDeterministicMcpToolCallsInSingleTurn(
+        this.db,
+        this.mcp,
+        analysisSession,
+        bootstrapInspectIds.map(id => ({ toolName: 'mcpscope_inspect', toolArgs: { id } })),
+        ctx.emitSink,
+        this.stepId,
+      )
+    }
 
     return { status: 'complete', outputArtifacts: [] }
   }

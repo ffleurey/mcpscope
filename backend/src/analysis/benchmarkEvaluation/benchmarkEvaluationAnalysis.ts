@@ -75,10 +75,13 @@ export class BenchmarkEvaluationAnalysis extends AnalysisSessionBase {
   // ── Hooks — called by buildPlan() during tree traversal ───────────────────
 
   protected onBeforeSession(): void {
-    // Reuse the bootstrap step to materialize analysis_target and push the
-    // target session's evidence into the judge's context.
+    // Materialize the analysis_target + work-index artifacts, but do NOT inject
+    // the target session's trace into context. The judge is tool-enabled and
+    // inspects the session itself (named in the judge prompt), starting from the
+    // inspect summary and pulling detail only when a criterion needs it.
     this.addCommand(new BootstrapStep(this.db, this.lm, this.mcp, {
       indexSchemaKey: SCHEMA_KEY.WORK_INDEX,
+      injectEvidence: false,
     }))
   }
 
