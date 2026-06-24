@@ -54,6 +54,7 @@ import { ANALYSIS_WORKFLOW_KIND } from "../analysis/workflowKinds.js";
 import { getLatestArtifactBySchemaKey } from "../analysis/artifactRepository.js";
 import { SCHEMA_KEY as BENCHMARK_EVAL_KEY } from "../analysis/benchmarkEvaluation/schemas.js";
 import type { OperationContext } from "./context.js";
+import type { ExecutionScheduler, TerminalJob } from "../runtime/scheduler.js";
 import { RunStoppedError, type RunController } from "../runtime/runControl.js";
 import { OperationError } from "./errors.js";
 import {
@@ -664,6 +665,26 @@ async function runBenchmarkCoordinator(
   }
 }
 
+/**
+ * Await a scheduler job, but bail out immediately if the run is stopped — even if
+ * the job itself never settles (a model/MCP call that ignores the abort signal).
+ * Returns { stopped: true } when the stop wins the race, so the coordinator can
+ * unwind to 'stopped' without waiting on a possibly-hung job.
+ */
+async function awaitJobOrStop(
+  scheduler: ExecutionScheduler,
+  controller: RunController | undefined,
+  jobId: string,
+): Promise<{ stopped: boolean; terminal: TerminalJob | null }> {
+  if (!controller) {
+    return { stopped: false, terminal: await scheduler.awaitJob(jobId) };
+  }
+  return Promise.race([
+    scheduler.awaitJob(jobId).then((terminal) => ({ stopped: false, terminal })),
+    controller.whenStopRequested.then(() => ({ stopped: true, terminal: null })),
+  ]);
+}
+
 /** Patch a single run-session entry (matched by sessionId) in place. */
 function setRunSessionStatus(
   db: BackendDatabase,
@@ -741,11 +762,11 @@ async function runOneRepetition(
   try {
     const initJob = scheduler.enqueueInit(ctx, session.id, owner);
     controller?.setActiveJob(initJob.jobId);
-    const initTerminal = await scheduler.awaitJob(initJob.jobId);
+    const initWait = await awaitJobOrStop(scheduler, controller, initJob.jobId);
     controller?.clearActiveJob();
-    // A stop signalled during init aborts that job; record the partial session as
-    // cancelled (kept for review) and unwind to the run-level stop handler.
-    if (controller?.isStopping()) {
+    // A stop signalled during init unwinds the run immediately (even if the init
+    // job never settles); record the partial session as cancelled (kept for review).
+    if (initWait.stopped || controller?.isStopping()) {
       setRunSessionStatus(db, runId, session.id, "cancelled");
       throw new RunStoppedError(runId);
     }
@@ -759,7 +780,7 @@ async function runOneRepetition(
         runId,
         session.id,
         "error",
-        initTerminal?.error ??
+        initWait.terminal?.error ??
           "Initialization failed — the MCP server may be unreachable or the model unavailable.",
       );
       return session.id;
@@ -767,9 +788,9 @@ async function runOneRepetition(
 
     const turnJob = scheduler.enqueueSession(ctx, session.id, snapshot.prompt, owner);
     controller?.setActiveJob(turnJob.jobId);
-    const turnTerminal = await scheduler.awaitJob(turnJob.jobId);
+    const turnWait = await awaitJobOrStop(scheduler, controller, turnJob.jobId);
     controller?.clearActiveJob();
-    if (controller?.isStopping()) {
+    if (turnWait.stopped || controller?.isStopping()) {
       setRunSessionStatus(db, runId, session.id, "cancelled");
       throw new RunStoppedError(runId);
     }
@@ -788,7 +809,7 @@ async function runOneRepetition(
         runId,
         session.id,
         "error",
-        turnTerminal?.error ??
+        turnWait.terminal?.error ??
           (lastTurn?.outcome ? `Turn failed (${lastTurn.outcome}).` : "Turn did not complete."),
       );
     }
@@ -1652,14 +1673,16 @@ async function judgeOneSession(
     status: "running",
   });
 
+  let stopped = false;
   try {
     const job = scheduler.enqueueSession(ctx, analysisSession.id, undefined, {
       kind: "benchmark-evaluation",
       id: evaluationId,
     });
     controller?.setActiveJob(job.jobId);
-    await scheduler.awaitJob(job.jobId);
+    const wait = await awaitJobOrStop(scheduler, controller, job.jobId);
     controller?.clearActiveJob();
+    stopped = wait.stopped || (controller?.isStopping() ?? false);
   } catch (err) {
     controller?.clearActiveJob();
     upsertEvaluationSession(db, evaluationId, {
@@ -1670,9 +1693,9 @@ async function judgeOneSession(
     throw err;
   }
 
-  // A stop signalled during judging aborts that job; record the partial judge
-  // session as cancelled (kept for review) and unwind to the pass-level handler.
-  if (controller?.isStopping()) {
+  // A stop signalled during judging unwinds the pass immediately (even if the
+  // judge job never settles); record the partial judge session as cancelled.
+  if (stopped) {
     upsertEvaluationSession(db, evaluationId, {
       runSessionId: runSession.sessionId,
       analysisSessionId: analysisSession.id,

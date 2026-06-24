@@ -41,10 +41,23 @@ export class RunController {
   /** Resolves the pause gate when the run is resumed or stopped. */
   private gateResolve: (() => void) | null = null
 
+  /**
+   * Resolves once a stop is requested. The coordinator races its job waits
+   * against this so a stop unwinds the run *immediately* — even if the in-flight
+   * job never settles (a model/MCP call that ignores the abort signal). Without
+   * this, awaitJob could hang and the run would stay stuck 'running'.
+   */
+  readonly whenStopRequested: Promise<void>
+  private resolveStop!: () => void
+
   constructor(
     readonly runId: string,
     private readonly scheduler: ExecutionScheduler,
-  ) {}
+  ) {
+    this.whenStopRequested = new Promise<void>(resolve => {
+      this.resolveStop = resolve
+    })
+  }
 
   getState(): RunControlState {
     return this.state
@@ -109,6 +122,7 @@ export class RunController {
     if (this.state === 'stopping') return false
     this.state = 'stopping'
     this.releaseGate()
+    this.resolveStop()
     const jobId = this.activeJobId
     if (jobId) {
       const active = this.scheduler.getSnapshot().activeJob

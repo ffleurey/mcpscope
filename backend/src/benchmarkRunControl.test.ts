@@ -113,6 +113,62 @@ function controllableGateways() {
   };
 }
 
+/** Init probe succeeds, but the turn's model call hangs forever AND ignores the
+ *  abort signal — the worst case for stopping (a provider that won't cancel). */
+function hungTurnGateways(): {
+  gateways: Parameters<typeof buildBackendApp>[1];
+  startedTurns: () => number;
+} {
+  let started = 0;
+  return {
+    startedTurns: () => started,
+    gateways: {
+      chatCompletionGateway: {
+        async probePromptTokensDetailed() {
+          return {
+            promptTokens: 3,
+            completion: {
+              id: "probe-1",
+              model: "model-key",
+              created: 1,
+              choices: [],
+              usage: { prompt_tokens: 3, completion_tokens: 0, total_tokens: 3 },
+            },
+            rawExchange: {
+              requestUrl: "https://example.com/v1/chat/completions",
+              requestMethod: "POST",
+              requestHeadersJson: {},
+              requestBody: "{}",
+              responseStatus: 200,
+              responseHeadersJson: {},
+              responseBody: "{}",
+            },
+          };
+        },
+        async createChatCompletion() {
+          throw new Error("not used");
+        },
+        streamChatCompletion() {
+          started++;
+          // Never settles, never honors the abort signal.
+          return new Promise(() => {});
+        },
+      },
+      mcpGateway: {
+        async initializeSession() {
+          throw new Error("not used");
+        },
+        async listTools() {
+          throw new Error("not used");
+        },
+        async callTool() {
+          throw new Error("not used");
+        },
+      },
+    },
+  };
+}
+
 async function seedModelConfig(app: FastifyInstance) {
   await app.inject({
     method: "PUT",
@@ -331,5 +387,33 @@ describe("benchmark run control (pause / stop / resume)", () => {
     ctl.releaseTurn();
     await waitFor(async () => (await getRun(runId)).status === "complete", "run complete");
     expect(sessionStatuses(await getRun(runId))).toEqual(["complete", "complete"]);
+  });
+
+  it("stops even when the in-flight job never settles (ignores abort)", async () => {
+    const config = makeTestConfig();
+    dataDir = config.dataDir;
+    const hung = hungTurnGateways();
+    app = await buildBackendApp(config, hung.gateways);
+    await seedModelConfig(app);
+
+    const { runId } = await setupRun(1);
+
+    // The turn is in-flight on a model call that will never settle or honor abort.
+    await waitFor(() => hung.startedTurns() >= 1, "the hung turn to start");
+
+    // Stop must unwind the run regardless — not hang waiting for the dead job.
+    const stopRes = await app.inject({
+      method: "POST",
+      url: `/api/benchmark-runs/${runId}/stop`,
+    });
+    expect(stopRes.statusCode).toBe(200);
+
+    await waitFor(
+      async () => (await getRun(runId)).status === "stopped",
+      "run to reach 'stopped' despite the hung job",
+    );
+    const run = await getRun(runId);
+    expect(run.sessions).toHaveLength(1);
+    expect(run.sessions[0].status).toBe("cancelled");
   });
 });
