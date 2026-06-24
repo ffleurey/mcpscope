@@ -373,6 +373,9 @@ export const benchmarkRunSessionSchema = z.object({
   status: z
     .enum(["running", "complete", "error", "cancelled"])
     .default("running"),
+  // Why the session failed (init unreachable, model error, non-complete turn).
+  // Null while running, complete, or cancelled.
+  error: z.string().nullable().default(null),
 });
 
 export const benchmarkRunRecordSchema = z.object({

@@ -214,12 +214,16 @@
     if (!viewCaseId || !run) return []
     const caseReport = report?.cases.find((c) => c.caseId === viewCaseId)
     if (!caseReport) return []
-    return caseReport.sessions.map((sm) => ({
-      sessionId: sm.sessionId,
-      terminalStatus: sm.terminalStatus,
-      completed: sm.completed,
-      repetition: run.sessions.find((rs) => rs.sessionId === sm.sessionId)?.repetition ?? null,
-    }))
+    return caseReport.sessions.map((sm) => {
+      const runSession = run.sessions.find((rs) => rs.sessionId === sm.sessionId)
+      return {
+        sessionId: sm.sessionId,
+        terminalStatus: sm.terminalStatus,
+        completed: sm.completed,
+        repetition: runSession?.repetition ?? null,
+        error: runSession?.error ?? null,
+      }
+    })
   })
 
   function outcomeLabel(s: { terminalStatus: string | null; completed: boolean }): string {
@@ -673,6 +677,9 @@
                   <td class="col-num">{s.repetition ?? '—'}</td>
                   <td>
                     <span class="status-pill {outcomePillClass(s)}">{outcomeLabel(s)}</span>
+                    {#if s.error}
+                      <span class="session-error" title={s.error}>{s.error}</span>
+                    {/if}
                   </td>
                   <td class="col-actions">
                     <span class="row-actions">
@@ -759,6 +766,17 @@
     border-radius: 6px;
     color: var(--red-bright);
     font-size: 0.82rem;
+  }
+  .session-error {
+    display: inline-block;
+    margin-left: 0.5rem;
+    max-width: 28rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+    color: var(--red-bright);
+    font-size: 0.78rem;
   }
   .running-note {
     display: flex;

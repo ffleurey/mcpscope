@@ -4,16 +4,20 @@
     schedulerSnapshot,
     activeJob,
     pendingJobs,
-    queueLength,
     pauseExecution,
     resumeExecution,
     abortExecution,
     removePendingJob,
   } from '../executionStore'
+  import {
+    stopBenchmarkRun,
+    stopEvaluation,
+  } from '../api/backendClient'
   import { followRunning } from '../followStore'
   import { selectChat, activeChatId, chatSessions } from '../sessionStore'
   import Icon from './Icon.svelte'
-  import { iconView } from '../design/icons'
+  import { iconView, iconStop } from '../design/icons'
+  import type { ExecutionJobOwner } from '../backendTypes'
 
   let showQueue = $state(false)
   let isActioning = $state(false)
@@ -22,6 +26,77 @@
   const currentActiveJob = $derived($activeJob)
   const queuedJobs = $derived($pendingJobs)
   const connected = $derived($schedulerConnected)
+
+  // The execution queue's unit is the *run* (benchmark or evaluation), not the
+  // individual session: a run enqueues many jobs (init + turn per session) under one
+  // owner. Group active+pending jobs by owner so the bar shows — and controls — runs.
+  // Ad-hoc (interactive) session jobs have no owner and stay as individual items.
+  interface QueueGroup {
+    key: string
+    ownerKind: ExecutionJobOwner['kind'] | null
+    ownerId: string | null
+    label: string
+    isActive: boolean
+    /** A pending job in the group, for removing an ad-hoc job from the queue. */
+    representativeJobId: string
+  }
+
+  function ownerLabel(owner: ExecutionJobOwner): string {
+    return owner.kind === 'benchmark-run'
+      ? `Benchmark run ${owner.id}`
+      : `LLM evaluation ${owner.id}`
+  }
+
+  const groups = $derived.by(() => {
+    const entries = [
+      ...(currentActiveJob ? [{ job: currentActiveJob, active: true }] : []),
+      ...queuedJobs.map((job) => ({ job, active: false })),
+    ]
+    const byKey = new Map<string, QueueGroup>()
+    for (const { job, active } of entries) {
+      const owner = job.owner
+      const key = owner ? `${owner.kind}:${owner.id}` : `job:${job.jobId}`
+      let group = byKey.get(key)
+      if (!group) {
+        group = {
+          key,
+          ownerKind: owner?.kind ?? null,
+          ownerId: owner?.id ?? null,
+          label: owner ? ownerLabel(owner) : formatTarget(job),
+          isActive: false,
+          representativeJobId: job.jobId,
+        }
+        byKey.set(key, group)
+      }
+      if (active) group.isActive = true
+      else group.representativeJobId = job.jobId
+    }
+    return [...byKey.values()]
+  })
+
+  const activeGroup = $derived(groups.find((g) => g.isActive) ?? null)
+  const pendingGroups = $derived(groups.filter((g) => !g.isActive))
+
+  async function handleStopGroup(group: QueueGroup) {
+    if (isActioning) return
+    isActioning = true
+    try {
+      if (group.ownerKind === 'benchmark-run' && group.ownerId) {
+        await stopBenchmarkRun(group.ownerId)
+      } else if (group.ownerKind === 'benchmark-evaluation' && group.ownerId) {
+        await stopEvaluation(group.ownerId)
+      } else if (group.isActive) {
+        // Ad-hoc active turn: hard-abort the in-flight model call.
+        await abortExecution()
+      } else {
+        await removePendingJob(group.representativeJobId)
+      }
+    } catch {
+      // ignore — the SSE stream reconciles the queue
+    } finally {
+      isActioning = false
+    }
+  }
 
   // "Follow running": while engaged, auto-open whichever session is currently
   // streaming so the user can watch run / evaluation progress hands-free. Any manual
@@ -55,27 +130,6 @@
     }
   }
 
-  let isAborting = $state(false)
-  async function handleAbort() {
-    if (isAborting) return
-    isAborting = true
-    try {
-      await abortExecution()
-    } catch {
-      // ignore
-    } finally {
-      isAborting = false
-    }
-  }
-
-  async function handleRemoveJob(jobId: string) {
-    try {
-      await removePendingJob(jobId)
-    } catch {
-      // ignore
-    }
-  }
-
   function formatTarget(job: {
     target: { kind: string; sessionId: string; stepId?: string }
     prompt?: string
@@ -94,14 +148,25 @@
 
 {#if connected || currentActiveJob !== null || queuedJobs.length > 0}
   <div class="execution-bar">
-    <!-- Active job indicator -->
+    <!-- Active unit indicator (run / evaluation / ad-hoc session) -->
     <div class="exec-status">
-      {#if currentActiveJob !== null}
+      {#if activeGroup !== null}
         <span class="status-dot running"></span>
         <span class="status-label">
           {snapshot.controlState === 'paused' ? 'Pausing…' : 'Running'}
         </span>
-        <span class="job-label">{formatTarget(currentActiveJob)}</span>
+        <span class="job-label">{activeGroup.label}</span>
+        <button
+          class="icon-btn icon-btn-danger stop-btn"
+          onclick={() => activeGroup && handleStopGroup(activeGroup)}
+          disabled={isActioning}
+          title={activeGroup.ownerKind
+            ? 'Stop this run (it can be resumed from the run view)'
+            : 'Stop: abort the in-flight model call now'}
+          aria-label="Stop"
+        >
+          <Icon path={iconStop} />
+        </button>
       {:else if snapshot.controlState === 'paused'}
         <span class="status-dot warn"></span>
         <span class="status-label">Paused</span>
@@ -124,32 +189,22 @@
         <span class="follow-icon"><Icon path={iconView} /></span> Follow
       </button>
 
+      <!-- Queue-level pause/resume: pauses the whole execution queue. -->
       <button
         class="btn btn-sm"
         onclick={handlePauseResume}
         disabled={isActioning}
         title={snapshot.controlState === 'running'
-          ? 'Pause after current step'
-          : 'Resume execution'}
+          ? 'Pause the queue (after the current step)'
+          : 'Resume the queue'}
       >
         {snapshot.controlState === 'running' ? '⏸' : '▶'}
       </button>
 
-      {#if currentActiveJob !== null}
-        <button
-          class="btn btn-sm btn-danger"
-          onclick={handleAbort}
-          disabled={isAborting}
-          title="Hard stop: abort the running model call now (cancels the in-flight request, not just future turns)"
-        >
-          {isAborting ? 'Stopping…' : 'Stop'}
-        </button>
-      {/if}
-
       <!-- Queue button -->
-      {#if queuedJobs.length > 0}
+      {#if pendingGroups.length > 0}
         <button class="btn btn-sm" onclick={() => (showQueue = !showQueue)} title="Show queue">
-          Queue ({$queueLength})
+          Queue ({pendingGroups.length})
           <span class="chevron">{showQueue ? '▲' : '▼'}</span>
         </button>
       {/if}
@@ -157,17 +212,20 @@
   </div>
 {/if}
 
-<!-- Queue dropdown -->
-{#if showQueue && queuedJobs.length > 0}
+<!-- Queue dropdown: one row per waiting unit (run / evaluation / ad-hoc session). -->
+{#if showQueue && pendingGroups.length > 0}
   <div class="queue-panel">
-    <div class="queue-header">Pending jobs</div>
-    {#each queuedJobs as job (job.jobId)}
+    <div class="queue-header">Queued</div>
+    {#each pendingGroups as group (group.key)}
       <div class="queue-item">
-        <span class="queue-item-label">{formatTarget(job)}</span>
+        <span class="queue-item-label">{group.label}</span>
         <button
           class="icon-btn icon-btn-danger"
-          onclick={() => handleRemoveJob(job.jobId)}
-          title="Remove from queue">✕</button
+          onclick={() => handleStopGroup(group)}
+          disabled={isActioning}
+          title={group.ownerKind
+            ? 'Remove this run from the queue (stops it; resume it later from the run view)'
+            : 'Remove from queue'}>✕</button
         >
       </div>
     {/each}
@@ -199,6 +257,11 @@
   .status-label {
     color: var(--text-dim);
     flex-shrink: 0;
+  }
+
+  .stop-btn {
+    flex-shrink: 0;
+    margin-left: 0.1rem;
   }
 
   .job-label {

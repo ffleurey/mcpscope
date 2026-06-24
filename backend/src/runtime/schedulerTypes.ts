@@ -17,11 +17,21 @@ export type ExecutionTarget =
   | { kind: 'step'; sessionId: string }
   | { kind: 'init'; sessionId: string }
 
+/**
+ * The long-running coordinator that owns a job, when one does. Lets the UI group
+ * a run's many jobs (init + turn per session) under one controllable unit instead
+ * of showing loose sessions. Absent for ad-hoc (interactive) session jobs.
+ */
+export type ExecutionJobOwner =
+  | { kind: 'benchmark-run'; id: string }
+  | { kind: 'benchmark-evaluation'; id: string }
+
 export interface ExecutionJob {
   jobId: string
   target: ExecutionTarget
   prompt?: string
   createdAt: number
+  owner?: ExecutionJobOwner
 }
 
 export interface ActiveExecutionJob extends ExecutionJob {

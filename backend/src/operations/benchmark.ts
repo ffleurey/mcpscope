@@ -614,13 +614,27 @@ async function runBenchmarkCoordinator(
     if (done) {
       // 'complete' only when no task was left interrupted. A 'continue' resume
       // deliberately leaves prior 'cancelled' sessions untouched, so the run rests
-      // at the resumable 'stopped' state (retry can still re-run them). Soft 'error'
-      // sessions are non-blocking and do not prevent completion.
+      // at the resumable 'stopped' state (retry can still re-run them).
       const hasCancelled = done.sessions.some((s) => s.status === "cancelled");
+      const erroredCount = done.sessions.filter((s) => s.status === "error").length;
+      const completedCount = done.sessions.filter((s) => s.status === "complete").length;
+      // Surface failures: a run where every session failed is itself a failure
+      // ('error' with a summary); a partial failure stays 'complete' but carries a
+      // summary so the failure is visible rather than silent.
+      const failureSummary =
+        erroredCount > 0
+          ? `${erroredCount} of ${done.sessions.length} session(s) failed — see per-session errors.`
+          : null;
+      const status = hasCancelled
+        ? "stopped"
+        : completedCount === 0 && erroredCount > 0
+          ? "error"
+          : "complete";
       updateBenchmarkRun(db.connection, {
         ...done,
-        status: hasCancelled ? "stopped" : "complete",
-        completedAt: hasCancelled ? done.completedAt : now(),
+        status,
+        error: hasCancelled ? null : failureSummary,
+        completedAt: status === "complete" || status === "error" ? now() : done.completedAt,
         updatedAt: now(),
       });
     }
@@ -656,13 +670,14 @@ function setRunSessionStatus(
   runId: string,
   sessionId: string,
   status: "running" | "complete" | "error" | "cancelled",
+  error: string | null = null,
 ): void {
   const current = getBenchmarkRun(db.connection, runId);
   if (!current) return;
   updateBenchmarkRun(db.connection, {
     ...current,
     sessions: current.sessions.map((s) =>
-      s.sessionId === sessionId ? { ...s, status } : s,
+      s.sessionId === sessionId ? { ...s, status, error } : s,
     ),
     updatedAt: now(),
   });
@@ -715,16 +730,18 @@ async function runOneRepetition(
           sourceCaseId: snapshot.sourceCaseId,
           repetition: rep,
           status: "running",
+          error: null,
         },
       ],
       updatedAt: now(),
     });
   }
 
+  const owner = { kind: "benchmark-run" as const, id: runId };
   try {
-    const initJob = scheduler.enqueueInit(ctx, session.id);
+    const initJob = scheduler.enqueueInit(ctx, session.id, owner);
     controller?.setActiveJob(initJob.jobId);
-    await scheduler.awaitJob(initJob.jobId);
+    const initTerminal = await scheduler.awaitJob(initJob.jobId);
     controller?.clearActiveJob();
     // A stop signalled during init aborts that job; record the partial session as
     // cancelled (kept for review) and unwind to the run-level stop handler.
@@ -734,26 +751,57 @@ async function runOneRepetition(
     }
 
     // Only run the prompt if initialization succeeded; a failed-init session is
-    // still recorded and surfaces as a non-completed session in the report.
+    // recorded as errored with the reason so the failure is never silent.
     const initialized = getSessionRecord(db.connection, session.id);
-    if (initialized?.initStatus === "ready") {
-      const turnJob = scheduler.enqueueSession(ctx, session.id, snapshot.prompt);
-      controller?.setActiveJob(turnJob.jobId);
-      await scheduler.awaitJob(turnJob.jobId);
-      controller?.clearActiveJob();
-      if (controller?.isStopping()) {
-        setRunSessionStatus(db, runId, session.id, "cancelled");
-        throw new RunStoppedError(runId);
-      }
+    if (initialized?.initStatus !== "ready") {
+      setRunSessionStatus(
+        db,
+        runId,
+        session.id,
+        "error",
+        initTerminal?.error ??
+          "Initialization failed — the MCP server may be unreachable or the model unavailable.",
+      );
+      return session.id;
+    }
+
+    const turnJob = scheduler.enqueueSession(ctx, session.id, snapshot.prompt, owner);
+    controller?.setActiveJob(turnJob.jobId);
+    const turnTerminal = await scheduler.awaitJob(turnJob.jobId);
+    controller?.clearActiveJob();
+    if (controller?.isStopping()) {
+      setRunSessionStatus(db, runId, session.id, "cancelled");
+      throw new RunStoppedError(runId);
+    }
+
+    // The job settling does NOT mean the turn succeeded: a failed model call is
+    // either recorded on the turn (status 'error') or surfaces as a failed job.
+    // The session is 'complete' only if its last turn actually completed.
+    const lastTurn = listTurnRecordsBySession(db.connection, session.id)
+      .sort((a, b) => a.turnNumber - b.turnNumber)
+      .at(-1);
+    if (lastTurn?.status === "complete") {
       setRunSessionStatus(db, runId, session.id, "complete");
     } else {
-      // Init did not reach ready — mark the session as errored.
-      setRunSessionStatus(db, runId, session.id, "error");
+      setRunSessionStatus(
+        db,
+        runId,
+        session.id,
+        "error",
+        turnTerminal?.error ??
+          (lastTurn?.outcome ? `Turn failed (${lastTurn.outcome}).` : "Turn did not complete."),
+      );
     }
   } catch (err) {
     controller?.clearActiveJob();
     if (err instanceof RunStoppedError) throw err;
-    setRunSessionStatus(db, runId, session.id, "error");
+    setRunSessionStatus(
+      db,
+      runId,
+      session.id,
+      "error",
+      err instanceof Error ? err.message : String(err),
+    );
     throw err;
   }
 
@@ -1605,7 +1653,10 @@ async function judgeOneSession(
   });
 
   try {
-    const job = scheduler.enqueueSession(ctx, analysisSession.id);
+    const job = scheduler.enqueueSession(ctx, analysisSession.id, undefined, {
+      kind: "benchmark-evaluation",
+      id: evaluationId,
+    });
     controller?.setActiveJob(job.jobId);
     await scheduler.awaitJob(job.jobId);
     controller?.clearActiveJob();
