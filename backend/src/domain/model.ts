@@ -1,8 +1,13 @@
 import { z } from "zod";
 import { providerTypeValues } from "./configuration.js";
 
-/** Single schema/domain version recorded in schema_meta and reported on /api/system. */
-export const SCHEMA_VERSION = 3;
+/**
+ * Single schema/domain version recorded in schema_meta and reported on /api/system.
+ * v4: run-control statuses (benchmark run/eval 'paused'/'stopped', per-session
+ * 'cancelled') + run-session error field — a breaking CHECK-constraint change, so
+ * an older DB must be recreated fresh (the project keeps no migration logic).
+ */
+export const SCHEMA_VERSION = 4;
 
 export const sessionTypeValues = ["primary", "session_analysis"] as const;
 export const parentKindValues = ["session", "benchmark"] as const;
