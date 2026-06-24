@@ -20,7 +20,7 @@ export function getBackendConfig(): BackendConfig {
   const corsOrigin = process.env.BACKEND_CORS_ORIGIN ?? true
   const dataDir = process.env.BACKEND_DATA_DIR ?? defaultDataDir
   const sqlitePath = process.env.BACKEND_SQLITE_PATH ?? path.join(dataDir, 'mcpscope.db')
-  const maxToolRounds = Number(process.env.BACKEND_MAX_TOOL_ROUNDS ?? '10')
+  const maxToolRounds = Number(process.env.BACKEND_MAX_TOOL_ROUNDS ?? '50')
   const staticDir = process.env.BACKEND_STATIC_DIR ?? null
   const appVersion = process.env.APP_VERSION ?? 'dev'
 
