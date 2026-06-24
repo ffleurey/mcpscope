@@ -1673,7 +1673,7 @@ async function judgeOneSession(
     status: "running",
   });
 
-  let stopped = false;
+  let stopped: boolean;
   try {
     const job = scheduler.enqueueSession(ctx, analysisSession.id, undefined, {
       kind: "benchmark-evaluation",
