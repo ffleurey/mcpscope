@@ -4,6 +4,9 @@ import { getSessionRecord } from '../persistence/repository.js'
 import type { SchedulerEvent } from '../runtime/schedulerTypes.js'
 import type { RouteDeps } from './types.js'
 
+/** Interval between SSE keepalive comments on the scheduler stream. */
+const SSE_HEARTBEAT_MS = 20000
+
 export function registerSchedulerRoutes({ app, database, scheduler, opCtx, handleOperationError }: RouteDeps): void {
   app.get('/api/scheduler/snapshot', async () => scheduler.getSnapshot())
 
@@ -87,7 +90,21 @@ export function registerSchedulerRoutes({ app, database, scheduler, opCtx, handl
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
     })
 
+    // Periodic SSE comment so idle connections stay alive (proxies/browsers drop
+    // silent streams) and a half-open connection surfaces as a write error that
+    // the client's reconnect loop can recover from.
+    const heartbeat = setInterval(() => {
+      if (reply.raw.writableEnded) return
+      try {
+        reply.raw.write(': ping\n\n')
+      } catch {
+        // Connection is closing; the 'close' handler will clean up.
+      }
+    }, SSE_HEARTBEAT_MS)
+    heartbeat.unref?.()
+
     reply.raw.on('close', () => {
+      clearInterval(heartbeat)
       unsubscribe()
     })
 

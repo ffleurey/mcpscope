@@ -74,6 +74,13 @@ function recordTerminalJobId(jobId: string): void {
   terminalJobIds.add(jobId)
 }
 
+// Stream reconnection tuning.
+const INITIAL_RECONNECT_MS = 1000
+const MAX_RECONNECT_MS = 10000
+// A connection that stayed up at least this long is treated as healthy, so the
+// next drop restarts backoff from the bottom instead of escalating.
+const HEALTHY_CONNECTION_MS = 5000
+
 let streamAbort: AbortController | null = null
 
 function applySchedulerEvent(event: SchedulerEvent): void {
@@ -196,41 +203,53 @@ export function clearSessionStreamCache(sessionId: string): void {
   })
 }
 
-async function connectSchedulerStream(): Promise<void> {
-  streamAbort = new AbortController()
-  schedulerConnected.set(false)
-  schedulerError.set(null)
+/**
+ * Maintains the scheduler SSE connection: (re)connects, syncs the snapshot, and
+ * streams events until the connection ends — for ANY reason, including a clean
+ * server-side close (e.g. a dev backend restart) that resolves without an error.
+ * Reconnects with capped exponential backoff until the controller is aborted, so
+ * a dropped stream self-heals instead of leaving the UI silently stale.
+ */
+async function connectSchedulerStream(abort: AbortController): Promise<void> {
+  let backoffMs = INITIAL_RECONNECT_MS
 
-  try {
-    // Fetch initial snapshot first
-    const snapshot = await getSchedulerSnapshot()
-    schedulerSnapshot.set(snapshot)
-    schedulerConnected.set(true)
-
-    // Then subscribe to SSE stream
-    await streamSchedulerEvents((event) => {
-      applySchedulerEvent(event)
-    }, streamAbort.signal)
-  } catch (err) {
-    if (streamAbort?.signal.aborted) return
-    const message = err instanceof Error ? err.message : 'Scheduler stream error'
-    schedulerError.set(message)
-    schedulerConnected.set(false)
-
-    // Reconnect after a short delay
-    await new Promise((resolve) => setTimeout(resolve, 3000))
-    if (!streamAbort?.signal.aborted) {
-      await connectSchedulerStream()
+  while (!abort.signal.aborted) {
+    let connectedAt = 0
+    try {
+      schedulerError.set(null)
+      const snapshot = await getSchedulerSnapshot()
+      if (abort.signal.aborted) return
+      schedulerSnapshot.set(snapshot)
+      schedulerConnected.set(true)
+      connectedAt = Date.now()
+      // Resolves on a clean close, throws on error — either way, fall through
+      // below and reconnect.
+      await streamSchedulerEvents((event) => {
+        applySchedulerEvent(event)
+      }, abort.signal)
+    } catch (err) {
+      if (abort.signal.aborted) return
+      schedulerError.set(err instanceof Error ? err.message : 'Scheduler stream error')
     }
+
+    schedulerConnected.set(false)
+    if (abort.signal.aborted) return
+
+    // Reset backoff after a healthy session; otherwise grow it so a downed or
+    // crash-looping backend isn't hammered.
+    if (connectedAt > 0 && Date.now() - connectedAt >= HEALTHY_CONNECTION_MS) {
+      backoffMs = INITIAL_RECONNECT_MS
+    }
+    await new Promise((resolve) => setTimeout(resolve, backoffMs))
+    backoffMs = Math.min(backoffMs * 2, MAX_RECONNECT_MS)
   }
 }
 
-export async function initExecutionStore(): Promise<void> {
-  if (streamAbort) {
-    streamAbort.abort()
-    streamAbort = null
-  }
-  connectSchedulerStream() // intentionally not awaited — runs in background
+export function initExecutionStore(): void {
+  if (streamAbort) streamAbort.abort()
+  const abort = new AbortController()
+  streamAbort = abort
+  void connectSchedulerStream(abort) // runs in background until aborted
 }
 
 export function destroyExecutionStore(): void {

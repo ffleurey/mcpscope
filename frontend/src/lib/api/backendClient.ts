@@ -702,6 +702,32 @@ export function stopEvaluation(evaluationId: string) {
   })
 }
 
+/**
+ * Parse one SSE data payload into a SchedulerEvent, tolerantly: a malformed or
+ * unrecognized event is skipped (and warned in dev) rather than thrown, so a
+ * single bad event can't tear down the whole stream.
+ */
+function parseSchedulerEvent(dataText: string): SchedulerEvent | null {
+  let json: unknown
+  try {
+    json = JSON.parse(dataText)
+  } catch {
+    return null
+  }
+  const result = schedulerEventSchema.safeParse(json)
+  if (!result.success) {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console -- dev-only diagnostic for schema drift
+      console.warn(
+        '[scheduler stream] skipping unrecognized event:',
+        result.error.issues[0]?.message ?? 'invalid shape',
+      )
+    }
+    return null
+  }
+  return result.data
+}
+
 export async function streamSchedulerEvents(
   onEvent: (event: SchedulerEvent) => void | Promise<void>,
   signal?: AbortSignal,
@@ -730,8 +756,8 @@ export async function streamSchedulerEvents(
         buffer = buffer.slice(separatorIndex + (buffer[separatorIndex] === '\r' ? 4 : 2))
         const parsed = parseSseBlock(block)
         if (parsed?.dataText) {
-          const event = schedulerEventSchema.parse(JSON.parse(parsed.dataText))
-          await onEvent(event)
+          const event = parseSchedulerEvent(parsed.dataText)
+          if (event) await onEvent(event)
         }
         separatorIndex = buffer.search(/\r?\n\r?\n/)
       }
