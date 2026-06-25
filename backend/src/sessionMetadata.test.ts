@@ -265,6 +265,38 @@ describe("session metadata repository", () => {
     db.connection.close();
   });
 
+  it("persists and reads back a session init error", () => {
+    const config = makeTestConfig();
+    dataDir = config.dataDir;
+    fs.mkdirSync(dataDir, { recursive: true });
+    const db = openBackendDatabase(config.sqlitePath);
+
+    createSessionRecord(
+      db.connection,
+      makeSessionRecord({
+        id: "FAIL",
+        initStatus: "error",
+        initError: {
+          errorKind: "mcp_init_error",
+          message: "fetch failed — initializing MCP server 'HA Oslo'",
+        },
+      }),
+    );
+
+    const read = getSessionRecord(db.connection, "FAIL")!;
+    expect(read.initStatus).toBe("error");
+    expect(read.initError).toEqual({
+      errorKind: "mcp_init_error",
+      message: "fetch failed — initializing MCP server 'HA Oslo'",
+    });
+
+    // A session with no init failure round-trips with no initError.
+    createSessionRecord(db.connection, makeSessionRecord({ id: "OKAY" }));
+    expect(getSessionRecord(db.connection, "OKAY")!.initError ?? null).toBeNull();
+
+    db.connection.close();
+  });
+
   it("createSessionRecord rejects invalid session metadata", () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;

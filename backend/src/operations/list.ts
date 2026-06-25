@@ -4,7 +4,7 @@ import type { OperationContext } from './context.js'
 import { computeLifecycleState } from './lifecycleState.js'
 import {
   getAnalysisWorkflowKindFromSteps,
-  getLatestAnalysisDiagnosticSummaryForSession,
+  getLatestSessionErrorSummary,
 } from '../analysis/analysisSessionPresentation.js'
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
@@ -79,8 +79,8 @@ export const listOperation = {
           ? getAnalysisWorkflowKindFromSteps(listStepRecordsBySession(ctx.db.connection, s.id), ctx.db.connection, s.id)
           : null
         const state = computeLifecycleState(ctx.db.connection, s)
-        const latestError = state === 'error' && s.sessionType === 'session_analysis'
-          ? getLatestAnalysisDiagnosticSummaryForSession(ctx.db.connection, s.id) ?? undefined
+        const latestError = state === 'error'
+          ? getLatestSessionErrorSummary(ctx.db.connection, s) ?? undefined
           : undefined
 
         return {

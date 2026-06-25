@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import { getSessionRecord } from '../persistence/repository.js'
 import { listArtifactsBySession, type ArtifactRecord } from './artifactRepository.js'
 import { SCHEMA_KEY, type AnalysisPhase, type AnalysisSessionState } from './schemas.js'
-import type { StepRecord } from '../domain/model.js'
+import type { SessionRecord, StepRecord } from '../domain/model.js'
 import { isKnownWorkflowKind, getWorkflowLabel } from './analysisWorkflowFactory.js'
 
 export interface AnalysisDiagnosticSummary {
@@ -82,6 +82,27 @@ export function getLatestAnalysisDiagnosticSummaryForSession(
   sessionId: string,
 ): AnalysisDiagnosticSummary | null {
   return getLatestAnalysisDiagnosticSummary(listArtifactsBySession(connection, sessionId))
+}
+
+/**
+ * Latest error summary for any session, in the shared latest_error shape.
+ * Prefers an analysis diagnostic (richest, for session_analysis workflows) and
+ * falls back to a persisted session init failure — so an MCP-handshake or
+ * token-probe failure during init is diagnosable from list/status/inspect, not
+ * just the live event stream.
+ */
+export function getLatestSessionErrorSummary(
+  connection: Database.Database,
+  session: Pick<SessionRecord, 'id' | 'sessionType' | 'initError'>,
+): AnalysisDiagnosticSummary | null {
+  if (session.sessionType === 'session_analysis') {
+    const diagnostic = getLatestAnalysisDiagnosticSummaryForSession(connection, session.id)
+    if (diagnostic) return diagnostic
+  }
+  if (session.initError) {
+    return { step_id: null, error_kind: session.initError.errorKind, message: session.initError.message }
+  }
+  return null
 }
 
 export function getLatestAnalysisDiagnosticSummaryForStep(

@@ -181,6 +181,13 @@ export const partDisplaySchema = z.object({
   collapsedByDefault: z.boolean(),
 });
 
+// Reason a session failed to initialize (MCP handshake / token probe), persisted
+// so the failure is diagnosable after the fact via list/status/inspect.
+export const sessionInitErrorSchema = z.object({
+  errorKind: z.string(),
+  message: z.string(),
+});
+
 export const sessionRecordSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -198,6 +205,7 @@ export const sessionRecordSchema = z.object({
   toolDefinitionsTokens: z.number().int().nonnegative().nullable(),
   isContextExhausted: z.boolean(),
   compactionStrategy: compactionStrategySchema,
+  initError: sessionInitErrorSchema.nullable().optional(),
   analysisState: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -216,6 +224,7 @@ export const sessionSummarySchema = z.object({
   isContextExhausted: z.boolean(),
   loadedContextLength: z.number().int().positive().nullable(),
   compactionStrategy: compactionStrategySchema,
+  initError: sessionInitErrorSchema.nullable().optional(),
   modelProfileSnapshot: z.object({ name: z.string() }),
   mcpProfileSnapshots: z.array(z.object({ name: z.string() })).default([]),
 });

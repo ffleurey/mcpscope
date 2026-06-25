@@ -532,7 +532,15 @@ export function resolveHierarchicalId(
     const workflowKind = (analysisState?.workflow_kind ??
       null) as AnalysisWorkflowKind | null;
     const workflowLabel = getAnalysisWorkflowLabel(workflowKind);
-    const latestError = getLatestAnalysisDiagnosticSummary(artifacts);
+    const latestError =
+      getLatestAnalysisDiagnosticSummary(artifacts) ??
+      (session.initError
+        ? {
+            step_id: null,
+            error_kind: session.initError.errorKind,
+            message: session.initError.message,
+          }
+        : null);
 
     const directTurnNodes = directTurns.map((turn) => {
       const turnRounds = allRounds
