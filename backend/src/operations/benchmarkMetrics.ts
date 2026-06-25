@@ -13,6 +13,13 @@ export interface PerToolCounts {
   resultPayloadChars: number;
 }
 
+/** Latest error for a session, in the shared latest_error shape. */
+export interface SessionErrorSummary {
+  step_id: string | null;
+  error_kind: string | null;
+  message: string;
+}
+
 export interface SessionMetrics {
   sessionId: string;
   terminalStatus: string | null;
@@ -28,6 +35,8 @@ export interface SessionMetrics {
     total: number | null;
   };
   finalAnswer: string | null;
+  /** Why the session failed, when it did (e.g. init/MCP failure). Null otherwise. */
+  error?: SessionErrorSummary | null;
 }
 
 export interface CaseExpectations {

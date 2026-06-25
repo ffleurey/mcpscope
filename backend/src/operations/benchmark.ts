@@ -52,6 +52,7 @@ import { createSession } from "../runtime/modelTurns.js";
 import { executeAnalysisLaunch } from "./launchAnalysis.js";
 import { ANALYSIS_WORKFLOW_KIND } from "../analysis/workflowKinds.js";
 import { getLatestArtifactBySchemaKey } from "../analysis/artifactRepository.js";
+import { getLatestSessionErrorSummary } from "../analysis/analysisSessionPresentation.js";
 import { SCHEMA_KEY as BENCHMARK_EVAL_KEY } from "../analysis/benchmarkEvaluation/schemas.js";
 import type { OperationContext } from "./context.js";
 import type { ExecutionScheduler, TerminalJob } from "../runtime/scheduler.js";
@@ -617,15 +618,25 @@ async function runBenchmarkCoordinator(
       // deliberately leaves prior 'cancelled' sessions untouched, so the run rests
       // at the resumable 'stopped' state (retry can still re-run them).
       const hasCancelled = done.sessions.some((s) => s.status === "cancelled");
-      const erroredCount = done.sessions.filter((s) => s.status === "error").length;
+      const erroredSessions = done.sessions.filter((s) => s.status === "error");
+      const erroredCount = erroredSessions.length;
       const completedCount = done.sessions.filter((s) => s.status === "complete").length;
       // Surface failures: a run where every session failed is itself a failure
       // ('error' with a summary); a partial failure stays 'complete' but carries a
-      // summary so the failure is visible rather than silent.
-      const failureSummary =
-        erroredCount > 0
-          ? `${erroredCount} of ${done.sessions.length} session(s) failed — see per-session errors.`
+      // summary so the failure is visible rather than silent. Include the first
+      // session's actual error so the run-level message is actionable on its own.
+      let failureSummary: string | null = null;
+      if (erroredCount > 0) {
+        const first = erroredSessions[0]!;
+        const firstRecord = getSessionRecord(db.connection, first.sessionId);
+        const firstError = firstRecord
+          ? getLatestSessionErrorSummary(db.connection, firstRecord)
           : null;
+        const detail = firstError
+          ? ` First error (${first.sessionId}): ${firstError.message}`
+          : " See per-session errors.";
+        failureSummary = `${erroredCount} of ${done.sessions.length} session(s) failed.${detail}`;
+      }
       const status = hasCancelled
         ? "stopped"
         : completedCount === 0 && erroredCount > 0
@@ -1074,13 +1085,22 @@ export function getBenchmarkRunReport(
     const entries = (byCase.get(snapshot.sourceCaseId) ?? []).sort(
       (a, b) => a.repetition - b.repetition,
     );
-    const sessionMetrics: SessionMetrics[] = entries.map((entry) =>
-      deriveSessionMetrics(
+    const sessionMetrics: SessionMetrics[] = entries.map((entry) => {
+      const metrics = deriveSessionMetrics(
         entry.sessionId,
         listPartRecordsBySession(db.connection, entry.sessionId),
         listTurnRecordsBySession(db.connection, entry.sessionId),
-      ),
-    );
+      );
+      // Surface why a failed session failed (e.g. MCP init failure), so the
+      // report explains the failure instead of just showing empty metrics.
+      if (entry.status === "error") {
+        const record = getSessionRecord(db.connection, entry.sessionId);
+        metrics.error = record
+          ? getLatestSessionErrorSummary(db.connection, record)
+          : null;
+      }
+      return metrics;
+    });
     return buildCaseReport(
       snapshot.sourceCaseId,
       snapshot.prompt,

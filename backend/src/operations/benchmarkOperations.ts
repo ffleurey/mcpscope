@@ -220,6 +220,7 @@ function sessionMetricsToSnake(m: SessionMetrics) {
       total: m.tokens.total,
     },
     final_answer: m.finalAnswer,
+    ...(m.error ? { error: m.error } : {}),
   };
 }
 
@@ -848,6 +849,13 @@ export const benchmarkRunReportOutputSchema = {
               total: z.number().nullable(),
             }),
             final_answer: z.string().nullable(),
+            error: z
+              .object({
+                step_id: z.string().nullable(),
+                error_kind: z.string().nullable(),
+                message: z.string(),
+              })
+              .optional(),
           }),
         ),
       }),
