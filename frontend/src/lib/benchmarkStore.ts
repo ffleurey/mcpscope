@@ -381,6 +381,7 @@ export async function launchRun(
     repetitions?: number
     modelConfigId?: string
     mcpProfileIds?: string[]
+    maxToolRounds?: number
   },
 ): Promise<BenchmarkRun> {
   const { run } = await launchBackendRun(benchmarkId, input)

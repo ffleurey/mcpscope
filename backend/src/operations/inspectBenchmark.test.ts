@@ -78,6 +78,7 @@ function seed(): BackendDatabase {
       },
     ],
     repetitions: 1,
+    maxToolRounds: 50,
     sessions: [
       { sessionId: 'AB12', sourceCaseId: 'B-TEST.1', repetition: 0, status: 'complete', error: null },
     ],

@@ -144,7 +144,7 @@ describe("backend foundation", () => {
 
     const body = response.json();
     expect(body).toMatchObject({
-      version: 4,
+      version: 5,
       entities: [
         "session",
         "step",
@@ -173,7 +173,7 @@ describe("backend foundation", () => {
       ]),
     );
     expect(body.schema.meta).toMatchObject({
-      schema_version: "4",
+      schema_version: "5",
     });
   });
 

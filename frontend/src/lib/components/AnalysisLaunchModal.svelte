@@ -32,6 +32,7 @@
   let loadingSystemPrompt = $state(true)
   let systemPromptLoadId = 0
   let temperature = $state(0.5)
+  let maxToolRounds = $state<number | null>(null)
   let evaluationCriteriaText = $state('')
   let loadingTurns = $state(true)
   let hasInitializedModelSelection = $state(false)
@@ -151,6 +152,7 @@
       modelConfigId: selectedModelConfigId,
       systemPromptOverride: systemPromptText.trim() || undefined,
       temperature,
+      maxToolRounds: maxToolRounds && maxToolRounds > 0 ? Math.floor(maxToolRounds) : undefined,
       selectedToolNames: selectedToolNames.length > 0 ? selectedToolNames : undefined,
       onlyFailedToolCalls,
       evaluationCriteria: evaluationCriteria.length > 0 ? evaluationCriteria : undefined,
@@ -228,6 +230,26 @@
         max="2"
         step="0.05"
         bind:value={temperature}
+        disabled={$isLaunchingAnalysis}
+      />
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="analysis-max-tool-rounds"
+        >Max tool rounds <span class="optional">(optional)</span></label
+      >
+      <p class="field-hinttext">
+        Tool-call rounds the judge may use to inspect the target before it must answer (loop guard).
+        Leave blank for the default.
+      </p>
+      <input
+        id="analysis-max-tool-rounds"
+        class="field-input"
+        type="number"
+        min="1"
+        step="1"
+        placeholder="Default"
+        bind:value={maxToolRounds}
         disabled={$isLaunchingAnalysis}
       />
     </div>

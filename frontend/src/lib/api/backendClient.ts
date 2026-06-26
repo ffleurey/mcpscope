@@ -126,6 +126,7 @@ export function createPrimarySession(input: {
   model_config_id?: string
   mcp_profile_ids?: string[]
   compaction_strategy?: 'none' | 'strip-reasoning'
+  max_tool_rounds?: number
 }) {
   return request('/api/session-constructors/primary', {
     method: 'POST',
@@ -428,6 +429,7 @@ export function launchAnalysis(input: {
   additional_instructions?: string
   system_prompt_override?: string
   temperature?: number
+  max_tool_rounds?: number
   selected_tool_names?: string[]
   only_failed_tool_calls?: boolean
   evaluation_criteria?: string[]
@@ -606,6 +608,7 @@ export function launchRun(
     repetitions?: number
     modelConfigId?: string
     mcpProfileIds?: string[]
+    maxToolRounds?: number
   },
 ) {
   return request(`/api/benchmarks/${encodeURIComponent(benchmarkId)}/runs`, {

@@ -10,8 +10,8 @@ re-run it. Quality is measured in two complementary layers:
    each session against a per-case **rubric**, covering the qualitative answer-quality
    dimension that deterministic checks can't. This is **not** a separate judging engine: an
    evaluation is implemented as a `benchmark_evaluation` **analysis session** — the same
-   workflow framework that powers session analysis (pushed evidence + pull-on-demand via the
-   read-only `mcpscope_inspect` tool, structured output, scheduler-driven steps). The analysis
+   workflow framework that powers session analysis (pull-on-demand evidence via the read-only
+   `mcpscope_inspect` tool, structured output, scheduler-driven steps). The analysis
    subsystem *is* how benchmark evaluation works; see [Evaluation](#evaluation-llm-rubric-judging).
 
 mcpscope owns session/run/evaluation creation; you do not script it.
@@ -76,10 +76,11 @@ The backing tables (`benchmarks`, `benchmark_cases`, `benchmark_runs`,
   - `rubric` is the optional scored-criteria list used by LLM evaluation (empty by default).
 - **Run** (immutable snapshot spawned from a benchmark): `id, benchmarkId, benchmarkName,
   status, modelConfigId, mcpProfileIds[], cases[{sourceCaseId, name, prompt,
-  expectedToolsCalled[], expectedToolsNotCalled[], rubric[]}], repetitions,
+  expectedToolsCalled[], expectedToolsNotCalled[], rubric[]}], repetitions, maxToolRounds,
   sessions[{sessionId, sourceCaseId, repetition}], error, createdAt, updatedAt, startedAt,
   completedAt`. The case snapshot includes the rubric, so an evaluation always judges against
-  the rubric as it was at run time.
+  the rubric as it was at run time. `maxToolRounds` is the per-turn tool-call cap (loop guard)
+  snapshotted at launch and applied to every test session in the run.
 - **Evaluation** (one judging pass over a run): `id, runId, judgeModelConfigId, judgeTemperature,
   status, sessions[{runSessionId, analysisSessionId, status}], error, createdAt, updatedAt`. A
   thin grouping record holding the chosen judge config (model + temperature); it links each
@@ -162,7 +163,7 @@ surface). These camelCase routes are not part of the MCP operation catalog.
 | `POST` | `/api/benchmarks/:id/cases/from-session` | `{ sessionId, name? }` | `201 { case }` |
 | `PATCH` | `/api/benchmark-cases/:caseId` | `{ name?, prompt?, orderIndex?, expectedToolsCalled?, expectedToolsNotCalled?, rubric? }` | `{ case }` |
 | `DELETE` | `/api/benchmark-cases/:caseId` | — | `204` |
-| `POST` | `/api/benchmarks/:id/runs` | `{ caseIds?, repetitions?, modelConfigId?, mcpProfileIds? }` | `202 { run }` |
+| `POST` | `/api/benchmarks/:id/runs` | `{ caseIds?, repetitions?, modelConfigId?, mcpProfileIds?, maxToolRounds? }` | `202 { run }` |
 | `GET` | `/api/benchmark-runs/:runId` | — | `{ run, report }` |
 | `DELETE` | `/api/benchmark-runs/:runId` | — | `204` (also deletes the run's sessions + evaluations) |
 | `POST` | `/api/benchmark-runs/:runId/pause` | — | `{ run }` (holds before the next session) |
@@ -272,13 +273,14 @@ case **rubric**.
 a new judging engine — it launches one `benchmark_evaluation` **analysis session** per
 run-session, using the exact same framework as session analysis:
 
-- **Pushed evidence** — the judge session is bootstrapped with a deterministic `inspect`
-  summary of the session under test (prompt, tool calls, final answer), so the common case
-  needs no extra reads.
-- **Pull on demand** — the judge runs against the **read-only `/mcp/analysis` endpoint** and
-  can call `mcpscope_inspect` to pull more detail (a specific turn, a tool result's full
-  payload) when a criterion needs it. This pull-when-needed ability is the differentiator: the
-  judge sees a cheap summary by default but can dig into the exact evidence.
+- **Pull-on-demand evidence** — the judge is given the **id of the session under test** and
+  inspects it itself through the **read-only `/mcp/analysis` endpoint**, rather than having the
+  trace pre-injected into its context. It starts from the session-level `mcpscope_inspect`
+  summary — the prompt, the final answer, and each round's tool calls with size-capped
+  parameters — which settles most criteria, and pulls a specific turn or part only when a
+  criterion needs a detail the summary omits (a tool result's values / row count, or a
+  truncated parameter value). This keeps the judge's context lean and dog-foods the same
+  inspect surface a tester uses by hand.
 - **Structured output** — the single judge step returns a validated verdict and writes it as
   an artifact, exactly like other analysis steps; the scheduler drives the step.
 
@@ -297,6 +299,18 @@ per-criterion `{ id, points, note }` plus an optional overall `comment`. Notes m
 hierarchical IDs** they refer to (session/turn/tool-call), so every judgment is traceable. The
 backend clamps each awarded points to `[0, criterion.points]` and stores the verdict as an
 artifact on the judge session.
+
+**The rubric is the answer key — author it as one.** Each criterion should be a specific,
+checkable assertion with the correct values already baked in (counts, dates, thresholds,
+parameters), computed ahead of time from an independent oracle — not an open-ended question.
+The judge treats the values a criterion states as ground truth: it checks whether the session's
+final answer (and, for tool-use criteria, its recorded trace) matches them; it does **not**
+re-derive or second-guess them against the session's tool results. So a vague criterion ("is
+the total correct?") gives the judge nothing to check against, while a concrete one ("the final
+answer reports a February total of 267 kWh, ±1") is gradable. Two kinds of criteria are graded
+on their own terms: **answer-content** criteria (about what the final answer says) are settled
+from the final answer alone; **tool-use** criteria (which tools ran, with what parameters, how
+large the results were) are settled from the recorded trace.
 
 ### Guardrails
 

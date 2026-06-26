@@ -6,8 +6,21 @@ import { providerTypeValues } from "./configuration.js";
  * v4: run-control statuses (benchmark run/eval 'paused'/'stopped', per-session
  * 'cancelled') + run-session error field — a breaking CHECK-constraint change, so
  * an older DB must be recreated fresh (the project keeps no migration logic).
+ * v5: per-session tool-round budget — `benchmark_runs.max_tool_rounds` column; an
+ * older DB is missing the column and must be recreated fresh.
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
+
+/**
+ * Default per-session tool-round budget: the cap on tool-call rounds in a single
+ * turn before it fails, so a model stuck looping on tools terminates instead of
+ * running forever. Set once per session at creation (overridable in the create /
+ * benchmark-run / analyse dialogs — raise it for an agent that legitimately needs
+ * more rounds) and read at execution time from the session record, the single
+ * source of truth for the limit. `BACKEND_MAX_TOOL_ROUNDS` overrides this default
+ * deployment-wide for sessions that don't specify one.
+ */
+export const DEFAULT_MAX_TOOL_ROUNDS = 20;
 
 export const sessionTypeValues = ["primary", "session_analysis"] as const;
 export const parentKindValues = ["session", "benchmark"] as const;
@@ -205,6 +218,9 @@ export const sessionRecordSchema = z.object({
   toolDefinitionsTokens: z.number().int().nonnegative().nullable(),
   isContextExhausted: z.boolean(),
   compactionStrategy: compactionStrategySchema,
+  // Tool-round budget for this session's turns (see DEFAULT_MAX_TOOL_ROUNDS).
+  // Optional on the schema for forward/backward tolerance; reads default it.
+  maxToolRounds: z.number().int().positive().optional(),
   initError: sessionInitErrorSchema.nullable().optional(),
   analysisState: z.record(z.string(), z.unknown()).optional(),
 });
@@ -404,6 +420,9 @@ export const benchmarkRunRecordSchema = z.object({
   // Snapshot of the selected cases at launch.
   cases: z.array(benchmarkRunCaseSnapshotSchema),
   repetitions: z.number().int().positive(),
+  // Tool-round budget applied to every test session in this run (see
+  // DEFAULT_MAX_TOOL_ROUNDS); snapshotted at launch like model/MCP.
+  maxToolRounds: z.number().int().positive(),
   // Populated by the run coordinator as sessions are created.
   sessions: z.array(benchmarkRunSessionSchema).default([]),
   error: z.string().nullable().default(null),

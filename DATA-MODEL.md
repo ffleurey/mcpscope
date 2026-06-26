@@ -99,6 +99,7 @@ These tables describe the canonical properties of each node in the runtime tree.
 | `model` | `object` | Model metadata needed to understand the run |
 | `mcp?` | `object[]` | MCP server metadata when present; one entry per server |
 | `context_window` | `object` | Total available context and current usage |
+| `max_tool_rounds` | `number` | Per-session cap on tool-call rounds per turn before the turn fails (loop guard); set at creation, read at execution |
 | `setup` | `Setup` | Session-level setup node |
 | `turns` | `Turn[]` | Ordered turns in the session |
 

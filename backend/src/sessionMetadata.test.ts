@@ -29,6 +29,7 @@ import { importTraceBundle } from "./runtime/traceImport.js";
 import { insertJsonArtifact } from "./analysis/artifactRepository.js";
 import { SCHEMA_KEY } from "./analysis/schemas.js";
 import { stepTypeKey } from "./domain/executionModel.js";
+import { DEFAULT_MAX_TOOL_ROUNDS } from "./domain/model.js";
 import type { PartRecord } from "./domain/model.js";
 import type { StepPersistenceRecord } from "./domain/persistenceContract.js";
 
@@ -293,6 +294,29 @@ describe("session metadata repository", () => {
     // A session with no init failure round-trips with no initError.
     createSessionRecord(db.connection, makeSessionRecord({ id: "OKAY" }));
     expect(getSessionRecord(db.connection, "OKAY")!.initError ?? null).toBeNull();
+
+    db.connection.close();
+  });
+
+  it("persists an explicit maxToolRounds and defaults old rows on read", () => {
+    const config = makeTestConfig();
+    dataDir = config.dataDir;
+    fs.mkdirSync(dataDir, { recursive: true });
+    const db = openBackendDatabase(config.sqlitePath);
+
+    // Explicit budget round-trips through the params JSON.
+    createSessionRecord(
+      db.connection,
+      makeSessionRecord({ id: "BUDG", maxToolRounds: 7 }),
+    );
+    expect(getSessionRecord(db.connection, "BUDG")!.maxToolRounds).toBe(7);
+
+    // A record written without the field (an "old" row) reads back as the
+    // default rather than undefined — the backward-compat fallback on read.
+    createSessionRecord(db.connection, makeSessionRecord({ id: "OLDR" }));
+    expect(getSessionRecord(db.connection, "OLDR")!.maxToolRounds).toBe(
+      DEFAULT_MAX_TOOL_ROUNDS,
+    );
 
     db.connection.close();
   });

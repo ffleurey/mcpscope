@@ -396,6 +396,7 @@ export async function startSession(input: {
   modelConfigId?: string
   mcpProfileIds?: string[]
   compactionStrategy: 'none' | 'strip-reasoning'
+  maxToolRounds?: number
 }): Promise<void> {
   clearSessionError()
   isStartingSession.set(true)
@@ -452,6 +453,7 @@ export async function startSession(input: {
       model_config_id: selectedModelConfig.id,
       mcp_profile_ids: resolvedMcpIds,
       compaction_strategy: input.compactionStrategy,
+      ...(input.maxToolRounds !== undefined ? { max_tool_rounds: input.maxToolRounds } : {}),
     })
     // Show the chat view immediately (composer locked until initStatus = 'ready')
     activeChatId.set(session.id)
@@ -653,6 +655,7 @@ export async function launchAnalysis(input: {
   additionalInstructions?: string
   systemPromptOverride?: string
   temperature?: number
+  maxToolRounds?: number
   selectedToolNames?: string[]
   onlyFailedToolCalls?: boolean
   evaluationCriteria?: string[]
@@ -669,6 +672,7 @@ export async function launchAnalysis(input: {
       additional_instructions: input.additionalInstructions,
       system_prompt_override: input.systemPromptOverride,
       temperature: input.temperature,
+      max_tool_rounds: input.maxToolRounds,
       selected_tool_names: input.selectedToolNames,
       only_failed_tool_calls: input.onlyFailedToolCalls,
       evaluation_criteria: input.evaluationCriteria,

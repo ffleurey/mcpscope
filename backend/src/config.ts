@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { DEFAULT_MAX_TOOL_ROUNDS } from './domain/model.js'
 
 export interface BackendConfig {
   host: string
@@ -20,7 +21,9 @@ export function getBackendConfig(): BackendConfig {
   const corsOrigin = process.env.BACKEND_CORS_ORIGIN ?? true
   const dataDir = process.env.BACKEND_DATA_DIR ?? defaultDataDir
   const sqlitePath = process.env.BACKEND_SQLITE_PATH ?? path.join(dataDir, 'mcpscope.db')
-  const maxToolRounds = Number(process.env.BACKEND_MAX_TOOL_ROUNDS ?? '50')
+  // Deployment-wide default for new sessions that don't specify their own
+  // max_tool_rounds; the per-session value is the source of truth at execution.
+  const maxToolRounds = Number(process.env.BACKEND_MAX_TOOL_ROUNDS ?? String(DEFAULT_MAX_TOOL_ROUNDS))
   const staticDir = process.env.BACKEND_STATIC_DIR ?? null
   const appVersion = process.env.APP_VERSION ?? 'dev'
 

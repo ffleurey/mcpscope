@@ -5,6 +5,7 @@ import type {
   StepRecord,
   TurnRecord,
 } from "../domain/model.js";
+import { DEFAULT_MAX_TOOL_ROUNDS } from "../domain/model.js";
 import type { AnalysisWorkflowKind } from "../analysis/workflowKinds.js";
 import {
   formatSetupId,
@@ -579,6 +580,7 @@ export function resolveHierarchicalId(
       title: session.title,
       session_type: session.sessionType,
       compaction_strategy: session.compactionStrategy,
+      max_tool_rounds: session.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS,
       model: {
         id: session.modelProfileSnapshot.id,
         name: session.modelProfileSnapshot.name,

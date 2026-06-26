@@ -234,6 +234,7 @@ interface BenchmarkRunRow {
   mcp_profile_ids_json: string;
   cases_json: string;
   repetitions: number;
+  max_tool_rounds: number;
   sessions_json: string;
   error: string | null;
   created_at: number;
@@ -252,6 +253,7 @@ function mapBenchmarkRunRow(row: BenchmarkRunRow): BenchmarkRunRecord {
     mcpProfileIds: JSON.parse(row.mcp_profile_ids_json) as string[],
     cases: JSON.parse(row.cases_json) as BenchmarkRunRecord["cases"],
     repetitions: row.repetitions,
+    maxToolRounds: row.max_tool_rounds,
     sessions: JSON.parse(row.sessions_json) as BenchmarkRunSession[],
     error: row.error,
     createdAt: row.created_at,
@@ -269,11 +271,11 @@ export function createBenchmarkRun(
     .prepare(
       `INSERT INTO benchmark_runs (
          id, benchmark_id, benchmark_name, status, model_config_id, mcp_profile_ids_json,
-         cases_json, repetitions, sessions_json, error,
+         cases_json, repetitions, max_tool_rounds, sessions_json, error,
          created_at, updated_at, started_at, completed_at
        ) VALUES (
          @id, @benchmarkId, @benchmarkName, @status, @modelConfigId, @mcpProfileIds,
-         @cases, @repetitions, @sessions, @error,
+         @cases, @repetitions, @maxToolRounds, @sessions, @error,
          @createdAt, @updatedAt, @startedAt, @completedAt
        )`,
     )
@@ -337,6 +339,7 @@ function serializeRun(run: BenchmarkRunRecord) {
     mcpProfileIds: JSON.stringify(run.mcpProfileIds),
     cases: JSON.stringify(run.cases),
     repetitions: run.repetitions,
+    maxToolRounds: run.maxToolRounds,
     sessions: JSON.stringify(run.sessions),
     error: run.error,
     createdAt: run.createdAt,

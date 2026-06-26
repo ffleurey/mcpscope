@@ -15,6 +15,7 @@ import { listTurnRecordsBySession, updateTurnRecord } from '../persistence/repos
 import { createModelOnlyTurn, type ChatCompletionGateway } from './modelTurns.js'
 import { createToolEnabledTurn, type McpGateway } from './toolTurns.js'
 import type { SessionRecord, TurnRecord } from '../domain/model.js'
+import { DEFAULT_MAX_TOOL_ROUNDS } from '../domain/model.js'
 import type { TurnStreamEventSink } from './streamEvents.js'
 import {
   CONTAINER_TYPE,
@@ -136,7 +137,6 @@ export class ChatSession implements Session {
     private readonly db: BackendDatabase,
     private readonly lmGateway: ChatCompletionGateway,
     private readonly mcpGateway: McpGateway | null,
-    private readonly maxToolRounds: number,
     pendingTurn: TurnRecord,
     pendingUserContent: string,
     private readonly emitEvent?: TurnStreamEventSink,
@@ -201,7 +201,9 @@ export class ChatSession implements Session {
       this.db,
       this.lmGateway,
       this.mcpGateway,
-      this.maxToolRounds,
+      // The per-session tool-round budget is the source of truth (set at
+      // session creation); fall back to the default for older sessions.
+      this.sessionRecord.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS,
       this.emitEvent,
     )
 

@@ -20,6 +20,7 @@
   let selectedMcpProfileIds = $state<string[]>([])
   let selectedCaseIds = $state<string[]>([])
   let repetitions = $state(1)
+  let maxToolRounds = $state<number | null>(null)
   let launching = $state(false)
   let launchError = $state<AppError | null>(null)
   let hasInitializedModel = $state(false)
@@ -75,6 +76,7 @@
         repetitions: Math.max(1, Math.floor(repetitions || 1)),
         modelConfigId: selectedConfigId || undefined,
         mcpProfileIds: selectedMcpProfileIds,
+        maxToolRounds: maxToolRounds && maxToolRounds > 0 ? Math.floor(maxToolRounds) : undefined,
       })
       onClose()
       await selectRun(run.id)
@@ -162,6 +164,26 @@
         min="1"
         step="1"
         bind:value={repetitions}
+        disabled={launching}
+      />
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="run-max-tool-rounds"
+        >Max tool rounds <span class="optional">(optional)</span></label
+      >
+      <p class="field-hinttext">
+        Tool-call rounds per turn before a test session fails (loop guard). Applies to every session
+        in the run. Leave blank for the default.
+      </p>
+      <input
+        id="run-max-tool-rounds"
+        class="field-input"
+        type="number"
+        min="1"
+        step="1"
+        placeholder="Default"
+        bind:value={maxToolRounds}
         disabled={launching}
       />
     </div>

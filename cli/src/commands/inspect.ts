@@ -156,6 +156,7 @@ function renderSessionText(data: AnyRecord): void {
   }
   if (ctxWindow) out(`  context     ${ctxWindow['used'] ?? '?'} / ${ctxWindow['available'] ?? '?'} tokens`)
   if (data['compaction_strategy']) out(`  compaction  ${data['compaction_strategy']}`)
+  if (data['max_tool_rounds'] != null) out(`  tool rounds ${String(data['max_tool_rounds'])}`)
 
   const setup = data['setup'] as AnyRecord | undefined
   if (setup) {

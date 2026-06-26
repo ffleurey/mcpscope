@@ -405,6 +405,7 @@ export interface LaunchBenchmarkRunInput {
   repetitions?: number | undefined;
   modelConfigId?: string | undefined;
   mcpProfileIds?: string[] | undefined;
+  maxToolRounds?: number | undefined;
 }
 
 export function launchBenchmarkRun(
@@ -481,6 +482,7 @@ export function launchBenchmarkRun(
     mcpProfileIds: resolved.mcpProfileSnapshots.map((s) => s.id),
     cases: caseSnapshots,
     repetitions,
+    maxToolRounds: input.maxToolRounds ?? ctx.maxToolRounds,
     sessions: [],
     error: null,
     createdAt: ts,
@@ -738,6 +740,8 @@ async function runOneRepetition(
         modelProfileSnapshot: resolved.modelProfileSnapshot,
         mcpProfileSnapshots: resolved.mcpProfileSnapshots,
         compactionStrategy: "strip-reasoning",
+        // Every test session in the run shares the run's snapshotted budget.
+        maxToolRounds: run?.maxToolRounds,
         sessionType: "primary",
         parentKind: "benchmark",
         parentId: runId,

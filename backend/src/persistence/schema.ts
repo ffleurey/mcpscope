@@ -292,6 +292,7 @@ export function initializeSchema(connection: Database.Database): void {
       mcp_profile_ids_json TEXT NOT NULL DEFAULT '[]',
       cases_json TEXT NOT NULL DEFAULT '[]',
       repetitions INTEGER NOT NULL,
+      max_tool_rounds INTEGER NOT NULL DEFAULT 20, -- see DEFAULT_MAX_TOOL_ROUNDS; inserts always set it explicitly
       sessions_json TEXT NOT NULL DEFAULT '[]',
       error TEXT,
       created_at INTEGER NOT NULL,
@@ -472,6 +473,7 @@ export function validateSchema(connection: Database.Database): void {
       "mcp_profile_ids_json",
       "cases_json",
       "repetitions",
+      "max_tool_rounds",
       "sessions_json",
       "error",
       "created_at",

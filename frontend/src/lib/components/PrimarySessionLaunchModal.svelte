@@ -15,6 +15,7 @@
   let selectedConfigId = $state('')
   let selectedMcpProfileIds = $state<string[]>([])
   let compactionStrategy = $state<'strip-reasoning' | 'none'>('strip-reasoning')
+  let maxToolRounds = $state<number | null>(null)
   let sessionId = $state('')
   let hasInitializedModelSelection = $state(false)
   let hasInitializedMcpSelection = $state(false)
@@ -48,6 +49,7 @@
       modelConfigId: selectedConfigId || undefined,
       mcpProfileIds: selectedMcpProfileIds,
       compactionStrategy,
+      maxToolRounds: maxToolRounds && maxToolRounds > 0 ? Math.floor(maxToolRounds) : undefined,
     })
   }
 
@@ -163,6 +165,25 @@
           onselect={(v) => (compactionStrategy = v as 'strip-reasoning' | 'none')}
         />
       </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="primary-max-tool-rounds"
+        >Max tool rounds <span class="optional">(optional)</span></label
+      >
+      <p class="field-hinttext">
+        Cap on tool-call rounds per turn before it fails — a loop guard. Leave blank for the default.
+      </p>
+      <input
+        id="primary-max-tool-rounds"
+        class="field-input"
+        type="number"
+        min="1"
+        step="1"
+        placeholder="Default"
+        bind:value={maxToolRounds}
+        disabled={$isStartingSession}
+      />
     </div>
 
     <div class="form-actions">

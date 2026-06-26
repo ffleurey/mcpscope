@@ -181,6 +181,7 @@ export function registerBenchmarkRoutes({
         repetitions: z.number().int().positive().optional(),
         modelConfigId: z.string().optional(),
         mcpProfileIds: z.array(z.string()).optional(),
+        maxToolRounds: z.number().int().positive().optional(),
       })
       .parse(request.body ?? {});
     try {

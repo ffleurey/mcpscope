@@ -39,6 +39,7 @@ import type {
   TurnRecord,
   StepRecord,
 } from '../domain/model.js'
+import { DEFAULT_MAX_TOOL_ROUNDS } from '../domain/model.js'
 import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 import { validateSessionParent } from '../domain/sessionValidation.js'
 
@@ -102,6 +103,7 @@ type V2SessionParams = {
   modelProfileSnapshot: ModelProfileSnapshot
   mcpProfileSnapshots: McpProfileSnapshot[]
   compactionStrategy: SessionRecord['compactionStrategy']
+  maxToolRounds?: number | undefined
 }
 
 type V2SessionState = {
@@ -117,6 +119,7 @@ function buildSessionParams(session: SessionRecord): string {
     modelProfileSnapshot: session.modelProfileSnapshot,
     mcpProfileSnapshots: session.mcpProfileSnapshots,
     compactionStrategy: session.compactionStrategy,
+    maxToolRounds: session.maxToolRounds,
   }
   return JSON.stringify(params)
 }
@@ -169,6 +172,8 @@ function mapV2SessionRow(row: V2SessionRow): SessionRecord {
     toolDefinitionsTokens: state.toolDefinitionsTokens ?? null,
     isContextExhausted: state.isContextExhausted ?? false,
     compactionStrategy: params.compactionStrategy,
+    // Old sessions predate the per-session budget — fall back to the default.
+    maxToolRounds: params.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS,
     initError: state.initError ?? null,
     analysisState: row.analysis_state_json ? (JSON.parse(row.analysis_state_json) as Record<string, unknown>) : undefined,
     createdAt: row.created_at,

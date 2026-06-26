@@ -10,6 +10,8 @@
  */
 
 import type { PartRecord } from '../domain/model.js'
+import { DEFAULT_MAX_TOOL_ROUNDS } from '../domain/model.js'
+import { getSessionRecord } from '../persistence/repository.js'
 import type { BackendDatabase } from '../persistence/db.js'
 import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
@@ -67,6 +69,12 @@ export async function runAnalysisTurn(
   emitEvent?: TurnStreamEventSink,
   ownerStepId?: string | null,
 ): Promise<AnalysisTurnResult> {
+  // The analysis session's own tool-round budget is the source of truth. An
+  // interactive judge inspects the target over several rounds before answering,
+  // so raise it at launch (analyse dialog) when the default is too tight.
+  const session = getSessionRecord(database.connection, analysisSessionId)
+  const maxToolRounds = session?.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS
+
   const result = await createToolEnabledTurn(
     database,
     lmGateway,
@@ -74,7 +82,7 @@ export async function runAnalysisTurn(
     {
       sessionId: analysisSessionId,
       userContent,
-      maxToolRounds: 50,
+      maxToolRounds,
       ownerStepId,
     },
     emitEvent,
