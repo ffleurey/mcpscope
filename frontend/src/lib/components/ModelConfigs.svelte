@@ -301,7 +301,7 @@
                 >{connectionName(config.connectionId)}</td
               >
               <td title={config.modelKey}>{config.modelDisplayName}</td>
-              <td class="col-num">{config.temperature}</td>
+              <td class="col-num">{config.temperature ?? 'Default'}</td>
               <td>{config.reasoning ?? '—'}</td>
               <td
                 title={loadedCtx

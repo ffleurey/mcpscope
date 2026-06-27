@@ -397,7 +397,7 @@ export async function launchRun(
 export async function launchEvaluation(
   runId: string,
   judgeModelConfigId: string,
-  temperature = 0,
+  temperature: number | null = 0,
 ): Promise<void> {
   await launchBackendEvaluation(runId, { judgeModelConfigId, temperature })
   if (get(activeRunId) !== runId) return

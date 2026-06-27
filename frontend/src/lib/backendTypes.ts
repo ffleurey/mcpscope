@@ -21,7 +21,8 @@ export const modelConfigSchema = z.object({
   modelKey: z.string(),
   modelDisplayName: z.string(),
   systemPrompt: z.string(),
-  temperature: z.number(),
+  // Optional: unset means "use the provider default" (request omits temperature).
+  temperature: z.number().optional(),
   reasoning: z.enum(['on', 'off']).optional(),
   contextSize: z.number().int().positive().optional(),
   createdAt: z.number().int().nonnegative(),
@@ -131,7 +132,7 @@ export const modelProfileSnapshotSchema = z.object({
   modelKey: z.string(),
   modelDisplayName: z.string(),
   systemPrompt: z.string(),
-  temperature: z.number(),
+  temperature: z.number().nullable().optional(),
   reasoning: z.enum(['on', 'off']).nullable(),
   providerType: providerTypeSchema.nullable().optional(),
   contextSize: z.number().int().positive().nullable().optional(),
@@ -775,7 +776,8 @@ export const benchmarkEvaluationSchema = z.object({
   id: z.string(),
   runId: z.string(),
   judgeModelConfigId: z.string(),
-  judgeTemperature: z.number().default(0),
+  // null => the judge ran at the provider's own default temperature.
+  judgeTemperature: z.number().nullable().default(0),
   status: z.string(),
   error: z.string().nullable().default(null),
   sessions: z.array(evaluationSessionRefSchema).default([]),

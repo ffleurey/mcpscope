@@ -660,7 +660,7 @@ export async function launchAnalysis(input: {
   modelConfigId?: string
   additionalInstructions?: string
   systemPromptOverride?: string
-  temperature?: number
+  temperature?: number | null
   maxToolRounds?: number
   selectedToolNames?: string[]
   onlyFailedToolCalls?: boolean

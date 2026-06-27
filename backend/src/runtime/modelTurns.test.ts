@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createSession, createModelOnlyTurn } from './modelTurns.js'
+import { createSession, createModelOnlyTurn, sessionTemperatureBody } from './modelTurns.js'
 import { openBackendDatabase } from '../persistence/db.js'
 import { insertStepRecord } from '../persistence/repository.js'
 import { stepTypeKey } from '../domain/executionModel.js'
@@ -269,5 +269,27 @@ describe('model-only turn runtime', () => {
     expect(result.parts[0]?.id).toBe(`${session.id}.4W.1T.1.1-U`)
 
     db.connection.close()
+  })
+})
+
+describe('sessionTemperatureBody', () => {
+  // The snapshot is the only field read; cast a minimal stub for this pure fn.
+  function withTemperature(temperature: number | null | undefined) {
+    return { modelProfileSnapshot: { temperature } } as unknown as Parameters<
+      typeof sessionTemperatureBody
+    >[0]
+  }
+
+  it('omits temperature when unset (null or undefined) so the provider default is used', () => {
+    expect(sessionTemperatureBody(withTemperature(null))).toEqual({})
+    expect(sessionTemperatureBody(withTemperature(undefined))).toEqual({})
+  })
+
+  it('includes 0 — a valid deterministic temperature, not an "unset" sentinel', () => {
+    expect(sessionTemperatureBody(withTemperature(0))).toEqual({ temperature: 0 })
+  })
+
+  it('includes a configured temperature', () => {
+    expect(sessionTemperatureBody(withTemperature(0.7))).toEqual({ temperature: 0.7 })
   })
 })

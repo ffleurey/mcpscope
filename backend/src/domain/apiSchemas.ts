@@ -15,7 +15,8 @@ export const modelProfileSnapshotInputSchema = z.object({
   modelKey: z.string(),
   modelDisplayName: z.string(),
   systemPrompt: z.string(),
-  temperature: z.number(),
+  // null/undefined => use the provider default (omit `temperature` from the request).
+  temperature: z.number().nullable().optional(),
   reasoning: z.enum(['on', 'off']).nullable().default(null),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),

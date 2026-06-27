@@ -158,6 +158,14 @@ describe('benchmark evaluation grouping CRUD', () => {
     expect(listBenchmarkEvaluationsByRun(d.connection, 'R-TEST').map((e) => e.id)).toEqual(['E-TEST'])
   })
 
+  it('round-trips a null judge temperature (provider default)', () => {
+    const d = openTempDb()
+    seedRun(d.connection)
+    createBenchmarkEvaluation(d.connection, evaluation({ judgeTemperature: null }))
+
+    expect(getBenchmarkEvaluation(d.connection, 'E-TEST')?.judgeTemperature).toBeNull()
+  })
+
   it('updates status + session entries', () => {
     const d = openTempDb()
     seedRun(d.connection)

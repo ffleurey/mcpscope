@@ -11,6 +11,7 @@ import {
   estimateTokensFromText,
 } from "../services/provider/index.js";
 import type { ChatCompletionGateway } from "./modelTurns.js";
+import { sessionTemperatureBody } from "./modelTurns.js";
 
 export type LmToolDefinition = {
   type: "function";
@@ -35,9 +36,9 @@ function buildProbeBody(
 ): Record<string, unknown> {
   return {
     model: session.modelProfileSnapshot.modelKey,
-    temperature: session.modelProfileSnapshot.temperature,
     messages,
     ...(tools && tools.length > 0 ? { tools } : {}),
+    ...sessionTemperatureBody(session),
     ...buildReasoningParams(
       session.modelProfileSnapshot.reasoning,
       session.modelProfileSnapshot.connectionBaseUrl,

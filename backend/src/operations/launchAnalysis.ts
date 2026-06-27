@@ -49,8 +49,11 @@ export const launchAnalysisInputSchema = z.object({
   additional_instructions: z.string().optional(),
   /** Optional full system prompt override shown and editable in the launch dialog. */
   system_prompt_override: z.string().optional(),
-  /** Optional sampling temperature override; defaults to 0.5. */
-  temperature: z.number().optional(),
+  /**
+   * Optional sampling temperature override. Omit to use the analysis default
+   * (0.5); pass null to send no temperature so the provider uses its own default.
+   */
+  temperature: z.number().nullable().optional(),
   /**
    * Max tool-call rounds per analysis turn before it fails (loop guard). A
    * tool-enabled judge inspects the target over several rounds, so this is
@@ -121,7 +124,9 @@ export async function executeAnalysisLaunch(
   const analysisGoal = normalizeAnalysisGoal(input.analysis_goal);
   const additionalInstructions = input.additional_instructions?.trim() ?? "";
   const systemPromptOverride = input.system_prompt_override?.trim() ?? "";
-  const temperature = input.temperature ?? 0.5;
+  // undefined => keep the analysis default (0.5); explicit null => provider
+  // default (snapshot omits temperature). A number is used as-is (0 is valid).
+  const temperature = input.temperature === undefined ? 0.5 : input.temperature;
   const selectedToolNames = [
     ...new Set(
       (input.selected_tool_names ?? [])
