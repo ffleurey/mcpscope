@@ -31,6 +31,7 @@ export interface CreateInput {
   compaction?: "none" | "strip-reasoning";
   model_config_id?: string;
   mcp_profile_ids?: string[];
+  max_tool_rounds?: number;
 }
 
 export interface CreateResult {
@@ -43,6 +44,7 @@ export interface CreateResult {
     model: { id: string; name: string };
     mcp: { id: string; name: string }[];
     compaction_strategy: string;
+    max_tool_rounds: number | null;
     created_at: number;
     updated_at: number;
   };

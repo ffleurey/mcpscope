@@ -281,6 +281,7 @@ export function registerSessionRoutes(deps: RouteDeps): void {
         compactionStrategy: z.enum(["none", "strip-reasoning"]).optional(),
         modelConfigId: z.string().optional(),
         mcpProfileIds: z.array(z.string()).optional(),
+        maxToolRounds: z.number().int().positive().optional(),
       })
       .parse(request.body);
     try {
@@ -295,6 +296,9 @@ export function registerSessionRoutes(deps: RouteDeps): void {
           : {}),
         ...(body.mcpProfileIds !== undefined
           ? { mcp_profile_ids: body.mcpProfileIds }
+          : {}),
+        ...(body.maxToolRounds !== undefined
+          ? { max_tool_rounds: body.maxToolRounds }
           : {}),
       });
       reply.code(201);

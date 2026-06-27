@@ -143,6 +143,9 @@ export async function cliCreate(
     ...(input.mcp_profile_ids !== undefined
       ? { mcpProfileIds: input.mcp_profile_ids }
       : {}),
+    ...(input.max_tool_rounds !== undefined
+      ? { maxToolRounds: input.max_tool_rounds }
+      : {}),
   });
 }
 
@@ -304,6 +307,7 @@ export async function cliBenchmarkRun(
     repetitions?: number;
     model_config_id?: string;
     mcp_profile_ids?: string[];
+    max_tool_rounds?: number;
   },
 ): Promise<BenchmarkRunLaunchResult> {
   return post<BenchmarkRunLaunchResult>(
