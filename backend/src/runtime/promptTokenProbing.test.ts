@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { probeRequestPromptTokens } from "./promptTokenProbing.js";
+import { ProviderResponseError } from "../services/openai/client.js";
 import type { ChatCompletionGateway } from "./modelTurns.js";
 import type { SessionRecord } from "../domain/model.js";
 import type { ApiMessage } from "../domain/selectors.js";
@@ -26,18 +27,23 @@ const messages: ApiMessage[] = [
   { role: "user", content: "What is the weather in Oslo?" } as ApiMessage,
 ];
 
-const throwingGateway: ChatCompletionGateway = {
-  async probePromptTokensDetailed() {
-    throw new Error(
-      "Completion failed: 400 Bad Request: max_tokens or model output limit was reached",
-    );
-  },
-} as unknown as ChatCompletionGateway;
+function gatewayThrowing(err: unknown): ChatCompletionGateway {
+  return {
+    async probePromptTokensDetailed() {
+      throw err;
+    },
+  } as unknown as ChatCompletionGateway;
+}
+
+const reject400 = new ProviderResponseError(
+  400,
+  "Completion failed: 400 Bad Request: max_tokens or model output limit was reached",
+);
 
 describe("probeRequestPromptTokens — probe failure handling", () => {
   it("falls back to an estimate (does not throw) for OpenRouter when the probe 400s", async () => {
     const result = await probeRequestPromptTokens(
-      throwingGateway,
+      gatewayThrowing(reject400),
       sessionWithProvider("openrouter"),
       messages,
     );
@@ -46,10 +52,28 @@ describe("probeRequestPromptTokens — probe failure handling", () => {
     expect(result as number).toBeGreaterThan(0);
   });
 
+  it("re-throws non-400 errors (e.g. auth/transport) even for OpenRouter", async () => {
+    // A 401 or a network error must surface, not be silently estimated away.
+    await expect(
+      probeRequestPromptTokens(
+        gatewayThrowing(new ProviderResponseError(401, "Unauthorized")),
+        sessionWithProvider("openrouter"),
+        messages,
+      ),
+    ).rejects.toThrow(/Unauthorized/);
+    await expect(
+      probeRequestPromptTokens(
+        gatewayThrowing(new Error("fetch failed")),
+        sessionWithProvider("openrouter"),
+        messages,
+      ),
+    ).rejects.toThrow(/fetch failed/);
+  });
+
   it("re-throws for non-OpenRouter providers (preserves fail-fast)", async () => {
     await expect(
       probeRequestPromptTokens(
-        throwingGateway,
+        gatewayThrowing(reject400),
         sessionWithProvider("lmstudio"),
         messages,
       ),
@@ -58,7 +82,7 @@ describe("probeRequestPromptTokens — probe failure handling", () => {
 
   it("returns null for an empty message list without calling the gateway", async () => {
     const result = await probeRequestPromptTokens(
-      throwingGateway,
+      gatewayThrowing(reject400),
       sessionWithProvider("openrouter"),
       [],
     );

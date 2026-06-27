@@ -91,7 +91,7 @@ Key design decisions:
 | Provider | Probe result | Fallback |
 |----------|-------------|----------|
 | **LM Studio** | Returns `usage.prompt_tokens` from response | None needed |
-| **OpenRouter** | Non-streaming responses don't include `usage` | Estimates from text + tool definitions length using `estimateTokensFromText` |
+| **OpenRouter** | Non-streaming responses don't include `usage` | Estimates from text + tool definitions length using `estimateTokensFromText`. Also degrades to this estimate when the probe itself is rejected with HTTP 400 (OpenRouter/OpenAI reject the `max_tokens: 1` probe when the prompt would trigger a tool call). Non-400 errors (auth/transport/5xx) still propagate. |
 | **Ollama** | Same as LM Studio format | None needed |
 
 ### Reasoning token handling

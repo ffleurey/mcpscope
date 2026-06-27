@@ -4,6 +4,7 @@ import type { ApiMessage } from "../domain/selectors.js";
 import type { RawExchangeRecord, SessionRecord } from "../domain/model.js";
 import {
   probePromptTokens,
+  ProviderResponseError,
   type PromptProbeResult,
 } from "../services/openai/client.js";
 import {
@@ -95,11 +96,12 @@ function makeProbeRawExchangeRecords(
 }
 
 /**
- * Estimate prompt tokens from message + tool-definition text. Only OpenRouter
- * has an estimate fallback today (its non-streaming responses often omit usage);
- * other providers return null so the count shows as unknown rather than fabricated.
+ * Estimate prompt tokens from message + tool-definition text for OpenRouter,
+ * whose non-streaming responses often omit usage (and whose probe can be
+ * rejected outright). Returns null for other providers, so their counts show as
+ * unknown rather than fabricated.
  */
-function estimatePromptTokensFallback(
+function estimatePromptTokensForOpenRouter(
   session: SessionRecord,
   messages: ApiMessage[],
   tools?: LmToolDefinition[],
@@ -116,6 +118,15 @@ function estimatePromptTokensFallback(
       ? JSON.stringify(tools.map((t) => t.function))
       : "";
   return estimateTokensFromText(messageText + toolsText);
+}
+
+/**
+ * True for an upstream HTTP 400 — a semantic rejection of the probe request
+ * itself (e.g. `max_tokens: 1` truncating a tool call). Transport/auth/5xx
+ * errors return false so they keep propagating.
+ */
+function isProbeRejection(err: unknown): boolean {
+  return err instanceof ProviderResponseError && err.status === 400;
 }
 
 export async function probeRequestPromptTokens(
@@ -141,13 +152,14 @@ export async function probeRequestPromptTokens(
         body,
       );
     } catch (err) {
-      // A token-accounting probe must never abort session init or a turn.
       // OpenRouter/OpenAI reject the `max_tokens: 1` probe with a 400 ("max_tokens
       // ... reached") when the prompt would trigger a tool call, so any tool-using
-      // OpenRouter session would otherwise fail. Degrade to an estimate there;
-      // other providers keep the previous fail-fast behavior.
-      if (provider === "openrouter") {
-        return estimatePromptTokensFallback(session, messages, tools);
+      // OpenRouter session would otherwise fail on this token-accounting probe.
+      // Degrade to an estimate ONLY for that semantic 400 — transport/auth/5xx
+      // errors (and all non-OpenRouter providers) still fail fast so real
+      // connection problems surface at init.
+      if (provider === "openrouter" && isProbeRejection(err)) {
+        return estimatePromptTokensForOpenRouter(session, messages, tools);
       }
       throw err;
     }
@@ -168,7 +180,7 @@ export async function probeRequestPromptTokens(
 
     // Fallback for providers like OpenRouter whose non-streaming responses
     // don't include usage.
-    return estimatePromptTokensFallback(session, messages, tools);
+    return estimatePromptTokensForOpenRouter(session, messages, tools);
   }
 
   const runFallbackProbe = chatCompletionGateway.probePromptTokens
@@ -187,8 +199,8 @@ export async function probeRequestPromptTokens(
   try {
     return await runFallbackProbe();
   } catch (err) {
-    if (provider === "openrouter") {
-      return estimatePromptTokensFallback(session, messages, tools);
+    if (provider === "openrouter" && isProbeRejection(err)) {
+      return estimatePromptTokensForOpenRouter(session, messages, tools);
     }
     throw err;
   }

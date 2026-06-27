@@ -397,7 +397,9 @@ export async function launchRun(
 export async function launchEvaluation(
   runId: string,
   judgeModelConfigId: string,
-  temperature: number | null = 0,
+  // null => provider default; the backend applies DEFAULT_JUDGE_TEMPERATURE only
+  // when the field is omitted entirely.
+  temperature: number | null = null,
 ): Promise<void> {
   await launchBackendEvaluation(runId, { judgeModelConfigId, temperature })
   if (get(activeRunId) !== runId) return
