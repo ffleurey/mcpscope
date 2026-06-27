@@ -198,10 +198,7 @@ export const sessionRecordSchema = z.object({
   toolDefinitionsTokens: z.number().int().nonnegative().nullable(),
   isContextExhausted: z.boolean(),
   compactionStrategy: compactionStrategyWithFallbackSchema,
-  initError: z
-    .object({ errorKind: z.string(), message: z.string() })
-    .nullable()
-    .optional(),
+  initError: z.object({ errorKind: z.string(), message: z.string() }).nullable().optional(),
 })
 
 // Slim summary returned by GET /api/sessions.

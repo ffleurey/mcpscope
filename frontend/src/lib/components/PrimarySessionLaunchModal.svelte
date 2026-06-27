@@ -172,7 +172,8 @@
         >Max tool rounds <span class="optional">(optional)</span></label
       >
       <p class="field-hinttext">
-        Cap on tool-call rounds per turn before it fails — a loop guard. Leave blank for the default.
+        Cap on tool-call rounds per turn before it fails — a loop guard. Leave blank for the
+        default.
       </p>
       <input
         id="primary-max-tool-rounds"
