@@ -51,6 +51,12 @@ function renderPartContent(part: AnyRecord, indent: string): void {
     out(`${indent}${tools.join(', ')}`)
   }
 
+  // tool_call parameters in nested (session/turn) views — compact one-liner
+  const toolArguments = part['tool_arguments']
+  if (toolArguments !== undefined && part['tool_payload'] === undefined) {
+    out(`${indent}${JSON.stringify(toolArguments)}`)
+  }
+
   const toolPayload = part['tool_payload'] as AnyRecord | undefined
   if (toolPayload) {
     const call = toolPayload['call']
@@ -93,25 +99,36 @@ function renderGenericStep(step: AnyRecord): void {
   const sourceTurn = step['source_turn_number'] != null ? `  after turn ${String(step['source_turn_number'])}` : ''
   out(`${id}  ${type}${status}${strategy}${sourceTurn}`)
 
-  const strippedPartIds = Array.isArray(step['stripped_part_ids']) ? step['stripped_part_ids'] as unknown[] : []
-  if (strippedPartIds.length > 0) {
-    out('  stripped parts')
-    for (const partId of strippedPartIds) {
-      out(`    ${String(partId)}`)
-    }
-  }
-
+  // Compaction: prefer the richer `stripped_parts` (full mode) over the bare
+  // `stripped_part_ids`. Render one line per part and the (usually shared) reason
+  // just once instead of repeating the boilerplate per part.
   const strippedParts = Array.isArray(step['stripped_parts']) ? step['stripped_parts'] as AnyRecord[] : []
+  const strippedPartIds = Array.isArray(step['stripped_part_ids']) ? step['stripped_part_ids'] as unknown[] : []
   if (strippedParts.length > 0) {
-    out('  stripped details')
+    const total = strippedParts.reduce((sum, p) => sum + (p['token_count'] != null ? Number(p['token_count']) : 0), 0)
+    out(`  stripped ${strippedParts.length} parts (${total} tokens)`)
     for (const strippedPart of strippedParts) {
       const strippedId = String(strippedPart['id'] ?? '')
       const strippedType = strippedPart['type'] ? `  ${String(strippedPart['type'])}` : ''
       const strippedTokens = strippedPart['token_count'] != null ? `  (${Number(strippedPart['token_count'])} tokens)` : ''
       out(`    ${strippedId}${strippedType}${strippedTokens}`)
-      if (typeof strippedPart['reason'] === 'string') {
-        out(`      ${strippedPart['reason']}`)
+    }
+    const reasons = new Set(
+      strippedParts.map(p => (typeof p['reason'] === 'string' ? p['reason'] : '')).filter(Boolean),
+    )
+    if (reasons.size === 1) {
+      out(`  reason  ${[...reasons][0]}`)
+    } else {
+      for (const strippedPart of strippedParts) {
+        if (typeof strippedPart['reason'] === 'string') {
+          out(`    ${String(strippedPart['id'] ?? '')}  ${strippedPart['reason']}`)
+        }
       }
+    }
+  } else if (strippedPartIds.length > 0) {
+    out(`  stripped ${strippedPartIds.length} parts`)
+    for (const partId of strippedPartIds) {
+      out(`    ${String(partId)}`)
     }
   }
 
@@ -139,6 +156,7 @@ function renderSessionText(data: AnyRecord): void {
   }
   if (ctxWindow) out(`  context     ${ctxWindow['used'] ?? '?'} / ${ctxWindow['available'] ?? '?'} tokens`)
   if (data['compaction_strategy']) out(`  compaction  ${data['compaction_strategy']}`)
+  if (data['max_tool_rounds'] != null) out(`  tool rounds ${String(data['max_tool_rounds'])}`)
 
   const setup = data['setup'] as AnyRecord | undefined
   if (setup) {

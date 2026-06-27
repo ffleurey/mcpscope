@@ -5,6 +5,7 @@ import type {
   StepRecord,
   TurnRecord,
 } from "../domain/model.js";
+import { DEFAULT_MAX_TOOL_ROUNDS } from "../domain/model.js";
 import type { AnalysisWorkflowKind } from "../analysis/workflowKinds.js";
 import {
   formatSetupId,
@@ -96,6 +97,45 @@ function mergedToolCallTokens(
   return all.reduce((sum, p) => sum + (p.tokens.count ?? 0), 0);
 }
 
+/**
+ * Max characters kept for a single tool-call argument value in nested (overview)
+ * inspect views. Caps individual oversized values — e.g. a tool fed a large text
+ * blob — while keeping every parameter key and short value intact, so tool-use
+ * criteria stay checkable from the overview. A direct part inspect returns the
+ * full, untruncated arguments.
+ */
+export const TOOL_ARG_VALUE_MAX_CHARS = 80;
+
+function capArgValue(value: unknown): unknown {
+  const serialized = typeof value === "string" ? value : JSON.stringify(value);
+  if (serialized != null && serialized.length > TOOL_ARG_VALUE_MAX_CHARS) {
+    return `${serialized.slice(0, TOOL_ARG_VALUE_MAX_CHARS)}… [${serialized.length} chars]`;
+  }
+  return value;
+}
+
+/**
+ * Compact, size-capped view of a tool call's arguments for nested inspect nodes.
+ * Returns the parsed object with each value capped; falls back to the (capped)
+ * raw string when the arguments aren't a JSON object.
+ */
+export function summarizeToolArguments(argsString: string | undefined): unknown {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(argsString ?? "{}");
+  } catch {
+    return capArgValue(argsString ?? "");
+  }
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      out[key] = capArgValue(value);
+    }
+    return out;
+  }
+  return capArgValue(parsed);
+}
+
 function buildPartNode(
   part: PartRecord,
   resultParts: PartRecord[],
@@ -160,7 +200,13 @@ function buildPartNode(
             : {}
         : {};
       base.tool_payload = { call: parsedArgs, result: toolResult };
-    } else if (!isToolCall) {
+    } else if (isToolCall) {
+      // Nested overview (session/turn/round): include the call parameters with
+      // per-value size caps so tool-use criteria are checkable without drilling
+      // into each call. Drill into the part directly for full args + result.
+      const callJson = part.payload.json as { arguments?: string } | null;
+      base.tool_arguments = summarizeToolArguments(callJson?.arguments);
+    } else {
       const includeContent =
         isDirectPartLookup ||
         part.partType === "user-message" ||
@@ -487,7 +533,15 @@ export function resolveHierarchicalId(
     const workflowKind = (analysisState?.workflow_kind ??
       null) as AnalysisWorkflowKind | null;
     const workflowLabel = getAnalysisWorkflowLabel(workflowKind);
-    const latestError = getLatestAnalysisDiagnosticSummary(artifacts);
+    const latestError =
+      getLatestAnalysisDiagnosticSummary(artifacts) ??
+      (session.initError
+        ? {
+            step_id: null,
+            error_kind: session.initError.errorKind,
+            message: session.initError.message,
+          }
+        : null);
 
     const directTurnNodes = directTurns.map((turn) => {
       const turnRounds = allRounds
@@ -526,6 +580,7 @@ export function resolveHierarchicalId(
       title: session.title,
       session_type: session.sessionType,
       compaction_strategy: session.compactionStrategy,
+      max_tool_rounds: session.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS,
       model: {
         id: session.modelProfileSnapshot.id,
         name: session.modelProfileSnapshot.name,

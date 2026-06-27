@@ -68,6 +68,7 @@ No inputs.
 | `compaction`     | `"none"` \| `"strip-reasoning"`   |          | Compaction strategy |
 | `model_config_id`| string                            |          | Optional model config ID to use instead of the default |
 | `mcp_profile_ids`| string[]                          |          | Optional list of MCP profile IDs; when provided, replaces the default-enabled selection |
+| `max_tool_rounds`| number                            |          | Max tool-call rounds per turn before the turn fails (loop guard). Defaults to the backend default (`BACKEND_MAX_TOOL_ROUNDS`) |
 
 ### `mcpscope_send`
 
@@ -162,6 +163,7 @@ Edit an existing case; only the fields you pass change. Returns the updated `{ c
 | `repetitions`     | number   |          | Times to run each case (default: 1) |
 | `model_config_id` | string   |          | Model config to use (default: the configured default) |
 | `mcp_profile_ids` | string[] |          | MCP profiles to enable (default: the configured defaults) |
+| `max_tool_rounds` | number   |          | Max tool-call rounds per turn for every test session in the run (loop guard). Default: the backend default |
 
 Returns the run immediately with `status: "pending"`; poll `mcpscope_benchmark_run_status` for progress and `mcpscope_benchmark_run_report` for the full report.
 
@@ -249,8 +251,10 @@ http://localhost:3030/mcp/analysis
 
 This endpoint is backend-owned and used by `session_analysis` sessions — including the
 `benchmark_evaluation` judge sessions that back `mcpscope_benchmark_evaluate`, since benchmark
-evaluation *is* an analysis workflow. The judge is pushed an inspect summary and can pull more
-detail through this endpoint on demand.
+evaluation *is* an analysis workflow. The judge is given the target session ID and inspects it
+through this endpoint on demand — starting from the inspect summary (request, final answer, and
+per-round tool calls with size-capped parameters) and pulling specific parts only when a criterion
+needs more detail.
 
 Its tool surface is intentionally restricted to:
 

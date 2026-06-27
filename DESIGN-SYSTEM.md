@@ -174,8 +174,10 @@ Use the shared **`DialogShell.svelte`** — never hand-roll `<dialog>`. Backdrop
 `--bg-surface` surface, 8px radius, header & body `0.75rem 1rem`, `min(720px,95vw)` / 85vh,
 draggable header. **Separation from the dark background:** a `--amber-dim` border (marks the active/
 focused surface — a sanctioned use of the amber accent) plus an elevation shadow
-(`0 10px 40px rgba(0,0,0,0.55)`); dark-on-dark needs both color and depth. Error content: the
-**`InlineAppError.svelte`** component.
+(`0 10px 40px rgba(0,0,0,0.55)`); dark-on-dark needs both color and depth. **Dismissal:** a dialog
+closes only via an explicit action — a footer button, the close ✕, or Escape (the keyboard equivalent
+of the ✕). Clicking the backdrop does **not** close it, so an accidental outside-click never discards
+in-progress content. Error content: the **`InlineAppError.svelte`** component.
 
 ### Tabs / navigation
 

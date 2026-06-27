@@ -126,6 +126,7 @@ export function createPrimarySession(input: {
   model_config_id?: string
   mcp_profile_ids?: string[]
   compaction_strategy?: 'none' | 'strip-reasoning'
+  max_tool_rounds?: number
 }) {
   return request('/api/session-constructors/primary', {
     method: 'POST',
@@ -428,6 +429,7 @@ export function launchAnalysis(input: {
   additional_instructions?: string
   system_prompt_override?: string
   temperature?: number
+  max_tool_rounds?: number
   selected_tool_names?: string[]
   only_failed_tool_calls?: boolean
   evaluation_criteria?: string[]
@@ -606,6 +608,7 @@ export function launchRun(
     repetitions?: number
     modelConfigId?: string
     mcpProfileIds?: string[]
+    maxToolRounds?: number
   },
 ) {
   return request(`/api/benchmarks/${encodeURIComponent(benchmarkId)}/runs`, {
@@ -702,6 +705,32 @@ export function stopEvaluation(evaluationId: string) {
   })
 }
 
+/**
+ * Parse one SSE data payload into a SchedulerEvent, tolerantly: a malformed or
+ * unrecognized event is skipped (and warned in dev) rather than thrown, so a
+ * single bad event can't tear down the whole stream.
+ */
+function parseSchedulerEvent(dataText: string): SchedulerEvent | null {
+  let json: unknown
+  try {
+    json = JSON.parse(dataText)
+  } catch {
+    return null
+  }
+  const result = schedulerEventSchema.safeParse(json)
+  if (!result.success) {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console -- dev-only diagnostic for schema drift
+      console.warn(
+        '[scheduler stream] skipping unrecognized event:',
+        result.error.issues[0]?.message ?? 'invalid shape',
+      )
+    }
+    return null
+  }
+  return result.data
+}
+
 export async function streamSchedulerEvents(
   onEvent: (event: SchedulerEvent) => void | Promise<void>,
   signal?: AbortSignal,
@@ -730,8 +759,8 @@ export async function streamSchedulerEvents(
         buffer = buffer.slice(separatorIndex + (buffer[separatorIndex] === '\r' ? 4 : 2))
         const parsed = parseSseBlock(block)
         if (parsed?.dataText) {
-          const event = schedulerEventSchema.parse(JSON.parse(parsed.dataText))
-          await onEvent(event)
+          const event = parseSchedulerEvent(parsed.dataText)
+          if (event) await onEvent(event)
         }
         separatorIndex = buffer.search(/\r?\n\r?\n/)
       }

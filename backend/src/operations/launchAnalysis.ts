@@ -51,6 +51,12 @@ export const launchAnalysisInputSchema = z.object({
   system_prompt_override: z.string().optional(),
   /** Optional sampling temperature override; defaults to 0.5. */
   temperature: z.number().optional(),
+  /**
+   * Max tool-call rounds per analysis turn before it fails (loop guard). A
+   * tool-enabled judge inspects the target over several rounds, so this is
+   * typically set higher than a chat session. Defaults to the backend default.
+   */
+  max_tool_rounds: z.number().int().positive().optional(),
   /** Optional subset of tool names to include in the analysis. */
   selected_tool_names: z.array(z.string().min(1)).optional(),
   /** Limit analysis to tool calls whose tool result is marked as an error. */
@@ -260,6 +266,7 @@ export async function executeAnalysisLaunch(
         modelProfileSnapshot,
         mcpProfileSnapshots: analysisMcpSnapshot ? [analysisMcpSnapshot] : [],
         compactionStrategy: "strip-reasoning",
+        maxToolRounds: input.max_tool_rounds ?? ctx.maxToolRounds,
         sessionType: "session_analysis",
         parentKind: "session",
         parentId: targetSessionId,

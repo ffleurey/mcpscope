@@ -144,7 +144,7 @@ describe("backend foundation", () => {
 
     const body = response.json();
     expect(body).toMatchObject({
-      version: 4,
+      version: 5,
       entities: [
         "session",
         "step",
@@ -173,7 +173,7 @@ describe("backend foundation", () => {
       ]),
     );
     expect(body.schema.meta).toMatchObject({
-      schema_version: "4",
+      schema_version: "5",
     });
   });
 
@@ -1061,6 +1061,18 @@ describe("backend foundation", () => {
     expect(sessionFullSetupParts.every((p) => p.content === undefined)).toBe(
       true,
     );
+    // Nested tool calls in a session-full view expose size-capped tool_arguments
+    // (so tool-use criteria are checkable from the overview) but NOT the full
+    // tool_payload — that is reserved for direct part/round lookups.
+    const sessionFullToolCall = sessionFull
+      .json()
+      .data.steps.flatMap((s: { rounds?: { parts: unknown[] }[] }) => s.rounds ?? [])
+      .flatMap((r: { parts: unknown[] }) => r.parts)
+      .find((p: { type?: string }) => p?.type === "tool_call") as
+      | { tool_arguments?: unknown; tool_payload?: unknown }
+      | undefined;
+    expect(sessionFullToolCall?.tool_arguments).toBeDefined();
+    expect(sessionFullToolCall?.tool_payload).toBeUndefined();
 
     const turnSummary = await app.inject({
       method: "GET",

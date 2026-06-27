@@ -497,7 +497,8 @@
       Live <code class="mono">DialogShell.svelte</code> — native
       <code class="mono">&lt;dialog&gt;</code>
       with <code class="mono">::backdrop</code>, draggable header. Max width 720px or 95vw, max
-      height 85vh.
+      height 85vh. Closes only on an explicit action — a footer button, the close ✕, or Escape;
+      clicking the backdrop does not dismiss it.
     </p>
   </section>
 

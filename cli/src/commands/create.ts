@@ -8,6 +8,7 @@ export interface CreateOptions {
   compaction?: "none" | "strip-reasoning" | undefined;
   modelConfigId?: string | undefined;
   mcpProfileIds?: string[] | undefined;
+  maxToolRounds?: number | undefined;
   json: boolean;
 }
 
@@ -25,6 +26,9 @@ export async function runCreate(opts: CreateOptions): Promise<void> {
       : {}),
     ...(opts.mcpProfileIds !== undefined
       ? { mcp_profile_ids: opts.mcpProfileIds }
+      : {}),
+    ...(opts.maxToolRounds !== undefined
+      ? { max_tool_rounds: opts.maxToolRounds }
       : {}),
   });
 
@@ -49,6 +53,9 @@ function renderCreateText(result: CreateResult): void {
     process.stdout.write(`  mcp         ${mcpNames}\n`);
   }
   process.stdout.write(`  compaction  ${session.compaction_strategy}\n`);
+  if (session.max_tool_rounds != null) {
+    process.stdout.write(`  tool rounds ${String(session.max_tool_rounds)}\n`);
+  }
   process.stdout.write(`  created     ${formatDate(session.created_at)}\n`);
   process.stdout.write(
     `\nRun 'mcpscope status ${session.id}' to check initialization progress.\n`,
@@ -64,6 +71,7 @@ export function parseCreateArgs(
   let compaction: "none" | "strip-reasoning" | undefined;
   let modelConfigId: string | undefined;
   let mcpProfileIds: string[] | undefined;
+  let maxToolRounds: number | undefined;
   let title: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
@@ -93,6 +101,14 @@ export function parseCreateArgs(
       if (!val) return { error: "--mcp-profile requires a value" };
       if (!mcpProfileIds) mcpProfileIds = [];
       mcpProfileIds.push(val);
+    } else if (arg === "--max-tool-rounds") {
+      const val = args[++i];
+      if (!val) return { error: "--max-tool-rounds requires a value" };
+      const n = Number(val);
+      if (!Number.isInteger(n) || n < 1) {
+        return { error: "--max-tool-rounds must be a positive integer" };
+      }
+      maxToolRounds = n;
     } else if (!arg.startsWith("-")) {
       if (title !== undefined)
         return {
@@ -111,5 +127,6 @@ export function parseCreateArgs(
   if (compaction !== undefined) opts.compaction = compaction;
   if (modelConfigId !== undefined) opts.modelConfigId = modelConfigId;
   if (mcpProfileIds !== undefined) opts.mcpProfileIds = mcpProfileIds;
+  if (maxToolRounds !== undefined) opts.maxToolRounds = maxToolRounds;
   return { opts };
 }

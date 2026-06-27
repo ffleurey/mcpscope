@@ -139,6 +139,7 @@ function runToSnake(r: BenchmarkRunRecord) {
     model_config_id: r.modelConfigId,
     mcp_profile_ids: r.mcpProfileIds,
     repetitions: r.repetitions,
+    max_tool_rounds: r.maxToolRounds,
     cases: r.cases.map((c) => ({
       source_case_id: c.sourceCaseId,
       name: c.name,
@@ -220,6 +221,7 @@ function sessionMetricsToSnake(m: SessionMetrics) {
       total: m.tokens.total,
     },
     final_answer: m.finalAnswer,
+    ...(m.error ? { error: m.error } : {}),
   };
 }
 
@@ -386,6 +388,7 @@ const runShape = z.object({
   model_config_id: z.string(),
   mcp_profile_ids: z.array(z.string()),
   repetitions: z.number(),
+  max_tool_rounds: z.number(),
   cases: z.array(
     z.object({
       source_case_id: z.string(),
@@ -727,6 +730,14 @@ export const benchmarkRunInputSchema = z.object({
     .array(z.string())
     .optional()
     .describe("MCP profiles to enable (default: the configured defaults)."),
+  max_tool_rounds: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Max tool-call rounds per turn for every test session in the run (loop guard). Default: the backend default.",
+    ),
 });
 export type BenchmarkRunInput = z.infer<typeof benchmarkRunInputSchema>;
 
@@ -752,6 +763,9 @@ export const benchmarkRunOperation = {
         : {}),
       ...(input.mcp_profile_ids !== undefined
         ? { mcpProfileIds: input.mcp_profile_ids }
+        : {}),
+      ...(input.max_tool_rounds !== undefined
+        ? { maxToolRounds: input.max_tool_rounds }
         : {}),
     });
     return { run: runToSnake(run) };
@@ -848,6 +862,13 @@ export const benchmarkRunReportOutputSchema = {
               total: z.number().nullable(),
             }),
             final_answer: z.string().nullable(),
+            error: z
+              .object({
+                step_id: z.string().nullable(),
+                error_kind: z.string().nullable(),
+                message: z.string(),
+              })
+              .optional(),
           }),
         ),
       }),

@@ -14,6 +14,7 @@ export const launchPrimarySessionInputSchema = z.object({
   model_config_id: z.string().optional(),
   mcp_profile_ids: z.array(z.string()).optional(),
   compaction_strategy: z.enum(["none", "strip-reasoning"]).optional(),
+  max_tool_rounds: z.number().int().positive().optional(),
 });
 
 export type LaunchPrimarySessionInput = z.infer<
@@ -68,6 +69,7 @@ export async function executePrimarySessionLaunch(
         modelProfileSnapshot: resolved.modelProfileSnapshot,
         mcpProfileSnapshots: resolved.mcpProfileSnapshots,
         compactionStrategy: input.compaction_strategy ?? "strip-reasoning",
+        maxToolRounds: input.max_tool_rounds ?? ctx.maxToolRounds,
         sessionType: "primary",
       });
       return { kind: "created", session };

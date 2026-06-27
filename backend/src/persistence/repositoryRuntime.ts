@@ -39,6 +39,7 @@ import type {
   TurnRecord,
   StepRecord,
 } from '../domain/model.js'
+import { DEFAULT_MAX_TOOL_ROUNDS } from '../domain/model.js'
 import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
 import { validateSessionParent } from '../domain/sessionValidation.js'
 
@@ -102,6 +103,7 @@ type V2SessionParams = {
   modelProfileSnapshot: ModelProfileSnapshot
   mcpProfileSnapshots: McpProfileSnapshot[]
   compactionStrategy: SessionRecord['compactionStrategy']
+  maxToolRounds?: number | undefined
 }
 
 type V2SessionState = {
@@ -109,6 +111,7 @@ type V2SessionState = {
   systemPromptTokens: number | null
   toolDefinitionsTokens: number | null
   isContextExhausted: boolean
+  initError?: SessionRecord['initError']
 }
 
 function buildSessionParams(session: SessionRecord): string {
@@ -116,6 +119,7 @@ function buildSessionParams(session: SessionRecord): string {
     modelProfileSnapshot: session.modelProfileSnapshot,
     mcpProfileSnapshots: session.mcpProfileSnapshots,
     compactionStrategy: session.compactionStrategy,
+    maxToolRounds: session.maxToolRounds,
   }
   return JSON.stringify(params)
 }
@@ -126,6 +130,7 @@ function buildSessionState(session: SessionRecord): string {
     systemPromptTokens: session.systemPromptTokens,
     toolDefinitionsTokens: session.toolDefinitionsTokens,
     isContextExhausted: session.isContextExhausted,
+    initError: session.initError ?? null,
   }
   return JSON.stringify(state)
 }
@@ -167,6 +172,9 @@ function mapV2SessionRow(row: V2SessionRow): SessionRecord {
     toolDefinitionsTokens: state.toolDefinitionsTokens ?? null,
     isContextExhausted: state.isContextExhausted ?? false,
     compactionStrategy: params.compactionStrategy,
+    // Old sessions predate the per-session budget — fall back to the default.
+    maxToolRounds: params.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS,
+    initError: state.initError ?? null,
     analysisState: row.analysis_state_json ? (JSON.parse(row.analysis_state_json) as Record<string, unknown>) : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -183,6 +191,7 @@ function mapV2SessionSummaryRow(row: V2SessionRow): SessionSummary {
   const state = JSON.parse(row.state_json) as {
     isContextExhausted?: boolean
     loadedContextLength?: number | null
+    initError?: SessionRecord['initError']
   }
   const mcpNames: { name: string }[] = params.mcpProfileSnapshots ??
     (params.mcpProfileSnapshot ? [params.mcpProfileSnapshot] : [])
@@ -199,6 +208,7 @@ function mapV2SessionSummaryRow(row: V2SessionRow): SessionSummary {
     isContextExhausted: state.isContextExhausted ?? false,
     loadedContextLength: state.loadedContextLength ?? null,
     compactionStrategy: params.compactionStrategy ?? 'none',
+    initError: state.initError ?? null,
     modelProfileSnapshot: { name: params.modelProfileSnapshot?.name ?? '' },
     mcpProfileSnapshots: mcpNames,
   }

@@ -32,6 +32,14 @@ export const createInputSchema = z.object({
     .describe(
       "Optional list of MCP profile IDs. When provided, replaces the default-enabled selection.",
     ),
+  max_tool_rounds: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      "Max tool-call rounds per turn before the turn fails (loop guard). Defaults to the backend default.",
+    ),
 });
 
 export type CreateInput = z.infer<typeof createInputSchema>;
@@ -46,6 +54,7 @@ export interface CreateResult {
     model: { id: string; name: string };
     mcp: { id: string; name: string }[];
     compaction_strategy: string;
+    max_tool_rounds: number | null;
     created_at: number;
     updated_at: number;
   };
@@ -62,6 +71,7 @@ export const createOutputSchema = {
     model: z.object({ id: z.string(), name: z.string() }),
     mcp: z.array(z.object({ id: z.string(), name: z.string() })),
     compaction_strategy: z.string(),
+    max_tool_rounds: z.number().nullable(),
     created_at: z.number(),
     updated_at: z.number(),
   }),
@@ -109,6 +119,7 @@ export const createOperation = {
             modelProfileSnapshot: resolved.modelProfileSnapshot,
             mcpProfileSnapshots: resolved.mcpProfileSnapshots,
             compactionStrategy: input.compaction ?? "strip-reasoning",
+            maxToolRounds: input.max_tool_rounds ?? ctx.maxToolRounds,
           });
           mcpSnapshotsRef = resolved.mcpProfileSnapshots;
           return {
@@ -155,6 +166,7 @@ export const createOperation = {
         model: { id: modelConfigId, name: modelConfigName },
         mcp: mcpSnapshotsRef.map((s) => ({ id: s.id, name: s.name })),
         compaction_strategy: session.compactionStrategy,
+        max_tool_rounds: session.maxToolRounds ?? null,
         created_at: session.createdAt,
         updated_at: session.updatedAt,
       },

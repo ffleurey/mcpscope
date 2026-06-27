@@ -1914,7 +1914,7 @@ export async function createToolEnabledTurn(
     payload: {
       text:
         `Turn stopped: reached the maximum of ${input.maxToolRounds} tool-call rounds without a final assistant response. ` +
-        `Increase BACKEND_MAX_TOOL_ROUNDS (currently ${input.maxToolRounds}) if this is too low for your workflow.`,
+        `Raise this session's max tool rounds (currently ${input.maxToolRounds}) — or the BACKEND_MAX_TOOL_ROUNDS default — if this is too low for your workflow.`,
       json: null,
       mimeType: "text/plain",
       summary: `Tool-loop limit reached (${input.maxToolRounds} rounds)`,

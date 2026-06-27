@@ -37,6 +37,7 @@ import type {
   SessionType,
   TurnRecord,
 } from "../domain/model.js";
+import { DEFAULT_MAX_TOOL_ROUNDS } from "../domain/model.js";
 import {
   deriveContextEntries,
   deriveTranscriptEntries,
@@ -109,6 +110,8 @@ export interface CreateSessionInput {
   modelProfileSnapshot: ModelProfileSnapshot;
   mcpProfileSnapshots?: McpProfileSnapshot[] | undefined;
   compactionStrategy?: "none" | "strip-reasoning" | undefined;
+  /** Tool-round budget for this session; defaults to DEFAULT_MAX_TOOL_ROUNDS. */
+  maxToolRounds?: number | undefined;
   /** Session type. Defaults to 'primary' when omitted. */
   sessionType?: SessionType | undefined;
   /** Parent object kind. Must be provided together with parentId. */
@@ -200,6 +203,7 @@ export function createSession(
     toolDefinitionsTokens: null,
     isContextExhausted: false,
     compactionStrategy: input.compactionStrategy ?? "strip-reasoning",
+    maxToolRounds: input.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS,
   };
 
   const tx = database.connection.transaction(() => {

@@ -91,7 +91,6 @@ async function executePrimaryJob(
     opCtx.db,
     opCtx.chatCompletionGateway,
     session.mcpProfileSnapshots.length > 0 ? opCtx.mcpGateway : null,
-    opCtx.maxToolRounds,
     activeTurn,
     prompt,
     emitExecutionEvent,

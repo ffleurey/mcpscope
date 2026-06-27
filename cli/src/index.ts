@@ -55,7 +55,7 @@ function printHelp(): void {
   mcpscope serve [--port <n>] [--host <host>] [--data-dir <path>] [--no-open]
 
   mcpscope list [--json]
-  mcpscope create <title> [--id <session-id>] [--compaction strip-reasoning|none] [--model-config <id>] [--mcp-profile <id>...] [--json]
+  mcpscope create <title> [--id <session-id>] [--compaction strip-reasoning|none] [--model-config <id>] [--mcp-profile <id>...] [--max-tool-rounds <n>] [--json]
   mcpscope send <session-id> <prompt> [--json]
   mcpscope status <session-id> [--json]
   mcpscope inspect <id> [--short] [--json]
@@ -69,7 +69,7 @@ function printHelp(): void {
   mcpscope benchmark_add_case_from_session <benchmark_id> <session_id> [--name <text>] [--json]
   mcpscope benchmark_update_case <case_id> [--name <text>] [--prompt <text>] [--order <n>] [--expect-tool <name>]... [--forbid-tool <name>]... [--rubric-json <json>] [--json]
   mcpscope benchmark_delete_case <case_id> [--json]
-  mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--wait] [--json]
+  mcpscope benchmark_run <benchmark_id> [--case <id>]... [--repetitions <n>] [--model-config <id>] [--mcp-profile <id>]... [--max-tool-rounds <n>] [--wait] [--json]
   mcpscope benchmark_run_status <run_id> [--json]
   mcpscope benchmark_run_report <run_id> [--json]
   mcpscope benchmark_run_control <run_id> --action <pause|resume|stop> [--mode <continue|retry>] [--json]

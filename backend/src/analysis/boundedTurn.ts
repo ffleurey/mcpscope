@@ -9,6 +9,9 @@
  * that need responseText, turnId, and assistantReasoningPartIds.
  */
 
+import type { PartRecord } from '../domain/model.js'
+import { DEFAULT_MAX_TOOL_ROUNDS } from '../domain/model.js'
+import { getSessionRecord } from '../persistence/repository.js'
 import type { BackendDatabase } from '../persistence/db.js'
 import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
@@ -22,6 +25,30 @@ export interface AnalysisTurnResult {
   assistantContentPartIds: string[]
   assistantReasoningPartIds: string[]
   responseText: string
+}
+
+/**
+ * Selects the model's FINAL answer from a tool-enabled turn.
+ *
+ * A tool-enabled turn can emit assistant-content in intermediate rounds (e.g.
+ * "Let me inspect the trace…") alongside its tool calls. Concatenating that
+ * intermediate prose with the final round's text corrupts the JSON that judge /
+ * analysis callers parse, so we scope to the final round, which holds the
+ * end-of-turn answer. Callers should wait for the turn to finish and parse this.
+ */
+export function selectFinalRoundContent(
+  parts: PartRecord[],
+  finalRoundId: string,
+): { responseText: string; assistantContentPartIds: string[] } {
+  const finalContentParts = parts.filter(
+    p => p.roundId === finalRoundId && p.partType === 'assistant-content',
+  )
+  const responseText = finalContentParts
+    .filter(p => p.payload.text)
+    .map(p => p.payload.text ?? '')
+    .join('')
+    .trim()
+  return { responseText, assistantContentPartIds: finalContentParts.map(p => p.id) }
 }
 
 /**
@@ -42,6 +69,12 @@ export async function runAnalysisTurn(
   emitEvent?: TurnStreamEventSink,
   ownerStepId?: string | null,
 ): Promise<AnalysisTurnResult> {
+  // The analysis session's own tool-round budget is the source of truth. An
+  // interactive judge inspects the target over several rounds before answering,
+  // so raise it at launch (analyse dialog) when the default is too tight.
+  const session = getSessionRecord(database.connection, analysisSessionId)
+  const maxToolRounds = session?.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS
+
   const result = await createToolEnabledTurn(
     database,
     lmGateway,
@@ -49,7 +82,7 @@ export async function runAnalysisTurn(
     {
       sessionId: analysisSessionId,
       userContent,
-      maxToolRounds: 5,
+      maxToolRounds,
       ownerStepId,
     },
     emitEvent,
@@ -57,24 +90,16 @@ export async function runAnalysisTurn(
 
   const { turn, round, parts } = result
 
-  // Collect turn-level response text from all assistant-content parts
-  const responseText = parts
-    .filter(p => p.partType === 'assistant-content' && p.payload.text)
-    .map(p => p.payload.text ?? '')
-    .join('')
-    .trim()
-
-  const userPartId = parts.find(p => p.partType === 'user-message')?.id ?? ''
-  const assistantContentPartIds = parts
-    .filter(p => p.partType === 'assistant-content')
-    .map(p => p.id)
-  const assistantReasoningPartIds = parts
-    .filter(p => p.partType === 'assistant-reasoning')
-    .map(p => p.id)
-
   // Use the last round's ID so callers that reference the final response round
   // get the correct round even when the LLM made multiple tool-call rounds.
   const finalRound = result.rounds.at(-1) ?? round
+
+  const { responseText, assistantContentPartIds } = selectFinalRoundContent(parts, finalRound.id)
+
+  const userPartId = parts.find(p => p.partType === 'user-message')?.id ?? ''
+  const assistantReasoningPartIds = parts
+    .filter(p => p.partType === 'assistant-reasoning')
+    .map(p => p.id)
 
   return {
     turnId: turn.id,

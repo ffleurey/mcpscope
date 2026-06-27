@@ -18,12 +18,16 @@
     dialogEl?.showModal()
   })
 
-  function handleBackdropClick(e: MouseEvent) {
-    if (e.target === dialogEl) onClose()
-  }
-
+  // Clicking the backdrop must NOT close the dialog — that would discard
+  // in-progress content on an accidental outside click. The dialog closes only
+  // via an explicit action: a footer button, the close ✕, or Escape (the
+  // keyboard equivalent of the ✕). Native <dialog> closes on Escape on its own;
+  // intercept it so the parent's open-state stays in sync via onClose().
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') onClose()
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose()
+    }
   }
 
   // ── Drag ────────────────────────────────────────────────────────────
@@ -66,7 +70,6 @@
   class="shell-dialog {dialogClass}"
   class:dragging
   style="transform: translate({dragX}px, {dragY}px)"
-  onclick={handleBackdropClick}
   onkeydown={handleKeydown}
 >
   <div class="dialog-inner">

@@ -99,6 +99,7 @@ These tables describe the canonical properties of each node in the runtime tree.
 | `model` | `object` | Model metadata needed to understand the run |
 | `mcp?` | `object[]` | MCP server metadata when present; one entry per server |
 | `context_window` | `object` | Total available context and current usage |
+| `max_tool_rounds` | `number` | Per-session cap on tool-call rounds per turn before the turn fails (loop guard); set at creation, read at execution |
 | `setup` | `Setup` | Session-level setup node |
 | `turns` | `Turn[]` | Ordered turns in the session |
 
@@ -139,6 +140,7 @@ Current implementations may also expose metadata around the session tree such as
 | `context_state` | `string` | Whether the part remains in model-visible context |
 | `content?` | `object` | Content payload when the selected mode includes it and the part type carries content |
 | `tool_name?` | `string` | Tool name for `tool_call` parts |
+| `tool_arguments?` | `object \| string` | `tool_call` parameters in nested (session/turn) full lookups, with each value size-capped |
 | `tool_payload?` | `object` | Tool request / response payloads for direct `tool_call` full lookups |
 
 ### Nested property objects
@@ -190,6 +192,7 @@ Examples:
 
 - `tool_name` is omitted on non-`tool_call` parts
 - `content` is omitted in `summary` mode
+- `tool_arguments` appears on `tool_call` parts in nested full lookups (session/turn overviews), with each value truncated past a fixed size cap; it is omitted in `summary` mode and on direct `tool_call`/round full lookups (which carry the full `tool_payload` instead)
 - `tool_payload` is omitted except for direct `tool_call` full lookups
 - `token_count` may be `null` if token attribution is not available yet
 - `context_window.used` may be `null` if it cannot be computed yet

@@ -512,6 +512,7 @@ export interface BenchmarkRunOptions {
   modelConfigId?: string | undefined;
   mcpProfileIds?: string[] | undefined;
   caseIds?: string[] | undefined;
+  maxToolRounds?: number | undefined;
   wait: boolean;
 }
 
@@ -530,6 +531,9 @@ export async function runBenchmarkRun(opts: BenchmarkRunOptions): Promise<void> 
       : {}),
     ...(opts.mcpProfileIds !== undefined
       ? { mcp_profile_ids: opts.mcpProfileIds }
+      : {}),
+    ...(opts.maxToolRounds !== undefined
+      ? { max_tool_rounds: opts.maxToolRounds }
       : {}),
   });
 
@@ -581,6 +585,7 @@ export function parseBenchmarkRunArgs(
   let modelConfigId: string | undefined;
   let mcpProfileIds: string[] | undefined;
   let caseIds: string[] | undefined;
+  let maxToolRounds: number | undefined;
   let wait = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -601,6 +606,14 @@ export function parseBenchmarkRunArgs(
         return { error: "--repetitions must be a positive integer" };
       }
       repetitions = n;
+    } else if (arg === "--max-tool-rounds") {
+      const val = args[++i];
+      if (!val) return { error: "--max-tool-rounds requires a value" };
+      const n = Number(val);
+      if (!Number.isInteger(n) || n < 1) {
+        return { error: "--max-tool-rounds must be a positive integer" };
+      }
+      maxToolRounds = n;
     } else if (arg === "--model-config") {
       const val = args[++i];
       if (!val) return { error: "--model-config requires a value" };
@@ -634,6 +647,7 @@ export function parseBenchmarkRunArgs(
   if (modelConfigId !== undefined) opts.modelConfigId = modelConfigId;
   if (mcpProfileIds !== undefined) opts.mcpProfileIds = mcpProfileIds;
   if (caseIds !== undefined) opts.caseIds = caseIds;
+  if (maxToolRounds !== undefined) opts.maxToolRounds = maxToolRounds;
   return { opts };
 }
 

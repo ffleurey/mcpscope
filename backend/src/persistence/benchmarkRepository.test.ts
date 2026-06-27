@@ -113,6 +113,7 @@ describe('benchmark run rubric snapshot', () => {
         },
       ],
       repetitions: 1,
+      maxToolRounds: 50,
       sessions: [],
       error: null,
       createdAt: 1,
@@ -124,6 +125,7 @@ describe('benchmark run rubric snapshot', () => {
 
     const reloaded = getBenchmarkRun(d.connection, 'R-TEST')
     expect(reloaded?.cases[0]?.rubric).toEqual(RUBRIC)
+    expect(reloaded?.maxToolRounds).toBe(50)
   })
 })
 
@@ -132,7 +134,7 @@ describe('benchmark evaluation grouping CRUD', () => {
     createBenchmark(connection, { id: 'B-TEST', name: 'B', description: null, createdAt: 1, updatedAt: 1 })
     const run: BenchmarkRunRecord = {
       id: 'R-TEST', benchmarkId: 'B-TEST', benchmarkName: 'B', status: 'complete',
-      modelConfigId: 'mc-1', mcpProfileIds: [], cases: [], repetitions: 1, sessions: [],
+      modelConfigId: 'mc-1', mcpProfileIds: [], cases: [], repetitions: 1, maxToolRounds: 50, sessions: [],
       error: null, createdAt: 1, updatedAt: 1, startedAt: null, completedAt: null,
     }
     createBenchmarkRun(connection, run)

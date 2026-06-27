@@ -64,6 +64,10 @@ export async function runSessionInitialization(
   session.updatedAt = now()
   updateSessionRecord(database.connection, session)
 
+  // Tracks which init phase is running so a failure can be attributed (and the
+  // offending server named) in the persisted initError.
+  let phase: 'mcp' | 'tokens' = 'mcp'
+
   try {
     // Emit existing parts (system prompt was created during createSession)
     let parts = listPartRecordsBySession(database.connection, sessionId)
@@ -81,6 +85,7 @@ export async function runSessionInitialization(
     }
 
     // Token probing: context length + system prompt tokens + MCP/tool-definition tokens
+    phase = 'tokens'
     const probedParts = await ensureSessionPreludeTokenMetadata(database, chatCompletionGateway, session, parts)
     // Emit updated parts (now have token counts filled in)
     for (const part of probedParts.filter(p => p.turnId === null)) {
@@ -106,9 +111,20 @@ export async function runSessionInitialization(
     })
     emitEvent({ type: 'prelude-complete', trace })
   } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err)
+    // Attribute the failure to its phase and name the server, so a bare
+    // transport error like "fetch failed" is actionable.
+    const errorKind = phase === 'mcp' ? 'mcp_init_error' : 'token_probe_error'
+    const target = phase === 'mcp'
+      ? session.mcpProfileSnapshots.map(m => `'${m.name}' (${m.url})`).join(', ')
+      : `model '${session.modelProfileSnapshot.name}' (${session.modelProfileSnapshot.connectionBaseUrl})`
+    const message = target ? `${raw} — initializing ${phase === 'mcp' ? 'MCP server' : 'LM connection'} ${target}` : raw
     session.initStatus = 'error'
+    // Persist the failure reason so it is diagnosable after the fact via
+    // list/status/inspect (otherwise only emitted on the live event stream).
+    session.initError = { errorKind, message }
     session.updatedAt = now()
     updateSessionRecord(database.connection, session)
-    emitEvent({ type: 'prelude-failed', message: err instanceof Error ? err.message : String(err) })
+    emitEvent({ type: 'prelude-failed', message })
   }
 }
