@@ -49,7 +49,10 @@ export const modelConfigSchemaBase = z.object({
   modelKey: z.string(),
   modelDisplayName: z.string().optional(),
   systemPrompt: z.string().optional().default(""),
-  temperature: z.number().optional().default(0.7),
+  // Optional: when unset the request omits `temperature` entirely, letting the
+  // provider use its own default. Mirrors `contextSize`. 0 is a valid value, so
+  // "unset" must be represented by absence, never by a falsy number.
+  temperature: z.number().min(0).optional(),
   reasoning: z.enum(["on", "off"]).optional(),
   contextSize: z.number().int().positive().optional(),
   createdAt: z

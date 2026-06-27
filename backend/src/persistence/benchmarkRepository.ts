@@ -355,7 +355,7 @@ interface BenchmarkEvaluationRow {
   id: string;
   run_id: string;
   judge_model_config_id: string;
-  judge_temperature: number;
+  judge_temperature: number | null;
   status: string;
   sessions_json: string;
   error: string | null;

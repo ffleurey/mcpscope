@@ -8,8 +8,11 @@ import { providerTypeValues } from "./configuration.js";
  * an older DB must be recreated fresh (the project keeps no migration logic).
  * v5: per-session tool-round budget — `benchmark_runs.max_tool_rounds` column; an
  * older DB is missing the column and must be recreated fresh.
+ * v6: `benchmark_evaluations.judge_temperature` is now nullable (NULL => send no
+ * temperature, i.e. provider default); an older DB has it NOT NULL and must be
+ * recreated fresh.
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /**
  * Default per-session tool-round budget: the cap on tool-call rounds in a single
@@ -150,7 +153,8 @@ export const modelProfileSnapshotSchema = z.object({
   modelKey: z.string(),
   modelDisplayName: z.string(),
   systemPrompt: z.string(),
-  temperature: z.number(),
+  // null/undefined => use the provider default (omit `temperature` from the request).
+  temperature: z.number().optional().nullable(),
   reasoning: z.enum(["on", "off"]).nullable(),
   providerType: z.enum(providerTypeValues).nullable().optional(),
   contextSize: z.number().int().positive().optional().nullable(),
@@ -458,8 +462,8 @@ export const benchmarkEvaluationRecordSchema = z.object({
   id: z.string(),
   runId: z.string(),
   judgeModelConfigId: z.string(),
-  /** Sampling temperature for the judge sessions. */
-  judgeTemperature: z.number().default(DEFAULT_JUDGE_TEMPERATURE),
+  /** Sampling temperature for the judge sessions; null => provider default. */
+  judgeTemperature: z.number().nullable().default(DEFAULT_JUDGE_TEMPERATURE),
   status: benchmarkRunStatusSchema,
   sessions: z.array(benchmarkEvaluationSessionSchema).default([]),
   error: z.string().nullable().default(null),

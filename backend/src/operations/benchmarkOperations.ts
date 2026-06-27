@@ -912,7 +912,7 @@ const evaluationShape = z.object({
   id: z.string(),
   run_id: z.string(),
   judge_model_config_id: z.string(),
-  judge_temperature: z.number(),
+  judge_temperature: z.number().nullable(),
   status: z.string(),
   error: z.string().nullable(),
   sessions: z.array(evaluationSessionShape),
@@ -927,10 +927,12 @@ export const benchmarkEvaluateInputSchema = z.object({
     .describe("Model config for the judge (a separate model; never the task model)."),
   temperature: z
     .number()
+    .nullable()
     .optional()
     .describe(
       "Judge sampling temperature. Defaults to a small non-zero value so retries "
-        + "of a looping judge session can escape (not bitwise-deterministic).",
+        + "of a looping judge session can escape (not bitwise-deterministic). "
+        + "Pass null to send no temperature (use the provider's own default).",
     ),
 });
 export type BenchmarkEvaluateInput = z.infer<typeof benchmarkEvaluateInputSchema>;

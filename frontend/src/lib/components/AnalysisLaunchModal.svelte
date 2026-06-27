@@ -31,7 +31,10 @@
   let systemPromptText = $state('')
   let loadingSystemPrompt = $state(true)
   let systemPromptLoadId = 0
-  let temperature = $state(0.5)
+  // 'custom' (default 0.5, the historical analysis default) sends an explicit
+  // temperature; 'default' omits it so the provider uses its own default.
+  let temperatureMode = $state<'default' | 'custom'>('custom')
+  let temperatureValue = $state(0.5)
   let maxToolRounds = $state<number | null>(null)
   let evaluationCriteriaText = $state('')
   let loadingTurns = $state(true)
@@ -137,8 +140,12 @@
     selectedToolNames = selectedToolNames.filter((value) => value !== toolName)
   }
 
+  let temperatureValid = $derived(
+    temperatureMode === 'default' || Number.isFinite(temperatureValue),
+  )
+
   async function handleLaunch() {
-    if (!selectedModelConfigId || !selectedTurnId.trim() || !Number.isFinite(temperature)) return
+    if (!selectedModelConfigId || !selectedTurnId.trim() || !temperatureValid) return
 
     const evaluationCriteria = evaluationCriteriaText
       .split('\n')
@@ -151,7 +158,7 @@
       workflowKind: selectedWorkflowKind,
       modelConfigId: selectedModelConfigId,
       systemPromptOverride: systemPromptText.trim() || undefined,
-      temperature,
+      temperature: temperatureMode === 'custom' ? temperatureValue : null,
       maxToolRounds: maxToolRounds && maxToolRounds > 0 ? Math.floor(maxToolRounds) : undefined,
       selectedToolNames: selectedToolNames.length > 0 ? selectedToolNames : undefined,
       onlyFailedToolCalls,
@@ -220,18 +227,31 @@
         >Temperature <span class="optional">(optional)</span></label
       >
       <p class="field-hinttext">
-        Defaults to 0.5 for analysis runs. Adjust only when you need broader or narrower sampling.
+        Defaults to 0.5 for analysis runs. Choose "Provider default" to send no temperature, or set
+        a custom value for broader or narrower sampling.
       </p>
-      <input
-        id="analysis-temperature"
-        class="field-input"
-        type="number"
-        min="0"
-        max="2"
-        step="0.05"
-        bind:value={temperature}
-        disabled={$isLaunchingAnalysis}
-      />
+      <div class="temperature-row">
+        <select
+          id="analysis-temperature"
+          class="field-input"
+          bind:value={temperatureMode}
+          disabled={$isLaunchingAnalysis}
+        >
+          <option value="default">Provider default</option>
+          <option value="custom">Custom…</option>
+        </select>
+        {#if temperatureMode === 'custom'}
+          <input
+            class="field-input"
+            type="number"
+            min="0"
+            max="2"
+            step="0.05"
+            bind:value={temperatureValue}
+            disabled={$isLaunchingAnalysis}
+          />
+        {/if}
+      </div>
     </div>
 
     <div class="field">
@@ -362,7 +382,7 @@
         disabled={$isLaunchingAnalysis ||
           !selectedModelConfigId ||
           !selectedTurnId.trim() ||
-          !Number.isFinite(temperature)}
+          !temperatureValid}
       >
         {$isLaunchingAnalysis ? 'Running analysis…' : 'Launch analysis'}
       </button>
@@ -386,6 +406,18 @@
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
+  }
+
+  .temperature-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .temperature-row select {
+    flex: 1;
+  }
+  .temperature-row input {
+    width: 160px;
   }
 
   .checkbox-list {

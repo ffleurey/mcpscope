@@ -144,7 +144,7 @@ describe("backend foundation", () => {
 
     const body = response.json();
     expect(body).toMatchObject({
-      version: 5,
+      version: 6,
       entities: [
         "session",
         "step",
@@ -173,7 +173,7 @@ describe("backend foundation", () => {
       ]),
     );
     expect(body.schema.meta).toMatchObject({
-      schema_version: "5",
+      schema_version: "6",
     });
   });
 
@@ -4793,6 +4793,10 @@ describe("analysis launch", () => {
       "You are an evaluation agent.",
     );
     expect(stored?.modelProfileSnapshot.temperature).toBe(0.5);
+    // Regression: the analysis snapshot must carry providerType, or
+    // buildReasoningParams falls back to the LM Studio reasoning format and
+    // OpenRouter/Ollama judge/analysis sessions fail init with a 400.
+    expect(stored?.modelProfileSnapshot.providerType).toBe("lmstudio");
 
     const storedSession = getSessionRecord(
       app.backendDb.connection,

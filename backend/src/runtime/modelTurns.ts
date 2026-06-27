@@ -149,6 +149,20 @@ export function sessionContextBody(
   return { num_ctx: contextSize };
 }
 
+/**
+ * Request-body fragment for sampling temperature. When the snapshot has no
+ * temperature (null/undefined) the key is omitted entirely so the provider uses
+ * its own default. Note: 0 is a valid temperature, so this gates on `!= null`
+ * rather than a falsy check (unlike `sessionContextBody`).
+ */
+export function sessionTemperatureBody(
+  session: SessionRecord,
+): Record<string, unknown> {
+  const temperature = session.modelProfileSnapshot.temperature;
+  if (temperature == null) return {};
+  return { temperature };
+}
+
 function createUuid(): string {
   return crypto.randomUUID();
 }
@@ -304,12 +318,12 @@ export async function createModelOnlyTurn(
 
   const requestBody = {
     model: session.modelProfileSnapshot.modelKey,
-    temperature: session.modelProfileSnapshot.temperature,
     stream: true,
     stream_options: {
       include_usage: true,
     },
     messages: requestMessages,
+    ...sessionTemperatureBody(session),
     ...buildReasoningParams(
       session.modelProfileSnapshot.reasoning,
       session.modelProfileSnapshot.connectionBaseUrl,

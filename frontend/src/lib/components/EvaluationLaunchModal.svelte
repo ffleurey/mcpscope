@@ -14,9 +14,11 @@
   let { runId, onClose }: Props = $props()
 
   let selectedJudgeId = $state('')
-  // Default to a small non-zero temperature (mirrors backend DEFAULT_JUDGE_TEMPERATURE):
-  // at exactly 0 a retry of a looping judge session reproduces the same loop and can't recover.
-  let selectedTemperature = $state(0.2)
+  // 'custom' (default 0.2, mirrors backend DEFAULT_JUDGE_TEMPERATURE) sends an
+  // explicit temperature; at exactly 0 a retry of a looping judge can't recover.
+  // 'default' sends no temperature so the judge's provider uses its own default.
+  let temperatureMode = $state<'default' | 'custom'>('custom')
+  let temperatureValue = $state(0.2)
   let launching = $state(false)
   let launchError = $state<AppError | null>(null)
   let hasInitialized = $state(false)
@@ -37,7 +39,11 @@
     launching = true
     launchError = null
     try {
-      await launchEvaluation(runId, selectedJudgeId, selectedTemperature)
+      await launchEvaluation(
+        runId,
+        selectedJudgeId,
+        temperatureMode === 'custom' ? temperatureValue : null,
+      )
       onClose()
     } catch (e) {
       launchError = toAppError(e)
@@ -83,18 +89,30 @@
 
     <div class="field">
       <label class="field-label" for="eval-temp">Temperature</label>
-      <input
-        id="eval-temp"
-        class="field-input"
-        type="number"
-        min="0"
-        step="0.1"
-        bind:value={selectedTemperature}
-        disabled={launching}
-      />
+      <div class="temperature-row">
+        <select
+          id="eval-temp"
+          class="field-input"
+          bind:value={temperatureMode}
+          disabled={launching}
+        >
+          <option value="default">Provider default</option>
+          <option value="custom">Custom…</option>
+        </select>
+        {#if temperatureMode === 'custom'}
+          <input
+            class="field-input"
+            type="number"
+            min="0"
+            step="0.1"
+            bind:value={temperatureValue}
+            disabled={launching}
+          />
+        {/if}
+      </div>
       <p class="field-hinttext">
         Small non-zero (0.2) by default, so retrying a stuck judge can escape. Avoid 0 — a retry
-        would reproduce the same result. Raise to probe judge stability.
+        would reproduce the same result. "Provider default" sends no temperature.
       </p>
     </div>
 
@@ -133,5 +151,16 @@
   }
   :global(.eval-launch-dialog) {
     max-width: min(480px, 95vw);
+  }
+  .temperature-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .temperature-row select {
+    flex: 1;
+  }
+  .temperature-row input {
+    width: 160px;
   }
 </style>

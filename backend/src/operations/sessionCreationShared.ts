@@ -158,7 +158,7 @@ export function resolvePrimarySessionInputs(
     modelKey: modelConfig.modelKey,
     modelDisplayName: modelConfig.modelDisplayName,
     systemPrompt: modelConfig.systemPrompt,
-    temperature: modelConfig.temperature,
+    temperature: modelConfig.temperature ?? null,
     reasoning: modelConfig.reasoning ?? null,
     contextSize: modelConfig.contextSize ?? null,
     providerType: lmConnection.providerType ?? null,

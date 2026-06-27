@@ -74,6 +74,7 @@ function printHelp(): void {
   mcpscope benchmark_run_report <run_id> [--json]
   mcpscope benchmark_run_control <run_id> --action <pause|resume|stop> [--mode <continue|retry>] [--json]
   mcpscope benchmark_evaluate <run_id> --judge-model <model_config_id> [--temperature <n>] [--json]
+    (omit --temperature for the provider's own default; otherwise a non-negative number)
   mcpscope benchmark_run_evaluations <run_id> [--json]
   mcpscope benchmark_evaluation_control <evaluation_id> --action <pause|resume|stop> [--mode <continue|retry>] [--json]
 

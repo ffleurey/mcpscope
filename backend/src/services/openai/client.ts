@@ -623,6 +623,21 @@ export async function streamChatCompletion(
 // Token probing
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Error carrying the upstream HTTP status, so callers can distinguish a semantic
+ * request rejection (e.g. a 400 from OpenRouter when `max_tokens: 1` would
+ * truncate a tool call) from transport/auth failures that must still surface.
+ */
+export class ProviderResponseError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ProviderResponseError";
+  }
+}
+
 export async function probePromptTokens(
   baseUrl: string,
   apiKey: string | undefined,
@@ -659,7 +674,8 @@ export async function probePromptTokensDetailed(
 
   const responseText = await response.text();
   if (!response.ok) {
-    throw new Error(
+    throw new ProviderResponseError(
+      response.status,
       `Completion failed: ${response.status} ${response.statusText}: ${responseText.slice(0, 500)}`,
     );
   }

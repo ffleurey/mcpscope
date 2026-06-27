@@ -309,7 +309,7 @@ export function initializeSchema(connection: Database.Database): void {
       id TEXT PRIMARY KEY,
       run_id TEXT NOT NULL REFERENCES benchmark_runs(id) ON DELETE CASCADE,
       judge_model_config_id TEXT NOT NULL,
-      judge_temperature REAL NOT NULL DEFAULT 0.2, -- see DEFAULT_JUDGE_TEMPERATURE; inserts always set it explicitly
+      judge_temperature REAL, -- nullable: NULL => send no temperature (provider default). Otherwise see DEFAULT_JUDGE_TEMPERATURE.
       status TEXT NOT NULL CHECK (status IN (${sqlEnum(benchmarkRunStatusValues)})),
       sessions_json TEXT NOT NULL DEFAULT '[]',
       error TEXT,

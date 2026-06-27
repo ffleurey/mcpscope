@@ -342,7 +342,7 @@ export async function cliBenchmarkRunReport(
 /** POST /api/operations/benchmark-evaluate → BenchmarkEvaluateResult */
 export async function cliBenchmarkEvaluate(
   baseUrl: string,
-  body: { run_id: string; judge_model_config_id: string; temperature?: number },
+  body: { run_id: string; judge_model_config_id: string; temperature?: number | null },
 ): Promise<BenchmarkEvaluateResult> {
   return post<BenchmarkEvaluateResult>(
     baseUrl,

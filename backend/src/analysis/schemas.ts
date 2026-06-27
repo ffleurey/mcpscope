@@ -31,7 +31,8 @@ export const launchAnalysisV2InputSchema = z.object({
   analysis_goal: z.string().min(1),
   model_config_id: z.string().optional(),
   additional_instructions: z.string().optional(),
-  temperature: z.number().optional(),
+  // Omit for the analysis default; null => provider default (no temperature sent).
+  temperature: z.number().nullable().optional(),
   selected_tool_names: z.array(z.string().min(1)).optional(),
   only_failed_tool_calls: z.boolean().optional(),
   evaluation_criteria: z.array(z.string().min(1)).optional(),

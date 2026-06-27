@@ -917,7 +917,9 @@ export async function runBenchmarkEvaluate(
   const result = await cliBenchmarkEvaluate(opts.url, {
     run_id: opts.runId,
     judge_model_config_id: opts.judgeModelConfigId,
-    ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+    // Omitting --temperature means "provider default": send null explicitly so
+    // the judge runs without a temperature param rather than the backend default.
+    temperature: opts.temperature ?? null,
   });
 
   if (opts.json) {
@@ -932,7 +934,9 @@ function renderBenchmarkEvaluate(result: BenchmarkEvaluateResult): void {
   const { evaluation: e } = result;
   process.stdout.write(`${bold(e.id)}  ${e.status}\n`);
   process.stdout.write(`  run    ${e.run_id}\n`);
-  process.stdout.write(`  judge  ${e.judge_model_config_id}  (temp ${e.judge_temperature})\n`);
+  process.stdout.write(
+    `  judge  ${e.judge_model_config_id}  (temp ${e.judge_temperature ?? "provider default"})\n`,
+  );
   process.stdout.write(
     `\nRun 'mcpscope benchmark_run_evaluations ${e.run_id}' for scores.\n`,
   );

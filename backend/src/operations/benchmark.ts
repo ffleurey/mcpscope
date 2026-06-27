@@ -1137,8 +1137,11 @@ export function getBenchmarkRunReport(
 export interface EvaluateBenchmarkRunInput {
   runId: string;
   judgeModelConfigId: string;
-  /** Judge sampling temperature; defaults to DEFAULT_JUDGE_TEMPERATURE when omitted. */
-  temperature?: number;
+  /**
+   * Judge sampling temperature. Omit to use DEFAULT_JUDGE_TEMPERATURE; pass null
+   * to send no temperature so the judge's provider uses its own default.
+   */
+  temperature?: number | null;
 }
 
 /**
@@ -1182,7 +1185,9 @@ export function evaluateBenchmarkRun(
     ),
     runId: input.runId,
     judgeModelConfigId: input.judgeModelConfigId,
-    judgeTemperature: input.temperature ?? DEFAULT_JUDGE_TEMPERATURE,
+    // Omitted (undefined) => default; explicit null => provider default (no temperature).
+    judgeTemperature:
+      input.temperature === undefined ? DEFAULT_JUDGE_TEMPERATURE : input.temperature,
     status: "pending",
     sessions: [],
     error: null,
@@ -1643,7 +1648,7 @@ async function judgeOneSession(
   run: BenchmarkRunRecord,
   runSession: BenchmarkRunRecord["sessions"][number],
   judgeModelConfigId: string,
-  judgeTemperature: number,
+  judgeTemperature: number | null,
   controller: RunController | undefined,
 ): Promise<void> {
   const { db, scheduler } = ctx;

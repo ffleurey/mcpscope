@@ -49,6 +49,7 @@ import {
 } from "./turnAssembly.js";
 import {
   sessionContextBody,
+  sessionTemperatureBody,
   type ChatCompletionGateway,
   type RuntimeTurnResult,
 } from "./modelTurns.js";
@@ -1446,13 +1447,13 @@ export async function createToolEnabledTurn(
   for (let roundIndex = 0; roundIndex < input.maxToolRounds; roundIndex++) {
     const requestBody: Record<string, unknown> = {
       model: session.modelProfileSnapshot.modelKey,
-      temperature: session.modelProfileSnapshot.temperature,
       stream: true,
       stream_options: {
         include_usage: true,
       },
       messages: requestMessages,
       tools: lmTools,
+      ...sessionTemperatureBody(session),
       ...buildReasoningParams(
         session.modelProfileSnapshot.reasoning,
         session.modelProfileSnapshot.connectionBaseUrl,

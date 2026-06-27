@@ -29,7 +29,10 @@
   let connectionId = $state('')
   let modelKey = $state('')
   let modelDisplayName = $state('')
-  let temperature = $state(0.7)
+  // Temperature is optional: 'default' omits it so the provider uses its own
+  // default; 'custom' sends `temperatureValue`. Mirrors the context-size control.
+  let temperatureMode = $state<'default' | 'custom'>('default')
+  let temperatureValue = $state(0.7)
   let systemPrompt = $state('')
   let reasoning = $state<'on' | 'off' | undefined>(undefined)
   let contextSize = $state<number | undefined>(undefined)
@@ -63,7 +66,13 @@
     connectionId = modelConfig?.connectionId ?? ''
     modelKey = modelConfig?.modelKey ?? ''
     modelDisplayName = modelConfig?.modelDisplayName ?? ''
-    temperature = modelConfig?.temperature ?? 0.7
+    if (modelConfig?.temperature == null) {
+      temperatureMode = 'default'
+      temperatureValue = 0.7
+    } else {
+      temperatureMode = 'custom'
+      temperatureValue = modelConfig.temperature
+    }
     systemPrompt = modelConfig?.systemPrompt ?? ''
     reasoning = modelConfig?.reasoning
     contextSize = modelConfig?.contextSize
@@ -201,7 +210,10 @@
     }
     if (!connectionId) e.connectionId = 'Connection is required'
     if (!modelKey) e.modelKey = 'Model is required'
-    if (isNaN(temperature) || temperature < 0 || temperature > 2) {
+    if (
+      temperatureMode === 'custom' &&
+      (isNaN(temperatureValue) || temperatureValue < 0 || temperatureValue > 2)
+    ) {
       e.temperature = 'Temperature must be between 0.0 and 2.0'
     }
     errors = e
@@ -224,7 +236,7 @@
       modelKey,
       modelDisplayName,
       systemPrompt: systemPrompt.trim(),
-      temperature,
+      temperature: temperatureMode === 'custom' ? temperatureValue : undefined,
       reasoning: selectedModelMeta?.supportsReasoning ? reasoning : undefined,
       contextSize: resolvedContextSize,
       createdAt: modelConfig?.createdAt ?? now,
@@ -355,16 +367,26 @@
   </div>
 
   <div class="field">
-    <label class="field-label" for="mc-temperature">Temperature</label>
-    <input
-      id="mc-temperature"
-      class="field-input"
-      type="number"
-      step="0.1"
-      min="0"
-      max="2"
-      bind:value={temperature}
-    />
+    <label class="field-label" for="mc-temperature"
+      >Temperature <span class="field-hinttext">(provider default sends no temperature)</span
+      ></label
+    >
+    <div class="temperature-row">
+      <select id="mc-temperature" class="field-input" bind:value={temperatureMode}>
+        <option value="default">Provider default</option>
+        <option value="custom">Custom…</option>
+      </select>
+      {#if temperatureMode === 'custom'}
+        <input
+          class="field-input"
+          type="number"
+          step="0.1"
+          min="0"
+          max="2"
+          bind:value={temperatureValue}
+        />
+      {/if}
+    </div>
     {#if errors.temperature}<span class="field-errortext">{errors.temperature}</span>{/if}
   </div>
 
@@ -429,10 +451,17 @@
 
 <style>
   .model-select-row,
-  .context-size-row {
+  .context-size-row,
+  .temperature-row {
     display: flex;
     gap: 0.5rem;
     align-items: center;
+  }
+  .temperature-row select {
+    flex: 1;
+  }
+  .temperature-row input {
+    width: 160px;
   }
   .model-select-row select {
     flex: 1;

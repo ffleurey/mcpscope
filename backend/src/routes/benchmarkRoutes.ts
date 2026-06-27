@@ -255,7 +255,8 @@ export function registerBenchmarkRoutes({
     const body = z
       .object({
         judgeModelConfigId: z.string().min(1),
-        temperature: z.number().min(0).optional(),
+        // null => send no temperature (provider default); omitted => backend default.
+        temperature: z.number().min(0).nullable().optional(),
       })
       .parse(request.body);
     try {

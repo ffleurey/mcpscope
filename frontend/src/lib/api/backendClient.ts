@@ -428,7 +428,7 @@ export function launchAnalysis(input: {
   model_config_id?: string
   additional_instructions?: string
   system_prompt_override?: string
-  temperature?: number
+  temperature?: number | null
   max_tool_rounds?: number
   selected_tool_names?: string[]
   only_failed_tool_calls?: boolean
@@ -655,7 +655,7 @@ export function stopBenchmarkRun(runId: string) {
 
 export function launchEvaluation(
   runId: string,
-  input: { judgeModelConfigId: string; temperature?: number },
+  input: { judgeModelConfigId: string; temperature?: number | null },
 ) {
   return request(`/api/benchmark-runs/${encodeURIComponent(runId)}/evaluations`, {
     method: 'POST',
