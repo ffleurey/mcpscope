@@ -55,7 +55,7 @@ The docs above are references, not pre-read requirements. Keep context lean and 
 
 ## Validation
 
-Choose the smallest check that matches the change. See [TESTING.md](TESTING.md) for the canonical list of test, type-check, lint, and format commands and when to use each.
+Choose the smallest check that matches the change. See [TESTING.md](TESTING.md) for the canonical list of test, type-check, lint, and format commands and when to use each. **Before opening a PR, run the full gate (`npm run verify`) — CI enforces lint, type-check, format, and tests, including `format:check` on `frontend/**`.**
 
 ## High-Value References
 
