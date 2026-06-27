@@ -241,6 +241,11 @@ export async function executeAnalysisLaunch(
             }),
       temperature,
       reasoning: modelConfig.reasoning ?? null,
+      // Without providerType, buildReasoningParams falls back to the LM Studio
+      // format (reasoning: "on"), which OpenRouter/Ollama reject — analysis and
+      // judge sessions on those providers would fail init. Carry it through like
+      // sessionCreationShared does for regular sessions.
+      providerType: lmConnection.providerType ?? null,
       createdAt: modelConfig.createdAt,
       updatedAt: modelConfig.updatedAt,
     };
