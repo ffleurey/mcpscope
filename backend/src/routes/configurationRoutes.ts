@@ -28,6 +28,7 @@ import {
   loadModel as loadLmModel,
   unloadModel as unloadLmModel,
 } from "../services/lmstudio/client.js";
+import { ensureModelReady } from "../services/provider/index.js";
 import { listModels } from "../services/openai/client.js";
 import { listUserModels } from "../services/openrouter/client.js";
 import { getOllamaModelDetails } from "../services/ollama/client.js";
@@ -286,7 +287,24 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
       );
     }
     try {
-      await loadLmModel(baseUrl, apiKey ?? undefined, modelKey, contextSize);
+      // When the connection has auto-swap enabled, unload any other model on
+      // this instance first (centralized in ensureModelReady); otherwise just
+      // load the requested model.
+      const autoSwap = listLmConnections().some(
+        (c) => c.baseUrl === baseUrl && c.autoSwapModel === true,
+      );
+      if (autoSwap) {
+        await ensureModelReady({
+          baseUrl,
+          apiKey: apiKey ?? undefined,
+          providerType: "lmstudio",
+          modelKey,
+          contextSize,
+          autoSwap: true,
+        });
+      } else {
+        await loadLmModel(baseUrl, apiKey ?? undefined, modelKey, contextSize);
+      }
       return { ok: true };
     } catch (e) {
       app.log.warn(
@@ -468,9 +486,16 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
       );
     }
 
+    // Auto-swap connections load the model on the first request, so a
+    // not-loaded model is not an error — skip the gate and let the harness swap.
+    const autoSwap = listLmConnections().some(
+      (c) =>
+        c.baseUrl === lmConnectionSnapshot.baseUrl && c.autoSwapModel === true,
+    );
+
     // For hosted or auto-load providers (OpenRouter, Ollama) the model is always
     // available — skip the loaded-model check which only applies to LM Studio.
-    if (providerType !== "openrouter" && providerType !== "ollama") {
+    if (!autoSwap && providerType !== "openrouter" && providerType !== "ollama") {
       const loaded = await isModelLoaded(
         lmConnectionSnapshot.baseUrl,
         lmConnectionSnapshot.apiKey ?? undefined,

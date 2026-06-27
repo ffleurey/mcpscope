@@ -15,6 +15,11 @@ export const providerConnectionSchema = z.object({
   baseUrl: z.string().url(),
   apiKey: z.string().optional(),
   providerType: z.enum(providerTypeValues).default("lmstudio"),
+  // When enabled (LM Studio only), mcpscope unloads any other model loaded on
+  // this instance before serving a request for a different model — so a single
+  // VRAM-limited instance can be driven from the CLI/MCP without manual
+  // load/unload. No-op for ollama/openrouter, which auto-manage loading.
+  autoSwapModel: z.boolean().optional(),
   createdAt: z
     .number()
     .int()
