@@ -57,6 +57,7 @@ function buildSessionSummaryPayload(
     isContextExhausted: boolean;
     loadedContextLength: number | null;
     compactionStrategy: string;
+    initError?: { errorKind: string; message: string } | null | undefined;
     modelProfileSnapshot: { name: string };
     mcpProfileSnapshots: { name: string }[];
   },
@@ -108,12 +109,19 @@ function buildSessionSummaryPayload(
         })()
       : null;
   const latestError =
-    deps.toLifecycleState(summary) === "error" &&
-    summary.sessionType === "session_analysis"
-      ? (getLatestAnalysisDiagnosticSummaryForSession(
-          deps.database.connection,
-          summary.id,
-        ) ?? undefined)
+    deps.toLifecycleState(summary) === "error"
+      ? summary.initError
+        ? {
+            step_id: null,
+            error_kind: summary.initError.errorKind,
+            message: summary.initError.message,
+          }
+        : summary.sessionType === "session_analysis"
+          ? (getLatestAnalysisDiagnosticSummaryForSession(
+              deps.database.connection,
+              summary.id,
+            ) ?? undefined)
+          : undefined
       : undefined;
 
   return {

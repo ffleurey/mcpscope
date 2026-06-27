@@ -124,7 +124,13 @@ function toSessionSummary(record: SessionRecord): SessionSummary {
     compaction_strategy: record.compactionStrategy,
     workflow_kind: undefined,
     workflow_phase: undefined,
-    latest_error: undefined,
+    latest_error: record.initError
+      ? {
+          step_id: null,
+          error_kind: record.initError.errorKind,
+          message: record.initError.message,
+        }
+      : undefined,
     model_profile_snapshot: { name: record.modelProfileSnapshot.name },
     mcp_profile_snapshots: record.mcpProfileSnapshots.map((s) => ({ name: s.name })),
   }

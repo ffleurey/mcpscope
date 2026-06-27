@@ -214,7 +214,8 @@
   let analysisComplete = $derived(analysisPhase === 'complete')
   let analysisFailed = $derived(analysisPhase === 'error' || session?.status === 'error')
   let hasTraceContent = $derived(
-    isInitializing ||
+    isInitError ||
+      isInitializing ||
       sessionPreludeParts.length > 0 ||
       sessionPreludeRawExchanges.length > 0 ||
       timelineItems.length > 0 ||
@@ -411,7 +412,17 @@
         {/if}
         {#if isInitError}
           <div class="init-error-banner">
-            Session initialization failed.
+            <div class="init-error-text">
+              <div>Session initialization failed.</div>
+              {#if session.latest_error}
+                <div class="init-error-detail">
+                  {session.latest_error.message}
+                  {#if session.latest_error.error_kind}
+                    <em>({session.latest_error.error_kind})</em>
+                  {/if}
+                </div>
+              {/if}
+            </div>
             <button class="btn btn-sm" onclick={() => retryInit(session.id)}
               >↻ Retry initialization</button
             >
@@ -708,6 +719,25 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+  }
+
+  .init-error-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
+  .init-error-detail {
+    font-size: 0.8rem;
+    color: color-mix(in srgb, var(--text-bright) 88%, var(--red-bright) 12%);
+    overflow-wrap: anywhere;
+  }
+
+  .init-error-detail em {
+    font-style: normal;
+    color: var(--text-dim);
   }
   .init-error-banner .btn {
     flex-shrink: 0;
