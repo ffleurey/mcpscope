@@ -24,6 +24,7 @@ import {
 } from "./services/mcp/httpClient.js";
 import { apiError } from "./errors.js";
 import type { ChatCompletionGateway } from "./runtime/modelTurns.js";
+import { withAutoModelSwap } from "./runtime/autoModelSwapGateway.js";
 import type { McpGateway } from "./runtime/toolTurns.js";
 import { registerMcpTransport } from "./mcp/index.js";
 import {
@@ -55,13 +56,13 @@ interface RuntimeDependencies {
 export async function buildBackendApp(
   config: BackendConfig,
   dependencies: RuntimeDependencies = {
-    chatCompletionGateway: {
+    chatCompletionGateway: withAutoModelSwap({
       createChatCompletion,
       streamChatCompletion,
       probePromptTokens,
       probePromptTokensDetailed,
       getLoadedContextLength,
-    },
+    }),
     mcpGateway: {
       initializeSession: initializeMcpSession,
       listTools: listMcpTools,

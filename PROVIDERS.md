@@ -20,6 +20,42 @@ During session creation, `providerType` is copied from the connection into the [
 
 ---
 
+## Model loading / unloading
+
+### Who loads the model
+
+mcpscope **never explicitly loads a model at session start**. The model is auto-loaded by the provider when the first chat request arrives — in practice the token probe during session init (`sessionPrelude.ts`). What each provider does:
+
+| Provider | Loading | Explicit load/unload control |
+|----------|---------|------------------------------|
+| **LM Studio** | Auto-loads on first request. A second load under a VRAM limit **fails** — eviction is *not* guaranteed. | Yes — native API (below). This is the only provider we drive. |
+| **Ollama** | Auto-loads on first request; self-manages VRAM eviction (`OLLAMA_MAX_LOADED_MODELS`, `keep_alive`). | No — load/unload routes reject it with `400`. |
+| **OpenRouter** | Hosted; no loading concept. | No. |
+
+### LM Studio native API (`services/lmstudio/client.ts`)
+
+| Operation | Endpoint | Helper |
+|-----------|----------|--------|
+| Load | `POST /api/v1/models/load` `{model, context_length?}` | `loadModel` |
+| Unload | `POST /api/v1/models/unload` `{instance_id}` | `unloadModel` |
+| Status | `GET /api/v1/models` → `loaded_instances[]` | `listModelsWithStatus`, `isModelLoaded`, `getLoadedContextLength` |
+
+`context_length` is set at **load** time (LM Studio ignores `num_ctx` in the request body — see [Context window](#context-window)). `instance_id` == model key in practice.
+
+### Auto-swap (`autoSwapModel` connection flag — LM Studio only)
+
+Opt-in per connection. When on, before every provider request the harness unloads any *other* model loaded on the instance and loads the requested one — so a single VRAM-limited instance can be driven from the CLI/MCP without manual load/unload.
+
+Key design decisions:
+
+- **Request-level, not a session concern.** Implemented as a gateway decorator `withAutoModelSwap` (`runtime/autoModelSwapGateway.ts`) wrapping the `ChatCompletionGateway` in `app.ts`. Sessions never see the flag — there is no `modelProfileSnapshot` field for it. The flag is read **live** per request, so it self-heals if another process evicts our model mid-session.
+- **One central rule.** `ensureModelReady` (`services/provider/modelLoading.ts`) is the only place that knows the swap logic: no-op unless `providerType === "lmstudio"` *and* the flag is on; otherwise unload every other loaded model, then load the target. Both the decorator and the manual load button call it.
+- **`baseUrl` identifies the instance.** The decorator resolves the connection by `baseUrl` (same base URL = same physical process = same VRAM). A `baseUrl`-keyed in-process mutex serializes the swap sequence so concurrent requests don't interleave load/unload.
+- **Manual load button** (`POST /api/lm-connections/models/load`) routes through the same `ensureModelReady`; **preflight** skips its `model_not_loaded` 409 for auto-swap connections.
+- **Tradeoff:** two sessions requesting *different* models on one instance will thrash (each turn re-asserts its model) — correct but inefficient. Accepted; LM Studio is single-model under a VRAM limit anyway.
+
+---
+
 ## Reasoning tokens
 
 ### Request body params (`buildReasoningParams` in `reasoning.ts`)
@@ -94,6 +130,9 @@ Resolution order:
 | File | Purpose |
 |------|---------|
 | `backend/src/services/provider/index.ts` | `ProviderType` type definition, barrel exports |
+| `backend/src/services/provider/modelLoading.ts` | `ensureModelReady` — central auto-swap rule + per-instance lock |
+| `backend/src/runtime/autoModelSwapGateway.ts` | `withAutoModelSwap` gateway decorator (wired in `app.ts`) |
+| `backend/src/services/lmstudio/client.ts` | LM Studio native load/unload/status helpers |
 | `backend/src/services/provider/reasoning.ts` | Request-body reasoning params + `estimateTokensFromText` |
 | `backend/src/services/provider/tokenUsage.ts` | Provider-aware response usage normalization |
 | `backend/src/services/provider/contextLength.ts` | Provider-aware context window resolution |
@@ -114,3 +153,4 @@ Resolution order:
 3. **Token parsing**: Add a `case` in `normalizeStreamUsage` in `tokenUsage.ts` and implement a provider-specific normalizer
 4. **Context length**: Add resolution in `getProviderContextLength` in `contextLength.ts`
 5. **Probing**: Add fallback in `probeRequestPromptTokens` in `promptTokenProbing.ts` if the provider doesn't return usage in non-streaming responses
+6. **Loading**: If the provider needs explicit load/unload (rather than auto-loading on first request), extend `ensureModelReady` in `modelLoading.ts`; otherwise it is a no-op for the new provider by default. See [Model loading / unloading](#model-loading--unloading).

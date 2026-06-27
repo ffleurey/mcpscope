@@ -6,3 +6,5 @@ export type ProviderType = (typeof providerTypeValues)[number];
 export { buildReasoningParams, estimateTokensFromText } from "./reasoning.js";
 export { normalizeStreamUsage } from "./tokenUsage.js";
 export { getProviderContextLength } from "./contextLength.js";
+export { ensureModelReady } from "./modelLoading.js";
+export type { EnsureModelReadyParams } from "./modelLoading.js";

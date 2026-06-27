@@ -23,7 +23,7 @@ The value of the project depends on correctness and inspectability:
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) — current SQLite tables, foreign keys, singleton defaults, and ER diagram
 - [CLI.md](CLI.md) and [MCP.md](MCP.md) — the shared operation catalog as CLI commands and MCP tools
 - [BENCHMARK.md](BENCHMARK.md) — benchmark suite/case/run feature: model, deterministic metrics, LLM rubric evaluation (built on the analysis workflow), and agent-facing surface
-- [PROVIDERS.md](PROVIDERS.md) — provider-specific reasoning, token-counting, and context-window behavior
+- [PROVIDERS.md](PROVIDERS.md) — provider-specific reasoning, token-counting, context-window, and model loading/unloading behavior
 - `ARCHITECTURE.md` — system design, persistence model, streaming model, replay model, and API overview
 
 ## Tech stack

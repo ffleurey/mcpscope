@@ -8,6 +8,7 @@ export const lmStudioConnectionSchema = z.object({
   baseUrl: z.string().url(),
   apiKey: z.string().optional(),
   providerType: providerTypeSchema.default('lmstudio'),
+  autoSwapModel: z.boolean().optional(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 })

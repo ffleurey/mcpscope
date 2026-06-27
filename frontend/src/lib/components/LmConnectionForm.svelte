@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { LmStudioConnection, ProviderType } from '../types'
+  import Checkbox from './Checkbox.svelte'
 
   interface Props {
     connection?: LmStudioConnection | null
@@ -13,6 +14,7 @@
   let baseUrl = $state('http://localhost:1234/v1')
   let apiKey = $state('')
   let providerType = $state<ProviderType>('lmstudio')
+  let autoSwapModel = $state(false)
   let showApiKey = $state(false)
   let seededConnection = $state<LmStudioConnection | null | undefined>(undefined)
 
@@ -23,6 +25,7 @@
     baseUrl = connection?.baseUrl ?? 'http://localhost:1234/v1'
     apiKey = connection?.apiKey ?? ''
     providerType = (connection as { providerType?: ProviderType })?.providerType ?? 'lmstudio'
+    autoSwapModel = (connection as { autoSwapModel?: boolean })?.autoSwapModel ?? false
   })
 
   let errors = $state<Record<string, string>>({})
@@ -52,6 +55,7 @@
       baseUrl: baseUrl.trim(),
       apiKey: apiKey.trim() || undefined,
       providerType,
+      autoSwapModel: providerType === 'lmstudio' ? autoSwapModel : false,
       createdAt: connection?.createdAt ?? now,
       updatedAt: now,
     })
@@ -131,6 +135,17 @@
       </button>
     </div>
   </div>
+
+  {#if providerType === 'lmstudio'}
+    <div class="field">
+      <Checkbox
+        checked={autoSwapModel}
+        label="Auto-swap model"
+        hint="Before each request, unload any other model on this instance and load the one the session needs — so a single VRAM-limited LM Studio instance can be driven from the CLI/MCP without manual load/unload."
+        onchange={(c) => (autoSwapModel = c)}
+      />
+    </div>
+  {/if}
 
   <div class="form-actions">
     <button type="button" class="btn" onclick={onCancel}>Cancel</button>
