@@ -79,7 +79,7 @@ The full walkthrough, including the CLI and a repeatable MCP-server testing loop
 
 - [MCP.md](MCP.md) - MCP interface: transport, tool surface, and structured results
 - [CLI.md](CLI.md) - CLI commands, flags, output format, and exit codes
-- [PROVIDERS.md](PROVIDERS.md) - provider behavior (LM Studio, Ollama, OpenRouter): reasoning tokens, token counting, context windows
+- [PROVIDERS.md](PROVIDERS.md) - provider behavior (LM Studio, Ollama, OpenRouter): reasoning tokens, token counting, context windows, model loading/unloading (incl. auto-swap)
 
 ### Internals & contributing
 
