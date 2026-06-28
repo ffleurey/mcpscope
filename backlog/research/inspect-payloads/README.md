@@ -10,8 +10,15 @@ developer working through the trace. This folder is the systematic baseline we w
 review before deciding on any changes: for every inspectable object type we capture the
 actual `summary` and `full` payloads and define the use-cases each granularity serves.
 
-This is a documentation / analysis pass. **No code has been changed.** The goal is to
-make the current behaviour legible so we can decide what to tune.
+This folder began as a documentation / analysis pass to make the behaviour legible, then
+drove **two phases of implementation**. The captured baseline and the cross-cutting findings
+below are the *original* investigation (kept as the rationale); the current shipped state is:
+
+- **[`phase-2-pass.md`](phase-2-pass.md)** — the per-type content proposal + the assessed
+  good-start + the remaining (defaulted, low-risk) design questions for review. **Start here.**
+- **[`phase-2-usecase-trials.md`](phase-2-usecase-trials.md)** — the use-cases (UC‑1…7) actually
+  *performed* on real runs/sessions, judging each payload's information fit.
+- **[`FINDINGS.md`](FINDINGS.md)** — the tracked register F1–F16 with each finding's outcome.
 
 > **Two cross-cutting research notes** live alongside the per-type folders:
 > - [`formats.md`](formats.md) — text vs JSON, content parity, and **measured token
@@ -53,26 +60,29 @@ One folder per inspectable object type. Each folder has:
 
 ## How the examples were captured
 
-All payloads were captured from the **live test instance** (`http://localhost:3030`)
-on 2026-06-27, while benchmark run `R-RZNP` (benchmark `B-GUDP`, "HA History V3",
-Gemma 4 12B QAT on the `ha-replay` MCP profile) was running. The canonical runtime
-example is session **`9LJM`** — `01 outdoor-winter-coldest-and-freezing (rep 1)`, a
-clean single-turn, three-round, one-compaction trace that exercises every runtime part
-subtype.
+The per-type `example-*.md` files were **re-captured from the rebuilt backend** (Phase 2,
+2026-06-28) so they reflect the shipped payloads. Rendering is now a **backend domain feature**
+(`backend/src/inspect/renderInspect.ts`) consumed identically by the CLI, the MCP tool, and the
+API — text is the default; `format: json` returns the structural payload (no longer CLI-only).
 
-Payloads were rendered with the CLI text renderer (`node cli/dist/index.js inspect`)
-for readability, exactly as the task asked. **This text view is CLI-only** — see the
-cross-cutting findings below.
+The canonical single-turn example is session **`9LJM`** (benchmark run `R-RZNP`, Gemma 4 12B QAT
+on `ha-replay`). Phase 2 added multi-turn (`2ZHT` clean, `RH8P` mid-stream error) and
+analysis/judge (`ZTJE`) session examples, and a 2nd run (`R-AW4J`, Gemma 4 E4B) for the run
+comparison trial. The original 2026-06-27 CLI captures are preserved as raw artifacts in
+[`_measurements/`](_measurements/).
 
 ---
 
-## Cross-cutting findings (read this first)
+## Cross-cutting findings — the *original* baseline (now largely resolved)
 
-These surfaced while capturing the baseline and matter more than any single payload.
-They are the candidate agenda for the tuning work. **The consolidated, triageable register
-(IDs F1–F15, with severity + proposed direction) lives in [`FINDINGS.md`](FINDINGS.md)** —
-the narrative below explains them; FINDINGS.md is what we work from in the decision phase.
-The per-type micro use-cases that justify them are in [`use-cases-by-type.md`](use-cases-by-type.md).
+> **Historical context.** The narrative below is the agenda as it stood when we captured the
+> baseline. **Most of it shipped** across Phase 1 + Phase 2 — the readable MCP text view, the
+> benchmark renderers, the uniform error surface, the lean summaries, etc. Read it for the
+> *why*; see [`FINDINGS.md`](FINDINGS.md) for each finding's **current outcome** and
+> [`phase-2-pass.md`](phase-2-pass.md) for what shipped.
+
+The consolidated register (F1–F16, severity + outcome) is in [`FINDINGS.md`](FINDINGS.md); the
+per-type micro use-cases are in [`use-cases-by-type.md`](use-cases-by-type.md).
 
 ### 1. The MCP tool returns raw JSON, not the readable text view
 
@@ -185,9 +195,9 @@ worth noting when we decide where to invest.
 
 ---
 
-## Status — Phase 1 complete, Phase 2 next
+## Status — Phase 1 + Phase 2 complete
 
-The full hand-over (branch, commits, doc map, Phase-2 work list) is in the task file:
+The full hand-over (branch, commits, doc map) is in the task file:
 [`../../tuning-of-inspect-payload.md`](../../tuning-of-inspect-payload.md).
 
 - [x] Folder structure + captured baseline payloads (this folder)
@@ -196,11 +206,17 @@ The full hand-over (branch, commits, doc map, Phase-2 work list) is in the task 
 - [x] Cross-cutting findings catalogue + tracked register [`FINDINGS.md`](FINDINGS.md) (F1–F16)
 - [x] Format & token-efficiency research ([`formats.md`](formats.md)) and the implementation
       pattern ([`serialization-architecture.md`](serialization-architecture.md))
-- [x] `benchmark_evaluation` (`E-`) + error/non-success payloads captured ([`errors/`](errors/))
-- [x] **Phase 1 implemented** — backend render module + `format` param, benchmark `B-`/`R-`/`E-`
-      redesign, coverage test, and the GUI inspect dialog → **navigator**
+- [x] **Phase 1 implemented** — backend render module + `format` param (text default), benchmark
+      `B-`/`R-`/`E-` redesign, coverage test, GUI inspect **navigator**
       ([`gui-navigator-spec.md`](gui-navigator-spec.md)). Resolves F1, F2, F3, F4 (safe dir),
       F5/F12 (benchmark types), F8, F11, F15, F16.
-- [ ] **Phase 2 — content critique** of the remaining payloads (open findings in
-      [`FINDINGS.md`](FINDINGS.md): F4 json-necessity, F5, F6, F7, F9, F10, F13, F14 +
-      per-type allow-list review).
+- [x] **Phase 2 — content critique** ([`phase-2-pass.md`](phase-2-pass.md)): uniform session
+      `terminal_status` + failure summary (F9/F10), `B-` summary/full split (F5), slimmer JSON
+      (F4), cross-payload model-name consistency, per-turn cost, owned-turn rendering for
+      analysis sessions, chronological child ordering, and run-summary `overall_pct` for run
+      comparison. F6/F7/F13/F14 resolved or decided. Examples refreshed from the rebuilt backend.
+- [x] **Phase 2 — use-case trials** ([`phase-2-usecase-trials.md`](phase-2-usecase-trials.md)):
+      UC‑1…7 performed on real runs/sessions (incl. a 2nd local-model run for run comparison).
+
+**Open for review (not blocking):** the defaulted design questions in
+[`phase-2-pass.md`](phase-2-pass.md) §"Open design questions".
