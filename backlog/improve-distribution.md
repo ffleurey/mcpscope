@@ -7,6 +7,87 @@
 > WASM-SQLite options below remain **future, optional** paths, relevant only if a single binary or
 > a desktop shell becomes a priority. The rest of this doc is kept as the options analysis.
 
+---
+
+## V1 plan (2026-06-28): node:sqlite swap + Node 24 + unsigned Electron
+
+Decision: pursue an **Electron desktop distribution**, enabled by **replacing `better-sqlite3`
+with the built-in `node:sqlite` (`DatabaseSync`)** so packaging needs no native rebuild.
+
+### Verified (tested against local node:sqlite)
+Our usage ports cleanly. Bare named params (`@id` in SQL bound with `{ id }` — no `@` in keys)
+work out of the box; `.run()` returns `{ changes, lastInsertRowid }` (`changes` is a `number`);
+`.get`/`.all`/positional `?` are identical; boolean binding throws (same as today). We use **none**
+of the hard-to-port features (`.iterate/.pluck/.raw`, custom functions, backup/serialize,
+BigInt/safeIntegers, BLOB/Buffer, SQLite error-code catching, constructor options). The real
+surface is just: **pragmas, transactions, and the `Database` type import.**
+
+### GATE — PASSED (2026-06-28)
+Spiked Electron 42.5.0 (bundles **Node 24.17.0**, matching our floor). `node:sqlite` works with
+**no flag** — WAL pragma + named params + prepare/get all succeed, verified in the **real main
+process** (`--headless`), not just `ELECTRON_RUN_AS_NODE`. The early Electron-35 flag problem
+(electron/electron#45532, Node 22.9) is gone on current Electron. Electron route is unblocked.
+
+### Decisions
+- **Node floor: 24** (current LTS; engines `>=24`). node:sqlite flag-free and more mature there.
+- **Transaction helper: savepoint-aware** (no per-call-site nesting audit). Mirrors better-sqlite3's
+  auto-nesting so behavior is preserved regardless of call graph.
+- **Electron v1: unsigned artifacts** (no Apple notarization / Windows Authenticode yet) to validate
+  the pipeline before investing in certs.
+
+### Workstream A — drop better-sqlite3 → node:sqlite (~1 day)
+- `db.ts`: `new Database` → `new DatabaseSync`; `.pragma("…")` → `.exec("PRAGMA …")`.
+- Shared type alias (`BackendConnection = DatabaseSync`) replacing `Database.Database` in ~15 files.
+- `runInTransaction(conn, fn)` helper (BEGIN/COMMIT/ROLLBACK, savepoint-aware, returns fn's value);
+  convert the 15 `connection.transaction(fn)()` sites.
+- Drop the 5 `.prepare<[Params],Row>()` generics (rely on existing `as Row` casts).
+- Suppress the ExperimentalWarning via `--disable-warning=ExperimentalWarning` (not NODE_NO_WARNINGS).
+- Remove `better-sqlite3` + `@types/better-sqlite3`. Run the DB-touching test suite as the net.
+
+### Workstream B — Node 24 bump (~½ day)
+- Add `"engines": { "node": ">=24" }`.
+- Dockerfile: `node:22-alpine` → `node:24-alpine`; **delete** the native-build layer
+  (`python3 make g++`) and native-`.node` copy comments. CI already on Node 24.
+
+### Workstream C — Electron distribution (~1.5–2 wks, dominated by CI not code)
+- `electron/` (main + preload). Boot backend in-process exactly like `cli/src/commands/serve.ts`,
+  then open a BrowserWindow on `http://127.0.0.1:<port>`. Data dir via `app.getPath('userData')`.
+- `electron-builder` → `.dmg` (arm64+x64), NSIS `.exe`, AppImage. **No electron-rebuild/node-gyp**
+  (the payoff of A). asar must include `backend/dist` + `frontend/dist`.
+- Release CI: 3-OS matrix, **unsigned** for v1. Validate AppImage early (Open Design had issues);
+  fall back to a Linux tarball if needed. Auto-update (electron-updater) deferred.
+
+### Compatibility — must not break any existing run mode
+Hard constraint: every current way to run mcpscope keeps working. The DB swap and warning
+suppression touch all entry points, so handle them once, centrally.
+
+| Run mode | Command | What to watch |
+|---|---|---|
+| Dev (full) | `npm run dev` (tsx watch backend + vite) | tsx uses the dev's local Node → must be ≥24; node:sqlite works under tsx; warning suppressed |
+| Dev (CLI) | `npm run dev:cli` (tsx) | same |
+| Backend only | `npm run start:backend` (`node backend/dist/server.js`) | DB opens via db.ts; warning suppressed |
+| Global install | `npm i -g mcpscope && mcpscope serve` | boots backend in-process from dist (serve.ts); `engines:>=24`; bin shebang is plain `node` (can't pass flags → suppress in-code) |
+| Docker | `docker run …` (`node:24-alpine`) | node:sqlite is compiled into the node binary on **musl/alpine** too → also removes the old better-sqlite3 native-compile + apk build-deps |
+| Electron | packaged app | covered by gate (Node 24.17, flag-free) |
+
+**Warning suppression strategy (covers all entry points at once):** all paths open the DB through
+`db.ts`. Suppress the `ExperimentalWarning` programmatically there (e.g. a `suppressWarnings.js`
+imported *before* `node:sqlite` in source order — ESM evaluates imports in order) rather than via
+per-launcher `--disable-warning` flags, since the `bin` shebang can't carry flags portably. Verify
+the warning is gone in dev (tsx), `start:backend`, and `serve`.
+
+**Local-dev Node implication:** this repo's current dev machine is on Node 22.22; `engines:>=24`
+means devs should upgrade locally to match CI/Docker (node:sqlite *runs* on 22.22, but we're
+standardizing on 24). Flagged so the bump isn't a surprise.
+
+**Verification (run before merging A+B):** `npm run verify` on Node 24, then smoke-test each row of
+the table above — `npm run dev` opens a working DB, `mcpscope serve` from a packed tarball
+(`npm pack`) serves + persists, and `docker build` + `docker run` boots without the apk build layer.
+
+### Sequence
+1) Electron node:sqlite spike (gate ✅) → 2) Workstream A (+ B alongside) → 3) Workstream C.
+Each of 2/3 must pass the compatibility matrix above before merge.
+
 ## Context
 
 mcpscope currently ships two ways for end users:
