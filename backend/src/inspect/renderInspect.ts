@@ -353,11 +353,12 @@ function renderTurnHeader(turn: AnyRecord, out: Emit): void {
   const id = String(turn["id"] ?? "");
   if (!id) return;
   const status = turn["status"] ? `  ${String(turn["status"])}` : "";
+  const outcome = turn["outcome"] ? ` (${String(turn["outcome"])})` : "";
   const rounds = (turn["rounds"] as AnyRecord[] | undefined) ?? [];
   const roundStr = `  ${rounds.length} round${rounds.length === 1 ? "" : "s"}`;
   const total = (turn["tokens"] as AnyRecord | undefined)?.["total"];
   const tokenStr = total != null ? `  (${Number(total)} tokens)` : "";
-  out(`${id}  turn${status}${roundStr}${tokenStr}`);
+  out(`${id}  turn${status}${outcome}${roundStr}${tokenStr}`);
 }
 
 function renderTurnParts(turn: AnyRecord, out: Emit): void {
@@ -444,6 +445,14 @@ function renderGenericStep(step: AnyRecord, out: Emit): void {
   const parts = step["parts"] as AnyRecord[] | undefined;
   if (parts) {
     for (const part of parts) renderPart(part, "  ", out);
+  }
+
+  // Owned turns (analysis steps): the step's actual work — the agent/judge's
+  // rounds, tool calls, and final answer. Without this an analysis-session inspect
+  // shows only the step headers and the judge's trace/verdict is invisible.
+  const ownedTurns = step["turns"] as AnyRecord[] | undefined;
+  if (ownedTurns) {
+    for (const turn of ownedTurns) renderTurnParts(turn, out);
   }
 }
 

@@ -74,7 +74,21 @@ function loadFixture(name: string): InspectResult {
 
 describe("renderInspect — text coverage (json ⊆ text, minus allow-list)", () => {
   // Runtime types: the reference payloads captured from a real session.
-  for (const name of ["session-full", "turn-full", "toolcall-full"]) {
+  // `analysis-session-full` is an analysis/judge session (ZTJE): its steps OWN
+  // turns, so it guards that the owned-turn trace (the judge's tool calls + verdict)
+  // renders in text — the gap that made an analysis-session inspect show only step
+  // headers.
+  // `multiturn-error-full` is a 2-turn primary session whose 2nd turn errored
+  // mid-stream (no diagnostic part): it guards the turn header/`outcome`, the
+  // synthesized "errored turn" failure summary, and chronological child ordering
+  // (the compaction between turns 1 and 2 renders in order).
+  for (const name of [
+    "session-full",
+    "turn-full",
+    "toolcall-full",
+    "analysis-session-full",
+    "multiturn-error-full",
+  ]) {
     it(`covers every string leaf of ${name}`, () => {
       assertStringCoverage(loadFixture(name));
     });

@@ -19,6 +19,8 @@ export const TEXT_OMISSION_ALLOWLIST: ReadonlySet<string> = new Set([
   // entirely (no use-case needed them); `parent_ref` is now *rendered*. What
   // remains here is deliberately JSON-only.
   "source_turn_id", // compaction drill ID; text shows "after turn N"
+  "owned_turn_ids", // analysis-step nav list; the owned turns themselves render
+  "postamble_step_ids", // analysis-step nav list (e.g. the trailing compaction)
   "model.id", // the model's internal config id; text shows name + key instead
   "model_config_id", // run join key; text shows the friendly model_name instead
   "judge_model_config_id", // eval join key; text shows the friendly judge name
