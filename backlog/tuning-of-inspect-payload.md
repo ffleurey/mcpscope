@@ -68,9 +68,20 @@ Read in this order:
 - **Findings resolved:** F1, F2, F3 (text default), F4 (safe direction + coverage test), F5/F12
   (for the benchmark types), F8, F11 (E- incompleteness), F15, F16.
 
-## Phase 2 — the starting point (what's next)
+## Phase 2 — complete (2026-06-28)
 
-The open work is the **content critique**; `FINDINGS.md` is the tracked list. Open items:
+The content critique is done — see [`research/inspect-payloads/phase-2-pass.md`](research/inspect-payloads/phase-2-pass.md)
+for the proposal (per-type changes, the assessed good-start, and the remaining low-risk
+design questions, each with a shipped default). Headline: a **uniform top-level
+`terminal_status` + failure summary** across all session kinds (F9/F10); a real **`B-`
+summary/full split** (F5); **slimmer JSON** (F4 dropped `token_source`/`token_confidence`/
+`owner_step_id`, renders `parent_ref`); F6/F7/F13/F14 resolved/decided. `verify` green;
+the per-type examples were re-captured from the rebuilt backend. The list below is the
+register the pass worked from (all addressed; `FINDINGS.md` has the outcomes).
+
+### Original open items (the starting point)
+
+`FINDINGS.md` is the tracked list. Items:
 - **F4** — decide, *per type*, whether the plumbing fields (`token_source`, `owner_step_id`,
   `parent_ref`, …) belong in the **JSON** at all (they're already omitted from text).
 - **F5** — `B-` / `B-.N` are still `summary == full`; decide if they need a real split.
