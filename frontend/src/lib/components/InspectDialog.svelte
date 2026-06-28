@@ -1,9 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import {
-    lookupByHierarchicalId,
-    lookupTextByHierarchicalId,
-  } from '../api/backendClient'
+  import { lookupByHierarchicalId, lookupTextByHierarchicalId } from '../api/backendClient'
+  import { collectInspectIds, linkify } from '../inspectIds'
   import DialogShell from './DialogShell.svelte'
   import SegmentedControl from './SegmentedControl.svelte'
 
@@ -16,43 +14,84 @@
 
   let { id, initialMode = 'full', onClose }: Props = $props()
 
-  // The two orthogonal axes of the inspect tool, mirrored in the GUI:
-  //   detail = summary | full   ·   format = text | json
-  // `initialMode` only seeds the opening detail level (the dialog mounts fresh
-  // each time the pill is used), after which the toggles drive `mode`.
+  // ── Navigation (browser-like) ───────────────────────────────────────────────
+  // A history stack of inspected ids; back/forward move a pointer over it. Detail
+  // and format are sticky view settings, not per-history-entry.
+  let history = $state<string[]>(untrack(() => [id]))
+  let pointer = $state(0)
+  const currentId = $derived(history[pointer] ?? id)
+  const canBack = $derived(pointer > 0)
+  const canForward = $derived(pointer < history.length - 1)
+
   let mode = $state<'summary' | 'full'>(untrack(() => initialMode))
   let format = $state<'text' | 'json'>('text')
 
   let loading = $state(false)
   let error = $state<string | null>(null)
   let jsonData = $state<unknown>(null)
+  let idSet = $state<Set<string>>(new Set())
   let textData = $state('')
   let copied = $state(false)
 
-  async function load(currentMode: 'summary' | 'full', currentFormat: 'text' | 'json') {
+  // The id input doubles as an address bar: it reflects the current id and lets
+  // you jump anywhere (free text — Enter to go).
+  let inputValue = $state(untrack(() => id))
+  $effect(() => {
+    inputValue = currentId
+  })
+
+  function navigate(targetId: string) {
+    const next = targetId.trim()
+    if (!next || next === currentId) return
+    history = [...history.slice(0, pointer + 1), next]
+    pointer = history.length - 1
+  }
+  function back() {
+    if (canBack) pointer -= 1
+  }
+  function forward() {
+    if (canForward) pointer += 1
+  }
+
+  async function load(
+    idToLoad: string,
+    currentMode: 'summary' | 'full',
+    currentFormat: 'text' | 'json',
+  ) {
     loading = true
     error = null
     try {
-      if (currentFormat === 'json') {
-        jsonData = await lookupByHierarchicalId(id, currentMode)
-      } else {
-        textData = await lookupTextByHierarchicalId(id, currentMode)
-      }
+      // Always fetch the JSON: it is the display in JSON mode and the reliable
+      // id-set used to linkify both views (the T2 approach).
+      jsonData = await lookupByHierarchicalId(idToLoad, currentMode)
+      idSet = collectInspectIds(jsonData)
+      textData =
+        currentFormat === 'text' ? await lookupTextByHierarchicalId(idToLoad, currentMode) : ''
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
+      jsonData = null
+      idSet = new Set()
+      textData = ''
     } finally {
       loading = false
     }
   }
 
-  // Reload on mount and whenever either axis changes.
+  // Reload on mount and whenever the current id or a view setting changes.
   $effect(() => {
-    void load(mode, format)
+    void load(currentId, mode, format)
+  })
+
+  const segments = $derived.by(() => {
+    if (loading || error) return []
+    const display = format === 'json' ? JSON.stringify(jsonData, null, 2) : textData
+    const links = new Set(idSet)
+    links.delete(currentId) // don't link the element you're already viewing
+    return linkify(display, links)
   })
 
   async function copyPayload() {
-    const content =
-      format === 'json' ? JSON.stringify(jsonData, null, 2) : textData
+    const content = format === 'json' ? JSON.stringify(jsonData, null, 2) : textData
     try {
       await navigator.clipboard.writeText(content)
       copied = true
@@ -63,8 +102,40 @@
   }
 </script>
 
-<DialogShell title={`Inspect ${id}`} {onClose} dialogClass="inspect-dialog-size" fixedHeight flush>
+<DialogShell
+  title={`Inspect ${currentId}`}
+  {onClose}
+  dialogClass="inspect-dialog-size"
+  fixedHeight
+  flush
+>
   <div class="inspect-toolbar">
+    <div class="nav-group">
+      <button class="nav-btn" onclick={back} disabled={!canBack} title="Back" aria-label="Back"
+        >←</button
+      >
+      <button
+        class="nav-btn"
+        onclick={forward}
+        disabled={!canForward}
+        title="Forward"
+        aria-label="Forward">→</button
+      >
+    </div>
+
+    <input
+      class="id-input"
+      bind:value={inputValue}
+      onkeydown={(e) => {
+        if (e.key === 'Enter') navigate(inputValue)
+      }}
+      spellcheck="false"
+      autocomplete="off"
+      aria-label="Inspect id (Enter to go)"
+    />
+
+    <span class="toolbar-spacer"></span>
+
     <div class="control">
       <span class="control-label">Detail</span>
       <SegmentedControl
@@ -91,8 +162,6 @@
       />
     </div>
 
-    <span class="toolbar-spacer"></span>
-
     <button
       class="copy-btn"
       onclick={copyPayload}
@@ -108,10 +177,9 @@
       <div class="state">Loading…</div>
     {:else if error}
       <pre class="payload payload-error">{error}</pre>
-    {:else if format === 'json'}
-      <pre class="payload">{JSON.stringify(jsonData, null, 2)}</pre>
     {:else}
-      <pre class="payload">{textData}</pre>
+      <!-- prettier-ignore -->
+      <pre class="payload">{#each segments as seg, i (i)}{#if seg.id}<button type="button" class="id-link" onclick={() => seg.id && navigate(seg.id)}>{seg.text}</button>{:else}{seg.text}{/if}{/each}</pre>
     {/if}
   </div>
 </DialogShell>
@@ -127,7 +195,7 @@
   .inspect-toolbar {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.7rem;
     padding: 0.55rem 0.85rem;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
@@ -136,6 +204,50 @@
 
   .toolbar-spacer {
     flex: 1;
+  }
+
+  .nav-group {
+    display: inline-flex;
+    gap: 0.25rem;
+  }
+
+  .nav-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    line-height: 1;
+    padding: 0.22rem 0.5rem;
+  }
+
+  .nav-btn:hover:not(:disabled) {
+    border-color: var(--text-dim);
+    color: var(--text-bright);
+  }
+
+  .nav-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .id-input {
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-bright);
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    padding: 0.22rem 0.5rem;
+    width: 14rem;
+    max-width: 40vw;
+  }
+
+  .id-input:focus-visible {
+    outline: none;
+    border-color: var(--amber-bright);
   }
 
   .control {
@@ -194,6 +306,24 @@
 
   .payload-error {
     color: var(--red-bright);
+  }
+
+  /* Inline id hyperlink within the payload: an amber, underline-on-hover link
+     that carries no button chrome so it reads as text in the monospace flow. */
+  .id-link {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: var(--amber-bright);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--amber-bright) 45%, transparent);
+  }
+
+  .id-link:hover {
+    text-decoration-color: var(--amber-bright);
   }
 
   .state {
