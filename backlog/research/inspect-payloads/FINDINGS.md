@@ -8,14 +8,16 @@ decision phase. Severity = impact on core use-cases × cheapness of fix.
 Legend — **Area:** FMT (format/efficiency) · GRAN (summary/full dial) · ERR (error
 inspection) · COV (coverage) · DOC (hygiene). **Sev:** 🔴 high · 🟡 medium · ⚪ low.
 
-> **Implemented (Phase 1 refactor, 2026-06-27):** the serializer architecture is in.
-> Rendering is now a backend domain feature (`backend/src/inspect/renderInspect.ts`)
-> consumed by CLI + MCP + API via a `format: text|json` param (text default). This
-> **resolves F1, F2, F8, F15, F16** and the safe direction of **F4** (text ⊆ json by
-> construction + a coverage test for the rest: `renderInspect.coverage.test.ts` +
-> `omissionAllowList.ts`). Benchmark `B-`/`R-`/`E-` payloads were **redesigned**
-> (drill-oriented; F5/F12 addressed for those types). Remaining open: the GRAN/content
-> items below for runtime + the deferred Phase-2 content critique.
+> **Implemented (Phase 1, 2026-06-28):** the serializer architecture is in. Rendering is now
+> a backend domain feature (`backend/src/inspect/renderInspect.ts`) consumed by CLI + MCP +
+> API via a `format: text|json` param (**text default**). This **resolves F1, F2, F3 (text
+> default), F8, F15, F16** and the safe direction of **F4** (text ⊆ json by construction + a
+> coverage test for the rest: `renderInspect.coverage.test.ts` + `omissionAllowList.ts`).
+> Benchmark `B-`/`R-`/`E-` payloads were **redesigned** (drill-oriented; **F5/F12** addressed
+> for those types; `E-` now carries the **F11** incomplete flag). The GUI inspect dialog
+> became a **navigator** (back/forward + clickable ids; see `gui-navigator-spec.md`).
+> **Remaining open (Phase 2):** F4 (json-necessity), F5 (`B-`/`B-.N`), F6, F7, F9, F10, F13,
+> F14, and the per-type allow-list/content review — the GRAN/content items below.
 
 | ID | Area | Sev | Finding | Evidence | Proposed direction |
 |----|------|-----|---------|----------|--------------------|

@@ -18,23 +18,79 @@ This is a tasks taht reaquires a lot of exploration and heavy systematic work be
 
 ---
 
-## Progress so far (2026-06-28) — committed, not finished
+# Hand-over — Phase 1 complete; ready for Phase 2 (2026-06-28)
 
-### Research & specification — `backlog/research/inspect-payloads/`
-- Captured the real `summary` and `full` inspect payloads for **every object type** (session, setup, turn, round, part subtypes, deterministic/compaction step, benchmark, case, run, evaluation), plus **error/non-success** scenarios (failed sessions, judge `json_parse_error`, incomplete evaluation, the `diagnostic` part).
-- Per-type READMEs of use-cases; a workflow-level `use-cases.md`; a micro `use-cases-by-type.md`; `formats.md` with **measured token efficiency** (JSON costs ~2.8–3.1× text on tree/overview payloads); a consolidated findings register **`FINDINGS.md` (F1–F16)**; and `serialization-architecture.md` (the agreed implementation pattern).
+The original "explore → capture → decide" work above is **done**, and we went on to build the
+**structural foundation (Phase 1)**: a backend rendering architecture, the benchmark payload
+redesign, and the GUI inspect dialog/navigator. What remains is **Phase 2 — the per-payload
+*content* critique**: applying critical eyes to what each payload actually contains, against
+the documented use-cases. Phase 1 deliberately changed *structure* (and the benchmark payloads,
+which had no evidence of being good) while keeping sessions/parts as the reference.
 
-### Implementation — Phase 1 refactor (structure + benchmark redesign)
-- **Backend render module** (`backend/src/inspect/renderInspect.ts`): one source-of-truth renderer; `format: text | json`; text is derived **only** from the JSON payload (text ⊆ json by construction); the step `latest_error` is now shown (F8).
-- **`format` param** plumbed through the inspect operation, `/api/lookup`, and MCP — **text by default**, no `structuredContent` double-encode (F15). Rendering is now a backend domain feature; the **CLI is a thin printer** (its local renderers deleted). Fixes F1/F2/F4(safe direction)/F8/F16.
-- **Benchmark `B-`/`R-`/`E-` payloads redesigned** to be drill-oriented (status + drillable session lists with metrics; `B-` carries no results; `E-` has a lean summary + incomplete flag). Sessions/parts and `B-.N` kept as reference.
-- **Coverage test + omission allow-list** enforce json ⊆ text minus a reviewed allow-list (F4 seed). All backend tests green.
+**Everything is on branch `tuning-of-inspect-payload`** (pushed). Commits:
+`5666ee9` backend render + `format` param + benchmark redesign + GUI dialog ·
+`8edf5d9` GUI payload navigator · `7190dfd` format fix.
+The full `verify` gate is green (prettier + eslint + svelte-check + tsc + **323 tests**).
 
-### GUI
-- The ID-pill menu (Copy ID / Summary / Full) now opens a **consolidated Inspect dialog** (the GUI equivalent of the inspect tool) with **detail (summary/full)** and **format (text/json)** toggles, a fixed size that doesn't resize on change, and a single scrolling content region.
-- New reusable **`SegmentedControl.svelte`** (amber active-state) added to the **design system** (DesignReference + DESIGN-SYSTEM.md); `DialogShell` gained `fixedHeight` / `flush` props.
+## Hand-over package — `backlog/research/inspect-payloads/`
 
-### Still to do (next)
-- **Phase 2 content critique** of the remaining payloads against the use-cases: runtime findings **F6, F7, F9, F10, F13**, per-type allow-list contents, and whether the F4 plumbing fields belong in the JSON at all.
-- GUI JSON **syntax highlighting** (deferred), and an optional pill action to **navigate to the GUI view** for an element.
-- Live end-to-end verification once the backend is rebuilt/restarted.
+Read in this order:
+- **`README.md`** — overview + the cross-cutting findings narrative + folder index.
+- **`FINDINGS.md`** — the authoritative, tracked register **F1–F16** (severity, evidence,
+  proposed direction, and which are resolved by Phase 1). *This is the Phase-2 work list.*
+- **`use-cases.md`** (workflow fetch-paths UC‑1…7) and **`use-cases-by-type.md`** (the micro
+  per-type use-cases with the key ones flagged) — the lens for the content critique.
+- **`formats.md`** — text-vs-JSON, parity, and **measured token efficiency** (JSON ≈ 2.8–3.1×
+  text on tree/overview payloads). **`serialization-architecture.md`** — the implementation
+  pattern (decisions resolved). **`gui-navigator-spec.md`** — the GUI navigator spec.
+- **Per-type folders** (`session/ setup/ turn/ round/ part/ step/ benchmark/ benchmark-case/
+  benchmark-run/ benchmark-evaluation/ errors/`) — captured `summary`+`full` payload examples
+  and per-type use-case READMEs. **`_measurements/`** — raw token artifacts + test fixtures.
+
+## What Phase 1 delivered (done)
+
+- **Research & capture** of every object type's `summary`/`full` payloads + error/non-success
+  scenarios (failed sessions, judge `json_parse_error`, incomplete evaluation, `diagnostic` part).
+- **Backend render module** (`backend/src/inspect/renderInspect.ts`): one renderer, `format:
+  text | json`, text derived **only** from the JSON (text ⊆ json by construction). The step
+  `latest_error` now renders.
+- **`format` param** through the inspect operation, `/api/lookup`, and MCP — **text by
+  default**, no `structuredContent` double-encode. Rendering is a backend domain feature; the
+  **CLI is a thin printer**. **Coverage test + omission allow-list** enforce json ⊆ text.
+- **Benchmark `B-`/`R-`/`E-` payloads redesigned** drill-oriented (status + session lists with
+  metrics; `B-` no results; `E-` lean summary + incomplete flag). Sessions/parts and `B-.N`
+  kept as reference.
+- **GUI:** the ID pill opens a consolidated **Inspect dialog turned navigator** — back/forward
+  history, a free-text id "address bar", and **clickable ids in both JSON and text** (grammar-
+  based detection; text links via the prefetched JSON's id-set). New reusable
+  **`SegmentedControl.svelte`** (amber active state) added to the design system; `DialogShell`
+  gained `fixedHeight`/`flush`.
+- **Findings resolved:** F1, F2, F3 (text default), F4 (safe direction + coverage test), F5/F12
+  (for the benchmark types), F8, F11 (E- incompleteness), F15, F16.
+
+## Phase 2 — the starting point (what's next)
+
+The open work is the **content critique**; `FINDINGS.md` is the tracked list. Open items:
+- **F4** — decide, *per type*, whether the plumbing fields (`token_source`, `owner_step_id`,
+  `parent_ref`, …) belong in the **JSON** at all (they're already omitted from text).
+- **F5** — `B-` / `B-.N` are still `summary == full`; decide if they need a real split.
+- **F6** — full content (tool schemas, tool results) is reachable only by *direct part* lookup;
+  decide whether to surface/signal it.
+- **F7** — a round full-lookup doesn't expand its own tool result.
+- **F9 / F10** — a primary session exposes no top-level status/error; failure is exposed
+  inconsistently across session kinds. Define one uniform "how did this end and why".
+- **F13** — nothing consumes compaction/deterministic-step payloads; decide invest vs UI-only.
+- **F14** — doc drift: a design doc says the judge seeds from `short=true`; shipped says
+  "default, not short".
+- **Per-type omission allow-list contents** (`backend/src/inspect/omissionAllowList.ts`) — review.
+- The broad pass: critical eyes on **every** payload via `use-cases-by-type.md` + the captured
+  examples; tighten content where it doesn't serve a use-case.
+
+## Deferred (not blocking Phase 2)
+
+- GUI: **JSON syntax highlighting** in the dialog; navigator **id autocomplete** (top-level
+  entities + in-payload children) and an optional **backend id-offset sidecar** for exact text
+  links; a pill action to **open the element's GUI view**.
+- **Ops:** live end-to-end verification needs the `:3030` backend **rebuilt/restarted** — it
+  still runs the pre-Phase-1 build, so its `inspect` ignores `format=text` and serves the old
+  benchmark payloads.

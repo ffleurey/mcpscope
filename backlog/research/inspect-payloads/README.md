@@ -21,6 +21,8 @@ make the current behaviour legible so we can decide what to tune.
 >   the "gradual exploration" principle. Raw measurement artifacts: [`_measurements/`](_measurements/).
 > - [`use-cases-by-type.md`](use-cases-by-type.md) — the **micro** use-case catalogue:
 >   per type, who asks what, with the key ones to optimize for flagged.
+> - [`gui-navigator-spec.md`](gui-navigator-spec.md) — the GUI inspect-dialog **navigator**
+>   spec (browser-like history, clickable ids); the locked decisions and deferred items.
 > - [`serialization-architecture.md`](serialization-architecture.md) — the implementation
 >   pattern (per-type serializer + single text renderer derived from the JSON payload) that
 >   makes text/JSON equivalent **by construction**.
@@ -183,18 +185,22 @@ worth noting when we decide where to invest.
 
 ---
 
-## Status
+## Status — Phase 1 complete, Phase 2 next
+
+The full hand-over (branch, commits, doc map, Phase-2 work list) is in the task file:
+[`../../tuning-of-inspect-payload.md`](../../tuning-of-inspect-payload.md).
 
 - [x] Folder structure + captured baseline payloads (this folder)
-- [x] Use-case READMEs per type (grounded, file:line cited)
-- [x] Cross-cutting findings catalogue (above)
-- [x] Format & token-efficiency research ([`formats.md`](formats.md)) + workflow use-cases
-      ([`use-cases.md`](use-cases.md))
-- [x] `benchmark_evaluation` (`E-`) examples captured (run `R-RZNP` completed with two
-      passes: complete `E-FE7K`, errored `E-2BPM`)
-- [x] Error / non-success payloads captured ([`errors/`](errors/)) — failed primary
-      sessions, judge `json_parse_error`, incomplete evaluation; run example refreshed to
-      its completed (with-failures) state
-- [ ] **Next (decision):** triage the findings above into concrete tuning changes
-      (per the project's feedback-triage convention: easy fixes now, design-touching
-      ones discussed first).
+- [x] Use-case READMEs per type; workflow [`use-cases.md`](use-cases.md) + micro
+      [`use-cases-by-type.md`](use-cases-by-type.md)
+- [x] Cross-cutting findings catalogue + tracked register [`FINDINGS.md`](FINDINGS.md) (F1–F16)
+- [x] Format & token-efficiency research ([`formats.md`](formats.md)) and the implementation
+      pattern ([`serialization-architecture.md`](serialization-architecture.md))
+- [x] `benchmark_evaluation` (`E-`) + error/non-success payloads captured ([`errors/`](errors/))
+- [x] **Phase 1 implemented** — backend render module + `format` param, benchmark `B-`/`R-`/`E-`
+      redesign, coverage test, and the GUI inspect dialog → **navigator**
+      ([`gui-navigator-spec.md`](gui-navigator-spec.md)). Resolves F1, F2, F3, F4 (safe dir),
+      F5/F12 (benchmark types), F8, F11, F15, F16.
+- [ ] **Phase 2 — content critique** of the remaining payloads (open findings in
+      [`FINDINGS.md`](FINDINGS.md): F4 json-necessity, F5, F6, F7, F9, F10, F13, F14 +
+      per-type allow-list review).
