@@ -1,6 +1,6 @@
 # inspect example — deterministic step — compaction (9LJM.2C)
 
-- **Source:** `9LJM.2C` — a `strip-reasoning` compaction after turn 1.
+- **Source:** `9LJM.2C` — a `strip-reasoning` compaction after turn 1. Compaction-only accounting fields; no empty turn-owning arrays.
 
 - **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
 

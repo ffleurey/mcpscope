@@ -1,7 +1,7 @@
 # inspect example — session (9LJM)
 
 - **Source:** `9LJM` — `01 outdoor-winter-coldest-and-freezing (rep 1)`, a primary benchmark session (Gemma 4 12B QAT, HA Replay).
-- The header now carries a uniform **`status`** (terminal outcome) and the **`parent`** run edge (F4/F9).
+- Header carries a uniform **`status`** (terminal outcome) and the **`parent`** run edge; each turn now has a **header line** (rounds + token cost).
 
 - **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
 
@@ -23,6 +23,7 @@
 9LJM.S.2-TD  tool_definitions  10 tools  (4650 tokens)
   ha_history_get_current_time, ha_history_list_areas, ha_history_list_devices, ha_history_list_device_entities, ha_history_list_entities, ha_history_get_state, ha_history_get_sensor_stats, ha_history_get_consumption, ha_history_detect_sessions, ha_history_get_state_history
 
+9LJM.1T  turn  complete  4 rounds  (7094 tokens)
 9LJM.1T.1.1-U  user_prompt  (81 tokens)
 9LJM.1T.1.2-R  reasoning  (314 tokens - stripped)
 9LJM.1T.1.3-T  tool_call  ha_history_list_entities  (128 tokens)
@@ -57,6 +58,7 @@
 9LJM.S.2-TD  tool_definitions  10 tools  (4650 tokens)
   ha_history_get_current_time, ha_history_list_areas, ha_history_list_devices, ha_history_list_device_entities, ha_history_list_entities, ha_history_get_state, ha_history_get_sensor_stats, ha_history_get_consumption, ha_history_detect_sessions, ha_history_get_state_history
 
+9LJM.1T  turn  complete  4 rounds  (7094 tokens)
 9LJM.1T.1.1-U  user_prompt  (81 tokens)
   I'd like to understand how cold it got outside last winter — December 2025 through February 2026. Two things: (1) which day was the coldest, and how cold did it get? (2) on how many days that winter did the temperature drop below freezing at some point? Resolve the outdoor sensor yourself and keep it concise.
 9LJM.1T.1.2-R  reasoning  (314 tokens - stripped)

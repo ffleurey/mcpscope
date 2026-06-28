@@ -1,7 +1,7 @@
 # inspect example — error: primary session (N8GF)
 
 - **Source:** `N8GF` — `02 charger-energy-month (rep 3)`, terminal status **error** (looped to the 20-round cap).
-- **Fixed (F9/F10):** the header now shows `status error` + the failure reason; you no longer have to read to the trailing `diagnostic` part.
+- **Fixed (F9/F10):** the header shows `status error` + the failure reason; no need to read to the trailing `diagnostic` part.
 
 - **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
 
@@ -24,6 +24,7 @@ N8GF.S.1-MI  mcp_instructions  (391 tokens)
 N8GF.S.2-TD  tool_definitions  10 tools  (4650 tokens)
   ha_history_get_current_time, ha_history_list_areas, ha_history_list_devices, ha_history_list_device_entities, ha_history_list_entities, ha_history_get_state, ha_history_get_sensor_stats, ha_history_get_consumption, ha_history_detect_sessions, ha_history_get_state_history
 
+N8GF.1T  turn  error  21 rounds
 N8GF.1T.1.1-U  user_prompt  (89 tokens)
 N8GF.1T.1.2-R  reasoning  (608 tokens)
 N8GF.1T.1.3-T  tool_call  ha_history_list_entities  (418 tokens)
@@ -78,6 +79,7 @@ N8GF.S.1-MI  mcp_instructions  (391 tokens)
 N8GF.S.2-TD  tool_definitions  10 tools  (4650 tokens)
   ha_history_get_current_time, ha_history_list_areas, ha_history_list_devices, ha_history_list_device_entities, ha_history_list_entities, ha_history_get_state, ha_history_get_sensor_stats, ha_history_get_consumption, ha_history_detect_sessions, ha_history_get_state_history
 
+N8GF.1T  turn  error  21 rounds
 N8GF.1T.1.1-U  user_prompt  (89 tokens)
   Give me a rundown of the car charger's electricity use for February 2026 — it's on a metered outdoor plug. How much energy did it use in total that month? Which single day was the highest, and how much? On which days did it use more than 20 kWh? And roughly how does February compare to January? Resolve the charger entity yourself and keep it concise.
 N8GF.1T.1.2-R  reasoning  (608 tokens)

@@ -1,7 +1,7 @@
 # inspect example — round (9LJM.1T.3)
 
 - **Source:** `9LJM.1T.3` — one model/tool iteration (reasoning + the tool call).
-- A round **full** lookup now expands the tool `{call, result}` (F7 — no longer a part-only drill).
+- A round **full** lookup expands the tool `{call, result}` (F7).
 
 - **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
 

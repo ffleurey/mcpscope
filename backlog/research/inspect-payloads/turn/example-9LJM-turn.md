@@ -1,6 +1,6 @@
 # inspect example — turn (9LJM.1T)
 
-- **Source:** `9LJM.1T` — the single turn of session 9LJM, across its rounds.
+- **Source:** `9LJM.1T` — the single turn of session 9LJM. The header gives round count + turn token cost.
 
 - **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
 
@@ -9,6 +9,7 @@
 `mcpscope inspect --short 9LJM.1T`
 
 ```text
+9LJM.1T  turn  complete  4 rounds  (7094 tokens)
 9LJM.1T.1.1-U  user_prompt  (81 tokens)
 9LJM.1T.1.2-R  reasoning  (314 tokens - stripped)
 9LJM.1T.1.3-T  tool_call  ha_history_list_entities  (128 tokens)
@@ -24,6 +25,7 @@
 `mcpscope inspect 9LJM.1T`
 
 ```text
+9LJM.1T  turn  complete  4 rounds  (7094 tokens)
 9LJM.1T.1.1-U  user_prompt  (81 tokens)
   I'd like to understand how cold it got outside last winter — December 2025 through February 2026. Two things: (1) which day was the coldest, and how cold did it get? (2) on how many days that winter did the temperature drop below freezing at some point? Resolve the outdoor sensor yourself and keep it concise.
 9LJM.1T.1.2-R  reasoning  (314 tokens - stripped)

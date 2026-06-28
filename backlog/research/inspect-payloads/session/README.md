@@ -59,6 +59,11 @@ Full adds, per round: the `user_prompt`/`assistant_answer` **text**, and every
   and `owner_step_id` (per turn) were dropped from the payload — no use-case read them. The
   `parent_ref` edge is now **rendered** (`parent <kind> <id>`), surfacing the run/analyzed
   -session link for the audit chain.
+- **Structure (content pass):** the JSON groups all header/identity metadata
+  (`model`, `mcp`, `parent_ref`, `terminal_status`, failure) **before** the body (`setup` +
+  `steps`), instead of trailing `parent_ref`/`mcp` after the big `steps` array — the JSON now
+  reads like the text header. Each turn renders a **header line** (rounds + token cost) in the
+  session view, delimiting turns the way a step header delimits a compaction step.
 - **Still by design:** a full session inspect inlines neither tool schemas nor tool results
   (the router stays cheap); the part **IDs + token weight** are the drill signal and
   `tool_definitions` now shows its **tool count** (F6). Drill the `-TD`/`-T` part for the

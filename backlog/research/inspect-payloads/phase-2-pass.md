@@ -37,30 +37,51 @@ so the examples in each per-type folder reflect the improved output. `verify` is
    them, and they were already omitted from text. `parent_ref` is now **rendered** (the
    run / analyzed-session edge, useful for the audit chain).
 
+4. **Consistent model identity across types.** Sessions showed a friendly model name; runs and
+   evals showed a raw config id (a UUID for one judge, a slug for another). Runs/evals now
+   resolve a **`model_name` / `judge_model_name`** from a child session's snapshot (the same
+   historical truth the session shows), keeping the config id as the JSON join key. `R-RZNP`
+   now reads `model Gemma 4 12B QAT`; its evals read `judge Kimi K2.5` / `judge Gemma 4 12B
+   QAT` (+ `temp` for judge-stability comparison) instead of opaque ids.
+
+5. **Per-turn cost + structure.** A turn now carries a **`tokens`** summary (same shape as the
+   run's per-session tokens) and renders a **header line** (`<id> turn <status> N rounds (T
+   tokens)`), so "how costly / how many rounds was this turn?" is answerable up front and a
+   turn reads like a step in the session view instead of an unlabeled run of parts.
+
+6. **Cleaner structure, fewer cross-contaminating fields.** Session JSON groups all
+   header/identity metadata (`model`, `mcp`, `parent_ref`, `terminal_status`, failure) **before
+   the body** instead of trailing `parent_ref`/`mcp` after the big `steps` array. A compaction
+   step no longer emits empty `owned_turn_ids`/`turns`/`postamble_step_ids` (analysis-step
+   concepts) and an analysis step no longer emits null compaction fields. The run's full
+   `per_case` now uses **`source_case_id`** — the same join key as `sessions`/`progress`/the
+   eval — instead of an inconsistent `case_id`.
+
 ---
 
 ## Per-type pass
 
 | Type | Summary vs full | What changed | Assessment |
 |---|---|---|---|
-| **session** | real dial (router vs evidence) | + `terminal_status`; `parent_ref` rendered; `latest_error` falls back to the trailing diagnostic for primary errors; dropped `token_source`/`token_confidence`/`owner_step_id` | **good start.** Header now answers "did it fail & why" without a drill. |
+| **session** | real dial (router vs evidence) | + `terminal_status`; `parent_ref` rendered; `latest_error` falls back to the trailing diagnostic for primary errors; dropped `token_source`/`token_confidence`/`owner_step_id`; **header metadata grouped before the body** | **good start.** Header now answers "what / where / did it fail & why" before the trace. |
 | **setup** | real dial | `tool_definitions` shows a **tool count**; schemas stay drillable (not inlined) | good; one open Q (below). |
-| **turn** | real dial | dropped `owner_step_id`; capped tool args by design | good. |
+| **turn** | real dial | + a **header line** (rounds + token cost) and a **`tokens`** summary; dropped `owner_step_id`; capped tool args by design | good; per-turn cost now legible. |
 | **round** | real dial | full lookup expands `{call, result}` (F7 — already true; doc fixed) | good. |
 | **part** (all subtypes) | leaf (always full) | dropped `token_source`/`token_confidence`; diagnostic reason now also at session header | good; `short` flag still inert on parts (open, cosmetic). |
-| **step / compaction** | real dial | removed dead `workflow_kind`/`workflow_label` null fields; `latest_error` renders (F8) | good; no internal consumer **by decision** (F13). |
+| **step / compaction** | real dial | removed dead `workflow_kind`/`workflow_label`; `latest_error` renders (F8); **kind-specific fields gated** (no empty turn-owning arrays on compaction, no null compaction fields on analysis steps); `parts` always present | good; no internal consumer **by decision** (F13). |
 | **benchmark `B-`** | **now a real dial** (F5) | summary = case/run nav ids; full = + prompts/rubric-size/run completion/eval IDs; no results | good. |
 | **case `B-.N`** | leaf (summary==full **by decision**) | unchanged — it *is* the full-spec drill target | correct as a leaf; cheap "list cases" lives in `B-` summary. |
-| **run `R-`** | real dial | (Phase 1) lean compare-summary, no embedded rubric (F12); flat session list | good; minor open Q (model id below). |
-| **evaluation `E-`** | real dial | (Phase 1) lean score summary; full grid; `incomplete` flag (F5/F11) | good. |
+| **run `R-`** | real dial | lean compare-summary, no embedded rubric (F12); flat session list; **friendly `model_name`** + per-eval `judge_model_name`; `per_case` keyed by **`source_case_id`** | good; model identity now matches sessions. |
+| **evaluation `E-`** | real dial | lean score summary; full grid; `incomplete` flag (F5/F11); **friendly `judge_model_name` + `temp`** in the header | good. |
 
 ### Omission allow-list (reviewed)
 
 After Phase 2 the text-omission allow-list is **only** deliberate JSON-only fields:
-`source_turn_id` (text shows "after turn N"), `model.id` (text shows name + key),
-`session_type` and `workflow_kind` (text shows `workflow_label` / the id namespace), plus the
-partially-surfaced enums `context_state`/`type`/`status` and the echoed `mode`. Everything
-content-bearing is rendered; the coverage test enforces it.
+`source_turn_id` (text shows "after turn N"), `model.id` / `model_config_id` /
+`judge_model_config_id` (text shows the friendly name), `session_type` and `workflow_kind`
+(text shows `workflow_label` / the id namespace), plus the partially-surfaced enums
+`context_state`/`type`/`status` and the echoed `mode`. Everything content-bearing is rendered;
+the coverage test enforces it.
 
 ---
 
@@ -83,9 +104,11 @@ blocks you.
    slightly imprecise. *Default: render the raw kind.* Option: map the kind to a friendlier
    word ("run"/"analyzed session"). Cosmetic.
 
-3. **`R-` run header shows the raw `model_config_id` UUID**, not a friendly model name — the
-   run record (unlike a session) stores no model-name snapshot. *Default: leave it* (a future
-   nicety would resolve/snapshot the name). Not in scope for a payload-content pass.
+3. **Model name resolved from a child session, not a run-level snapshot.** Runs/evals store no
+   model-name snapshot, so `model_name`/`judge_model_name` are read from the first child
+   session's `modelProfileSnapshot`. *Default: resolve lazily.* If the run had zero sessions,
+   or the session record was deleted, the name is `null` and the config-id is what shows. A
+   future option is to snapshot the name onto the run/eval record at creation. Low-risk.
 
 4. **The `short` flag is inert on parts and `B-.N` (leaves).** The operation docstring already
    carves out the exception. *Default: keep documented-but-inert.* Could signal it explicitly
@@ -94,6 +117,11 @@ blocks you.
 5. **`terminal_status` is shown even when `complete`.** Slightly noisy for a healthy session,
    but it directly serves the "did it fail?" use-case and makes the header self-describing.
    *Default: always show.* Could suppress on `complete`.
+
+6. **A turn header line now appears in the session view too.** It delimits each turn with its
+   round count + token cost (valuable for multi-turn/analysis sessions; mildly redundant for a
+   single-turn session). *Default: always show*, parts kept flat (not indented) so the session
+   log stays scannable.
 
 ---
 
@@ -110,7 +138,10 @@ blocks you.
 
 - `deriveSessionTerminalStatus` — the terminal-status precedence (init error → analysis-phase
   error → last-turn status → session status) is unit-tested.
-- `inspectBenchmark.test.ts` — added a case asserting the `B-` summary is the lean router
-  (nav ids only) while full keeps the detail.
+- `inspectBenchmark.test.ts` — the `B-` summary is the lean router (nav ids only) while full
+  keeps the detail; the run carries `model_name` and the eval `judge_model_name`; the run's
+  full `per_case` is keyed by `source_case_id` (not the old `case_id`).
+- `app.test.ts` — the existing compaction-step contract (`parts` always present;
+  `stripped_parts` only in full) still holds after the kind-specific field gating.
 - Coverage fixtures regenerated from the new payloads; the json-⊆-text coverage test stays
   green over them and the seeded benchmark types.

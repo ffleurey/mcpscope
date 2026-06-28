@@ -16,10 +16,10 @@ Example: [`example-R-RZNP.md`](example-R-RZNP.md).
 ## Summary mode — use-cases
 
 Summary = `{ run, progress, evaluations, sessions }`: the config snapshot
-(model_config_id, mcp_profile_ids, repetitions, max_tool_rounds, timestamps), overall +
-per-case completion, the evaluation passes (id/status/judged), and a flat session list
-`{session_id, source_case_id, repetition, status}`. **No case rubric** (drill `B-.N` or
-use `benchmark_run_report` for the scored snapshot).
+(`model_name` + `model_config_id`, mcp_profile_ids, repetitions, max_tool_rounds,
+timestamps), overall + per-case completion, the evaluation passes (id/status/`judge_model_name`/
+judged), and a flat session list `{session_id, source_case_id, repetition, status}`. **No case
+rubric** (drill `B-.N` or use `benchmark_run_report` for the scored snapshot).
 
 - **Cross-run comparison / run-to-run report** (the task's headline example) — summary
   carries exactly the *configuration* axis you diff across runs: model, MCP profiles,
@@ -72,6 +72,8 @@ the relevance reference). See [`../serialization-architecture.md`](../serializat
 
 - **Resolved:** text rendering (F2) and the lean compare-summary (F12) both shipped. The
   deep per-case→per-session nesting was flattened to a session-centric list.
-- *Open (minor):* the run header shows the raw `model_config_id` UUID, not a friendly
-  name (the run record stores no model-name snapshot, unlike a session). A future nicety,
-  not blocking — flagged in [`../phase-2-pass.md`](../phase-2-pass.md).
+- **Model identity (content pass):** the run now carries a friendly **`model_name`** (and each
+  eval a **`judge_model_name`**) resolved from a child session's snapshot, alongside the
+  `model_config_id` join key — so a run's model matches what its sessions show instead of an
+  opaque UUID/slug. The full `per_case` is keyed by **`source_case_id`** (consistent with
+  `sessions`/`progress`/the eval).

@@ -1,7 +1,7 @@
 # inspect example — benchmark_run (R-RZNP)
 
 - **Source:** `R-RZNP` — a completed run (25 sessions, 3 failed, 2 evaluation passes).
-- Summary = status + progress + evaluations + drillable session list; full adds per-case pass rates, the per-tool rollup, and per-session metrics.
+- Model + judges show **friendly names** (resolved from session snapshots). Summary = status + progress + evaluations + drillable session list; full adds per-case pass rates, the per-tool rollup, and per-session metrics.
 
 - **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
 
@@ -11,7 +11,7 @@
 
 ```text
 R-RZNP  HA History V3 (oracle-pinned)  complete
-  model       ce0c471c-088b-4b36-b104-c57e78d93e19
+  model       Gemma 4 12B QAT
   mcp         ha-replay
   reps        5  max tool rounds 20
   error       3 of 25 session(s) failed. See per-session errors.
@@ -23,8 +23,8 @@ R-RZNP  HA History V3 (oracle-pinned)  complete
     B-GUDP.5 05 whole-home-weekday-weekend: 5/5
 
 evaluations
-  E-2BPM  error  judged 20/22  judge ce0c471c-088b-4b36-b104-c57e78d93e19
-  E-FE7K  complete  judged 22/22  judge kimi-k25
+  E-2BPM  error  judged 20/22  judge Gemma 4 12B QAT
+  E-FE7K  complete  judged 22/22  judge Kimi K2.5
 
 sessions (25)
   9LJM  B-GUDP.1 rep 1  complete
@@ -60,7 +60,7 @@ sessions (25)
 
 ```text
 R-RZNP  HA History V3 (oracle-pinned)  complete
-  model       ce0c471c-088b-4b36-b104-c57e78d93e19
+  model       Gemma 4 12B QAT
   mcp         ha-replay
   reps        5  max tool rounds 20
   error       3 of 25 session(s) failed. See per-session errors.
@@ -72,8 +72,8 @@ R-RZNP  HA History V3 (oracle-pinned)  complete
     B-GUDP.5 05 whole-home-weekday-weekend: 5/5
 
 evaluations
-  E-2BPM  error  judged 20/22  judge ce0c471c-088b-4b36-b104-c57e78d93e19
-  E-FE7K  complete  judged 22/22  judge kimi-k25
+  E-2BPM  error  judged 20/22  judge Gemma 4 12B QAT
+  E-FE7K  complete  judged 22/22  judge Kimi K2.5
 
 per case
   B-GUDP.1  pass 5/5 (100%)  pass@k 1  pass^k 1

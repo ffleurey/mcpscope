@@ -24,9 +24,11 @@ material for the compare/audit use-cases ([`../use-cases.md`](../use-cases.md) U
 
 `{ evaluation, sessions[] }` (+ `per_case[]` in full):
 
-- **Summary** — `evaluation{ status, judge, expected/judged_sessions, incomplete,
-  overall_pct }` + a flat `sessions[{ analysis_session_id, run_session_id, source_case_id,
-  status, pct }]` drill list. No criteria grid.
+- **Summary** — `evaluation{ status, judge_model_name (+ judge_model_config_id join key),
+  judge_temperature, expected/judged_sessions, incomplete, overall_pct }` + a flat
+  `sessions[{ analysis_session_id, run_session_id, source_case_id, status, pct }]` drill list.
+  No criteria grid. The friendly judge name + temperature make judge-stability comparison
+  legible without resolving an id.
 - **Full** — each session adds `awarded`/`max` + the `criteria[{id, description, max,
   points, note}]` grid (rubric × judge's awarded points + ID-citing note), plus per-case
   `pct_stats`.

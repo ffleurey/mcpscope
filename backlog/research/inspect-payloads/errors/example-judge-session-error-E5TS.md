@@ -1,7 +1,7 @@
 # inspect example — error: judge/analysis session (E5TS)
 
 - **Source:** `E5TS` — a judge session that failed (`json_parse_error`).
-- The errored step's `latest_error` (kind + message) renders in text (F8); the session header carries the uniform `status`/failure too.
+- The session header carries the uniform `status`/failure too — identical shape to the primary N8GF case (F8/F10).
 
 - **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
 

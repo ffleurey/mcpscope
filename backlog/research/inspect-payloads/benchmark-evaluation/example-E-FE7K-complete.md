@@ -1,7 +1,7 @@
 # inspect example — benchmark_evaluation — complete (E-FE7K)
 
-- **Source:** `E-FE7K` — a complete judge pass (kimi-k25, 22/22, overall 50%).
-- Summary = score + completeness + drillable judged-session list; full adds the per-case distribution + the per-criterion grid with judge notes (F5).
+- **Source:** `E-FE7K` — a complete judge pass (Kimi K2.5, 22/22, overall 50%).
+- Summary = score + completeness + drillable judged-session list; full adds per-case distribution + the per-criterion grid with judge notes (F5).
 
 - **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
 
@@ -11,7 +11,7 @@
 
 ```text
 E-FE7K  evaluation of R-RZNP  complete  overall 50%
-  judge       kimi-k25
+  judge       Kimi K2.5  temp 0.2
   judged      22/22
 
 sessions (22)
@@ -45,7 +45,7 @@ sessions (22)
 
 ```text
 E-FE7K  evaluation of R-RZNP  complete  overall 50%
-  judge       kimi-k25
+  judge       Kimi K2.5  temp 0.2
   judged      22/22
 
 per case

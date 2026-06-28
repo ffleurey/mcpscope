@@ -25,8 +25,15 @@ inspection) · COV (coverage) · DOC (hygiene). **Sev:** 🔴 high · 🟡 mediu
 > (round full expands its tool result — was already true; doc fixed), **F9/F10** (uniform
 > top-level `terminal_status` + failure summary across all session kinds; primary sessions
 > now surface the trailing diagnostic reason), **F13** (decided: leave step inspection
-> UI/dev-only), **F14** (doc reconciled). See [`phase-2-pass.md`](phase-2-pass.md) for the
-> per-type changes + the remaining (low-risk, defaulted) design questions for review.
+> UI/dev-only), **F14** (doc reconciled).
+>
+> **Beyond the register (content/consistency, same pass):** friendly **`model_name` /
+> `judge_model_name`** on runs/evals (resolved from a child session snapshot) so model
+> identity matches sessions; run full `per_case` re-keyed to **`source_case_id`** for a
+> consistent join key; **turn header + per-turn `tokens`** (per-turn cost legible); session
+> JSON **header metadata grouped before the body**; step **kind-specific fields gated** (no
+> empty/null cross-contamination). See [`phase-2-pass.md`](phase-2-pass.md) for the full
+> per-type proposal + the remaining (low-risk, defaulted) design questions for review.
 
 | ID | Area | Sev | Finding | Evidence | Proposed direction |
 |----|------|-----|---------|----------|--------------------|

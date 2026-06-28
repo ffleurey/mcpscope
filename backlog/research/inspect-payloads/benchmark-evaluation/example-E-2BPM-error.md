@@ -1,7 +1,7 @@
 # inspect example — benchmark_evaluation — error/incomplete (E-2BPM)
 
-- **Source:** `E-2BPM` — an errored judge pass (20/22 judged).
-- The score is flagged **`⚠ incomplete`** and the `incomplete` field marks `overall_pct` as provisional (F11).
+- **Source:** `E-2BPM` — an errored judge pass (Gemma 4 12B QAT, 20/22 judged).
+- Flagged **`⚠ incomplete`**; the `incomplete` field marks `overall_pct` provisional (F11).
 
 - **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
 
@@ -11,7 +11,7 @@
 
 ```text
 E-2BPM  evaluation of R-RZNP  error  overall 59%
-  judge       ce0c471c-088b-4b36-b104-c57e78d93e19
+  judge       Gemma 4 12B QAT  temp 0.2
   judged      20/22  ⚠ incomplete
   error       2 of 22 judge sessions incomplete.
 
@@ -46,7 +46,7 @@ sessions (22)
 
 ```text
 E-2BPM  evaluation of R-RZNP  error  overall 59%
-  judge       ce0c471c-088b-4b36-b104-c57e78d93e19
+  judge       Gemma 4 12B QAT  temp 0.2
   judged      20/22  ⚠ incomplete
   error       2 of 22 judge sessions incomplete.
 

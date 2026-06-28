@@ -47,4 +47,11 @@ compaction after turn 1).
 - **F13 decided:** no internal agent drives step inspection today, but the payload is
   correct and cheap and the GUI/developer use it. Decision: **leave it UI/dev-only; do not
   build a consumer now.** Revisit only if a workflow needs to audit compaction
-  programmatically. (Dead `workflow_kind`/`workflow_label` null fields were removed.)
+  programmatically.
+- **Content pass — kind-specific fields gated.** The dead `workflow_kind`/`workflow_label`
+  null fields were removed; the compaction accounting (`strategy`, `source_turn_*`,
+  `context_tokens_*`, `tokens_removed`, `stripped_*`) is emitted **only for compaction
+  steps**, and the turn-owning fields (`owned_turn_ids`/`turns`/`postamble_step_ids`) only for
+  analysis steps that actually own turns — so neither kind is padded with the other's
+  null/empty fields. `parts` stays always-present (the step-level parallel to a turn's
+  `rounds`).

@@ -34,7 +34,11 @@ Example: [`example-9LJM-turn.md`](example-9LJM-turn.md).
 
 ## Tuning notes (Phase 2)
 
+- **Content pass:** the turn now carries a **`tokens`** summary (prompt/completion/reasoning/
+  total, from the turn's own usage) and renders a **header line** (`<id> turn <status> N rounds
+  (T tokens)`) — so "how costly / how many rounds was this turn?" is answerable from the
+  header, and a turn reads like a step in the session view. `owner_step_id` was dropped
+  (graph-plumbing, no use-case, F4).
 - **By design:** a full-turn overview keeps tool payloads capped/result-free so the turn
   stays a cheap router; the full result is one drill away (the `tool_call` part, or — for a
-  single iteration — the **round** full-lookup, which now expands it, F7). `owner_step_id`
-  was dropped from the turn node (graph-plumbing, no use-case, F4).
+  single iteration — the **round** full-lookup, which expands it, F7).

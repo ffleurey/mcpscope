@@ -1,7 +1,7 @@
 # inspect example — benchmark (B-GUDP)
 
 - **Source:** `B-GUDP` — `HA History V3 (oracle-pinned)`, 5 cases.
-- Now a real summary/full split (F5): summary = case/run **nav ids** only; full adds prompts, rubric size, run completion + eval IDs. No results (drill `R-`/`E-`).
+- Real summary/full split (F5): summary = case/run **nav ids** only; full adds prompts, rubric size, run completion + eval IDs. No results.
 
 - **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
 
