@@ -6,6 +6,7 @@ snapshot, context-window usage, the setup, and the ordered list of steps/turns
 [`DATA-MODEL.md:93-104`](../../../../DATA-MODEL.md)).
 
 Examples: [`example-9LJM-session.md`](example-9LJM-session.md) (single-turn primary) ·
+[`example-2ZHT-multiturn-clean.md`](example-2ZHT-multiturn-clean.md) (clean 2-turn primary) ·
 [`example-RH8P-multiturn.md`](example-RH8P-multiturn.md) (multi-turn, mid-stream error) ·
 [`example-ZTJE-analysis-session.md`](example-ZTJE-analysis-session.md) (analysis/judge session,
 steps own turns).
