@@ -99,7 +99,20 @@ Each of 2/3 must pass the compatibility matrix above before merge.
 - Compatibility verified on all current run modes: full test suite (vitest/tsx),
   `node backend/dist/server.js`, `mcpscope serve`, and Docker. ExperimentalWarning
   suppressed on Node 22 *and* 24 (createRequire load order, see connection.ts).
-- ⬜ C — Electron app + electron-builder (unsigned v1).
+- ✅ C (V1, Linux verified) — `electron/src/main.ts` boots the backend in-process
+  (free port, single-instance lock, userData data dir) + `electron-builder.yml`
+  (dmg/nsis/AppImage+tar.gz, unsigned, asar off for V1). Linux AppImage (128M) and
+  tar.gz build and boot from a clean /tmp extraction; UI hits the node:sqlite API.
+  Confirmed `@electron/rebuild` finds **no native deps** to rebuild.
+  - Packaging bug fixed: `fastify` was in both deps + devDeps → electron-builder
+    pruned it as dev. Now prod-only.
+  - **Remaining for C:** cross-platform release CI (dmg needs macOS runner, nsis
+    needs Windows runner — can't build locally on Linux); app icon + `desktopName`
+    (currently default Electron icon); decide whether dev (Node 22) still matters
+    after the floor bump. Later: revisit `asar: true` + asarUnpack; code signing
+    + notarization (deferred past v1); auto-update (electron-updater).
+  - Dev tip: `npm run start:electron` (after `build:all` + `build:electron`);
+    `npm run dist:electron:dir` for a quick unpacked build, `dist:electron` for installers.
 
 ## Context
 
