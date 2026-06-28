@@ -163,8 +163,13 @@ function renderBenchmarkRunText(data: AnyRecord, out: Emit): void {
     out("evaluations");
     for (const e of evals) {
       const judge = e["judge_model_name"] ?? e["judge_model_config_id"];
+      const pct =
+        e["overall_pct"] != null
+          ? `  overall ${Math.round(Number(e["overall_pct"]) * 100)}%`
+          : "";
+      const incomplete = e["incomplete"] ? " ⚠" : "";
       out(
-        `  ${e["id"]}  ${e["status"]}  judged ${e["judged_sessions"]}/${e["expected_sessions"]}  judge ${judge}`,
+        `  ${e["id"]}  ${e["status"]}${pct}  judged ${e["judged_sessions"]}/${e["expected_sessions"]}${incomplete}  judge ${judge}`,
       );
     }
   }

@@ -162,10 +162,14 @@ describe('inspect — benchmark-family IDs', () => {
     // The run carries a friendly model_name (resolved from a session snapshot)
     // alongside the config-id join key, for consistency with session payloads.
     expect(summary.data.run).toHaveProperty('model_name')
-    // Evaluations are listed for progress monitoring (judged/expected).
+    // Evaluations carry the headline overall_pct (for UC-5 run comparison) plus
+    // progress (judged/expected + incomplete) — so a run can be ranked by quality
+    // from the run payload itself, no separate E- fetch per run.
     const evals = summary.data.evaluations as Array<Record<string, unknown>>
     expect(evals[0]!.id).toBe('E-TEST')
     expect(evals[0]!.expected_sessions).toBe(1)
+    expect(evals[0]!).toHaveProperty('overall_pct')
+    expect(evals[0]!).toHaveProperty('incomplete')
 
     const full = await inspectOperation.execute(ctx, { id: 'R-TEST' })
     expect(full.data.per_case).toBeDefined()

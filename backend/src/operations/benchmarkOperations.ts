@@ -294,11 +294,6 @@ function caseDigestToSnake(c: BenchmarkCaseRecord) {
   };
 }
 
-/** How many of an evaluation's judge sessions actually completed (vs failed/pending). */
-function countJudged(ev: BenchmarkEvaluationRecord): number {
-  return ev.sessions.filter((s) => s.status === "complete").length;
-}
-
 /**
  * The friendly model name a run/evaluation used, read from a child session's
  * snapshot (the historical truth — the same name the session payload shows), so
@@ -372,7 +367,10 @@ function buildRunInspect(
   mode: "summary" | "full",
 ) {
   const progress = getBenchmarkRunProgress(ctx.db, run.id);
-  const evaluations = listBenchmarkEvaluationsByRun(ctx.db.connection, run.id);
+  // Use the scored reports (not the bare records) so each eval digest carries the
+  // headline `overall_pct` — the signal UC-5 (compare runs) needs to rank runs by
+  // quality from the run payload itself, without a separate `E-` fetch per run.
+  const evaluations = getBenchmarkRunEvaluationReports(ctx.db, run.id);
 
   const data: Record<string, unknown> = {
     run: {
@@ -407,8 +405,10 @@ function buildRunInspect(
       status: e.status,
       judge_model_name: resolveJudgeModelName(ctx, e),
       judge_model_config_id: e.judgeModelConfigId,
-      judged_sessions: countJudged(e),
-      expected_sessions: e.sessions.length,
+      overall_pct: e.score.overallPct,
+      judged_sessions: e.judgedSessions,
+      expected_sessions: e.expectedSessions,
+      incomplete: e.judgedSessions < e.expectedSessions,
     })),
   };
 
