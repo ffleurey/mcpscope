@@ -307,10 +307,24 @@ function buildTurnNode(
       isDirectLookup,
     );
   });
+  const usage = turn.usage;
   return {
     id: turn.id,
     type: "turn",
     ...(turn.status ? { status: turn.status } : {}),
+    // Turn-level token cost (from the turn's own usage) so "how costly was this
+    // turn?" and the per-turn comparison are answerable from the overview without
+    // summing parts. Same shape as the run report's per-session tokens.
+    ...(usage.totalTokens != null
+      ? {
+          tokens: {
+            prompt: usage.promptTokens,
+            completion: usage.completionTokens,
+            reasoning: usage.reasoningTokens,
+            total: usage.totalTokens,
+          },
+        }
+      : {}),
     rounds: roundNodes,
   };
 }
@@ -441,41 +455,58 @@ function buildStepNode(
     step.id,
   );
 
+  const isCompaction = step.stepTypeKey === "compaction";
+
   return {
     id: step.id,
     type: step.stepTypeKey,
     status: step.status,
     ...(diagnostic ? { latest_error: diagnostic } : {}),
-    strategy:
-      typeof step.params.strategy === "string" ? step.params.strategy : null,
-    source_turn_id:
-      typeof step.params.sourceTurnId === "string"
-        ? step.params.sourceTurnId
-        : null,
-    source_turn_number:
-      typeof step.params.sourceTurnSequenceNumber === "number"
-        ? step.params.sourceTurnSequenceNumber
-        : null,
-    stripped_part_count:
-      typeof step.state.strippedPartCount === "number"
-        ? step.state.strippedPartCount
-        : null,
-    context_tokens_before:
-      typeof step.state.contextTokensAtTurnEnd === "number"
-        ? step.state.contextTokensAtTurnEnd
-        : null,
-    context_tokens_after:
-      typeof step.state.contextTokensAfterCompaction === "number"
-        ? step.state.contextTokensAfterCompaction
-        : null,
-    tokens_removed:
-      typeof step.state.compactionTokensRemoved === "number"
-        ? step.state.compactionTokensRemoved
-        : null,
-    owned_turn_ids: ownedTurnIds,
-    turns: ownedTurnNodes,
-    postamble_step_ids: postambleStepIds,
-    ...compactionEvidence,
+    // Compaction-specific accounting. Gated so analysis/other steps don't carry a
+    // row of null compaction fields (and vice-versa for the turn-owning fields).
+    ...(isCompaction
+      ? {
+          strategy:
+            typeof step.params.strategy === "string"
+              ? step.params.strategy
+              : null,
+          source_turn_id:
+            typeof step.params.sourceTurnId === "string"
+              ? step.params.sourceTurnId
+              : null,
+          source_turn_number:
+            typeof step.params.sourceTurnSequenceNumber === "number"
+              ? step.params.sourceTurnSequenceNumber
+              : null,
+          stripped_part_count:
+            typeof step.state.strippedPartCount === "number"
+              ? step.state.strippedPartCount
+              : null,
+          context_tokens_before:
+            typeof step.state.contextTokensAtTurnEnd === "number"
+              ? step.state.contextTokensAtTurnEnd
+              : null,
+          context_tokens_after:
+            typeof step.state.contextTokensAfterCompaction === "number"
+              ? step.state.contextTokensAfterCompaction
+              : null,
+          tokens_removed:
+            typeof step.state.compactionTokensRemoved === "number"
+              ? step.state.compactionTokensRemoved
+              : null,
+          ...compactionEvidence,
+        }
+      : {}),
+    // Turn-owning fields (analysis steps) — omitted when empty so a compaction
+    // step isn't padded with the analysis-step concepts it never uses.
+    ...(ownedTurnIds.length > 0
+      ? { owned_turn_ids: ownedTurnIds, turns: ownedTurnNodes }
+      : {}),
+    ...(postambleStepIds.length > 0
+      ? { postamble_step_ids: postambleStepIds }
+      : {}),
+    // `parts` is the step's own direct content — always present (possibly empty),
+    // the step-level parallel to a turn's `rounds`.
     parts: stepParts,
   };
 }
@@ -615,6 +646,15 @@ export function resolveHierarchicalId(
       return posA - posB;
     });
 
+    const parentRef =
+      session.parentKind !== null && session.parentId !== null
+        ? { kind: session.parentKind, id: session.parentId }
+        : null;
+    const mcpData = session.mcpProfileSnapshots.map((s) => ({ name: s.name }));
+
+    // All header/identity metadata is grouped up top (model, mcp, parent, status,
+    // failure) before the body (setup + steps), so the JSON reads like the text
+    // header and a reader sees "what/where/how did it end" before the trace.
     const data: Record<string, unknown> = {
       id: session.id,
       title: session.title,
@@ -628,26 +668,19 @@ export function resolveHierarchicalId(
         temperature: session.modelProfileSnapshot.temperature,
         reasoning: session.modelProfileSnapshot.reasoning,
       },
+      ...(mcpData.length > 0 ? { mcp: mcpData } : {}),
       context_window: {
         available: session.loadedContextLength ?? null,
         used: deriveContextWindowUsed(turns),
       },
       terminal_status: terminalStatus,
+      ...(parentRef ? { parent_ref: parentRef } : {}),
       ...(workflowKind ? { workflow_kind: workflowKind } : {}),
       ...(workflowLabel ? { workflow_label: workflowLabel } : {}),
       ...(latestError ? { latest_error: latestError } : {}),
       setup: buildSetupNode(session.id, setupParts, mode, false),
       steps: allChildNodes,
     };
-
-    if (session.parentKind !== null && session.parentId !== null) {
-      data.parent_ref = { kind: session.parentKind, id: session.parentId };
-    }
-
-    const mcpData = session.mcpProfileSnapshots.map((s) => ({ name: s.name }));
-    if (mcpData.length > 0) {
-      data.mcp = mcpData;
-    }
 
     return {
       status: "ok",

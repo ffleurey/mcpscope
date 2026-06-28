@@ -15,11 +15,20 @@
       "temperature": 0.3,
       "reasoning": "on"
     },
+    "mcp": [
+      {
+        "name": "HA Replay"
+      }
+    ],
     "context_window": {
       "available": 32768,
       "used": 7094
     },
     "terminal_status": "complete",
+    "parent_ref": {
+      "kind": "benchmark",
+      "id": "R-RZNP"
+    },
     "setup": {
       "id": "9LJM.S",
       "parts": [
@@ -54,6 +63,12 @@
         "id": "9LJM.1T",
         "type": "turn",
         "status": "complete",
+        "tokens": {
+          "prompt": 6993,
+          "completion": 101,
+          "reasoning": 1,
+          "total": 7094
+        },
         "rounds": [
           {
             "id": "9LJM.1T.1",
@@ -167,9 +182,6 @@
         "context_tokens_before": 7094,
         "context_tokens_after": 6162,
         "tokens_removed": 932,
-        "owned_turn_ids": [],
-        "turns": [],
-        "postamble_step_ids": [],
         "stripped_part_ids": [
           "9LJM.1T.1.2-R",
           "9LJM.1T.2.1-R",
@@ -197,17 +209,7 @@
             "round_id": "9LJM.1T.3",
             "reason": "Removed from future context because strip-reasoning compaction excludes assistant reasoning parts."
           }
-        ],
-        "parts": []
-      }
-    ],
-    "parent_ref": {
-      "kind": "benchmark",
-      "id": "R-RZNP"
-    },
-    "mcp": [
-      {
-        "name": "HA Replay"
+        ]
       }
     ]
   }

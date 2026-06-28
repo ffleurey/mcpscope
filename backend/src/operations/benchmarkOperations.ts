@@ -38,6 +38,7 @@ import {
   getBenchmarkEvaluation,
   listBenchmarkEvaluationsByRun,
 } from "../persistence/benchmarkRepository.js";
+import { getSessionRecord } from "../persistence/repository.js";
 import type {
   BenchmarkRecord,
   BenchmarkCaseRecord,
@@ -298,6 +299,31 @@ function countJudged(ev: BenchmarkEvaluationRecord): number {
   return ev.sessions.filter((s) => s.status === "complete").length;
 }
 
+/**
+ * The friendly model name a run/evaluation used, read from a child session's
+ * snapshot (the historical truth — the same name the session payload shows), so
+ * run/eval model identity is consistent with sessions instead of a raw config id.
+ * Returns null when no session is available (then callers keep just the id).
+ */
+function resolveModelName(
+  ctx: OperationContext,
+  sessionId: string | undefined,
+): string | null {
+  if (!sessionId) return null;
+  return (
+    getSessionRecord(ctx.db.connection, sessionId)?.modelProfileSnapshot.name ??
+    null
+  );
+}
+
+/** The judge model name for an evaluation pass, via its first judge session. */
+function resolveJudgeModelName(
+  ctx: OperationContext,
+  ev: BenchmarkEvaluationRecord,
+): string | null {
+  return resolveModelName(ctx, ev.sessions[0]?.analysisSessionId);
+}
+
 /** Compact run view for the suite full payload: status + completion + drill IDs. */
 function runDigestForSuite(ctx: OperationContext, run: BenchmarkRunRecord) {
   const progress = getBenchmarkRunProgress(ctx.db, run.id);
@@ -354,6 +380,9 @@ function buildRunInspect(
       benchmark_id: run.benchmarkId,
       benchmark_name: run.benchmarkName,
       status: run.status,
+      // Friendly name (from a session snapshot) + the config id join key, so the
+      // run's model identity matches what the session payloads show.
+      model_name: resolveModelName(ctx, run.sessions[0]?.sessionId),
       model_config_id: run.modelConfigId,
       mcp_profile_ids: run.mcpProfileIds,
       repetitions: run.repetitions,
@@ -376,6 +405,7 @@ function buildRunInspect(
     evaluations: evaluations.map((e) => ({
       id: e.id,
       status: e.status,
+      judge_model_name: resolveJudgeModelName(ctx, e),
       judge_model_config_id: e.judgeModelConfigId,
       judged_sessions: countJudged(e),
       expected_sessions: e.sessions.length,
@@ -419,7 +449,7 @@ function buildRunInspect(
     };
   });
   data.per_case = report.cases.map((c) => ({
-    case_id: c.caseId,
+    source_case_id: c.caseId,
     pass_count: c.passCount,
     session_count: c.sessionCount,
     success_rate: c.successRate,
@@ -436,6 +466,7 @@ function buildEvaluationInspect(
   ev: BenchmarkEvaluationRecord,
   report: BenchmarkEvaluationReport,
   mode: "summary" | "full",
+  judgeModelName: string | null,
 ) {
   const flatSessions = report.score.cases.flatMap((c) =>
     c.sessions.map((s) => ({
@@ -465,6 +496,7 @@ function buildEvaluationInspect(
     evaluation: {
       id: ev.id,
       run_id: ev.runId,
+      judge_model_name: judgeModelName,
       judge_model_config_id: ev.judgeModelConfigId,
       judge_temperature: ev.judgeTemperature,
       status: ev.status,
@@ -554,7 +586,7 @@ export function resolveBenchmarkInspect(
       id,
       type: "benchmark_evaluation",
       mode,
-      data: buildEvaluationInspect(ev, report, mode),
+      data: buildEvaluationInspect(ev, report, mode, resolveJudgeModelName(ctx, ev)),
     };
   }
   return null;

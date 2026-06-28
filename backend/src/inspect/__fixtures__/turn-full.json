@@ -6,6 +6,12 @@
     "id": "9LJM.1T",
     "type": "turn",
     "status": "complete",
+    "tokens": {
+      "prompt": 6993,
+      "completion": 101,
+      "reasoning": 1,
+      "total": 7094
+    },
     "rounds": [
       {
         "id": "9LJM.1T.1",

@@ -159,6 +159,9 @@ describe('inspect — benchmark-family IDs', () => {
     expect(sessions[0]!.session_id).toBe('AB12')
     expect(summary.data.per_case).toBeUndefined()
     expect(summary.data.per_tool).toBeUndefined()
+    // The run carries a friendly model_name (resolved from a session snapshot)
+    // alongside the config-id join key, for consistency with session payloads.
+    expect(summary.data.run).toHaveProperty('model_name')
     // Evaluations are listed for progress monitoring (judged/expected).
     const evals = summary.data.evaluations as Array<Record<string, unknown>>
     expect(evals[0]!.id).toBe('E-TEST')
@@ -167,6 +170,11 @@ describe('inspect — benchmark-family IDs', () => {
     const full = await inspectOperation.execute(ctx, { id: 'R-TEST' })
     expect(full.data.per_case).toBeDefined()
     expect(full.data.per_tool).toBeDefined()
+    // per_case uses source_case_id — the same join key as sessions/progress/eval,
+    // not the old inconsistent case_id.
+    const perCase = full.data.per_case as Array<Record<string, unknown>>
+    expect(perCase[0]!.source_case_id).toBe('B-TEST.1')
+    expect(perCase[0]!.case_id).toBeUndefined()
   })
 
   it('resolves an evaluation (E-): status + scores + drillable judged sessions', async () => {
@@ -178,6 +186,7 @@ describe('inspect — benchmark-family IDs', () => {
     expect(ev.expected_sessions).toBe(1)
     expect(ev).toHaveProperty('overall_pct')
     expect(ev).toHaveProperty('incomplete')
+    expect(ev).toHaveProperty('judge_model_name')
     // Flat, drillable session list; no per-criterion grid in summary.
     const sessions = summary.data.sessions as Array<Record<string, unknown>>
     expect(sessions[0]!.analysis_session_id).toBe('CD34')

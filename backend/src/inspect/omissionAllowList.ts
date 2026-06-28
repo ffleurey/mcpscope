@@ -20,6 +20,8 @@ export const TEXT_OMISSION_ALLOWLIST: ReadonlySet<string> = new Set([
   // remains here is deliberately JSON-only.
   "source_turn_id", // compaction drill ID; text shows "after turn N"
   "model.id", // the model's internal config id; text shows name + key instead
+  "model_config_id", // run join key; text shows the friendly model_name instead
+  "judge_model_config_id", // eval join key; text shows the friendly judge name
   "session_type", // text shows workflow_label / the id namespace instead
   "workflow_kind", // text shows workflow_label instead
 

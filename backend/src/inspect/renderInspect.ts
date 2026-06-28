@@ -132,7 +132,8 @@ function renderBenchmarkCaseText(data: AnyRecord, out: Emit): void {
 
 function renderRunHeader(run: AnyRecord, out: Emit): void {
   out(`${String(run["id"] ?? "")}  ${run["benchmark_name"] ?? ""}  ${run["status"] ?? ""}`);
-  if (run["model_config_id"]) out(`  model       ${run["model_config_id"]}`);
+  const runModel = run["model_name"] ?? run["model_config_id"];
+  if (runModel) out(`  model       ${runModel}`);
   const profiles = (run["mcp_profile_ids"] as string[] | undefined) ?? [];
   if (profiles.length > 0) out(`  mcp         ${profiles.join(", ")}`);
   if (run["repetitions"] != null)
@@ -161,8 +162,9 @@ function renderBenchmarkRunText(data: AnyRecord, out: Emit): void {
     out("");
     out("evaluations");
     for (const e of evals) {
+      const judge = e["judge_model_name"] ?? e["judge_model_config_id"];
       out(
-        `  ${e["id"]}  ${e["status"]}  judged ${e["judged_sessions"]}/${e["expected_sessions"]}  judge ${e["judge_model_config_id"]}`,
+        `  ${e["id"]}  ${e["status"]}  judged ${e["judged_sessions"]}/${e["expected_sessions"]}  judge ${judge}`,
       );
     }
   }
@@ -177,7 +179,7 @@ function renderBenchmarkRunText(data: AnyRecord, out: Emit): void {
           ? `${Math.round(Number(c["success_rate"]) * 100)}%`
           : "—";
       out(
-        `  ${c["case_id"]}  pass ${fmtNum(c["pass_count"])}/${c["session_count"]} (${sr})  pass@k ${fmtNum(c["pass_at_k"])}  pass^k ${fmtNum(c["pass_hat_k"])}`,
+        `  ${c["source_case_id"]}  pass ${fmtNum(c["pass_count"])}/${c["session_count"]} (${sr})  pass@k ${fmtNum(c["pass_at_k"])}  pass^k ${fmtNum(c["pass_hat_k"])}`,
       );
     }
   }
@@ -221,7 +223,10 @@ function renderBenchmarkEvaluationText(data: AnyRecord, out: Emit): void {
       ? `  overall ${Math.round(Number(ev["overall_pct"]) * 100)}%`
       : "";
   out(`${String(ev["id"] ?? "")}  evaluation of ${ev["run_id"] ?? ""}  ${ev["status"] ?? ""}${overall}`);
-  out(`  judge       ${ev["judge_model_config_id"] ?? ""}`);
+  const judge = ev["judge_model_name"] ?? ev["judge_model_config_id"] ?? "";
+  const temp =
+    ev["judge_temperature"] != null ? `  temp ${ev["judge_temperature"]}` : "";
+  out(`  judge       ${judge}${temp}`);
   const incomplete = ev["incomplete"] ? "  ⚠ incomplete" : "";
   out(`  judged      ${ev["judged_sessions"]}/${ev["expected_sessions"]}${incomplete}`);
   if (ev["error"]) out(`  error       ${ev["error"]}`);
@@ -341,9 +346,24 @@ function renderPart(part: AnyRecord, indent: string, out: Emit): void {
 
 // ─── Flatten helpers ──────────────────────────────────────────────────────────
 
+function renderTurnHeader(turn: AnyRecord, out: Emit): void {
+  // A turn gets a header line (id, status, round count, token cost) so it reads
+  // like a step in the session view and a direct turn inspect is self-describing —
+  // and so "how costly / how many rounds was this turn?" is answerable up front.
+  const id = String(turn["id"] ?? "");
+  if (!id) return;
+  const status = turn["status"] ? `  ${String(turn["status"])}` : "";
+  const rounds = (turn["rounds"] as AnyRecord[] | undefined) ?? [];
+  const roundStr = `  ${rounds.length} round${rounds.length === 1 ? "" : "s"}`;
+  const total = (turn["tokens"] as AnyRecord | undefined)?.["total"];
+  const tokenStr = total != null ? `  (${Number(total)} tokens)` : "";
+  out(`${id}  turn${status}${roundStr}${tokenStr}`);
+}
+
 function renderTurnParts(turn: AnyRecord, out: Emit): void {
   const rounds = turn["rounds"] as AnyRecord[] | undefined;
   if (!rounds) return;
+  renderTurnHeader(turn, out);
   for (const round of rounds) {
     const parts = round["parts"] as AnyRecord[] | undefined;
     if (parts) {
