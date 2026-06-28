@@ -359,10 +359,10 @@
       />
     </div>
     <p class="ref-note">
-      <code class="mono">SegmentedControl</code>: a compact group of mutually-exclusive options
-      (a labelled toggle group). The selected option uses the sanctioned active signal — amber
-      text on a faint amber wash — so it stays legible on the dark surface. Use for small,
-      binary/few-option switches (e.g. the inspect dialog's detail and format axes).
+      <code class="mono">SegmentedControl</code>: a compact group of mutually-exclusive options (a
+      labelled toggle group). The selected option uses the sanctioned active signal — amber text on
+      a faint amber wash — so it stays legible on the dark surface. Use for small, binary/few-option
+      switches (e.g. the inspect dialog's detail and format axes).
     </p>
   </section>
 
