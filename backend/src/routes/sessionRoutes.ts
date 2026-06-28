@@ -25,6 +25,7 @@ import {
   launchAnalysisSessionOperation,
   launchPrimarySessionOperation,
 } from "../operations/internal.js";
+import { renderInspect } from "../inspect/renderInspect.js";
 import {
   buildAnalysisSystemPrompt,
   normalizeAnalysisGoal,
@@ -413,14 +414,24 @@ export function registerSessionRoutes(deps: RouteDeps): void {
 
   app.get("/api/lookup/:id", async (request, reply) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
-    const { mode } = z
-      .object({ mode: z.enum(["summary", "full"]).optional() })
+    const { mode, format } = z
+      .object({
+        mode: z.enum(["summary", "full"]).optional(),
+        format: z.enum(["text", "json"]).optional(),
+      })
       .parse(request.query);
     try {
-      return await inspectOperation.execute(opCtx, {
+      const result = await inspectOperation.execute(opCtx, {
         id,
         short: (mode ?? "full") === "summary",
       });
+      // `format=text` renders server-side (rendering is a backend domain
+      // feature shared by CLI/MCP/UI); JSON stays the default for back-compat.
+      if (format === "text") {
+        void reply.type("text/plain; charset=utf-8");
+        return renderInspect(result, "text");
+      }
+      return result;
     } catch (err) {
       return handleOperationError(err, reply);
     }

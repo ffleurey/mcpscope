@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { OperationError } from './errors.js'
 import { resolveHierarchicalId } from '../runtime/hierarchicalLookup.js'
 import { resolveBenchmarkInspect } from './benchmarkOperations.js'
+import { renderInspect } from '../inspect/renderInspect.js'
 import type { OperationContext } from './context.js'
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
@@ -16,6 +17,11 @@ export const inspectInputSchema = z.object({
   ),
   short: z.boolean().optional().describe(
     'When true, omit part content and return token counts only. Parts always return full content regardless.',
+  ),
+  format: z.enum(['text', 'json']).optional().describe(
+    'Output rendering. "text" (default) is a compact, human- and LLM-readable view. '
+    + '"json" returns the full structured payload. The two carry the same information; '
+    + 'text omits a few structural/plumbing fields for readability.',
   ),
 })
 
@@ -71,5 +77,14 @@ export const inspectOperation = {
       mode: resolved.payload.mode,
       data: resolved.payload.data as Record<string, unknown>,
     }
+  },
+  /**
+   * Render the structured result to the requested format for transport-level
+   * surfaces (MCP). Text is the default; `json` returns the structural payload.
+   * We return a single text channel (no `structuredContent`) so the payload is
+   * never double-encoded over MCP.
+   */
+  renderContent(result: InspectResult, input: InspectInput): { text: string } {
+    return { text: renderInspect(result, input.format ?? 'text') }
   },
 }

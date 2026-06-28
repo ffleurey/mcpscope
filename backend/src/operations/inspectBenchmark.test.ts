@@ -109,13 +109,22 @@ function ctxFor(d: BackendDatabase): OperationContext {
 }
 
 describe('inspect — benchmark-family IDs', () => {
-  it('resolves a benchmark (B-) to its detail payload', async () => {
+  it('resolves a benchmark (B-): case shapes + minimal run digests + drill IDs, no results', async () => {
     const ctx = ctxFor(seed())
     const out = await inspectOperation.execute(ctx, { id: 'B-TEST' })
     expect(out.type).toBe('benchmark')
     expect((out.data.benchmark as { id: string }).id).toBe('B-TEST')
-    expect((out.data.cases as unknown[]).length).toBe(1)
-    expect((out.data.runs as unknown[]).length).toBe(1)
+
+    const cases = out.data.cases as Array<Record<string, unknown>>
+    expect(cases.length).toBe(1)
+    // Suite view carries the rubric *count* (scorability hint), not the rubric itself.
+    expect(cases[0]!.rubric_criteria_count).toBe(2)
+    expect(cases[0]!.rubric).toBeUndefined()
+
+    const runs = out.data.runs as Array<Record<string, unknown>>
+    expect(runs.length).toBe(1)
+    expect(runs[0]!.evaluation_ids).toEqual(['E-TEST'])
+    expect(runs[0]!.total_sessions).toBe(1)
   })
 
   it('resolves a case (B-.N) to its snake payload incl. rubric', async () => {
@@ -126,22 +135,44 @@ describe('inspect — benchmark-family IDs', () => {
     expect((out.data.rubric as unknown[]).length).toBe(2)
   })
 
-  it('resolves a run (R-): summary = snapshot, full adds the report', async () => {
+  it('resolves a run (R-): summary = status + drillable sessions; full adds metrics', async () => {
     const ctx = ctxFor(seed())
     const summary = await inspectOperation.execute(ctx, { id: 'R-TEST', short: true })
     expect(summary.type).toBe('benchmark_run')
     expect((summary.data.run as { id: string }).id).toBe('R-TEST')
-    expect(summary.data.report).toBeUndefined()
+    // Drillable session list with id + status; no heavy per-case/per-tool metrics.
+    const sessions = summary.data.sessions as Array<Record<string, unknown>>
+    expect(sessions.length).toBe(1)
+    expect(sessions[0]!.session_id).toBe('AB12')
+    expect(summary.data.per_case).toBeUndefined()
+    expect(summary.data.per_tool).toBeUndefined()
+    // Evaluations are listed for progress monitoring (judged/expected).
+    const evals = summary.data.evaluations as Array<Record<string, unknown>>
+    expect(evals[0]!.id).toBe('E-TEST')
+    expect(evals[0]!.expected_sessions).toBe(1)
 
     const full = await inspectOperation.execute(ctx, { id: 'R-TEST' })
-    expect(full.data.report).toBeDefined()
+    expect(full.data.per_case).toBeDefined()
+    expect(full.data.per_tool).toBeDefined()
   })
 
-  it('resolves an evaluation (E-) to its scored report', async () => {
+  it('resolves an evaluation (E-): status + scores + drillable judged sessions', async () => {
     const ctx = ctxFor(seed())
-    const out = await inspectOperation.execute(ctx, { id: 'E-TEST' })
-    expect(out.type).toBe('benchmark_evaluation')
-    expect((out.data.evaluation as { id: string }).id).toBe('E-TEST')
+    const summary = await inspectOperation.execute(ctx, { id: 'E-TEST', short: true })
+    expect(summary.type).toBe('benchmark_evaluation')
+    const ev = summary.data.evaluation as Record<string, unknown>
+    expect(ev.id).toBe('E-TEST')
+    expect(ev.expected_sessions).toBe(1)
+    expect(ev).toHaveProperty('overall_pct')
+    expect(ev).toHaveProperty('incomplete')
+    // Flat, drillable session list; no per-criterion grid in summary.
+    const sessions = summary.data.sessions as Array<Record<string, unknown>>
+    expect(sessions[0]!.analysis_session_id).toBe('CD34')
+    expect(sessions[0]!.criteria).toBeUndefined()
+
+    const full = await inspectOperation.execute(ctx, { id: 'E-TEST' })
+    const fullSessions = full.data.sessions as Array<Record<string, unknown>>
+    expect(fullSessions[0]!.criteria).toBeDefined()
   })
 
   it('throws not-found for an unknown benchmark ID', async () => {

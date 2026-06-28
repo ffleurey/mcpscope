@@ -7,10 +7,27 @@
     onClose: () => void
     /** Optional extra CSS class on the <dialog> element for sizing overrides */
     dialogClass?: string
+    /**
+     * Lock the dialog to a fixed tall height (85vh) instead of sizing to content,
+     * so it doesn't resize as content changes. The body region scrolls instead.
+     */
+    fixedHeight?: boolean
+    /**
+     * Remove the body padding and let the child own its layout/scroll (a flex
+     * column). Use when the child manages its own fixed toolbar + scroll area.
+     */
+    flush?: boolean
     children: Snippet
   }
 
-  let { title, onClose, dialogClass = '', children }: Props = $props()
+  let {
+    title,
+    onClose,
+    dialogClass = '',
+    fixedHeight = false,
+    flush = false,
+    children,
+  }: Props = $props()
 
   let dialogEl = $state<HTMLDialogElement | null>(null)
 
@@ -69,6 +86,7 @@
   bind:this={dialogEl}
   class="shell-dialog {dialogClass}"
   class:dragging
+  class:fixed-height={fixedHeight}
   style="transform: translate({dragX}px, {dragY}px)"
   onkeydown={handleKeydown}
 >
@@ -78,7 +96,7 @@
       <span class="dialog-title">{title}</span>
       <button class="close-btn" onclick={onClose} aria-label="Close">✕</button>
     </div>
-    <div class="dialog-body">
+    <div class="dialog-body" class:flush>
       {@render children()}
     </div>
   </div>
@@ -170,5 +188,24 @@
     overflow: auto;
     min-height: 0;
     padding: 0.75rem 1rem;
+  }
+
+  /* Fixed tall dialog: the inner fills the locked height so content scrolls
+     within the body rather than the dialog growing/shrinking with content. */
+  .shell-dialog.fixed-height {
+    height: 85vh;
+  }
+
+  .shell-dialog.fixed-height .dialog-inner {
+    height: 100%;
+  }
+
+  /* Flush body: the child owns layout + scrolling (e.g. a fixed toolbar above a
+     scrollable region). No padding here; the child provides its own. */
+  .dialog-body.flush {
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 </style>

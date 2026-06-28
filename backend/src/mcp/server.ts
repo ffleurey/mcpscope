@@ -32,16 +32,27 @@ export function buildMcpServer(
 
   for (const op of ops) {
     const toolName = `${TOOL_PREFIX}${op.id}`
+    // Operations may own their transport rendering (e.g. inspect renders text by
+    // default). Such ops return a single text channel and declare no outputSchema,
+    // so the payload is never double-encoded as both content + structuredContent.
+    const renderContent = (op as {
+      renderContent?: (result: unknown, args: Record<string, unknown>) => { text: string }
+    }).renderContent
     server.registerTool(
       toolName,
       {
         description: op.description,
         inputSchema: op.schema.shape,
-        outputSchema: op.outputSchema,
+        ...(renderContent ? {} : { outputSchema: op.outputSchema }),
       },
       async (args: Record<string, unknown>) => {
         try {
           const result = await op.execute(ctx, args as never)
+          if (renderContent) {
+            return {
+              content: [{ type: 'text' as const, text: renderContent(result, args).text }],
+            }
+          }
           const structuredContent = result as unknown as Record<string, unknown>
           return {
             content: [

@@ -1,0 +1,7 @@
+payload	txt_tokens	json_tokens	json_over_txt	note
+session-full	678	1890	2.79	tree/overview — JSON nesting+repeated keys dominate
+turn-full	334	1036	3.10	tree/overview
+toolcall-full	1376	1500	1.09	leaf: result is already a text table
+tooldefs-full	5140	5227	1.02	leaf: schemas are inherently JSON; "text" dumps JSON
+run-summary	3296	3296	1.00	no text renderer exists — text==json fallback
+run-full	14534	14534	1.00	no text renderer exists — text==json fallback

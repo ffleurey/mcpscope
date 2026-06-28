@@ -145,6 +145,31 @@ export function lookupByHierarchicalId(
   })
 }
 
+/**
+ * Fetch the backend-rendered text view of an inspect payload (the same renderer
+ * the CLI and MCP use). Returns plain text, so it bypasses the JSON `request`
+ * helper but mirrors its structured-error handling.
+ */
+export async function lookupTextByHierarchicalId(
+  id: string,
+  mode: 'summary' | 'full',
+): Promise<string> {
+  const encodedId = encodeURIComponent(id)
+  const response = await fetch(buildUrl(`/api/lookup/${encodedId}?mode=${mode}&format=text`))
+  const body = await response.text()
+  if (!response.ok) {
+    let message = `Backend request failed (${response.status})`
+    try {
+      const parsed = JSON.parse(body) as { error?: { message?: string } }
+      message = parsed?.error?.message ?? message
+    } catch {
+      // Non-JSON error body; keep the default message.
+    }
+    throw new AppError(message, 'internal', response.status, {})
+  }
+  return body
+}
+
 function parseSseBlock(
   block: string,
 ): { eventName: string | null; dataText: string | null } | null {

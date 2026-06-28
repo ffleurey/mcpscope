@@ -1,0 +1,2034 @@
+# inspect example — benchmark run (R-RZNP), completed with failures
+
+- **Source object:** `R-RZNP` — run of benchmark `B-GUDP` (HA History V3), Gemma 4 12B QAT on `ha-replay`.
+- **State:** `status: complete` — **25 sessions, 3 failed** (`N8GF`, `U7WR`, `39RT`).
+- **Captured from:** the completed run, 2026-06-27. (Supersedes the earlier mid-run capture.)
+- **Rendering:** ⚠️ JSON fallback — no text renderer for `R-` (see [../formats.md](../formats.md)).
+
+> **Summary vs full IS a real dial here** (unlike `B-`/`B-.N`/`E-`): summary is the run
+> config snapshot + session list; full adds the compute-on-read **metrics report**
+> (per-tool rollup, per-case pass@k/pass^k, per-session metrics). In the per-session
+> metrics, look for the 3 `error` sessions — this is how a run report surfaces failures
+> for the run-report / compare use-cases ([../use-cases.md](../use-cases.md) UC-4/UC-6).
+
+## Summary mode
+
+`mcpscope inspect --short R-RZNP`
+
+```json
+{
+  "id": "R-RZNP",
+  "type": "benchmark_run",
+  "mode": "summary",
+  "data": {
+    "run": {
+      "id": "R-RZNP",
+      "benchmark_id": "B-GUDP",
+      "benchmark_name": "HA History V3 (oracle-pinned)",
+      "status": "complete",
+      "model_config_id": "ce0c471c-088b-4b36-b104-c57e78d93e19",
+      "mcp_profile_ids": [
+        "ha-replay"
+      ],
+      "repetitions": 5,
+      "max_tool_rounds": 20,
+      "cases": [
+        {
+          "source_case_id": "B-GUDP.1",
+          "name": "01 outdoor-winter-coldest-and-freezing",
+          "prompt": "I'd like to understand how cold it got outside last winter — December 2025 through February 2026. Two things: (1) which day was the coldest, and how cold did it get? (2) on how many days that winter did the temperature drop below freezing at some point? Resolve the outdoor sensor yourself and keep it concise.",
+          "expected_tools_called": [
+            "ha_history_get_sensor_stats"
+          ],
+          "expected_tools_not_called": [
+            "ha_history_get_state_history",
+            "ha_history_detect_sessions",
+            "ha_history_get_consumption"
+          ],
+          "rubric": [
+            {
+              "id": 1,
+              "description": "States the coldest day = 2026-01-11 at about -14.9 °C.",
+              "points": 3
+            },
+            {
+              "id": 2,
+              "description": "States the freezing-day count = exactly 63.",
+              "points": 3
+            },
+            {
+              "id": 3,
+              "description": "A get_sensor_stats call sets filter_operator \"<\" and filter_value 0 (server-side threshold count).",
+              "points": 2
+            },
+            {
+              "id": 4,
+              "description": "A get_sensor_stats call sets aggregation \"min\".",
+              "points": 1
+            },
+            {
+              "id": 5,
+              "description": "No raw state/history timeline is fetched (no get_state_history); the count comes from the server.",
+              "points": 1
+            }
+          ]
+        },
+        {
+          "source_case_id": "B-GUDP.2",
+          "name": "02 charger-energy-month",
+          "prompt": "Give me a rundown of the car charger's electricity use for February 2026 — it's on a metered outdoor plug. How much energy did it use in total that month? Which single day was the highest, and how much? On which days did it use more than 20 kWh? And roughly how does February compare to January? Resolve the charger entity yourself and keep it concise.",
+          "expected_tools_called": [
+            "ha_history_get_consumption"
+          ],
+          "expected_tools_not_called": [
+            "ha_history_get_state_history",
+            "ha_history_get_state"
+          ],
+          "rubric": [
+            {
+              "id": 1,
+              "description": "February total reported = 267 kWh (267 or 267.1 acceptable; NOT 243 or 276).",
+              "points": 3
+            },
+            {
+              "id": 2,
+              "description": "Highest day = Feb 8 at 34.32 kWh.",
+              "points": 1
+            },
+            {
+              "id": 3,
+              "description": "Days over 20 kWh = exactly Feb 8, Feb 1, and Feb 26 (no more, no fewer).",
+              "points": 2
+            },
+            {
+              "id": 4,
+              "description": "January reported approximately 24 kWh (NOT 56).",
+              "points": 1
+            },
+            {
+              "id": 5,
+              "description": "get_consumption used for the totals (not get_sensor_stats on a power entity).",
+              "points": 1
+            },
+            {
+              "id": 6,
+              "description": "A get_consumption call sets interval \"day\", filter_operator \">\", filter_value 20.",
+              "points": 1
+            },
+            {
+              "id": 7,
+              "description": "No tool result exceeds 31 rows.",
+              "points": 1
+            }
+          ]
+        },
+        {
+          "source_case_id": "B-GUDP.3",
+          "name": "03 multiroom-climate-month",
+          "prompt": "Compare the temperatures across my home for February 2026 — cover the Cave, Kitchen, Salon, and Outdoor. Give me each area's average, minimum, and maximum in one table. Which area's temperature swings the most over the month? And does anything in the data look off — a reading that can't really be a room temperature? Resolve the sensors yourself and keep it compact.",
+          "expected_tools_called": [
+            "ha_history_get_sensor_stats"
+          ],
+          "expected_tools_not_called": [
+            "ha_history_get_consumption",
+            "ha_history_detect_sessions",
+            "ha_history_get_state_history"
+          ],
+          "rubric": [
+            {
+              "id": 1,
+              "description": "Outdoor Feb mean/min/max = -2.8 / -12.5 / 7.9 (NOT -2.6 / 8.6).",
+              "points": 2
+            },
+            {
+              "id": 2,
+              "description": "Cave = 21.8 / 19.1 / 23.7 and Salon = 19.1 / 16.6 / 22.8.",
+              "points": 1
+            },
+            {
+              "id": 3,
+              "description": "Flags the kitchen 30.1 °C max as not a real room temperature and reports the kitchen ambient (about 23 °C max) instead.",
+              "points": 2
+            },
+            {
+              "id": 4,
+              "description": "Biggest swing over the month = Outdoor.",
+              "points": 1
+            },
+            {
+              "id": 5,
+              "description": "One get_sensor_stats call covers at least 3 areas together (entity_ids) with aggregations mean, min, and max.",
+              "points": 2
+            },
+            {
+              "id": 6,
+              "description": "At most one get_sensor_stats call for the table (not one per room).",
+              "points": 1
+            },
+            {
+              "id": 7,
+              "description": "No tool result exceeds 6 rows.",
+              "points": 1
+            }
+          ]
+        },
+        {
+          "source_case_id": "B-GUDP.4",
+          "name": "04 recent-motion-routines",
+          "prompt": "For the last 7 days, how busy were the stairs in my home? Give me a per-day count of how many times the stairs motion sensors triggered, and tell me which day was the busiest. Resolve the stairs motion sensors yourself and keep it concise.",
+          "expected_tools_called": [
+            "ha_history_get_state_history"
+          ],
+          "expected_tools_not_called": [
+            "ha_history_detect_sessions",
+            "ha_history_get_sensor_stats",
+            "ha_history_get_consumption"
+          ],
+          "rubric": [
+            {
+              "id": 1,
+              "description": "Busiest day = 2026-06-22.",
+              "points": 2
+            },
+            {
+              "id": 2,
+              "description": "Per-day counts match the resolved sensor exactly (e.g. motion_1: 13/115/99/92/136/182/188/111, total 936).",
+              "points": 2
+            },
+            {
+              "id": 3,
+              "description": "get_state_history used; NOT get_sensor_stats and NOT detect_sessions on the binary motion sensor.",
+              "points": 2
+            },
+            {
+              "id": 4,
+              "description": "A get_state_history call sets state_value \"on\" and group_by \"day\".",
+              "points": 2
+            },
+            {
+              "id": 5,
+              "description": "No tool result exceeds 12 rows (a per-day summary, not a raw transition list).",
+              "points": 2
+            }
+          ]
+        },
+        {
+          "source_case_id": "B-GUDP.5",
+          "name": "05 whole-home-weekday-weekend",
+          "prompt": "For March 2026, is our household using more electricity on weekends than on weekdays? Compare the weekday vs weekend consumption for the whole home and give me a clear verdict with numbers. Resolve the whole-home meter yourself and keep it concise.",
+          "expected_tools_called": [
+            "ha_history_get_consumption"
+          ],
+          "expected_tools_not_called": [
+            "ha_history_detect_sessions",
+            "ha_history_get_state_history",
+            "ha_history_get_state"
+          ],
+          "rubric": [
+            {
+              "id": 1,
+              "description": "Weekday average = 63.4 kWh/day and weekend average = 75.4 kWh/day (rounding to 63 / 75 acceptable).",
+              "points": 3
+            },
+            {
+              "id": 2,
+              "description": "Verdict: weekends are higher (about 12 kWh/day, ~19%).",
+              "points": 2
+            },
+            {
+              "id": 3,
+              "description": "Whole-home / grid-import meter used (AMS total import), not a per-appliance meter.",
+              "points": 2
+            },
+            {
+              "id": 4,
+              "description": "A get_consumption call sets interval \"day\".",
+              "points": 1
+            },
+            {
+              "id": 5,
+              "description": "No sub-daily / raw series fetched; the daily series is at most 31 rows.",
+              "points": 2
+            }
+          ]
+        }
+      ],
+      "sessions": [
+        {
+          "session_id": "9LJM",
+          "source_case_id": "B-GUDP.1",
+          "repetition": 1,
+          "status": "complete"
+        },
+        {
+          "session_id": "7HVE",
+          "source_case_id": "B-GUDP.1",
+          "repetition": 2,
+          "status": "complete"
+        },
+        {
+          "session_id": "3VVQ",
+          "source_case_id": "B-GUDP.1",
+          "repetition": 3,
+          "status": "complete"
+        },
+        {
+          "session_id": "KG92",
+          "source_case_id": "B-GUDP.1",
+          "repetition": 4,
+          "status": "complete"
+        },
+        {
+          "session_id": "ART6",
+          "source_case_id": "B-GUDP.1",
+          "repetition": 5,
+          "status": "complete"
+        },
+        {
+          "session_id": "V3P3",
+          "source_case_id": "B-GUDP.2",
+          "repetition": 1,
+          "status": "complete"
+        },
+        {
+          "session_id": "DR93",
+          "source_case_id": "B-GUDP.2",
+          "repetition": 2,
+          "status": "complete"
+        },
+        {
+          "session_id": "N8GF",
+          "source_case_id": "B-GUDP.2",
+          "repetition": 3,
+          "status": "error"
+        },
+        {
+          "session_id": "XR2B",
+          "source_case_id": "B-GUDP.2",
+          "repetition": 4,
+          "status": "complete"
+        },
+        {
+          "session_id": "RGGR",
+          "source_case_id": "B-GUDP.2",
+          "repetition": 5,
+          "status": "complete"
+        },
+        {
+          "session_id": "VMLU",
+          "source_case_id": "B-GUDP.3",
+          "repetition": 1,
+          "status": "complete"
+        },
+        {
+          "session_id": "79YY",
+          "source_case_id": "B-GUDP.3",
+          "repetition": 2,
+          "status": "complete"
+        },
+        {
+          "session_id": "XJ3F",
+          "source_case_id": "B-GUDP.3",
+          "repetition": 3,
+          "status": "complete"
+        },
+        {
+          "session_id": "VU6C",
+          "source_case_id": "B-GUDP.3",
+          "repetition": 4,
+          "status": "complete"
+        },
+        {
+          "session_id": "PRSD",
+          "source_case_id": "B-GUDP.3",
+          "repetition": 5,
+          "status": "complete"
+        },
+        {
+          "session_id": "JF9U",
+          "source_case_id": "B-GUDP.4",
+          "repetition": 1,
+          "status": "complete"
+        },
+        {
+          "session_id": "AQK7",
+          "source_case_id": "B-GUDP.4",
+          "repetition": 2,
+          "status": "complete"
+        },
+        {
+          "session_id": "ZNF9",
+          "source_case_id": "B-GUDP.4",
+          "repetition": 3,
+          "status": "complete"
+        },
+        {
+          "session_id": "8PYJ",
+          "source_case_id": "B-GUDP.4",
+          "repetition": 4,
+          "status": "complete"
+        },
+        {
+          "session_id": "FZ3S",
+          "source_case_id": "B-GUDP.4",
+          "repetition": 5,
+          "status": "complete"
+        },
+        {
+          "session_id": "DZZ6",
+          "source_case_id": "B-GUDP.5",
+          "repetition": 1,
+          "status": "complete"
+        },
+        {
+          "session_id": "U7WR",
+          "source_case_id": "B-GUDP.5",
+          "repetition": 2,
+          "status": "error"
+        },
+        {
+          "session_id": "ZQLE",
+          "source_case_id": "B-GUDP.5",
+          "repetition": 3,
+          "status": "complete"
+        },
+        {
+          "session_id": "73K7",
+          "source_case_id": "B-GUDP.5",
+          "repetition": 4,
+          "status": "complete"
+        },
+        {
+          "session_id": "39RT",
+          "source_case_id": "B-GUDP.5",
+          "repetition": 5,
+          "status": "error"
+        }
+      ],
+      "error": "3 of 25 session(s) failed. See per-session errors.",
+      "created_at": 1782568618106,
+      "updated_at": 1782569551061,
+      "started_at": 1782568618107,
+      "completed_at": 1782569551061
+    }
+  }
+}
+
+```
+
+## Full mode (adds the metrics report)
+
+`mcpscope inspect R-RZNP`
+
+```json
+{
+  "id": "R-RZNP",
+  "type": "benchmark_run",
+  "mode": "full",
+  "data": {
+    "run": {
+      "id": "R-RZNP",
+      "benchmark_id": "B-GUDP",
+      "benchmark_name": "HA History V3 (oracle-pinned)",
+      "status": "complete",
+      "model_config_id": "ce0c471c-088b-4b36-b104-c57e78d93e19",
+      "mcp_profile_ids": [
+        "ha-replay"
+      ],
+      "repetitions": 5,
+      "max_tool_rounds": 20,
+      "cases": [
+        {
+          "source_case_id": "B-GUDP.1",
+          "name": "01 outdoor-winter-coldest-and-freezing",
+          "prompt": "I'd like to understand how cold it got outside last winter — December 2025 through February 2026. Two things: (1) which day was the coldest, and how cold did it get? (2) on how many days that winter did the temperature drop below freezing at some point? Resolve the outdoor sensor yourself and keep it concise.",
+          "expected_tools_called": [
+            "ha_history_get_sensor_stats"
+          ],
+          "expected_tools_not_called": [
+            "ha_history_get_state_history",
+            "ha_history_detect_sessions",
+            "ha_history_get_consumption"
+          ],
+          "rubric": [
+            {
+              "id": 1,
+              "description": "States the coldest day = 2026-01-11 at about -14.9 °C.",
+              "points": 3
+            },
+            {
+              "id": 2,
+              "description": "States the freezing-day count = exactly 63.",
+              "points": 3
+            },
+            {
+              "id": 3,
+              "description": "A get_sensor_stats call sets filter_operator \"<\" and filter_value 0 (server-side threshold count).",
+              "points": 2
+            },
+            {
+              "id": 4,
+              "description": "A get_sensor_stats call sets aggregation \"min\".",
+              "points": 1
+            },
+            {
+              "id": 5,
+              "description": "No raw state/history timeline is fetched (no get_state_history); the count comes from the server.",
+              "points": 1
+            }
+          ]
+        },
+        {
+          "source_case_id": "B-GUDP.2",
+          "name": "02 charger-energy-month",
+          "prompt": "Give me a rundown of the car charger's electricity use for February 2026 — it's on a metered outdoor plug. How much energy did it use in total that month? Which single day was the highest, and how much? On which days did it use more than 20 kWh? And roughly how does February compare to January? Resolve the charger entity yourself and keep it concise.",
+          "expected_tools_called": [
+            "ha_history_get_consumption"
+          ],
+          "expected_tools_not_called": [
+            "ha_history_get_state_history",
+            "ha_history_get_state"
+          ],
+          "rubric": [
+            {
+              "id": 1,
+              "description": "February total reported = 267 kWh (267 or 267.1 acceptable; NOT 243 or 276).",
+              "points": 3
+            },
+            {
+              "id": 2,
+              "description": "Highest day = Feb 8 at 34.32 kWh.",
+              "points": 1
+            },
+            {
+              "id": 3,
+              "description": "Days over 20 kWh = exactly Feb 8, Feb 1, and Feb 26 (no more, no fewer).",
+              "points": 2
+            },
+            {
+              "id": 4,
+              "description": "January reported approximately 24 kWh (NOT 56).",
+              "points": 1
+            },
+            {
+              "id": 5,
+              "description": "get_consumption used for the totals (not get_sensor_stats on a power entity).",
+              "points": 1
+            },
+            {
+              "id": 6,
+              "description": "A get_consumption call sets interval \"day\", filter_operator \">\", filter_value 20.",
+              "points": 1
+            },
+            {
+              "id": 7,
+              "description": "No tool result exceeds 31 rows.",
+              "points": 1
+            }
+          ]
+        },
+        {
+          "source_case_id": "B-GUDP.3",
+          "name": "03 multiroom-climate-month",
+          "prompt": "Compare the temperatures across my home for February 2026 — cover the Cave, Kitchen, Salon, and Outdoor. Give me each area's average, minimum, and maximum in one table. Which area's temperature swings the most over the month? And does anything in the data look off — a reading that can't really be a room temperature? Resolve the sensors yourself and keep it compact.",
+          "expected_tools_called": [
+            "ha_history_get_sensor_stats"
+          ],
+          "expected_tools_not_called": [
+            "ha_history_get_consumption",
+            "ha_history_detect_sessions",
+            "ha_history_get_state_history"
+          ],
+          "rubric": [
+            {
+              "id": 1,
+              "description": "Outdoor Feb mean/min/max = -2.8 / -12.5 / 7.9 (NOT -2.6 / 8.6).",
+              "points": 2
+            },
+            {
+              "id": 2,
+              "description": "Cave = 21.8 / 19.1 / 23.7 and Salon = 19.1 / 16.6 / 22.8.",
+              "points": 1
+            },
+            {
+              "id": 3,
+              "description": "Flags the kitchen 30.1 °C max as not a real room temperature and reports the kitchen ambient (about 23 °C max) instead.",
+              "points": 2
+            },
+            {
+              "id": 4,
+              "description": "Biggest swing over the month = Outdoor.",
+              "points": 1
+            },
+            {
+              "id": 5,
+              "description": "One get_sensor_stats call covers at least 3 areas together (entity_ids) with aggregations mean, min, and max.",
+              "points": 2
+            },
+            {
+              "id": 6,
+              "description": "At most one get_sensor_stats call for the table (not one per room).",
+              "points": 1
+            },
+            {
+              "id": 7,
+              "description": "No tool result exceeds 6 rows.",
+              "points": 1
+            }
+          ]
+        },
+        {
+          "source_case_id": "B-GUDP.4",
+          "name": "04 recent-motion-routines",
+          "prompt": "For the last 7 days, how busy were the stairs in my home? Give me a per-day count of how many times the stairs motion sensors triggered, and tell me which day was the busiest. Resolve the stairs motion sensors yourself and keep it concise.",
+          "expected_tools_called": [
+            "ha_history_get_state_history"
+          ],
+          "expected_tools_not_called": [
+            "ha_history_detect_sessions",
+            "ha_history_get_sensor_stats",
+            "ha_history_get_consumption"
+          ],
+          "rubric": [
+            {
+              "id": 1,
+              "description": "Busiest day = 2026-06-22.",
+              "points": 2
+            },
+            {
+              "id": 2,
+              "description": "Per-day counts match the resolved sensor exactly (e.g. motion_1: 13/115/99/92/136/182/188/111, total 936).",
+              "points": 2
+            },
+            {
+              "id": 3,
+              "description": "get_state_history used; NOT get_sensor_stats and NOT detect_sessions on the binary motion sensor.",
+              "points": 2
+            },
+            {
+              "id": 4,
+              "description": "A get_state_history call sets state_value \"on\" and group_by \"day\".",
+              "points": 2
+            },
+            {
+              "id": 5,
+              "description": "No tool result exceeds 12 rows (a per-day summary, not a raw transition list).",
+              "points": 2
+            }
+          ]
+        },
+        {
+          "source_case_id": "B-GUDP.5",
+          "name": "05 whole-home-weekday-weekend",
+          "prompt": "For March 2026, is our household using more electricity on weekends than on weekdays? Compare the weekday vs weekend consumption for the whole home and give me a clear verdict with numbers. Resolve the whole-home meter yourself and keep it concise.",
+          "expected_tools_called": [
+            "ha_history_get_consumption"
+          ],
+          "expected_tools_not_called": [
+            "ha_history_detect_sessions",
+            "ha_history_get_state_history",
+            "ha_history_get_state"
+          ],
+          "rubric": [
+            {
+              "id": 1,
+              "description": "Weekday average = 63.4 kWh/day and weekend average = 75.4 kWh/day (rounding to 63 / 75 acceptable).",
+              "points": 3
+            },
+            {
+              "id": 2,
+              "description": "Verdict: weekends are higher (about 12 kWh/day, ~19%).",
+              "points": 2
+            },
+            {
+              "id": 3,
+              "description": "Whole-home / grid-import meter used (AMS total import), not a per-appliance meter.",
+              "points": 2
+            },
+            {
+              "id": 4,
+              "description": "A get_consumption call sets interval \"day\".",
+              "points": 1
+            },
+            {
+              "id": 5,
+              "description": "No sub-daily / raw series fetched; the daily series is at most 31 rows.",
+              "points": 2
+            }
+          ]
+        }
+      ],
+      "sessions": [
+        {
+          "session_id": "9LJM",
+          "source_case_id": "B-GUDP.1",
+          "repetition": 1,
+          "status": "complete"
+        },
+        {
+          "session_id": "7HVE",
+          "source_case_id": "B-GUDP.1",
+          "repetition": 2,
+          "status": "complete"
+        },
+        {
+          "session_id": "3VVQ",
+          "source_case_id": "B-GUDP.1",
+          "repetition": 3,
+          "status": "complete"
+        },
+        {
+          "session_id": "KG92",
+          "source_case_id": "B-GUDP.1",
+          "repetition": 4,
+          "status": "complete"
+        },
+        {
+          "session_id": "ART6",
+          "source_case_id": "B-GUDP.1",
+          "repetition": 5,
+          "status": "complete"
+        },
+        {
+          "session_id": "V3P3",
+          "source_case_id": "B-GUDP.2",
+          "repetition": 1,
+          "status": "complete"
+        },
+        {
+          "session_id": "DR93",
+          "source_case_id": "B-GUDP.2",
+          "repetition": 2,
+          "status": "complete"
+        },
+        {
+          "session_id": "N8GF",
+          "source_case_id": "B-GUDP.2",
+          "repetition": 3,
+          "status": "error"
+        },
+        {
+          "session_id": "XR2B",
+          "source_case_id": "B-GUDP.2",
+          "repetition": 4,
+          "status": "complete"
+        },
+        {
+          "session_id": "RGGR",
+          "source_case_id": "B-GUDP.2",
+          "repetition": 5,
+          "status": "complete"
+        },
+        {
+          "session_id": "VMLU",
+          "source_case_id": "B-GUDP.3",
+          "repetition": 1,
+          "status": "complete"
+        },
+        {
+          "session_id": "79YY",
+          "source_case_id": "B-GUDP.3",
+          "repetition": 2,
+          "status": "complete"
+        },
+        {
+          "session_id": "XJ3F",
+          "source_case_id": "B-GUDP.3",
+          "repetition": 3,
+          "status": "complete"
+        },
+        {
+          "session_id": "VU6C",
+          "source_case_id": "B-GUDP.3",
+          "repetition": 4,
+          "status": "complete"
+        },
+        {
+          "session_id": "PRSD",
+          "source_case_id": "B-GUDP.3",
+          "repetition": 5,
+          "status": "complete"
+        },
+        {
+          "session_id": "JF9U",
+          "source_case_id": "B-GUDP.4",
+          "repetition": 1,
+          "status": "complete"
+        },
+        {
+          "session_id": "AQK7",
+          "source_case_id": "B-GUDP.4",
+          "repetition": 2,
+          "status": "complete"
+        },
+        {
+          "session_id": "ZNF9",
+          "source_case_id": "B-GUDP.4",
+          "repetition": 3,
+          "status": "complete"
+        },
+        {
+          "session_id": "8PYJ",
+          "source_case_id": "B-GUDP.4",
+          "repetition": 4,
+          "status": "complete"
+        },
+        {
+          "session_id": "FZ3S",
+          "source_case_id": "B-GUDP.4",
+          "repetition": 5,
+          "status": "complete"
+        },
+        {
+          "session_id": "DZZ6",
+          "source_case_id": "B-GUDP.5",
+          "repetition": 1,
+          "status": "complete"
+        },
+        {
+          "session_id": "U7WR",
+          "source_case_id": "B-GUDP.5",
+          "repetition": 2,
+          "status": "error"
+        },
+        {
+          "session_id": "ZQLE",
+          "source_case_id": "B-GUDP.5",
+          "repetition": 3,
+          "status": "complete"
+        },
+        {
+          "session_id": "73K7",
+          "source_case_id": "B-GUDP.5",
+          "repetition": 4,
+          "status": "complete"
+        },
+        {
+          "session_id": "39RT",
+          "source_case_id": "B-GUDP.5",
+          "repetition": 5,
+          "status": "error"
+        }
+      ],
+      "error": "3 of 25 session(s) failed. See per-session errors.",
+      "created_at": 1782568618106,
+      "updated_at": 1782569551061,
+      "started_at": 1782568618107,
+      "completed_at": 1782569551061
+    },
+    "report": {
+      "run_id": "R-RZNP",
+      "benchmark_id": "B-GUDP",
+      "status": "complete",
+      "repetitions": 5,
+      "case_count": 5,
+      "session_count": 25,
+      "cases": [
+        {
+          "case_id": "B-GUDP.1",
+          "prompt": "I'd like to understand how cold it got outside last winter — December 2025 through February 2026. Two things: (1) which day was the coldest, and how cold did it get? (2) on how many days that winter did the temperature drop below freezing at some point? Resolve the outdoor sensor yourself and keep it concise.",
+          "repetitions": 5,
+          "session_count": 5,
+          "has_checks": true,
+          "pass_count": 5,
+          "pass_at_k": true,
+          "pass_hat_k": true,
+          "success_rate": 1,
+          "completed_count": 5,
+          "tool_error_count": 0,
+          "tool_call_stats": {
+            "min": 2,
+            "max": 3,
+            "mean": 2.6,
+            "median": 3,
+            "stddev": 0.4898979485566356
+          },
+          "total_token_stats": {
+            "min": 7025,
+            "max": 7156,
+            "mean": 7081.8,
+            "median": 7094,
+            "stddev": 46.66219026149544
+          },
+          "per_tool": {
+            "ha_history_list_entities": {
+              "calls": 5,
+              "errors": 0,
+              "result_payload_chars": 1650
+            },
+            "ha_history_get_sensor_stats": {
+              "calls": 8,
+              "errors": 0,
+              "result_payload_chars": 18588
+            }
+          },
+          "sessions": [
+            {
+              "session_id": "9LJM",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 3,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_sensor_stats"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 330
+                },
+                "ha_history_get_sensor_stats": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 3774
+                }
+              },
+              "tokens": {
+                "prompt": 6993,
+                "completion": 101,
+                "reasoning": 1,
+                "total": 7094
+              },
+              "final_answer": "The coldest day was January 9, 2026, when the temperature dropped to -12.4°C.\n\nDuring the winter period (December 2025 through February 2026), the temperature dropped below freezing on 68 days.\n\nSensor: Ruuvi Outdoor Temperature\nPeriod: 2025-12-01 to 2026-02-28\nAggregation: Daily minimum"
+            },
+            {
+              "session_id": "7HVE",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 2,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_sensor_stats"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 330
+                },
+                "ha_history_get_sensor_stats": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 3659
+                }
+              },
+              "tokens": {
+                "prompt": 6929,
+                "completion": 96,
+                "reasoning": 1,
+                "total": 7025
+              },
+              "final_answer": "(1) The coldest day was 2026-01-09, reaching -12.4°C.\n(2) The temperature dropped below freezing on 64 days during that winter.\n\nSensor: sensor.ruuvitag_fc8f_temperature\nPeriod: 2025-12-01 to 2026-02-28\nAggregation: daily minimum"
+            },
+            {
+              "session_id": "3VVQ",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 3,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_sensor_stats"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 330
+                },
+                "ha_history_get_sensor_stats": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 3774
+                }
+              },
+              "tokens": {
+                "prompt": 6993,
+                "completion": 102,
+                "reasoning": 1,
+                "total": 7095
+              },
+              "final_answer": "The coldest day was January 10, 2026, when the temperature dropped to -14.9°C.\n\nDuring the winter period from December 2025 through February 2026, the temperature dropped below freezing on 63 days.\n\nSensor: Ruuvi Outdoor Temperature\nPeriod: 2025-12-01 to 2026-02-28\nAggregation: Daily minimum"
+            },
+            {
+              "session_id": "KG92",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 3,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_sensor_stats"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 330
+                },
+                "ha_history_get_sensor_stats": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 3722
+                }
+              },
+              "tokens": {
+                "prompt": 7054,
+                "completion": 102,
+                "reasoning": 1,
+                "total": 7156
+              },
+              "final_answer": "The coldest day was January 10, 2026, when the temperature dropped to -14.9°C.\n\nDuring the winter period from December 2025 through February 2026, the temperature dropped below freezing on 61 days.\n\nSensor: Ruuvi Outdoor Temperature\nPeriod: 2025-12-01 to 2026-02-28\nAggregation: Daily minimum"
+            },
+            {
+              "session_id": "ART6",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 2,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_sensor_stats"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 330
+                },
+                "ha_history_get_sensor_stats": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 3659
+                }
+              },
+              "tokens": {
+                "prompt": 6929,
+                "completion": 110,
+                "reasoning": 1,
+                "total": 7039
+              },
+              "final_answer": "The coldest day was January 10, 2026, when the temperature dropped to -14.9°C.\n\nDuring the winter period from December 1, 2025, to February 28, 2026, the temperature dropped below freezing on 66 days.\n\nSensor: Ruuvi Outdoor Temperature\nPeriod: 2025-12-01 to 2026-02-28\nAggregation: daily minimum"
+            }
+          ]
+        },
+        {
+          "case_id": "B-GUDP.2",
+          "prompt": "Give me a rundown of the car charger's electricity use for February 2026 — it's on a metered outdoor plug. How much energy did it use in total that month? Which single day was the highest, and how much? On which days did it use more than 20 kWh? And roughly how does February compare to January? Resolve the charger entity yourself and keep it concise.",
+          "repetitions": 5,
+          "session_count": 5,
+          "has_checks": true,
+          "pass_count": 4,
+          "pass_at_k": true,
+          "pass_hat_k": false,
+          "success_rate": 0.8,
+          "completed_count": 4,
+          "tool_error_count": 0,
+          "tool_call_stats": {
+            "min": 3,
+            "max": 20,
+            "mean": 10.6,
+            "median": 6,
+            "stddev": 6.974238309665077
+          },
+          "total_token_stats": {
+            "min": 6646,
+            "max": 8192,
+            "mean": 7805.5,
+            "median": 8192,
+            "stddev": 669.4376371253711
+          },
+          "per_tool": {
+            "ha_history_list_entities": {
+              "calls": 15,
+              "errors": 0,
+              "result_payload_chars": 29517
+            },
+            "ha_history_get_consumption": {
+              "calls": 33,
+              "errors": 0,
+              "result_payload_chars": 32945
+            },
+            "ha_history_get_current_time": {
+              "calls": 3,
+              "errors": 0,
+              "result_payload_chars": 432
+            },
+            "ha_history_list_devices": {
+              "calls": 2,
+              "errors": 0,
+              "result_payload_chars": 1054
+            }
+          },
+          "sessions": [
+            {
+              "session_id": "V3P3",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 3,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_consumption"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 3592
+                },
+                "ha_history_get_consumption": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 1091
+                }
+              },
+              "tokens": {
+                "prompt": 6854,
+                "completion": 1338,
+                "reasoning": 1335,
+                "total": 8192
+              },
+              "final_answer": null
+            },
+            {
+              "session_id": "DR93",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 18,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_get_current_time",
+                "ha_history_list_devices",
+                "ha_history_get_consumption",
+                "ha_history_list_entities"
+              ],
+              "per_tool": {
+                "ha_history_get_current_time": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 144
+                },
+                "ha_history_list_devices": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 527
+                },
+                "ha_history_get_consumption": {
+                  "calls": 11,
+                  "errors": 0,
+                  "result_payload_chars": 10987
+                },
+                "ha_history_list_entities": {
+                  "calls": 5,
+                  "errors": 0,
+                  "result_payload_chars": 8007
+                }
+              },
+              "tokens": {
+                "prompt": 6662,
+                "completion": 1530,
+                "reasoning": 1497,
+                "total": 8192
+              },
+              "final_answer": "Sensor: sensor.car_charging_plug_summation_delivered\nPeriod: February 2026\nTotal: 25"
+            },
+            {
+              "session_id": "N8GF",
+              "terminal_status": "error",
+              "completed": false,
+              "tool_call_count": 20,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_current_time",
+                "ha_history_get_consumption"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 7,
+                  "errors": 0,
+                  "result_payload_chars": 16221
+                },
+                "ha_history_get_current_time": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 144
+                },
+                "ha_history_get_consumption": {
+                  "calls": 12,
+                  "errors": 0,
+                  "result_payload_chars": 16192
+                }
+              },
+              "tokens": {
+                "prompt": null,
+                "completion": null,
+                "reasoning": null,
+                "total": null
+              },
+              "final_answer": null
+            },
+            {
+              "session_id": "XR2B",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 6,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_get_current_time",
+                "ha_history_list_devices",
+                "ha_history_get_consumption"
+              ],
+              "per_tool": {
+                "ha_history_get_current_time": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 144
+                },
+                "ha_history_list_devices": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 527
+                },
+                "ha_history_get_consumption": {
+                  "calls": 4,
+                  "errors": 0,
+                  "result_payload_chars": 3594
+                }
+              },
+              "tokens": {
+                "prompt": 8185,
+                "completion": 7,
+                "reasoning": 1,
+                "total": 8192
+              },
+              "final_answer": null
+            },
+            {
+              "session_id": "RGGR",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 6,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_consumption"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 1697
+                },
+                "ha_history_get_consumption": {
+                  "calls": 4,
+                  "errors": 0,
+                  "result_payload_chars": 1081
+                }
+              },
+              "tokens": {
+                "prompt": 6497,
+                "completion": 149,
+                "reasoning": 1,
+                "total": 6646
+              },
+              "final_answer": "The car charger (sensor.car_charging_plug_summation_delivered) in the Outdoor area used the following energy in February 2026:\n\n*   **Total Energy:** 258.28 kWh\n*   **Highest Day:** February 7th (34.32 kWh)\n*   **Days > 20 kWh:** February 7th (34.32 kWh) and February 25th (25.41 kWh)\n*   **Comparison to January:** February used 258.28 kWh, which is significantly higher than the previous period (January) total of 56.42 kWh."
+            }
+          ]
+        },
+        {
+          "case_id": "B-GUDP.3",
+          "prompt": "Compare the temperatures across my home for February 2026 — cover the Cave, Kitchen, Salon, and Outdoor. Give me each area's average, minimum, and maximum in one table. Which area's temperature swings the most over the month? And does anything in the data look off — a reading that can't really be a room temperature? Resolve the sensors yourself and keep it compact.",
+          "repetitions": 5,
+          "session_count": 5,
+          "has_checks": true,
+          "pass_count": 5,
+          "pass_at_k": true,
+          "pass_hat_k": true,
+          "success_rate": 1,
+          "completed_count": 5,
+          "tool_error_count": 0,
+          "tool_call_stats": {
+            "min": 2,
+            "max": 3,
+            "mean": 2.2,
+            "median": 2,
+            "stddev": 0.39999999999999997
+          },
+          "total_token_stats": {
+            "min": 6176,
+            "max": 7739,
+            "mean": 6944.4,
+            "median": 6995,
+            "stddev": 646.2212005188317
+          },
+          "per_tool": {
+            "ha_history_list_entities": {
+              "calls": 5,
+              "errors": 0,
+              "result_payload_chars": 5515
+            },
+            "ha_history_get_sensor_stats": {
+              "calls": 5,
+              "errors": 0,
+              "result_payload_chars": 2344
+            },
+            "ha_history_get_current_time": {
+              "calls": 1,
+              "errors": 0,
+              "result_payload_chars": 144
+            }
+          },
+          "sessions": [
+            {
+              "session_id": "VMLU",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 2,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_sensor_stats"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 1103
+                },
+                "ha_history_get_sensor_stats": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 472
+                }
+              },
+              "tokens": {
+                "prompt": 5868,
+                "completion": 1871,
+                "reasoning": 1555,
+                "total": 7739
+              },
+              "final_answer": "| Area | Sensor | Mean | Min | Max | Swing |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| **Cave** | SONOFF SNZB-02D #2 | 21.4°C | 18.8°C | 23.2°C | 4.4°C |\n| **Kitchen** | SONOFF SNZB-02D #1 | 19.6°C | 16.9°C | 30.1°C | 13.2°C |\n| **Salon** | Ruuvi Salon | 19.1°C | 16.6°C | 22.8°C | 6.2°C |\n| **Outdoor** | Ruuvi Outdoor | -2.6°C | -12.5°C | 8.6°C | 21.1°C |\n\n**Temperature Swings:**\nThe **Outdoor** area had the largest temperature swing over the month (21.1°C). Among indoor areas, the **Kitchen** had the largest swing (13.2°C).\n\n**Data Anomalies:**\nThe **Kitchen** maximum of **30.1°C** is quite high for a standard room temperature but possible near a heat source (like an oven). The **Outdoor** readings are correctly reflecting non-room temperatures."
+            },
+            {
+              "session_id": "79YY",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 2,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_sensor_stats"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 1103
+                },
+                "ha_history_get_sensor_stats": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 472
+                }
+              },
+              "tokens": {
+                "prompt": 5868,
+                "completion": 1694,
+                "reasoning": 1429,
+                "total": 7562
+              },
+              "final_answer": "| Area | Average | Minimum | Maximum | Swing |\n| :--- | :--- | :--- | :--- | :--- |\n| **Cave** | 21.4°C | 18.8°C | 23.2°C | 4.4°C |\n| **Kitchen** | 19.5°C | 16.9°C | 30.1°C | 13.2°C |\n| **Salon** | 19.1°C | 16.6°C | 22.8°C | 6.2°C |\n| **Outdoor** | -2.8°C | -12.5°C | 7.9°C | 20.4°C |\n\n**Analysis:**\n*   **Largest Swing:** The **Outdoor** area had the most significant temperature swing (20.4°C).\n*   **Data Anomaly:** The **Kitchen** maximum of **30.1°C** stands out as potentially \"off\" for a standard room temperature in February, likely indicating a heat source (like an oven or stove) was active during the month."
+            },
+            {
+              "session_id": "XJ3F",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 2,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_sensor_stats"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 1103
+                },
+                "ha_history_get_sensor_stats": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 472
+                }
+              },
+              "tokens": {
+                "prompt": 5868,
+                "completion": 1127,
+                "reasoning": 875,
+                "total": 6995
+              },
+              "final_answer": "| Area | Sensor | Mean | Min | Max |\n| :--- | :--- | :--- | :--- | :--- |\n| Cave | SONOFF SNZB-02D #2 | 21.4°C | 18.8°C | 23.2°C |\n| Kitchen | SONOFF SNZB-02D #1 | 19.6°C | 16.9°C | 30.1°C |\n| Salon | Ruuvi Salon | 19.1°C | 16.6°C | 22.8°C |\n| Outdoor | Ruuvi Outdoor | -2.6°C | -12.5°C | 8.6°C |\n\n**Temperature Swing:** The **Outdoor** area had the largest swing (21.1°C).\n\n**Data Anomaly:** The **Kitchen** maximum of **30.1°C** stands out as potentially \"off\" or indicative of a specific event (like using the oven), as it is significantly higher than the room's 19.6°C average."
+            },
+            {
+              "session_id": "VU6C",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 3,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_get_current_time",
+                "ha_history_list_entities",
+                "ha_history_get_sensor_stats"
+              ],
+              "per_tool": {
+                "ha_history_get_current_time": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 144
+                },
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 1103
+                },
+                "ha_history_get_sensor_stats": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 464
+                }
+              },
+              "tokens": {
+                "prompt": 5959,
+                "completion": 291,
+                "reasoning": 1,
+                "total": 6250
+              },
+              "final_answer": "The temperature statistics for February 2026 are as follows:\n\n| Area | Sensor | Mean | Min | Max |\n| :--- | :--- | :--- | :--- | :--- |\n| **Cave** | Ruuvi Cave Temperature | 21.8°C | 19.1°C | 23.7°C |\n| **Kitchen** | SONOFF SNZB-02D #1 | 19.5°C | 16.9°C | 30.1°C |\n| **Salon** | Ruuvi Salon Temperature | 19.1°C | 16.6°C | 22.8°C |\n| **Outdoor** | Ruuvi Outdoor Temperature | -2.8°C | -12.5°C | 7.9°C |\n\n**Analysis:**\n*   **Temperature Swings:** The **Outdoor** area had the largest swing (20.4°C difference), followed by the **Kitchen** (13.2°C difference).\n*   **Data Anomaly:** The **Kitchen** reading of **30.1°C** (Max) stands out as potentially high for a standard room temperature, suggesting a localized heat source (like an oven or stove) or a sensor placement issue."
+            },
+            {
+              "session_id": "PRSD",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 2,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_sensor_stats"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 1103
+                },
+                "ha_history_get_sensor_stats": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 464
+                }
+              },
+              "tokens": {
+                "prompt": 5845,
+                "completion": 331,
+                "reasoning": 1,
+                "total": 6176
+              },
+              "final_answer": "The temperature statistics for February 2026 are as follows:\n\n| Area | Sensor | Mean | Min | Max | Swing |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| **Cave** | Ruuvi Cave Temperature | 21.8°C | 19.1°C | 23.7°C | 4.6°C |\n| **Kitchen** | SONOFF SNZB-02D #1 | 19.6°C | 16.9°C | 30.1°C | 13.2°C |\n| **Salon** | Ruuvi Salon Temperature | 19.1°C | 16.6°C | 22.8°C | 6.2°C |\n| **Outdoor** | Ruuvi Outdoor Temperature | -2.6°C | -12.5°C | 8.6°C | 21.1°C |\n\n**Analysis:**\n*   **Largest Swing:** The **Outdoor** area had the most significant temperature swing (21.1°C).\n*   **Data Anomaly:** The **Kitchen** sensor (`sensor.sonoff_snzb_02d_1_temperature`) shows a maximum of **30.1°C**. While possible, this is significantly higher than the other indoor areas and may indicate a localized heat source (like an oven or stove) or a sensor placement issue."
+            }
+          ]
+        },
+        {
+          "case_id": "B-GUDP.4",
+          "prompt": "For the last 7 days, how busy were the stairs in my home? Give me a per-day count of how many times the stairs motion sensors triggered, and tell me which day was the busiest. Resolve the stairs motion sensors yourself and keep it concise.",
+          "repetitions": 5,
+          "session_count": 5,
+          "has_checks": true,
+          "pass_count": 4,
+          "pass_at_k": true,
+          "pass_hat_k": false,
+          "success_rate": 0.8,
+          "completed_count": 5,
+          "tool_error_count": 0,
+          "tool_call_stats": {
+            "min": 8,
+            "max": 10,
+            "mean": 8.4,
+            "median": 8,
+            "stddev": 0.7999999999999999
+          },
+          "total_token_stats": {
+            "min": 6792,
+            "max": 7463,
+            "mean": 6988.8,
+            "median": 6813,
+            "stddev": 261.6466319294021
+          },
+          "per_tool": {
+            "ha_history_list_entities": {
+              "calls": 10,
+              "errors": 0,
+              "result_payload_chars": 4877
+            },
+            "ha_history_list_areas": {
+              "calls": 9,
+              "errors": 0,
+              "result_payload_chars": 1695
+            },
+            "ha_history_list_devices": {
+              "calls": 5,
+              "errors": 0,
+              "result_payload_chars": 4415
+            },
+            "ha_history_get_state_history": {
+              "calls": 10,
+              "errors": 0,
+              "result_payload_chars": 4888
+            },
+            "ha_history_list_device_entities": {
+              "calls": 7,
+              "errors": 0,
+              "result_payload_chars": 3546
+            },
+            "ha_history_get_sensor_stats": {
+              "calls": 1,
+              "errors": 0,
+              "result_payload_chars": 167
+            }
+          },
+          "sessions": [
+            {
+              "session_id": "JF9U",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 8,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_list_areas",
+                "ha_history_list_devices",
+                "ha_history_get_state_history",
+                "ha_history_list_device_entities"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 1048
+                },
+                "ha_history_list_areas": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 366
+                },
+                "ha_history_list_devices": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 883
+                },
+                "ha_history_get_state_history": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 794
+                },
+                "ha_history_list_device_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 500
+                }
+              },
+              "tokens": {
+                "prompt": 6586,
+                "completion": 206,
+                "reasoning": 1,
+                "total": 6792
+              },
+              "final_answer": "The stairs motion sensors (binary_sensor.motion_1) were triggered the following number of times over the last 7 days:\n\n- **2026-06-16**: 26 times\n- **2026-06-17**: 106 times\n- **2026-06-18**: 102 times\n- **2026-06-19**: 93 times\n- **2026-06-20**: 137 times\n- **2026-06-21**: 180 times\n- **2026-06-22**: 192 times\n- **2026-06-23**: 100 times\n\nThe busiest day was **2026-06-22** with 192 triggers."
+            },
+            {
+              "session_id": "AQK7",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 10,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_list_areas",
+                "ha_history_list_devices",
+                "ha_history_get_sensor_stats",
+                "ha_history_list_device_entities",
+                "ha_history_get_state_history"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 1048
+                },
+                "ha_history_list_areas": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 366
+                },
+                "ha_history_list_devices": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 883
+                },
+                "ha_history_get_sensor_stats": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 167
+                },
+                "ha_history_list_device_entities": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 999
+                },
+                "ha_history_get_state_history": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 1253
+                }
+              },
+              "tokens": {
+                "prompt": 7139,
+                "completion": 324,
+                "reasoning": 1,
+                "total": 7463
+              },
+              "final_answer": "For the last 7 days, the stairs motion sensors (Motion #1 - Haut and Motion #2 - Bas) triggered the following number of times per day:\n\n| Date | Motion #1 (Haut) | Motion #2 (Bas) | Total Triggers |\n| :--- | :--- | :--- | :--- |\n| 2026-06-16 | 26 | 26 | 52 |\n| 2026-06-17 | 106 | 83 | 189 |\n| 2026-06-18 | 102 | 90 | 192 |\n| 2026-06-19 | 93 | 80 | 173 |\n| 2026-06-20 | 137 | 111 | 248 |\n| 2026-06-21 | 180 | 114 | 294 |\n| 2026-06-22 | 192 | 137 | 329 |\n| 2026-06-23 | 100 | 66 | 166 |\n\n**Busiest Day:** 2026-06-22 (329 total triggers)"
+            },
+            {
+              "session_id": "ZNF9",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 8,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_list_areas",
+                "ha_history_list_devices",
+                "ha_history_list_device_entities",
+                "ha_history_get_state_history"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 685
+                },
+                "ha_history_list_areas": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 231
+                },
+                "ha_history_list_devices": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 883
+                },
+                "ha_history_list_device_entities": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 1031
+                },
+                "ha_history_get_state_history": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 1253
+                }
+              },
+              "tokens": {
+                "prompt": 6874,
+                "completion": 210,
+                "reasoning": 1,
+                "total": 7084
+              },
+              "final_answer": "For the last 7 days, the stairs motion sensors (Motion #1 - Haut and Motion #2 - Bas) recorded the following daily activity:\n\n- **2026-06-16**: 52 triggers\n- **2026-06-17**: 189 triggers\n- **2026-06-18**: 192 triggers\n- **2026-06-19**: 173 triggers\n- **2026-06-20**: 248 triggers\n- **2026-06-21**: 294 triggers\n- **2026-06-22**: 329 triggers\n- **2026-06-23**: 166 triggers\n\nThe busiest day was **2026-06-22** with 329 triggers."
+            },
+            {
+              "session_id": "8PYJ",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 8,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_list_areas",
+                "ha_history_list_devices",
+                "ha_history_get_state_history",
+                "ha_history_list_device_entities"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 1048
+                },
+                "ha_history_list_areas": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 366
+                },
+                "ha_history_list_devices": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 883
+                },
+                "ha_history_get_state_history": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 794
+                },
+                "ha_history_list_device_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 516
+                }
+              },
+              "tokens": {
+                "prompt": 6597,
+                "completion": 216,
+                "reasoning": 1,
+                "total": 6813
+              },
+              "final_answer": "The stairs (Entrée - Escalier) were busiest on 2026-06-22 with 192 motion sensor triggers.\n\n**Daily counts for the last 7 days:**\n- 2026-06-16: 26\n- 2026-06-17: 106\n- 2026-06-18: 102\n- 2026-06-19: 93\n- 2026-06-20: 137\n- 2026-06-21: 180\n- 2026-06-22: 192\n- 2026-06-23: 100\n\nSensor: binary_sensor.motion_1\nPeriod: last 7d\nAggregation: session count (per day)"
+            },
+            {
+              "session_id": "FZ3S",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 8,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_list_areas",
+                "ha_history_list_devices",
+                "ha_history_get_state_history",
+                "ha_history_list_device_entities"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 1048
+                },
+                "ha_history_list_areas": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 366
+                },
+                "ha_history_list_devices": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 883
+                },
+                "ha_history_get_state_history": {
+                  "calls": 2,
+                  "errors": 0,
+                  "result_payload_chars": 794
+                },
+                "ha_history_list_device_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 500
+                }
+              },
+              "tokens": {
+                "prompt": 6586,
+                "completion": 206,
+                "reasoning": 1,
+                "total": 6792
+              },
+              "final_answer": "For the last 7 days, the stairs motion sensors (Motion #1 - Haut) triggered the following number of times per day:\n\n*   **2026-06-16:** 26\n*   **2026-06-17:** 106\n*   **2026-06-18:** 102\n*   **2026-06-19:** 93\n*   **2026-06-20:** 137\n*   **2026-06-21:** 180\n*   **2026-06-22:** 192\n*   **2026-06-23:** 100\n\nThe busiest day was **2026-06-22** with 192 triggers."
+            }
+          ]
+        },
+        {
+          "case_id": "B-GUDP.5",
+          "prompt": "For March 2026, is our household using more electricity on weekends than on weekdays? Compare the weekday vs weekend consumption for the whole home and give me a clear verdict with numbers. Resolve the whole-home meter yourself and keep it concise.",
+          "repetitions": 5,
+          "session_count": 5,
+          "has_checks": true,
+          "pass_count": 3,
+          "pass_at_k": true,
+          "pass_hat_k": false,
+          "success_rate": 0.6,
+          "completed_count": 3,
+          "tool_error_count": 0,
+          "tool_call_stats": {
+            "min": 2,
+            "max": 20,
+            "mean": 10.8,
+            "median": 8,
+            "stddev": 7.756287771866127
+          },
+          "total_token_stats": {
+            "min": 6592,
+            "max": 8192,
+            "mean": 7182,
+            "median": 6762,
+            "stddev": 717.5421009715504
+          },
+          "per_tool": {
+            "ha_history_list_entities": {
+              "calls": 34,
+              "errors": 0,
+              "result_payload_chars": 50108
+            },
+            "ha_history_get_consumption": {
+              "calls": 14,
+              "errors": 0,
+              "result_payload_chars": 26634
+            },
+            "ha_history_list_areas": {
+              "calls": 2,
+              "errors": 0,
+              "result_payload_chars": 462
+            },
+            "ha_history_list_devices": {
+              "calls": 4,
+              "errors": 0,
+              "result_payload_chars": 8149
+            }
+          },
+          "sessions": [
+            {
+              "session_id": "DZZ6",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 4,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_consumption"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 3,
+                  "errors": 0,
+                  "result_payload_chars": 3189
+                },
+                "ha_history_get_consumption": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 2684
+                }
+              },
+              "tokens": {
+                "prompt": 8174,
+                "completion": 18,
+                "reasoning": 1,
+                "total": 8192
+              },
+              "final_answer": "In March 2026, the household used more electricity"
+            },
+            {
+              "session_id": "U7WR",
+              "terminal_status": "error",
+              "completed": false,
+              "tool_call_count": 20,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_consumption",
+                "ha_history_list_areas"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 13,
+                  "errors": 0,
+                  "result_payload_chars": 20777
+                },
+                "ha_history_get_consumption": {
+                  "calls": 6,
+                  "errors": 0,
+                  "result_payload_chars": 11206
+                },
+                "ha_history_list_areas": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 231
+                }
+              },
+              "tokens": {
+                "prompt": null,
+                "completion": null,
+                "reasoning": null,
+                "total": null
+              },
+              "final_answer": null
+            },
+            {
+              "session_id": "ZQLE",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 8,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_consumption"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 5,
+                  "errors": 0,
+                  "result_payload_chars": 8713
+                },
+                "ha_history_get_consumption": {
+                  "calls": 3,
+                  "errors": 0,
+                  "result_payload_chars": 3730
+                }
+              },
+              "tokens": {
+                "prompt": 6645,
+                "completion": 117,
+                "reasoning": 1,
+                "total": 6762
+              },
+              "final_answer": "In March 2026, the household used more electricity on weekdays than on weekends.\n\n**Verdict: Weekdays higher**\n*   **Weekday Total:** 1,994.14 kWh (15 days)\n*   **Weekend Total:** 1,041.28 kWh (16 days)\n\n**Sensor:** `sensor.ams_8a4a_tpi` (AMS reader Accumulated active import)\n**Period:** March 2026\n**Aggregation:** Daily consumption breakdown"
+            },
+            {
+              "session_id": "73K7",
+              "terminal_status": "complete",
+              "completed": true,
+              "tool_call_count": 2,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_get_consumption"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 2085
+                },
+                "ha_history_get_consumption": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 918
+                }
+              },
+              "tokens": {
+                "prompt": 6476,
+                "completion": 116,
+                "reasoning": 1,
+                "total": 6592
+              },
+              "final_answer": "In March 2026, the household used more electricity on weekdays than on weekends.\n\n*   **Weekday Consumption:** 1,993.45 kWh (30 days total)\n*   **Weekend Consumption:** 42.19 kWh (5 days total)\n*   **Verdict:** Weekday usage was significantly higher.\n\n*Note: The data shows a very low consumption on the final weekend of the month (March 27-31), which may reflect a specific event or sensor behavior.*"
+            },
+            {
+              "session_id": "39RT",
+              "terminal_status": "error",
+              "completed": false,
+              "tool_call_count": 20,
+              "tool_error_count": 0,
+              "tools_called": [
+                "ha_history_list_entities",
+                "ha_history_list_areas",
+                "ha_history_list_devices",
+                "ha_history_get_consumption"
+              ],
+              "per_tool": {
+                "ha_history_list_entities": {
+                  "calls": 12,
+                  "errors": 0,
+                  "result_payload_chars": 15344
+                },
+                "ha_history_list_areas": {
+                  "calls": 1,
+                  "errors": 0,
+                  "result_payload_chars": 231
+                },
+                "ha_history_list_devices": {
+                  "calls": 4,
+                  "errors": 0,
+                  "result_payload_chars": 8149
+                },
+                "ha_history_get_consumption": {
+                  "calls": 3,
+                  "errors": 0,
+                  "result_payload_chars": 8096
+                }
+              },
+              "tokens": {
+                "prompt": null,
+                "completion": null,
+                "reasoning": null,
+                "total": null
+              },
+              "final_answer": null
+            }
+          ]
+        }
+      ],
+      "per_tool": {
+        "ha_history_list_entities": {
+          "calls": 69,
+          "errors": 0,
+          "error_rate": 0,
+          "result_payload_chars": 91667,
+          "cases_used_in": 5
+        },
+        "ha_history_get_sensor_stats": {
+          "calls": 14,
+          "errors": 0,
+          "error_rate": 0,
+          "result_payload_chars": 21099,
+          "cases_used_in": 3
+        },
+        "ha_history_get_consumption": {
+          "calls": 47,
+          "errors": 0,
+          "error_rate": 0,
+          "result_payload_chars": 59579,
+          "cases_used_in": 2
+        },
+        "ha_history_get_current_time": {
+          "calls": 4,
+          "errors": 0,
+          "error_rate": 0,
+          "result_payload_chars": 576,
+          "cases_used_in": 2
+        },
+        "ha_history_list_devices": {
+          "calls": 11,
+          "errors": 0,
+          "error_rate": 0,
+          "result_payload_chars": 13618,
+          "cases_used_in": 3
+        },
+        "ha_history_list_areas": {
+          "calls": 11,
+          "errors": 0,
+          "error_rate": 0,
+          "result_payload_chars": 2157,
+          "cases_used_in": 2
+        },
+        "ha_history_get_state_history": {
+          "calls": 10,
+          "errors": 0,
+          "error_rate": 0,
+          "result_payload_chars": 4888,
+          "cases_used_in": 1
+        },
+        "ha_history_list_device_entities": {
+          "calls": 7,
+          "errors": 0,
+          "error_rate": 0,
+          "result_payload_chars": 3546,
+          "cases_used_in": 1
+        }
+      }
+    }
+  }
+}
+
+```
