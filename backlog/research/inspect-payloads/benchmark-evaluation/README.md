@@ -16,18 +16,20 @@ Examples (captured from completed run `R-RZNP`, which carried two evaluation pas
 These two passes over the **same run** with **different judge models** are the canonical
 material for the compare/audit use-cases ([`../use-cases.md`](../use-cases.md) UC-5/UC-7).
 
-> ⚠️ **JSON-only** (no CLI text renderer). And, confirmed empirically: inspect **always
-> attaches the full scored report** regardless of `mode` — the summary and full payloads
-> are **byte-identical except the echoed `"mode"` field**, so summary is *not* lighter for
-> `E-` ([`benchmarkOperations.ts:336-348`](../../../../backend/src/operations/benchmarkOperations.ts)).
-> This is the opposite of `R-`'s cheap-summary design — a candidate inconsistency.
+> **Updated (Phase 1/2):** renders as **text** (F2) and now has a real summary/full split
+> (F5). Summary is the lean score+drill view; full adds the per-criterion grid + per-case
+> distribution.
 
-## Payload (both modes)
+## Payload
 
-`{ evaluation }`: `judge_model_config_id`, `judge_temperature`, `status`, `error`,
-`expected_sessions` / `judged_sessions`, and
-`score{ overall_pct, cases[{ pct_stats, sessions[{ analysis_session_id, awarded, max,
-pct, criteria[{id,description,max,points,note}] }] }] }`.
+`{ evaluation, sessions[] }` (+ `per_case[]` in full):
+
+- **Summary** — `evaluation{ status, judge, expected/judged_sessions, incomplete,
+  overall_pct }` + a flat `sessions[{ analysis_session_id, run_session_id, source_case_id,
+  status, pct }]` drill list. No criteria grid.
+- **Full** — each session adds `awarded`/`max` + the `criteria[{id, description, max,
+  points, note}]` grid (rubric × judge's awarded points + ID-citing note), plus per-case
+  `pct_stats`.
 
 ## Summary-mode use-cases
 
@@ -87,8 +89,9 @@ Focus on **status + scores + a drillable session list**. See
   judge `analysis_session_id` drill — settle when building `E-`). Makes summary genuinely lean
   (F5) and incompleteness visible (F11).
 
-## Tuning notes
+## Tuning notes (Phase 2)
 
-- **Doc/code drift:** [`benchmark-llm-evaluation-v1.md`](../../completed/benchmark-llm-evaluation-v1.md)
-  says the judge seeds from `short=true`; the shipped prompt says "default, not short" (F14).
-- Redesign above retires the F2 (no text) and F5 (summary not cheaper) gaps for this type.
+- **Resolved:** F2 (text), F5 (genuinely lean summary vs full grid), F11 (incomplete flag).
+- **F14 doc drift — fixed:** the completed-task doc
+  [`benchmark-llm-evaluation-v1.md`](../../completed/benchmark-llm-evaluation-v1.md) was
+  reconciled to the shipped prompt ("default, not short").

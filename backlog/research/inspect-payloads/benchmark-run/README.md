@@ -7,28 +7,27 @@ container in the tree
 
 Example: [`example-R-RZNP.md`](example-R-RZNP.md).
 
-> ⚠️ **JSON-only** (no CLI text renderer). But unlike `B-`/`B-.N`, the summary/full dial
-> **is real here** — full adds the compute-on-read metrics report
-> ([`benchmarkOperations.ts:326-334`](../../../../backend/src/operations/benchmarkOperations.ts)).
-> This is the cleanest, most meaningful summary/full split among the four benchmark types.
+> **Updated (Phase 1/2):** now renders as **text** (F2), and the redesigned summary is
+> genuinely lean — status + progress + evaluations + a flat `{session_id, status}` list,
+> **no embedded case rubric** (F12 resolved). Full adds the per-tool rollup, per-case pass
+> rates, and per-session metrics. The cleanest summary/full split of the four benchmark
+> types.
 
 ## Summary mode — use-cases
 
-Summary = `{ run }` only: the config snapshot (cases-with-rubric, sessions with
-per-session status, model_config_id, mcp_profile_ids, repetitions, max_tool_rounds,
-timestamps).
+Summary = `{ run, progress, evaluations, sessions }`: the config snapshot
+(model_config_id, mcp_profile_ids, repetitions, max_tool_rounds, timestamps), overall +
+per-case completion, the evaluation passes (id/status/judged), and a flat session list
+`{session_id, source_case_id, repetition, status}`. **No case rubric** (drill `B-.N` or
+use `benchmark_run_report` for the scored snapshot).
 
 - **Cross-run comparison / run-to-run report** (the task's headline example) — summary
   carries exactly the *configuration* axis you diff across runs: model, MCP profiles,
-  cases, repetitions ("run the same cases against different model/MCP combinations",
+  repetitions ("run the same cases against different model/MCP combinations",
   [`BENCHMARK.md:94-96`](../../../../BENCHMARK.md)). Lightweight, no session traces loaded.
-- **Cheap progress / identity checks** — terminal `status` + per-session `status` without
-  paying for the heavy report (the report loads session traces,
-  [`BENCHMARK.md:240-242`](../../../../BENCHMARK.md)).
-- **Audit what a past run was scored against** — the run snapshots the case rubric "so you
-  can always see exactly what a past run was scored against"
-  ([`BENCHMARK.md:343-345`](../../../../BENCHMARK.md)).
-- **Navigate to child sessions** — grab `session_id`s to drill into the tree.
+- **Cheap progress / identity checks** — terminal `status` + per-case + per-session
+  `status` and the evaluation passes, without paying for the heavy report.
+- **Navigate to child sessions / evaluations** — grab `session_id`s / `E-` ids to drill.
 
 ## Full mode — use-cases
 
@@ -69,7 +68,10 @@ the relevance reference). See [`../serialization-architecture.md`](../serializat
   exist in `SessionMetrics`; the work is **restructuring toward a flat session-centric list**,
   not new computation.
 
-## Tuning notes
+## Tuning notes (Phase 2)
 
-- **No text rendering** today (F2) and a deep per-case→per-session nesting — both addressed by
-  the redesign above. Tracked as F2/F12 in [`../FINDINGS.md`](../FINDINGS.md).
+- **Resolved:** text rendering (F2) and the lean compare-summary (F12) both shipped. The
+  deep per-case→per-session nesting was flattened to a session-centric list.
+- *Open (minor):* the run header shows the raw `model_config_id` UUID, not a friendly
+  name (the run record stores no model-name snapshot, unlike a session). A future nicety,
+  not blocking — flagged in [`../phase-2-pass.md`](../phase-2-pass.md).

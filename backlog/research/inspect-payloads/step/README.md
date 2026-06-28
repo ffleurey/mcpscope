@@ -27,12 +27,11 @@ compaction after turn 1).
   The CLI renderer collapses the shared reason to one line
   ([`cli/src/commands/inspect.ts:105-127`](../../../../cli/src/commands/inspect.ts)).
 - Steps also carry an embedded `latest_error` diagnostic for failed analysis steps
-  ([`hierarchicalLookup.ts:442-457`](../../../../backend/src/runtime/hierarchicalLookup.ts)).
-  **⚠️ But the CLI text renderer drops it** — an errored step shows as just
-  `… analysis_benchmark_evaluation  error`, with no reason. The `latest_error`
-  (`error_kind` + message) is only in the JSON. See the worked example in
+  ([`hierarchicalLookup.ts`](../../../../backend/src/runtime/hierarchicalLookup.ts)).
+  **Resolved (F8):** the text renderer now prints it — an errored step shows
+  `error  <kind>: <message>` (e.g. `error  json_parse_error: Judge response was not valid
+  JSON`). See the worked example in
   [`../errors/example-judge-session-error-E5TS.md`](../errors/example-judge-session-error-E5TS.md).
-  This is a high-priority error-inspection gap.
 
 ## Dog-fooding evidence
 
@@ -41,7 +40,11 @@ compaction after turn 1).
   every other runtime type where dog-fooding evidence is explicit. (See top-level
   finding #6.) This is the cleanest "rich payload, no consumer" gap to weigh in tuning.
 
-## Tuning notes
+## Tuning notes (Phase 2)
 
 - The summary→full split here is genuinely useful (IDs only vs. annotated reasons) and is
-  a good model. The open question is whether anything *reads* it beyond the UI.
+  a good model — **kept as-is.**
+- **F13 decided:** no internal agent drives step inspection today, but the payload is
+  correct and cheap and the GUI/developer use it. Decision: **leave it UI/dev-only; do not
+  build a consumer now.** Revisit only if a workflow needs to audit compaction
+  programmatically. (Dead `workflow_kind`/`workflow_label` null fields were removed.)

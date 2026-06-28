@@ -7,16 +7,21 @@ rubrics), and the list of runs spawned from it
 
 Example: [`example-B-GUDP.md`](example-B-GUDP.md).
 
-> ⚠️ Two caveats up front (see top-level findings #2 and #3): the CLI has **no text
-> renderer** for `B-` — it dumps JSON. And **summary and full are identical** —
-> `resolveBenchmarkInspect` ignores `mode` for benchmarks
-> ([`benchmarkOperations.ts:307-325`](../../../../backend/src/operations/benchmarkOperations.ts)).
+> **Updated (Phase 2):** `B-` now renders as **text** (F2) and has a genuine **summary/full
+> split** (F5). Both caveats below are resolved.
 
-## Payload (both modes)
+## Payload
 
-`{ benchmark, cases[], runs[] }` — `benchmark` is id/name/description/timestamps; `cases`
-are the **full** case shape incl. prompt, tool checks, and `rubric`; `runs` are full run
-snapshots.
+`{ benchmark, cases[], runs[] }`:
+
+- **Summary** — the cheap router: `cases` are `{id, name}` and `runs` are `{id, status}`.
+  Just the nav ids + the signal to pick one.
+- **Full** — adds, per case, the `prompt`, `order_index`, and `rubric_criteria_count` (a
+  scorability hint, **not** the rubric itself — drill `B-.N`); per run, the completion
+  counts (`total/completed/failed_sessions`) and `evaluation_ids`.
+
+Neither mode carries results: inspect the **run** (`R-`) for metrics, the **evaluation**
+(`E-`) for scores.
 
 ## Use-cases
 
@@ -47,7 +52,8 @@ The `B-` payload is for **understanding/monitoring the suite, not for results** 
 - **No results in `B-`.** For results inspect the **run** (`R-`); for scores the **evaluation**
   (`E-`). Detail decays with depth: compact children + IDs here; drill for the rest.
 
-## Tuning notes
+## Tuning notes (Phase 2)
 
-- Today **summary == full** and there's **no text rendering** — both subsumed by the redesign
-  above and tracked as F2/F5 in [`../FINDINGS.md`](../FINDINGS.md).
+- **Resolved:** the redesign above shipped — text rendering (F2) and a real summary/full
+  split (F5). The summary skips the per-run progress computation entirely, so it is cheap
+  to list a suite's cases and runs.

@@ -32,7 +32,9 @@ Example: [`example-9LJM-turn.md`](example-9LJM-turn.md).
   implementing "synthesize one turn summary per analyzed turn"
   ([`completed/SESSION-ANALYSIS.md`](../../completed/SESSION-ANALYSIS.md)).
 
-## Tuning notes
+## Tuning notes (Phase 2)
 
-- As with sessions, full-turn tool payloads are capped/result-free; the full result still
-  requires a direct `tool_call` part lookup (top-level finding #4).
+- **By design:** a full-turn overview keeps tool payloads capped/result-free so the turn
+  stays a cheap router; the full result is one drill away (the `tool_call` part, or — for a
+  single iteration — the **round** full-lookup, which now expands it, F7). `owner_step_id`
+  was dropped from the turn node (graph-plumbing, no use-case, F4).

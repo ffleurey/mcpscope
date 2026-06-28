@@ -31,31 +31,28 @@ This separates failure causes: a `diagnostic` "reached max tool rounds" is a *mo
 budget* issue; a judge `json_parse_error` is a *judge-model capability* issue (a small model
 that can't hold the JSON contract); a tool error inside a round is a *server* issue.
 
-## ⚠️ Inspection gaps the error payloads expose
+## Inspection gaps the error payloads exposed — all resolved (Phase 2)
 
-These are concrete tuning findings — error inspection is where the current payloads are
-weakest:
+Error inspection was the weakest surface; these four findings are now fixed:
 
-1. **The text renderer drops `latest_error`.** An errored step renders as just
-   `… analysis_benchmark_evaluation  error` — the *reason* (`json_parse_error`, "Judge
-   response was not valid JSON") is in the JSON but **invisible in text**
-   ([`cli/src/commands/inspect.ts` `renderGenericStep`](../../../../cli/src/commands/inspect.ts)).
-   For error inspection this is the single most important field. **High-priority fix.**
+1. **The text renderer dropped `latest_error` (F8).** ✅ Fixed in Phase 1: an errored step
+   now renders `error  <kind>: <message>` (e.g. `error  json_parse_error: Judge response
+   was not valid JSON`).
 
-2. **A primary session exposes no top-level status/error.** You cannot tell from the
-   session header that `N8GF` failed; the `status:error` lives on the turn step and the
-   reason on the trailing `diagnostic` part. The session payload should surface a terminal
-   status / failure summary so a failure is visible without reading the whole trace.
+2. **A primary session exposed no top-level status/error (F9).** ✅ Fixed: every session
+   payload now carries a top-level **`terminal_status`** (rendered as `status`), and when
+   it is `error` the header shows the failure reason — for a primary session, the trailing
+   `diagnostic` part's stop reason is surfaced there. `N8GF` now reads `status error` +
+   `error  Turn stopped: reached the maximum of 20 tool-call rounds…` from the header.
 
-3. **Failure is exposed inconsistently across session kinds.** Analysis/judge sessions
-   carry a top-level `latest_error`; primary sessions do not (turn-step `latest_error` was
-   even `null` while the real reason sat in a `diagnostic` part). One uniform "how did this
-   session end and why" field would make error inspection predictable.
+3. **Failure was exposed inconsistently across session kinds (F10).** ✅ Fixed: the same
+   `terminal_status` + failure-summary path runs for primary, analysis, and judge sessions.
+   `N8GF` (primary, diagnostic part) and `E5TS` (judge, `json_parse_error`) now present an
+   identical header shape.
 
-4. **An evaluation's partial-ness is only visible by comparing two numbers.**
-   `E-2BPM` reports an `overall_pct` *and* `status:error` / `judged 20/22`. The score is
-   over an incomplete set; nothing in the payload flags the headline number as provisional
-   beyond the count mismatch. Worth an explicit "incomplete" marker on the score.
+4. **An evaluation's partial-ness was only visible by comparing two numbers (F11).** ✅
+   Fixed: the evaluation payload carries an explicit **`incomplete`** flag and renders
+   `judged 20/22  ⚠ incomplete`, marking `overall_pct` provisional.
 
 ## New object detail discovered here
 

@@ -46,10 +46,20 @@ Full adds, per round: the `user_prompt`/`assistant_answer` **text**, and every
 - Judge turn prompt: "call mcpscope_inspect with id '…' first (default, not short)"
   ([`benchmarkEvaluation/evaluationPrompts.ts:28`](../../../../backend/src/analysis/benchmarkEvaluation/evaluationPrompts.ts)).
 
-## Tuning notes
+## Tuning notes (Phase 2)
 
-- A **full** session inspect is still not "everything": tool schemas show as names only,
-  tool results are absent, reasoning text is omitted (see top-level finding #4). The
-  payload header doesn't say so — consider a hint pointing to direct part inspection.
-- `max_tool_rounds` is in the payload ([`hierarchicalLookup.ts:583`](../../../../backend/src/runtime/hierarchicalLookup.ts))
-  but never framed as a "why did this turn stop?" summary read.
+- **Resolved — uniform "how did this end and why" (F9/F10).** Every session payload now
+  carries a top-level **`terminal_status`** (rendered as `status` in the header), derived
+  the same way for primary, analysis, and judge sessions (it agrees with the run report's
+  per-session `terminal_status`). When it is `error`, the header also shows the failure
+  reason: an analysis diagnostic, a persisted init failure, or — for a primary session —
+  the trailing `diagnostic` part's stop reason. A failure is now visible from the header
+  without reading the whole trace (see [`../errors/`](../errors/)).
+- **Resolved — graph-plumbing trimmed (F4).** `token_source`/`token_confidence` (per part)
+  and `owner_step_id` (per turn) were dropped from the payload — no use-case read them. The
+  `parent_ref` edge is now **rendered** (`parent <kind> <id>`), surfacing the run/analyzed
+  -session link for the audit chain.
+- **Still by design:** a full session inspect inlines neither tool schemas nor tool results
+  (the router stays cheap); the part **IDs + token weight** are the drill signal and
+  `tool_definitions` now shows its **tool count** (F6). Drill the `-TD`/`-T` part for the
+  full schema/result.

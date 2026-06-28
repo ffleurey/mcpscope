@@ -14,13 +14,12 @@ Example: [`example-9LJM-round.md`](example-9LJM-round.md).
 
 ## Full mode — use-cases
 
-- **Read one iteration in isolation** — the round's reasoning + tool call (capped args) —
-  useful when a turn has many rounds and you only care about the one where a retry
-  happened.
-- **Caveat:** a round full-lookup still uses the *nested* `tool_arguments` form; it does
-  **not** expand to the full `{ call, result }` tool payload. For the tool result you
-  still inspect the `tool_call` part directly
-  ([`hierarchicalLookup.ts:182-208,699-705`](../../../../backend/src/runtime/hierarchicalLookup.ts)).
+- **Read one iteration in isolation** — the round's reasoning + tool call **with the full
+  `{ call, result }` payload** — useful when a turn has many rounds and you only care about
+  the one where a retry happened. A round is a deliberate, narrow request, so its full
+  lookup expands the tool result (F7 — it no longer forces a second `tool_call` part
+  drill). Inside a session/turn *overview*, the same round still shows the compact,
+  capped `tool_arguments` form.
 
 ## Dog-fooding evidence
 
@@ -29,8 +28,8 @@ Example: [`example-9LJM-round.md`](example-9LJM-round.md).
   fast-tool prompt requires preserving `round_ids` exactly
   ([`fastTool/systemPrompt.ts:18`](../../../../backend/src/analysis/fastTool/systemPrompt.ts)).
 
-## Tuning notes
+## Tuning notes (Phase 2)
 
-- The round is the clearest case where "full" does not mean "full evidence" — the result
-  payload is one level deeper. Consider whether a round full-lookup should expand its own
-  tool results (it is already a narrow, deliberate request).
+- **Resolved (F7):** a round full-lookup now expands its own tool results, so "full" means
+  "full evidence" for the one iteration. (It already did in the shipped code; the doc note
+  was stale.)

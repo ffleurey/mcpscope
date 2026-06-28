@@ -1,23 +1,22 @@
 # inspect example — round (9LJM.1T.3)
 
-- **Source object:** `9LJM.1T.3`
-- **Captured from:** live test instance (`localhost:3030`), benchmark run `R-RZNP` — Gemma 4 12B QAT on the HA Replay MCP profile.
-- **Date:** 2026-06-27
-- **Rendering:** CLI text renderer (`mcpscope inspect`). Note the MCP tool returns this same data as raw JSON, not this text.
+- **Source:** `9LJM.1T.3` — one model/tool iteration (reasoning + the tool call).
+- A round **full** lookup now expands the tool `{call, result}` (F7 — no longer a part-only drill).
+
+- **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
 
 ## Summary mode
 
-`mcpscope inspect --short 9LJM.1T.3`  ·  MCP `{ id: "9LJM.1T.3", short: true }`
+`mcpscope inspect --short 9LJM.1T.3`
 
 ```text
 9LJM.1T.3.1-R  reasoning  (382 tokens - stripped)
 9LJM.1T.3.2-T  tool_call  ha_history_get_sensor_stats  (1679 tokens)
-
 ```
 
 ## Full mode
 
-`mcpscope inspect 9LJM.1T.3`  ·  MCP `{ id: "9LJM.1T.3" }`
+`mcpscope inspect 9LJM.1T.3`
 
 ```text
 9LJM.1T.3.1-R  reasoning  (382 tokens - stripped)
@@ -140,5 +139,4 @@
     2026-02-26 | 2.9                      
     2026-02-27 | 1.1                      
     2026-02-28 | 0.9                      
-
 ```

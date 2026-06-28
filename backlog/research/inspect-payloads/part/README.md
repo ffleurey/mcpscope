@@ -52,12 +52,16 @@ away the thing you need.
 - `tool_call_part_id` must be preserved exactly in analysis output
   ([`fullSession/systemPrompt.ts:23,27`](../../../../backend/src/analysis/fullSession/systemPrompt.ts)).
 
-## Tuning notes
+## Tuning notes (Phase 2)
 
+- **F4 trimmed the part node:** `token_source`/`token_confidence` were removed (no use-case
+  read them); `token_count` and `context_state` remain. `diagnostic` content (the stop
+  reason) now also surfaces at the **session header** as the failure summary, so triage no
+  longer requires reading to the trailing `-DN` part — though it stays the canonical leaf.
 - Because `--short` is a no-op on parts, exposing a part's `short` flag in the tool
   contract is arguably misleading — the operation docstring already carves out the
   exception ("Parts always return full content regardless"), but the dial still appears
-  in the schema. Decide whether to keep it documented-but-inert or signal it.
+  in the schema. Decide whether to keep it documented-but-inert or signal it. *(Open.)*
 - The folding of `tool_result` into `tool_call` is good for the tree but means there is
   no first-class `tool_result` example to inspect — captured here inside the `tool_call`
   example.

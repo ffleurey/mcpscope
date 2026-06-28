@@ -7,8 +7,9 @@ rubric within a suite
 
 Example: [`example-B-GUDP.1.md`](example-B-GUDP.1.md).
 
-> ⚠️ Same two caveats as `benchmark`: **JSON-only** (no CLI text renderer) and
-> **summary == full** (mode ignored, [`benchmarkOperations.ts:309-311`](../../../../backend/src/operations/benchmarkOperations.ts)).
+> **Updated (Phase 1):** renders as **text** (F2). **summary == full is intentional** — a
+> case is a **leaf** (like a part): it *is* the full-spec drill target, so there is nothing
+> cheaper for a summary to be. Kept as the JSON reference in the refactor.
 
 ## Payload (both modes)
 
@@ -32,8 +33,10 @@ None directly on the `B-X.N` ID. The judge receives the rubric criteria *inlined
 turn prompt* ([`evaluationPrompts.ts:15-16,30`](../../../../backend/src/analysis/benchmarkEvaluation/evaluationPrompts.ts)),
 not by inspecting the case — the rubric is snapshotted onto the run/evaluation.
 
-## Tuning notes
+## Tuning notes (Phase 2)
 
-- **Summary == full**, and the payload is small and complete, so there is nothing for a
-  full mode to add. If we want a meaningful split, summary could be prompt+name+points-total
-  and full could add the per-criterion rubric and tool checks.
+- **Decided (F5): keep summary == full.** A case is a leaf spec — prompt + answer-key
+  rubric + tool checks — and that is exactly what every use-case (document/edit a case)
+  needs in one fetch. Splitting it would only hide the rubric, the most important field. A
+  cheap "list cases" view already exists one level up, in the **`B-` summary** (`{id,
+  name}` per case).
