@@ -127,6 +127,19 @@ describe('inspect — benchmark-family IDs', () => {
     expect(runs[0]!.total_sessions).toBe(1)
   })
 
+  it('benchmark (B-) summary is a lean router: case/run nav ids only, no per-case detail', async () => {
+    const ctx = ctxFor(seed())
+    const out = await inspectOperation.execute(ctx, { id: 'B-TEST', short: true })
+    expect(out.mode).toBe('summary')
+    const cases = out.data.cases as Array<Record<string, unknown>>
+    expect(cases[0]).toEqual({ id: 'B-TEST.1', name: 'temp' })
+    // Summary omits the prompt, rubric size, and per-run completion (full adds them).
+    expect(cases[0]!.rubric_criteria_count).toBeUndefined()
+    const runs = out.data.runs as Array<Record<string, unknown>>
+    expect(runs[0]).toEqual({ id: 'R-TEST', status: 'complete' })
+    expect(runs[0]!.total_sessions).toBeUndefined()
+  })
+
   it('resolves a case (B-.N) to its snake payload incl. rubric', async () => {
     const ctx = ctxFor(seed())
     const out = await inspectOperation.execute(ctx, { id: 'B-TEST.1' })

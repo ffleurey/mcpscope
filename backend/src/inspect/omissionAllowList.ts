@@ -13,18 +13,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TEXT_OMISSION_ALLOWLIST: ReadonlySet<string> = new Set([
-  // ── F4 graph-plumbing: structural/navigation metadata, not analysis content.
-  // Useful to programmatic JSON consumers; noise in human/LLM text. Decision
-  // 2026-06-27: JSON-only for now (whether they belong in JSON at all is a
-  // separate, deferred question).
-  "token_source",
-  "token_confidence",
-  "owner_step_id",
-  "source_turn_id",
+  // ── F4 graph-plumbing kept JSON-only: structural metadata useful to
+  // programmatic consumers, noise in human/LLM text. Phase 2 (2026-06-28)
+  // removed `token_source`/`token_confidence`/`owner_step_id` from the payload
+  // entirely (no use-case needed them); `parent_ref` is now *rendered*. What
+  // remains here is deliberately JSON-only.
+  "source_turn_id", // compaction drill ID; text shows "after turn N"
   "model.id", // the model's internal config id; text shows name + key instead
-  "parent_ref.kind",
-  "parent_ref.id",
-  "session_type",
+  "session_type", // text shows workflow_label / the id namespace instead
   "workflow_kind", // text shows workflow_label instead
 
   // ── Enum partially surfaced by design: `context_state` is rendered only when

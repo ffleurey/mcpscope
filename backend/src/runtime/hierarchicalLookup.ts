@@ -157,8 +157,6 @@ function buildPartNode(
     id: part.id,
     type: publicType,
     token_count: tokenCount,
-    token_source: part.tokens.source,
-    token_confidence: part.tokens.confidence,
     context_state: contextState,
   };
 
@@ -312,7 +310,6 @@ function buildTurnNode(
   return {
     id: turn.id,
     type: "turn",
-    owner_step_id: turn.ownerStepId,
     ...(turn.status ? { status: turn.status } : {}),
     rounds: roundNodes,
   };
@@ -443,15 +440,11 @@ function buildStepNode(
     artifacts,
     step.id,
   );
-  const workflowKind = null;
-  const workflowLabel = null;
 
   return {
     id: step.id,
     type: step.stepTypeKey,
     status: step.status,
-    ...(workflowKind ? { workflow_kind: workflowKind } : {}),
-    ...(workflowLabel ? { workflow_label: workflowLabel } : {}),
     ...(diagnostic ? { latest_error: diagnostic } : {}),
     strategy:
       typeof step.params.strategy === "string" ? step.params.strategy : null,
@@ -494,6 +487,42 @@ function deriveContextWindowUsed(turns: TurnRecord[]): number | null {
   return completed.at(-1)?.contextTokensAtTurnEnd ?? null;
 }
 
+/**
+ * A uniform "how did this session end" status, derived the same way for every
+ * session kind (primary, analysis, judge). Mirrors the per-session terminal
+ * status the run report computes (benchmarkMetrics) so the session header and
+ * the run's session list agree. `error` whenever init failed, the analysis
+ * workflow ended in error, or the last turn errored; otherwise the last turn's
+ * own status (e.g. `complete`, `streaming`).
+ */
+export function deriveSessionTerminalStatus(
+  session: { initStatus: string; status: string; initError?: unknown },
+  turns: { turnNumber: number; status: string }[],
+  analysisPhase: string | null,
+): string {
+  if (session.initStatus === "error" || session.initError) return "error";
+  if (analysisPhase === "error") return "error";
+  const last = [...turns].sort((a, b) => a.turnNumber - b.turnNumber).at(-1);
+  return last?.status ?? session.status;
+}
+
+/**
+ * The stop reason carried by a trailing `diagnostic` part — the canonical "why
+ * did a primary session fail" marker (e.g. hitting the tool-round cap). Analysis
+ * sessions surface their reason via an analysis diagnostic artifact instead; this
+ * fallback gives primary sessions the same top-level failure summary (F9/F10).
+ */
+function getTrailingDiagnosticError(
+  allParts: PartRecord[],
+): { step_id: null; error_kind: null; message: string } | null {
+  const diagnostic = allParts
+    .filter((p) => p.partType === "diagnostic-note" && p.payload.text != null)
+    .sort((a, b) => a.ordinal - b.ordinal)
+    .at(-1);
+  if (!diagnostic?.payload.text) return null;
+  return { step_id: null, error_kind: null, message: diagnostic.payload.text };
+}
+
 // ─── Main resolver ────────────────────────────────────────────────────────────
 
 export function resolveHierarchicalId(
@@ -529,10 +558,19 @@ export function resolveHierarchicalId(
     const allRounds = listRoundRecordsBySession(connection, session.id);
     const analysisState = session.analysisState as {
       workflow_kind?: string;
+      phase?: string;
     } | null;
     const workflowKind = (analysisState?.workflow_kind ??
       null) as AnalysisWorkflowKind | null;
     const workflowLabel = getAnalysisWorkflowLabel(workflowKind);
+    const terminalStatus = deriveSessionTerminalStatus(
+      session,
+      turns,
+      analysisState?.phase ?? null,
+    );
+    // One uniform "how did this end and why" across session kinds (F9/F10):
+    // prefer an analysis diagnostic, then a persisted init failure, then — for a
+    // primary session that errored — the trailing `diagnostic` part's stop reason.
     const latestError =
       getLatestAnalysisDiagnosticSummary(artifacts) ??
       (session.initError
@@ -541,7 +579,9 @@ export function resolveHierarchicalId(
             error_kind: session.initError.errorKind,
             message: session.initError.message,
           }
-        : null);
+        : terminalStatus === "error"
+          ? getTrailingDiagnosticError(allParts)
+          : null);
 
     const directTurnNodes = directTurns.map((turn) => {
       const turnRounds = allRounds
@@ -592,6 +632,7 @@ export function resolveHierarchicalId(
         available: session.loadedContextLength ?? null,
         used: deriveContextWindowUsed(turns),
       },
+      terminal_status: terminalStatus,
       ...(workflowKind ? { workflow_kind: workflowKind } : {}),
       ...(workflowLabel ? { workflow_label: workflowLabel } : {}),
       ...(latestError ? { latest_error: latestError } : {}),

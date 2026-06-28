@@ -298,7 +298,7 @@ function countJudged(ev: BenchmarkEvaluationRecord): number {
   return ev.sessions.filter((s) => s.status === "complete").length;
 }
 
-/** Compact run view for the suite payload: status + completion + drill IDs. */
+/** Compact run view for the suite full payload: status + completion + drill IDs. */
 function runDigestForSuite(ctx: OperationContext, run: BenchmarkRunRecord) {
   const progress = getBenchmarkRunProgress(ctx.db, run.id);
   const evaluations = listBenchmarkEvaluationsByRun(ctx.db.connection, run.id);
@@ -314,8 +314,25 @@ function runDigestForSuite(ctx: OperationContext, run: BenchmarkRunRecord) {
   };
 }
 
-function buildBenchmarkInspect(ctx: OperationContext, id: string) {
+/**
+ * Suite view. A genuine summary/full split (F5): summary is the cheap router —
+ * the suite identity plus case/run *ids + the signal to pick one* (case name, run
+ * status); full adds the per-case prompt/rubric-size and per-run completion +
+ * evaluation IDs. Neither carries results (inspect the run `R-` / eval `E-`).
+ */
+function buildBenchmarkInspect(
+  ctx: OperationContext,
+  id: string,
+  mode: "summary" | "full",
+) {
   const detail = getBenchmarkDetail(ctx.db, id);
+  if (mode !== "full") {
+    return {
+      benchmark: benchmarkToSnake(detail.benchmark),
+      cases: detail.cases.map((c) => ({ id: c.id, name: c.name })),
+      runs: detail.runs.map((run) => ({ id: run.id, status: run.status })),
+    };
+  }
   return {
     benchmark: benchmarkToSnake(detail.benchmark),
     cases: detail.cases.map(caseDigestToSnake),
@@ -509,12 +526,12 @@ export function resolveBenchmarkInspect(
       return { id, type: "benchmark_case", mode, data: caseToSnake(found) };
     }
     if (!getBenchmark(ctx.db.connection, id)) benchmarkNotFound("Benchmark", id);
-    // Suite view: case shapes + minimal run digests + drill IDs. No results.
+    // Suite view: case/run nav + drill IDs (summary lean, full adds detail). No results.
     return {
       id,
       type: "benchmark",
       mode,
-      data: buildBenchmarkInspect(ctx, id),
+      data: buildBenchmarkInspect(ctx, id, mode),
     };
   }
   if (id.startsWith("R-")) {

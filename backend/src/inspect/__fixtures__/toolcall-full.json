@@ -6,8 +6,6 @@
     "id": "9LJM.1T.3.2-T",
     "type": "tool_call",
     "token_count": 1679,
-    "token_source": "exact-api",
-    "token_confidence": "estimated",
     "context_state": "included",
     "tool_name": "ha_history_get_sensor_stats",
     "tool_payload": {

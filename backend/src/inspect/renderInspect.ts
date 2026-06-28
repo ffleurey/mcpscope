@@ -283,9 +283,13 @@ function renderPartLine(part: AnyRecord, indent: string, out: Emit): void {
   const id = String(part["id"] ?? "");
   const type = String(part["type"] ?? "");
   const toolName = part["tool_name"] ? `  ${part["tool_name"]}` : "";
+  // tool_definitions in a container view list names only; show the count so the
+  // tool surface is legible and the part is visibly drillable for full schemas (F6).
+  const toolsList = part["tools"] as string[] | undefined;
+  const toolCount = Array.isArray(toolsList) ? `  ${toolsList.length} tools` : "";
   const state = String(part["context_state"] ?? "");
   const count = part["token_count"] != null ? Number(part["token_count"]) : null;
-  out(`${indent}${id}  ${type}${toolName}${tokens(count, state)}`);
+  out(`${indent}${id}  ${type}${toolName}${toolCount}${tokens(count, state)}`);
 }
 
 function renderTextBlock(text: string, indent: string, out: Emit): void {
@@ -446,8 +450,14 @@ function renderSessionText(data: AnyRecord, out: Emit): void {
     out(`  compaction  ${data["compaction_strategy"]}`);
   if (data["max_tool_rounds"] != null)
     out(`  tool rounds ${String(data["max_tool_rounds"])}`);
+  const parentRef = data["parent_ref"] as AnyRecord | undefined;
+  if (parentRef && parentRef["id"])
+    out(`  parent      ${parentRef["kind"] ?? ""} ${parentRef["id"]}`);
 
-  // F8/F9: a session-level failure reason, when present, surfaced in the header.
+  // F9/F10: a uniform terminal status + (when failed) the failure reason, so a
+  // session's outcome is visible from the header without reading the whole trace.
+  if (data["terminal_status"])
+    out(`  status      ${String(data["terminal_status"])}`);
   renderLatestError(data, "  ", out);
 
   const setup = data["setup"] as AnyRecord | undefined;
