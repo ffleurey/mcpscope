@@ -5,6 +5,7 @@
   import InlineAppError from './InlineAppError.svelte'
   import Checkbox from './Checkbox.svelte'
   import Radio from './Radio.svelte'
+  import SegmentedControl from './SegmentedControl.svelte'
   import { AppError } from '../errors'
   import {
     iconPlus,
@@ -48,6 +49,8 @@
   // Demo state for the Checkbox / Radio components.
   let demoChecks = $state({ a: true, b: false, verbose: true, reconnect: false })
   let demoRadio = $state('one')
+  let demoSegment = $state('summary')
+  let demoFormat = $state('text')
 
   // ── Color tokens — values are read live from :root so this guide can
   //    never drift from app.css. We only name the token + its purpose here.
@@ -332,6 +335,34 @@
       <code class="mono">.icon-blink</code> = in-progress (pulsing amber),
       <code class="mono">.icon-btn-danger</code> = destructive. A deliberate, sanctioned use of amber
       for single-/multi-select state and activity — radio for single-select, checkbox for multi-select.
+    </p>
+
+    <h3 class="group-title">Segmented control</h3>
+    <div class="demo-row">
+      <SegmentedControl
+        ariaLabel="Detail level"
+        selected={demoSegment}
+        onSelect={(v) => (demoSegment = v)}
+        options={[
+          { value: 'summary', label: 'Summary' },
+          { value: 'full', label: 'Full' },
+        ]}
+      />
+      <SegmentedControl
+        ariaLabel="Format"
+        selected={demoFormat}
+        onSelect={(v) => (demoFormat = v)}
+        options={[
+          { value: 'text', label: 'Text' },
+          { value: 'json', label: 'JSON' },
+        ]}
+      />
+    </div>
+    <p class="ref-note">
+      <code class="mono">SegmentedControl</code>: a compact group of mutually-exclusive options (a
+      labelled toggle group). The selected option uses the sanctioned active signal — amber text on
+      a faint amber wash — so it stays legible on the dark surface. Use for small, binary/few-option
+      switches (e.g. the inspect dialog's detail and format axes).
     </p>
   </section>
 

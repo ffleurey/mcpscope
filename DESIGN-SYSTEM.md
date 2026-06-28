@@ -167,6 +167,12 @@ Sizes: default `0.4rem 0.85rem`; `.btn-sm` (`0.28rem 0.65rem`); `.btn-xs` (dense
 - Checkboxes/radios: the **`Checkbox.svelte` / `Radio.svelte`** components — a visually-hidden native
   input (keeps accessibility + form semantics) with an MDI glyph that glows amber when checked, the same
   toggle look as the tables (`.opt-check`/`.opt-radio`). Selects stay native (`accent-color`).
+- Segmented control: the **`SegmentedControl.svelte`** component — a compact group of
+  mutually-exclusive options (a labelled toggle group). Inactive options are `--text-dim`; the
+  **selected** option uses the sanctioned active signal — `--amber-bright` text on a faint amber
+  wash (`color-mix(--amber-bright 16%, transparent)`) — never dark-on-grey. Use for small,
+  binary/few-option switches (e.g. the inspect dialog's detail and format axes); for more or
+  longer options prefer a native select.
 
 ### Dialogs
 
@@ -177,7 +183,10 @@ focused surface — a sanctioned use of the amber accent) plus an elevation shad
 (`0 10px 40px rgba(0,0,0,0.55)`); dark-on-dark needs both color and depth. **Dismissal:** a dialog
 closes only via an explicit action — a footer button, the close ✕, or Escape (the keyboard equivalent
 of the ✕). Clicking the backdrop does **not** close it, so an accidental outside-click never discards
-in-progress content. Error content: the **`InlineAppError.svelte`** component.
+in-progress content. Error content: the **`InlineAppError.svelte`** component. For a large
+content viewer, two opt-in props: **`fixedHeight`** locks the dialog at 85vh so it doesn't
+resize as content/options change, and **`flush`** removes body padding so the child owns its
+layout (e.g. a fixed toolbar above a single scrolling region) — used by the inspect dialog.
 
 ### Tabs / navigation
 

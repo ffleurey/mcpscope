@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { lookupByHierarchicalId } from '../api/backendClient'
-  import JsonDialog from './JsonDialog.svelte'
+  import InspectDialog from './InspectDialog.svelte'
 
   interface Props {
     id: string
@@ -9,15 +8,15 @@
   const { id }: Props = $props()
 
   let open = $state(false)
-  let lookupTitle = $state('')
-  let lookupData = $state<unknown>(null)
+  let inspectMode = $state<'summary' | 'full'>('full')
   let showLookup = $state(false)
 
-  async function doLookup(mode: 'summary' | 'full') {
+  // Summary/Full both open the same consolidated inspect dialog, pre-set to the
+  // chosen detail level; the dialog then switches detail (summary/full) and
+  // format (text/json) freely — it is the GUI equivalent of the inspect tool.
+  function doLookup(mode: 'summary' | 'full') {
     open = false
-    const payload = await lookupByHierarchicalId(id, mode)
-    lookupTitle = `${id} (${mode})`
-    lookupData = payload
+    inspectMode = mode
     showLookup = true
   }
 
@@ -57,9 +56,9 @@
 </span>
 
 {#if showLookup}
-  <JsonDialog
-    title={lookupTitle}
-    data={lookupData}
+  <InspectDialog
+    {id}
+    initialMode={inspectMode}
     onClose={() => {
       showLookup = false
     }}

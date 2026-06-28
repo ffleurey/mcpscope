@@ -172,7 +172,7 @@ export async function cliStatus(
   );
 }
 
-/** GET /api/lookup/:id?mode=... → InspectResult */
+/** GET /api/lookup/:id?mode=...&format=json → InspectResult */
 export async function cliInspect(
   baseUrl: string,
   input: InspectInput,
@@ -180,8 +180,32 @@ export async function cliInspect(
   const mode = input.short === true ? "summary" : "full";
   return request<InspectResult>(
     baseUrl,
-    `/api/lookup/${encodeURIComponent(input.id)}?mode=${mode}`,
+    `/api/lookup/${encodeURIComponent(input.id)}?mode=${mode}&format=json`,
   );
+}
+
+/**
+ * GET /api/lookup/:id?mode=...&format=text → pre-rendered text.
+ * Rendering is a backend domain feature; the CLI just prints what it returns.
+ */
+export async function cliInspectText(
+  baseUrl: string,
+  input: InspectInput,
+): Promise<string> {
+  const mode = input.short === true ? "summary" : "full";
+  const url = `${baseUrl}/api/lookup/${encodeURIComponent(input.id)}?mode=${mode}&format=text`;
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    throw new OperationError(`Cannot reach backend at ${baseUrl}: ${message}`);
+  }
+  // Errors come back as JSON (the route's error handler); reuse the JSON path.
+  if (!response.ok) {
+    return parseResponse<string>(response, baseUrl);
+  }
+  return response.text();
 }
 
 /** GET /api/operations/model-configs → ListModelConfigsResult */

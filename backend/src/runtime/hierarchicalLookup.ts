@@ -157,8 +157,6 @@ function buildPartNode(
     id: part.id,
     type: publicType,
     token_count: tokenCount,
-    token_source: part.tokens.source,
-    token_confidence: part.tokens.confidence,
     context_state: contextState,
   };
 
@@ -309,11 +307,31 @@ function buildTurnNode(
       isDirectLookup,
     );
   });
+  const usage = turn.usage;
   return {
     id: turn.id,
     type: "turn",
-    owner_step_id: turn.ownerStepId,
     ...(turn.status ? { status: turn.status } : {}),
+    // The turn's end-reason, surfaced only when it did NOT complete cleanly — for
+    // an errored/aborted turn it's the one persisted clue (e.g. "step-error"),
+    // since a mid-stream provider failure leaves no diagnostic part. A clean turn
+    // needs no outcome beyond status:complete.
+    ...(turn.status !== "complete" && turn.outcome
+      ? { outcome: turn.outcome }
+      : {}),
+    // Turn-level token cost (from the turn's own usage) so "how costly was this
+    // turn?" and the per-turn comparison are answerable from the overview without
+    // summing parts. Same shape as the run report's per-session tokens.
+    ...(usage.totalTokens != null
+      ? {
+          tokens: {
+            prompt: usage.promptTokens,
+            completion: usage.completionTokens,
+            reasoning: usage.reasoningTokens,
+            total: usage.totalTokens,
+          },
+        }
+      : {}),
     rounds: roundNodes,
   };
 }
@@ -443,46 +461,59 @@ function buildStepNode(
     artifacts,
     step.id,
   );
-  const workflowKind = null;
-  const workflowLabel = null;
+
+  const isCompaction = step.stepTypeKey === "compaction";
 
   return {
     id: step.id,
     type: step.stepTypeKey,
     status: step.status,
-    ...(workflowKind ? { workflow_kind: workflowKind } : {}),
-    ...(workflowLabel ? { workflow_label: workflowLabel } : {}),
     ...(diagnostic ? { latest_error: diagnostic } : {}),
-    strategy:
-      typeof step.params.strategy === "string" ? step.params.strategy : null,
-    source_turn_id:
-      typeof step.params.sourceTurnId === "string"
-        ? step.params.sourceTurnId
-        : null,
-    source_turn_number:
-      typeof step.params.sourceTurnSequenceNumber === "number"
-        ? step.params.sourceTurnSequenceNumber
-        : null,
-    stripped_part_count:
-      typeof step.state.strippedPartCount === "number"
-        ? step.state.strippedPartCount
-        : null,
-    context_tokens_before:
-      typeof step.state.contextTokensAtTurnEnd === "number"
-        ? step.state.contextTokensAtTurnEnd
-        : null,
-    context_tokens_after:
-      typeof step.state.contextTokensAfterCompaction === "number"
-        ? step.state.contextTokensAfterCompaction
-        : null,
-    tokens_removed:
-      typeof step.state.compactionTokensRemoved === "number"
-        ? step.state.compactionTokensRemoved
-        : null,
-    owned_turn_ids: ownedTurnIds,
-    turns: ownedTurnNodes,
-    postamble_step_ids: postambleStepIds,
-    ...compactionEvidence,
+    // Compaction-specific accounting. Gated so analysis/other steps don't carry a
+    // row of null compaction fields (and vice-versa for the turn-owning fields).
+    ...(isCompaction
+      ? {
+          strategy:
+            typeof step.params.strategy === "string"
+              ? step.params.strategy
+              : null,
+          source_turn_id:
+            typeof step.params.sourceTurnId === "string"
+              ? step.params.sourceTurnId
+              : null,
+          source_turn_number:
+            typeof step.params.sourceTurnSequenceNumber === "number"
+              ? step.params.sourceTurnSequenceNumber
+              : null,
+          stripped_part_count:
+            typeof step.state.strippedPartCount === "number"
+              ? step.state.strippedPartCount
+              : null,
+          context_tokens_before:
+            typeof step.state.contextTokensAtTurnEnd === "number"
+              ? step.state.contextTokensAtTurnEnd
+              : null,
+          context_tokens_after:
+            typeof step.state.contextTokensAfterCompaction === "number"
+              ? step.state.contextTokensAfterCompaction
+              : null,
+          tokens_removed:
+            typeof step.state.compactionTokensRemoved === "number"
+              ? step.state.compactionTokensRemoved
+              : null,
+          ...compactionEvidence,
+        }
+      : {}),
+    // Turn-owning fields (analysis steps) — omitted when empty so a compaction
+    // step isn't padded with the analysis-step concepts it never uses.
+    ...(ownedTurnIds.length > 0
+      ? { owned_turn_ids: ownedTurnIds, turns: ownedTurnNodes }
+      : {}),
+    ...(postambleStepIds.length > 0
+      ? { postamble_step_ids: postambleStepIds }
+      : {}),
+    // `parts` is the step's own direct content — always present (possibly empty),
+    // the step-level parallel to a turn's `rounds`.
     parts: stepParts,
   };
 }
@@ -492,6 +523,64 @@ function deriveContextWindowUsed(turns: TurnRecord[]): number | null {
     .filter((t) => t.status === "complete")
     .sort((a, b) => a.turnNumber - b.turnNumber);
   return completed.at(-1)?.contextTokensAtTurnEnd ?? null;
+}
+
+/**
+ * A uniform "how did this session end" status, derived the same way for every
+ * session kind (primary, analysis, judge). Mirrors the per-session terminal
+ * status the run report computes (benchmarkMetrics) so the session header and
+ * the run's session list agree. `error` whenever init failed, the analysis
+ * workflow ended in error, or the last turn errored; otherwise the last turn's
+ * own status (e.g. `complete`, `streaming`).
+ */
+export function deriveSessionTerminalStatus(
+  session: { initStatus: string; status: string; initError?: unknown },
+  turns: { turnNumber: number; status: string }[],
+  analysisPhase: string | null,
+): string {
+  if (session.initStatus === "error" || session.initError) return "error";
+  if (analysisPhase === "error") return "error";
+  const last = [...turns].sort((a, b) => a.turnNumber - b.turnNumber).at(-1);
+  return last?.status ?? session.status;
+}
+
+/**
+ * The stop reason carried by a trailing `diagnostic` part — the canonical "why
+ * did a primary session fail" marker (e.g. hitting the tool-round cap). Analysis
+ * sessions surface their reason via an analysis diagnostic artifact instead; this
+ * fallback gives primary sessions the same top-level failure summary (F9/F10).
+ */
+function getTrailingDiagnosticError(
+  allParts: PartRecord[],
+): { step_id: null; error_kind: null; message: string } | null {
+  const diagnostic = allParts
+    .filter((p) => p.partType === "diagnostic-note" && p.payload.text != null)
+    .sort((a, b) => a.ordinal - b.ordinal)
+    .at(-1);
+  if (!diagnostic?.payload.text) return null;
+  return { step_id: null, error_kind: null, message: diagnostic.payload.text };
+}
+
+/**
+ * Last-resort failure summary: the errored turn itself. A turn can fail mid-stream
+ * (a provider/tool error) with no diagnostic part and no rich persisted message —
+ * only `status:error` + an `outcome` marker. This still gives the session header a
+ * located reason (which turn, and its outcome) so an errored session is never
+ * shown with a bare `status:error` and nothing to drill.
+ */
+function getTerminalTurnError(
+  turns: TurnRecord[],
+): { step_id: string; error_kind: string; message: string } | null {
+  const errored = turns
+    .filter((t) => t.status === "error")
+    .sort((a, b) => a.turnNumber - b.turnNumber)
+    .at(-1);
+  if (!errored) return null;
+  return {
+    step_id: errored.id,
+    error_kind: errored.outcome ?? "error",
+    message: `Turn ${errored.turnNumber} ended in error.`,
+  };
 }
 
 // ─── Main resolver ────────────────────────────────────────────────────────────
@@ -529,52 +618,74 @@ export function resolveHierarchicalId(
     const allRounds = listRoundRecordsBySession(connection, session.id);
     const analysisState = session.analysisState as {
       workflow_kind?: string;
+      phase?: string;
     } | null;
     const workflowKind = (analysisState?.workflow_kind ??
       null) as AnalysisWorkflowKind | null;
     const workflowLabel = getAnalysisWorkflowLabel(workflowKind);
-    const latestError =
+    const terminalStatus = deriveSessionTerminalStatus(
+      session,
+      turns,
+      analysisState?.phase ?? null,
+    );
+    // One uniform "how did this end and why" across session kinds (F9/F10):
+    // prefer an analysis diagnostic, then a persisted init failure, then — for any
+    // session that errored — the trailing `diagnostic` part's stop reason, and
+    // finally the errored turn itself (a mid-stream failure leaves no diagnostic).
+    let latestError =
       getLatestAnalysisDiagnosticSummary(artifacts) ??
       (session.initError
         ? {
-            step_id: null,
-            error_kind: session.initError.errorKind,
+            step_id: null as string | null,
+            error_kind: session.initError.errorKind as string | null,
             message: session.initError.message,
           }
         : null);
+    if (!latestError && terminalStatus === "error") {
+      latestError =
+        getTrailingDiagnosticError(allParts) ?? getTerminalTurnError(turns);
+    }
 
-    const directTurnNodes = directTurns.map((turn) => {
-      const turnRounds = allRounds
-        .filter((r) => r.turnId === turn.id)
-        .sort((a, b) => a.roundIndex - b.roundIndex);
-      return buildTurnNode(turn, turnRounds, allParts, mode, false);
-    });
+    // Children (turns + deterministic steps) ordered by actual creation time, so a
+    // mid-session compaction reads between the turns it sat between — not after the
+    // next turn (the old id-suffix sort tied `2T`/`2C` and misplaced it).
+    const childEntries = [
+      ...directTurns.map((turn) => {
+        const turnRounds = allRounds
+          .filter((r) => r.turnId === turn.id)
+          .sort((a, b) => a.roundIndex - b.roundIndex);
+        return {
+          createdAt: turn.createdAt,
+          node: buildTurnNode(turn, turnRounds, allParts, mode, false),
+        };
+      }),
+      ...steps.map((step) => ({
+        createdAt: step.createdAt,
+        node: buildStepNode(
+          step,
+          steps,
+          turns,
+          allRounds,
+          allParts,
+          artifacts,
+          mode,
+          false,
+        ),
+      })),
+    ];
+    const allChildNodes = childEntries
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((e) => e.node);
 
-    const stepNodes = steps.map((step) =>
-      buildStepNode(
-        step,
-        steps,
-        turns,
-        allRounds,
-        allParts,
-        artifacts,
-        mode,
-        false,
-      ),
-    );
+    const parentRef =
+      session.parentKind !== null && session.parentId !== null
+        ? { kind: session.parentKind, id: session.parentId }
+        : null;
+    const mcpData = session.mcpProfileSnapshots.map((s) => ({ name: s.name }));
 
-    const allChildNodes = [...directTurnNodes, ...stepNodes].sort((a, b) => {
-      const aId = (a as { id: string }).id;
-      const bId = (b as { id: string }).id;
-      const posA =
-        (a as { turnNumber?: number }).turnNumber ??
-        Number(aId.split(".").pop()?.replace(/\D/g, "") ?? 0);
-      const posB =
-        (b as { turnNumber?: number }).turnNumber ??
-        Number(bId.split(".").pop()?.replace(/\D/g, "") ?? 0);
-      return posA - posB;
-    });
-
+    // All header/identity metadata is grouped up top (model, mcp, parent, status,
+    // failure) before the body (setup + steps), so the JSON reads like the text
+    // header and a reader sees "what/where/how did it end" before the trace.
     const data: Record<string, unknown> = {
       id: session.id,
       title: session.title,
@@ -588,25 +699,19 @@ export function resolveHierarchicalId(
         temperature: session.modelProfileSnapshot.temperature,
         reasoning: session.modelProfileSnapshot.reasoning,
       },
+      ...(mcpData.length > 0 ? { mcp: mcpData } : {}),
       context_window: {
         available: session.loadedContextLength ?? null,
         used: deriveContextWindowUsed(turns),
       },
+      terminal_status: terminalStatus,
+      ...(parentRef ? { parent_ref: parentRef } : {}),
       ...(workflowKind ? { workflow_kind: workflowKind } : {}),
       ...(workflowLabel ? { workflow_label: workflowLabel } : {}),
       ...(latestError ? { latest_error: latestError } : {}),
       setup: buildSetupNode(session.id, setupParts, mode, false),
       steps: allChildNodes,
     };
-
-    if (session.parentKind !== null && session.parentId !== null) {
-      data.parent_ref = { kind: session.parentKind, id: session.parentId };
-    }
-
-    const mcpData = session.mcpProfileSnapshots.map((s) => ({ name: s.name }));
-    if (mcpData.length > 0) {
-      data.mcp = mcpData;
-    }
 
     return {
       status: "ok",

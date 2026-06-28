@@ -89,13 +89,19 @@ useful criteria are objective and verifiable from evidence, which keeps judge ag
 (A future option is to let a criterion opt into a tiny deterministic check type for
 zero-variance points — explicitly **out of V1** to avoid the predicate-language rabbit hole.)
 
-## What the judge receives — push + pull (the differentiator, already built)
+## What the judge receives — pull-on-demand (the differentiator, already built)
 
-1. **Push (default base context):** the existing **`inspect` summary** of the session
-   (`inspect` with `short=true`) — *not a new payload format*. It gives the session tree, the
-   ordered tool calls, per-node token counts, and result sizes, each addressed by its
-   **hierarchical ID**, without inlining full payloads (the very context bloat we measure, and
-   too big for small judge models). Judge prompt = this summary + the case prompt + the rubric.
+> **Reconciled to shipped behaviour (F14, 2026-06-28):** the V1 judge is *not* pre-seeded
+> with a pushed `short=true` summary. Its prompt names the session id and tells it to
+> inspect the session itself **(default, not short)**, then pull deeper only as needed
+> (`injectEvidence:false`). The earlier "push the inspect summary" design below was
+> superseded; kept for history.
+
+1. **Seed (the id, not a payload):** the judge prompt = the case prompt + the rubric + the
+   session id. No trace is inlined. The system prompt: "Inspecting the session (default, not
+   short) returns the user request, the final answer, and each round's tool calls with their
+   parameters — enough for most criteria"
+   ([`systemPrompt.ts:22`](../../backend/src/analysis/benchmarkEvaluation/systemPrompt.ts)).
 2. **Pull (on demand):** the judge is the existing agentic analysis turn with `mcpscope_inspect`
    over `/mcp/analysis` (bounded to ~5 rounds), so it fetches full payloads/reasoning/any node
    by id when a criterion needs the actual content — or when a criterion tells it to. Same

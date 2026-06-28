@@ -36,7 +36,9 @@ import {
   getBenchmarkCase,
   getBenchmarkRun,
   getBenchmarkEvaluation,
+  listBenchmarkEvaluationsByRun,
 } from "../persistence/benchmarkRepository.js";
+import { getSessionRecord } from "../persistence/repository.js";
 import type {
   BenchmarkRecord,
   BenchmarkCaseRecord,
@@ -273,6 +275,250 @@ function runReportToSnake(report: RunReport) {
   };
 }
 
+// ── Redesigned unified-inspect builders (B- / R- / E-) ───────────────────────
+// These power the `inspect` tool (CLI/MCP). They are drill-oriented: each level
+// shows compact children + IDs + the signal needed to pick what to inspect next;
+// depth (rubric, results, scores, criteria) is recovered by inspecting the child
+// directly. Distinct from the *-ToSnake builders above, which the dedicated
+// benchmark_* operations keep using. See backlog/research/inspect-payloads/.
+
+/** Compact case view for the suite payload: shape + a scorability hint, no rubric. */
+function caseDigestToSnake(c: BenchmarkCaseRecord) {
+  return {
+    id: c.id,
+    name: c.name,
+    prompt: c.prompt,
+    order_index: c.orderIndex,
+    // Hint only; inspect the case (B-.N) for the full rubric and tool checks.
+    rubric_criteria_count: c.rubric?.length ?? 0,
+  };
+}
+
+/**
+ * The friendly model name a run/evaluation used, read from a child session's
+ * snapshot (the historical truth — the same name the session payload shows), so
+ * run/eval model identity is consistent with sessions instead of a raw config id.
+ * Returns null when no session is available (then callers keep just the id).
+ */
+function resolveModelName(
+  ctx: OperationContext,
+  sessionId: string | undefined,
+): string | null {
+  if (!sessionId) return null;
+  return (
+    getSessionRecord(ctx.db.connection, sessionId)?.modelProfileSnapshot.name ??
+    null
+  );
+}
+
+/** The judge model name for an evaluation pass, via its first judge session. */
+function resolveJudgeModelName(
+  ctx: OperationContext,
+  ev: BenchmarkEvaluationRecord,
+): string | null {
+  return resolveModelName(ctx, ev.sessions[0]?.analysisSessionId);
+}
+
+/** Compact run view for the suite full payload: status + completion + drill IDs. */
+function runDigestForSuite(ctx: OperationContext, run: BenchmarkRunRecord) {
+  const progress = getBenchmarkRunProgress(ctx.db, run.id);
+  const evaluations = listBenchmarkEvaluationsByRun(ctx.db.connection, run.id);
+  return {
+    id: run.id,
+    status: run.status,
+    repetitions: run.repetitions,
+    total_sessions: progress.totalSessions,
+    completed_sessions: progress.completedSessions,
+    failed_sessions: progress.failedSessions,
+    // IDs to drill into; the suite payload carries no results.
+    evaluation_ids: evaluations.map((e) => e.id),
+  };
+}
+
+/**
+ * Suite view. A genuine summary/full split (F5): summary is the cheap router —
+ * the suite identity plus case/run *ids + the signal to pick one* (case name, run
+ * status); full adds the per-case prompt/rubric-size and per-run completion +
+ * evaluation IDs. Neither carries results (inspect the run `R-` / eval `E-`).
+ */
+function buildBenchmarkInspect(
+  ctx: OperationContext,
+  id: string,
+  mode: "summary" | "full",
+) {
+  const detail = getBenchmarkDetail(ctx.db, id);
+  if (mode !== "full") {
+    return {
+      benchmark: benchmarkToSnake(detail.benchmark),
+      cases: detail.cases.map((c) => ({ id: c.id, name: c.name })),
+      runs: detail.runs.map((run) => ({ id: run.id, status: run.status })),
+    };
+  }
+  return {
+    benchmark: benchmarkToSnake(detail.benchmark),
+    cases: detail.cases.map(caseDigestToSnake),
+    runs: detail.runs.map((run) => runDigestForSuite(ctx, run)),
+  };
+}
+
+function buildRunInspect(
+  ctx: OperationContext,
+  run: BenchmarkRunRecord,
+  mode: "summary" | "full",
+) {
+  const progress = getBenchmarkRunProgress(ctx.db, run.id);
+  // Use the scored reports (not the bare records) so each eval digest carries the
+  // headline `overall_pct` — the signal UC-5 (compare runs) needs to rank runs by
+  // quality from the run payload itself, without a separate `E-` fetch per run.
+  const evaluations = getBenchmarkRunEvaluationReports(ctx.db, run.id);
+
+  const data: Record<string, unknown> = {
+    run: {
+      id: run.id,
+      benchmark_id: run.benchmarkId,
+      benchmark_name: run.benchmarkName,
+      status: run.status,
+      // Friendly name (from a session snapshot) + the config id join key, so the
+      // run's model identity matches what the session payloads show.
+      model_name: resolveModelName(ctx, run.sessions[0]?.sessionId),
+      model_config_id: run.modelConfigId,
+      mcp_profile_ids: run.mcpProfileIds,
+      repetitions: run.repetitions,
+      max_tool_rounds: run.maxToolRounds,
+      error: run.error,
+      started_at: run.startedAt,
+      completed_at: run.completedAt,
+    },
+    progress: {
+      total_sessions: progress.totalSessions,
+      completed_sessions: progress.completedSessions,
+      failed_sessions: progress.failedSessions,
+      per_case: progress.perCase.map((c) => ({
+        source_case_id: c.sourceCaseId,
+        name: c.name,
+        completed: c.completed,
+        total: c.total,
+      })),
+    },
+    evaluations: evaluations.map((e) => ({
+      id: e.id,
+      status: e.status,
+      judge_model_name: resolveJudgeModelName(ctx, e),
+      judge_model_config_id: e.judgeModelConfigId,
+      overall_pct: e.score.overallPct,
+      judged_sessions: e.judgedSessions,
+      expected_sessions: e.expectedSessions,
+      incomplete: e.judgedSessions < e.expectedSessions,
+    })),
+  };
+
+  if (mode !== "full") {
+    // Summary: a flat, drillable session list (id + status + which case/rep).
+    data.sessions = run.sessions.map((s) => ({
+      session_id: s.sessionId,
+      source_case_id: s.sourceCaseId,
+      repetition: s.repetition,
+      status: s.status,
+    }));
+    return data;
+  }
+
+  // Full: enrich each session with the metrics that help decide what to drill,
+  // plus per-case pass rates and the per-tool rollup.
+  const report = getBenchmarkRunReport(ctx.db, run.id).report;
+  const metricsById = new Map<string, SessionMetrics>();
+  for (const c of report.cases) {
+    for (const m of c.sessions) metricsById.set(m.sessionId, m);
+  }
+  data.sessions = run.sessions.map((s) => {
+    const m = metricsById.get(s.sessionId);
+    return {
+      session_id: s.sessionId,
+      source_case_id: s.sourceCaseId,
+      repetition: s.repetition,
+      status: s.status,
+      ...(m
+        ? {
+            terminal_status: m.terminalStatus,
+            tool_call_count: m.toolCallCount,
+            tool_error_count: m.toolErrorCount,
+            total_tokens: m.tokens.total,
+            ...(m.error ? { error: m.error } : {}),
+          }
+        : {}),
+    };
+  });
+  data.per_case = report.cases.map((c) => ({
+    source_case_id: c.caseId,
+    pass_count: c.passCount,
+    session_count: c.sessionCount,
+    success_rate: c.successRate,
+    pass_at_k: c.passAtK,
+    pass_hat_k: c.passHatK,
+    tool_call_stats: numberStatsToSnake(c.toolCallStats),
+    total_token_stats: numberStatsToSnake(c.totalTokenStats),
+  }));
+  data.per_tool = perToolRollupToSnake(report.perTool);
+  return data;
+}
+
+function buildEvaluationInspect(
+  ev: BenchmarkEvaluationRecord,
+  report: BenchmarkEvaluationReport,
+  mode: "summary" | "full",
+  judgeModelName: string | null,
+) {
+  const flatSessions = report.score.cases.flatMap((c) =>
+    c.sessions.map((s) => ({
+      analysis_session_id: s.analysisSessionId,
+      run_session_id: s.runSessionId,
+      source_case_id: s.sourceCaseId,
+      status: s.status,
+      pct: s.pct,
+      // Full adds the per-criterion grid; summary stays lean and drillable.
+      ...(mode === "full"
+        ? {
+            awarded: s.awarded,
+            max: s.max,
+            criteria: s.criteria.map((cr) => ({
+              id: cr.id,
+              description: cr.description,
+              max: cr.max,
+              points: cr.points,
+              note: cr.note,
+            })),
+          }
+        : {}),
+    })),
+  );
+
+  const data: Record<string, unknown> = {
+    evaluation: {
+      id: ev.id,
+      run_id: ev.runId,
+      judge_model_name: judgeModelName,
+      judge_model_config_id: ev.judgeModelConfigId,
+      judge_temperature: ev.judgeTemperature,
+      status: ev.status,
+      error: ev.error,
+      expected_sessions: report.expectedSessions,
+      judged_sessions: report.judgedSessions,
+      incomplete: report.judgedSessions < report.expectedSessions,
+      overall_pct: report.score.overallPct,
+    },
+    sessions: flatSessions,
+  };
+
+  if (mode === "full") {
+    data.per_case = report.score.cases.map((c) => ({
+      source_case_id: c.sourceCaseId,
+      name: c.name,
+      pct_stats: numberStatsToSnake(c.pctStats),
+    }));
+  }
+  return data;
+}
+
 // ── Unified inspect dispatch ─────────────────────────────────────────────────
 // The `inspect` operation (shared verbatim by the UI's id-pill lookup, the CLI,
 // and the MCP tool) resolves runtime hierarchical IDs itself. Benchmark-family
@@ -306,32 +552,26 @@ export function resolveBenchmarkInspect(
 ): BenchmarkInspectResult | null {
   if (id.startsWith("B-")) {
     if (id.includes(".")) {
+      // The case (B-.N) is the rubric/full-spec drill target — kept verbatim.
       const found = getBenchmarkCase(ctx.db.connection, id);
       if (!found) benchmarkNotFound("Benchmark case", id);
       return { id, type: "benchmark_case", mode, data: caseToSnake(found) };
     }
     if (!getBenchmark(ctx.db.connection, id)) benchmarkNotFound("Benchmark", id);
-    const detail = getBenchmarkDetail(ctx.db, id);
+    // Suite view: case/run nav + drill IDs (summary lean, full adds detail). No results.
     return {
       id,
       type: "benchmark",
       mode,
-      data: {
-        benchmark: benchmarkToSnake(detail.benchmark),
-        cases: detail.cases.map(caseToSnake),
-        runs: detail.runs.map(runToSnake),
-      },
+      data: buildBenchmarkInspect(ctx, id, mode),
     };
   }
   if (id.startsWith("R-")) {
     const run = getBenchmarkRun(ctx.db.connection, id);
     if (!run) benchmarkNotFound("Benchmark run", id);
-    // summary = the run snapshot; full = + the computed metrics report.
-    const data: Record<string, unknown> = { run: runToSnake(run) };
-    if (mode === "full") {
-      data.report = runReportToSnake(getBenchmarkRunReport(ctx.db, id).report);
-    }
-    return { id, type: "benchmark_run", mode, data };
+    // Summary: status + completion + evaluations + drillable session list.
+    // Full: + per-session metrics (what to drill), per-case pass rates, per-tool.
+    return { id, type: "benchmark_run", mode, data: buildRunInspect(ctx, run, mode) };
   }
   if (id.startsWith("E-")) {
     const ev = getBenchmarkEvaluation(ctx.db.connection, id);
@@ -340,11 +580,13 @@ export function resolveBenchmarkInspect(
       (r) => r.id === id,
     );
     if (!report) benchmarkNotFound("Benchmark evaluation", id);
+    // Summary: status + scores + drillable judged-session list (no criteria grid).
+    // Full: + per-criterion grid + per-case distribution.
     return {
       id,
       type: "benchmark_evaluation",
       mode,
-      data: { evaluation: evaluationReportToSnake(report) },
+      data: buildEvaluationInspect(ev, report, mode, resolveJudgeModelName(ctx, ev)),
     };
   }
   return null;

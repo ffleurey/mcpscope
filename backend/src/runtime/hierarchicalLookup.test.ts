@@ -1,8 +1,44 @@
 import { describe, expect, it } from 'vitest'
 import {
+  deriveSessionTerminalStatus,
   summarizeToolArguments,
   TOOL_ARG_VALUE_MAX_CHARS,
 } from './hierarchicalLookup.js'
+
+describe('deriveSessionTerminalStatus', () => {
+  const ok = { initStatus: 'ready', status: 'active' }
+  const turn = (turnNumber: number, status: string) => ({ turnNumber, status })
+
+  it('reports the last turn status for a healthy session', () => {
+    expect(
+      deriveSessionTerminalStatus(ok, [turn(0, 'complete'), turn(1, 'complete')], null),
+    ).toBe('complete')
+  })
+
+  it('is error when the last turn errored (primary loop/cap failure)', () => {
+    expect(
+      deriveSessionTerminalStatus(ok, [turn(0, 'complete'), turn(1, 'error')], null),
+    ).toBe('error')
+  })
+
+  it('is error when init failed, regardless of turns', () => {
+    expect(
+      deriveSessionTerminalStatus(
+        { initStatus: 'error', status: 'error', initError: { errorKind: 'mcp', message: 'x' } },
+        [],
+        null,
+      ),
+    ).toBe('error')
+  })
+
+  it('is error when the analysis workflow ended in error', () => {
+    expect(deriveSessionTerminalStatus(ok, [turn(0, 'complete')], 'error')).toBe('error')
+  })
+
+  it('falls back to the session status when there are no turns', () => {
+    expect(deriveSessionTerminalStatus(ok, [], null)).toBe('active')
+  })
+})
 
 describe('summarizeToolArguments', () => {
   it('keeps every key and short value intact', () => {

@@ -1,0 +1,1 @@
+Check and fix model loading. I have the impression that when we load the models we do not necessarly get the correct crequested context size. Maybe a side effect of having the "default" temperature and the logic we made to auto eject and load models but I observed that the model which was set to be 32k ctx was loaded with only 8k.

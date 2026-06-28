@@ -1,0 +1,178 @@
+{
+  "id": "RH8P",
+  "type": "session",
+  "mode": "full",
+  "data": {
+    "id": "RH8P",
+    "title": "Multi-turn weather (gpt-4o-mini + Meteo)",
+    "session_type": "primary",
+    "compaction_strategy": "strip-reasoning",
+    "max_tool_rounds": 20,
+    "model": {
+      "id": "gpt-40-mini",
+      "name": "GPT-40-mini",
+      "key": "openai/gpt-4o-mini",
+      "temperature": null,
+      "reasoning": null
+    },
+    "mcp": [
+      {
+        "name": "Meteo"
+      }
+    ],
+    "context_window": {
+      "available": 128000,
+      "used": 6342
+    },
+    "terminal_status": "error",
+    "latest_error": {
+      "step_id": "RH8P.2T",
+      "error_kind": "step-error",
+      "message": "Turn 2 ended in error."
+    },
+    "setup": {
+      "id": "RH8P.S",
+      "parts": [
+        {
+          "id": "RH8P.S.1-MI",
+          "type": "mcp_instructions",
+          "token_count": 447,
+          "context_state": "included"
+        },
+        {
+          "id": "RH8P.S.2-TD",
+          "type": "tool_definitions",
+          "token_count": 3951,
+          "context_state": "included",
+          "tools": [
+            "openmeteo_geocode",
+            "openmeteo_get_elevation",
+            "openmeteo_get_forecast",
+            "openmeteo_get_historical",
+            "openmeteo_get_marine",
+            "openmeteo_get_air_quality",
+            "openmeteo_get_ensemble",
+            "openmeteo_get_flood",
+            "openmeteo_dataframe_query",
+            "openmeteo_dataframe_describe"
+          ]
+        }
+      ]
+    },
+    "steps": [
+      {
+        "id": "RH8P.1T",
+        "type": "turn",
+        "status": "complete",
+        "tokens": {
+          "prompt": 6312,
+          "completion": 30,
+          "reasoning": 0,
+          "total": 6342
+        },
+        "rounds": [
+          {
+            "id": "RH8P.1T.1",
+            "status": "complete",
+            "parts": [
+              {
+                "id": "RH8P.1T.1.1-U",
+                "type": "user_prompt",
+                "token_count": 27,
+                "context_state": "included",
+                "content": {
+                  "text": "What's the current temperature and wind speed in Oslo, Norway right now? Use the weather tools to look it up."
+                }
+              },
+              {
+                "id": "RH8P.1T.1.2-T",
+                "type": "tool_call",
+                "token_count": 20,
+                "context_state": "included",
+                "tool_name": "openmeteo_geocode",
+                "tool_arguments": {
+                  "name": "Oslo, Norway"
+                }
+              }
+            ]
+          },
+          {
+            "id": "RH8P.1T.2",
+            "status": "complete",
+            "parts": [
+              {
+                "id": "RH8P.1T.2.1-T",
+                "type": "tool_call",
+                "token_count": 1242,
+                "context_state": "included",
+                "tool_name": "openmeteo_get_forecast",
+                "tool_arguments": {
+                  "latitude": 59.91273,
+                  "longitude": 10.74609,
+                  "hourly_variables": [
+                    "temperature_2m",
+                    "wind_speed_10m"
+                  ],
+                  "timezone": "auto"
+                }
+              }
+            ]
+          },
+          {
+            "id": "RH8P.1T.3",
+            "status": "complete",
+            "parts": [
+              {
+                "id": "RH8P.1T.3.1-A",
+                "type": "assistant_answer",
+                "token_count": 30,
+                "context_state": "included",
+                "content": {
+                  "text": "The current temperature in Oslo, Norway is approximately **21.9°C** and the wind speed is about **13.7 km/h**."
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "RH8P.2C",
+        "type": "compaction",
+        "status": "complete",
+        "strategy": "strip-reasoning",
+        "source_turn_id": "RH8P.1T",
+        "source_turn_number": 1,
+        "stripped_part_count": 0,
+        "context_tokens_before": 6342,
+        "context_tokens_after": 6342,
+        "tokens_removed": 0,
+        "stripped_part_ids": [],
+        "stripped_parts": [],
+        "parts": []
+      },
+      {
+        "id": "RH8P.2T",
+        "type": "turn",
+        "status": "error",
+        "outcome": "step-error",
+        "rounds": [
+          {
+            "id": "RH8P.2T.1",
+            "status": "streaming",
+            "parts": [
+              {
+                "id": "RH8P.2T.1.1-U",
+                "type": "user_prompt",
+                "token_count": null,
+                "context_state": "included",
+                "content": {
+                  "text": "Now compare that to Bergen — which of the two cities is warmer right now, and by how much?"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
