@@ -59,6 +59,39 @@ so the examples in each per-type folder reflect the improved output. `verify` is
 
 ---
 
+## Found by exercising fresh data (multi-model, multi-turn, analysis sessions)
+
+The captured examples were all single-turn primary sessions. Running new sessions — a
+multi-turn GPT-4o-mini + Meteo conversation, and re-inspecting the Kimi/Gemma judge sessions —
+surfaced four real gaps, now fixed (each with a regression fixture in the coverage test):
+
+1. **Analysis/judge sessions hid their entire trace (most impactful).** An analysis step
+   (`analysis_bootstrap`, `analysis_benchmark_evaluation`, …) *owns* a turn with the agent's
+   rounds, tool calls, and final answer — but the text renderer rendered only the step header,
+   so a judge session's `mcpscope_inspect` calls and its verdict `assistant_answer` (with the
+   cited evidence IDs) were **invisible in text**. This silently broke the "audit the judge"
+   path (UC-7). Fixed: `renderGenericStep` now renders the owned turns. Guarded by the
+   `analysis-session-full` fixture. (`owned_turn_ids`/`postamble_step_ids` are now allow-listed
+   nav plumbing — the turns themselves carry the content.)
+
+2. **An errored turn with no diagnostic showed no reason.** A turn can fail mid-stream (a
+   provider/tool error) leaving only `status:error` + an `outcome` marker — no diagnostic part.
+   The session header then read `status error` with nothing to drill. Fixed: the failure
+   summary falls back to the errored turn (`<outcome>: Turn N ended in error`), and the turn
+   node carries its `outcome` (rendered inline on the turn header when it didn't end cleanly).
+   F9/F10 is now uniform across *every* failure kind — round-cap diagnostic, judge
+   `json_parse_error`, init failure, and mid-stream provider error.
+
+3. **Mid-session compaction rendered out of order.** The child sort parsed the id suffix, tying
+   `2T` (turn 2) and `2C` (compaction-after-turn-1) and placing the compaction *after* turn 2.
+   Fixed: children are sorted by **creation time**, so the trace reads chronologically.
+
+4. **Per-turn cost/structure proved its worth on a real multi-turn trace.** The turn header +
+   `tokens` (added earlier in this pass) make a multi-turn session legible — each turn's
+   status, round count, and cost at a glance — which the single-turn captures couldn't show.
+
+---
+
 ## Per-type pass
 
 | Type | Summary vs full | What changed | Assessment |
@@ -143,5 +176,9 @@ blocks you.
   full `per_case` is keyed by `source_case_id` (not the old `case_id`).
 - `app.test.ts` — the existing compaction-step contract (`parts` always present;
   `stripped_parts` only in full) still holds after the kind-specific field gating.
-- Coverage fixtures regenerated from the new payloads; the json-⊆-text coverage test stays
-  green over them and the seeded benchmark types.
+- **New coverage fixtures from real sessions:** `analysis-session-full` (ZTJE — steps own
+  turns, guards the owned-turn rendering) and `multiturn-error-full` (RH8P — 2 turns, 2nd
+  errored mid-stream, guards turn `outcome` + the synthesized failure summary + chronological
+  ordering). Both run through the json-⊆-text coverage test.
+- Coverage fixtures regenerated from the new payloads; the coverage test stays green over them
+  and the seeded benchmark types.

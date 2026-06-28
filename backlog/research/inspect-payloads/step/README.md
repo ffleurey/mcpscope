@@ -55,3 +55,7 @@ compaction after turn 1).
   analysis steps that actually own turns — so neither kind is padded with the other's
   null/empty fields. `parts` stays always-present (the step-level parallel to a turn's
   `rounds`).
+- **Owned turns now render in text.** An analysis step owns the agent/judge's turn(s); the
+  renderer used to drop them, so an analysis-session inspect showed only step headers (the
+  judge's tool calls + verdict were invisible). Fixed — see
+  [`../session/example-ZTJE-analysis-session.md`](../session/example-ZTJE-analysis-session.md).

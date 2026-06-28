@@ -5,7 +5,10 @@ snapshot, context-window usage, the setup, and the ordered list of steps/turns
 ([`hierarchicalLookup.ts:578-609`](../../../../backend/src/runtime/hierarchicalLookup.ts);
 [`DATA-MODEL.md:93-104`](../../../../DATA-MODEL.md)).
 
-Example: [`example-9LJM-session.md`](example-9LJM-session.md).
+Examples: [`example-9LJM-session.md`](example-9LJM-session.md) (single-turn primary) ·
+[`example-RH8P-multiturn.md`](example-RH8P-multiturn.md) (multi-turn, mid-stream error) ·
+[`example-ZTJE-analysis-session.md`](example-ZTJE-analysis-session.md) (analysis/judge session,
+steps own turns).
 
 ## Summary mode — use-cases
 
@@ -63,7 +66,20 @@ Full adds, per round: the `user_prompt`/`assistant_answer` **text**, and every
   (`model`, `mcp`, `parent_ref`, `terminal_status`, failure) **before** the body (`setup` +
   `steps`), instead of trailing `parent_ref`/`mcp` after the big `steps` array — the JSON now
   reads like the text header. Each turn renders a **header line** (rounds + token cost) in the
-  session view, delimiting turns the way a step header delimits a compaction step.
+  session view, delimiting turns the way a step header delimits a compaction step. Children
+  (turns + steps) are ordered by **creation time**, so a mid-session compaction reads
+  *between* the turns it sat between (the old id-suffix sort placed it after the next turn).
+- **Found by broader testing (multi-model, multi-turn, analysis sessions):**
+  - **Analysis/judge sessions now render their owned turns.** An analysis step (e.g.
+    `analysis_benchmark_evaluation`) owns a turn with the agent/judge's rounds, tool calls,
+    and final answer; the text used to show only the step header, hiding the entire trace.
+    It now renders — the "audit the judge" path (UC-7) works in text. See
+    [`example-ZTJE-analysis-session.md`](example-ZTJE-analysis-session.md).
+  - **An errored turn always yields a header reason.** A turn can fail mid-stream (provider/
+    tool error) with no diagnostic part; the session now synthesizes the failure summary from
+    the errored turn (`<outcome>: Turn N ended in error`) and the turn line shows its
+    `outcome` inline, so `status:error` is never shown bare. See
+    [`example-RH8P-multiturn.md`](example-RH8P-multiturn.md).
 - **Still by design:** a full session inspect inlines neither tool schemas nor tool results
   (the router stays cheap); the part **IDs + token weight** are the drill signal and
   `tool_definitions` now shows its **tool count** (F6). Drill the `-TD`/`-T` part for the

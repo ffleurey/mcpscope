@@ -38,7 +38,9 @@ Example: [`example-9LJM-turn.md`](example-9LJM-turn.md).
   total, from the turn's own usage) and renders a **header line** (`<id> turn <status> N rounds
   (T tokens)`) — so "how costly / how many rounds was this turn?" is answerable from the
   header, and a turn reads like a step in the session view. `owner_step_id` was dropped
-  (graph-plumbing, no use-case, F4).
+  (graph-plumbing, no use-case, F4). A turn that did **not** end cleanly also carries its
+  `outcome` (e.g. `step-error`), rendered inline on the header — the one persisted clue when a
+  turn fails mid-stream with no diagnostic part.
 - **By design:** a full-turn overview keeps tool payloads capped/result-free so the turn
   stays a cheap router; the full result is one drill away (the `tool_call` part, or — for a
   single iteration — the **round** full-lookup, which expands it, F7).
