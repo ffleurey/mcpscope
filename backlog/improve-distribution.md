@@ -85,8 +85,21 @@ the table above — `npm run dev` opens a working DB, `mcpscope serve` from a pa
 (`npm pack`) serves + persists, and `docker build` + `docker run` boots without the apk build layer.
 
 ### Sequence
-1) Electron node:sqlite spike (gate ✅) → 2) Workstream A (+ B alongside) → 3) Workstream C.
+1) Electron node:sqlite spike (gate ✅) → 2) Workstream A ✅ + B ✅ → 3) Workstream C (next).
 Each of 2/3 must pass the compatibility matrix above before merge.
+
+**Progress (branch `node24-sqlite-and-electron`):**
+- ✅ A — DB swap done; `npm run verify` green (334 tests). Note: node:sqlite is
+  *stricter* than better-sqlite3 on extra named-param keys ("Unknown named
+  parameter") — restored lenient behaviour via `setAllowUnknownNamedParameters`
+  on every statement at the connection factory (db.ts).
+- ✅ B — engines `>=24`; Dockerfile on node:24-alpine with the apk build layer
+  removed. Verified: image builds toolchain-free and the container boots on
+  alpine/musl, serving the frontend + a DB-backed API.
+- Compatibility verified on all current run modes: full test suite (vitest/tsx),
+  `node backend/dist/server.js`, `mcpscope serve`, and Docker. ExperimentalWarning
+  suppressed on Node 22 *and* 24 (createRequire load order, see connection.ts).
+- ⬜ C — Electron app + electron-builder (unsigned v1).
 
 ## Context
 
