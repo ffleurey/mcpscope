@@ -17,9 +17,12 @@ Example: [`example-R-RZNP.md`](example-R-RZNP.md).
 
 Summary = `{ run, progress, evaluations, sessions }`: the config snapshot
 (`model_name` + `model_config_id`, mcp_profile_ids, repetitions, max_tool_rounds,
-timestamps), overall + per-case completion, the evaluation passes (id/status/`judge_model_name`/
-judged), and a flat session list `{session_id, source_case_id, repetition, status}`. **No case
-rubric** (drill `B-.N` or use `benchmark_run_report` for the scored snapshot).
+timestamps), overall + per-case completion, the evaluation passes
+(id/status/`judge_model_name`/**`overall_pct`**/judged/`incomplete`), and a flat session list
+`{session_id, source_case_id, repetition, status}`. **No case rubric** (drill `B-.N` or use
+`benchmark_run_report` for the scored snapshot). The eval `overall_pct` is what makes the run
+summary the **run-comparison unit** (UC-5) — rank runs by quality without an `E-` drill per run
+(see [`../phase-2-usecase-trials.md`](../phase-2-usecase-trials.md)).
 
 - **Cross-run comparison / run-to-run report** (the task's headline example) — summary
   carries exactly the *configuration* axis you diff across runs: model, MCP profiles,

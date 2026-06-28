@@ -1,9 +1,7 @@
 # inspect example — benchmark_run (R-RZNP)
 
-- **Source:** `R-RZNP` — a completed run (25 sessions, 3 failed, 2 evaluation passes).
-- Model + judges show **friendly names** (resolved from session snapshots). Summary = status + progress + evaluations + drillable session list; full adds per-case pass rates, the per-tool rollup, and per-session metrics.
-
-- **Captured:** rebuilt backend (Phase 2), read-only against `backend-data/`, 2026-06-28.
+- **Source:** `R-RZNP` — a completed run (25 sessions, 3 failed, 2 evaluation passes). Model + judges show **friendly names**; the eval digest now carries the headline **`overall_pct`** for at-a-glance run comparison (UC-5). Summary = status + progress + evaluations + drillable session list; full adds per-case pass rates, per-tool rollup, per-session metrics.
+- **Captured:** rebuilt backend (Phase 2), live MCP/API against `backend-data/`, 2026-06-28.
 
 ## Summary mode
 
@@ -23,8 +21,8 @@ R-RZNP  HA History V3 (oracle-pinned)  complete
     B-GUDP.5 05 whole-home-weekday-weekend: 5/5
 
 evaluations
-  E-2BPM  error  judged 20/22  judge Gemma 4 12B QAT
-  E-FE7K  complete  judged 22/22  judge Kimi K2.5
+  E-2BPM  error  overall 59%  judged 20/22 ⚠  judge Gemma 4 12B QAT
+  E-FE7K  complete  overall 50%  judged 22/22  judge Kimi K2.5
 
 sessions (25)
   9LJM  B-GUDP.1 rep 1  complete
@@ -51,8 +49,7 @@ sessions (25)
   U7WR  B-GUDP.5 rep 2  error
   ZQLE  B-GUDP.5 rep 3  complete
   73K7  B-GUDP.5 rep 4  complete
-  39RT  B-GUDP.5 rep 5  error
-```
+  39RT  B-GUDP.5 rep 5  error```
 
 ## Full mode
 
@@ -72,8 +69,8 @@ R-RZNP  HA History V3 (oracle-pinned)  complete
     B-GUDP.5 05 whole-home-weekday-weekend: 5/5
 
 evaluations
-  E-2BPM  error  judged 20/22  judge Gemma 4 12B QAT
-  E-FE7K  complete  judged 22/22  judge Kimi K2.5
+  E-2BPM  error  overall 59%  judged 20/22 ⚠  judge Gemma 4 12B QAT
+  E-FE7K  complete  overall 50%  judged 22/22  judge Kimi K2.5
 
 per case
   B-GUDP.1  pass 5/5 (100%)  pass@k 1  pass^k 1
@@ -117,5 +114,4 @@ sessions (25)
   U7WR  B-GUDP.5 rep 2  error  20 calls
   ZQLE  B-GUDP.5 rep 3  complete  8 calls, 6762 tok
   73K7  B-GUDP.5 rep 4  complete  2 calls, 6592 tok
-  39RT  B-GUDP.5 rep 5  error  20 calls
-```
+  39RT  B-GUDP.5 rep 5  error  20 calls```

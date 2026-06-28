@@ -90,6 +90,13 @@ surfaced four real gaps, now fixed (each with a regression fixture in the covera
    `tokens` (added earlier in this pass) make a multi-turn session legible — each turn's
    status, round count, and cost at a glance — which the single-turn captures couldn't show.
 
+5. **Run-comparison was missing its headline metric (UC-5).** Performing the actual
+   compare-runs use-case — two B-GUDP runs on different local models (Gemma 12B vs E4B), same
+   Gemma-12B judge — showed the run **summary's eval digest carried `judged/expected` but not
+   `overall_pct`**, forcing a separate `E-` fetch per run to rank by quality. Fixed: the eval
+   digest now carries `overall_pct` (+ `incomplete`), so the run summary *is* the comparison
+   unit. Full write-up in [`phase-2-usecase-trials.md`](phase-2-usecase-trials.md).
+
 ---
 
 ## Per-type pass
