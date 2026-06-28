@@ -1,5 +1,11 @@
 # Inspect serialization architecture — making text and JSON equivalent by construction
 
+> **Shipped** — this is the design record for the rendering architecture that Phase 1 built
+> (`backend/src/inspect/renderInspect.ts` + the per-type builders + the coverage test). The
+> "current architecture (what we have)" and "incremental migration" sections below describe the
+> *pre-refactor* starting point and the rollout plan; they are kept as rationale. The **design
+> rules (Rule 1–4)** are the live contract any new payload/field must follow.
+
 Research note for the [inspect-payload tuning task](../../tuning-of-inspect-payload.md).
 This is the *implementation* counterpart to [`formats.md`](formats.md): given that we want a
 content-aligned `format: text | json` choice, what is the right code pattern so the formats

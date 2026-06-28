@@ -37,7 +37,8 @@
 2ZHT.2T.2.2-T  tool_call  openmeteo_get_forecast  (370 tokens)
 2ZHT.2T.3.1-A  assistant_answer  (40 tokens)
 
-2ZHT.4C  compaction  complete  strip-reasoning  after turn 2```
+2ZHT.4C  compaction  complete  strip-reasoning  after turn 2
+```
 
 ## Full mode
 
@@ -78,4 +79,5 @@
 2ZHT.2T.3.1-A  assistant_answer  (40 tokens)
   It looks like Bergen is currently colder than Oslo. In Oslo, the temperature is around 22.2°C, while in Bergen it's about 17.1°C.
 
-2ZHT.4C  compaction  complete  strip-reasoning  after turn 2```
+2ZHT.4C  compaction  complete  strip-reasoning  after turn 2
+```

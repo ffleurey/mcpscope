@@ -30,7 +30,8 @@ RH8P.1T.3.1-A  assistant_answer  (30 tokens)
 RH8P.2C  compaction  complete  strip-reasoning  after turn 1
 
 RH8P.2T  turn  error (step-error)  1 round
-RH8P.2T.1.1-U  user_prompt```
+RH8P.2T.1.1-U  user_prompt
+```
 
 ## Full mode
 
@@ -64,4 +65,5 @@ RH8P.2C  compaction  complete  strip-reasoning  after turn 1
 
 RH8P.2T  turn  error (step-error)  1 round
 RH8P.2T.1.1-U  user_prompt
-  Now compare that to Bergen — which of the two cities is warmer right now, and by how much?```
+  Now compare that to Bergen — which of the two cities is warmer right now, and by how much?
+```

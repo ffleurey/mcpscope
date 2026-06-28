@@ -6,9 +6,9 @@
 ([`backend/src/operations/inspect.ts`](../../../backend/src/operations/inspect.ts))
 backs the CLI (`mcpscope inspect`), the MCP tool (`mcpscope_inspect`), and the UI id-pill,
 so **the quality of these payloads is the quality of the product** for any agent or
-developer working through the trace. This folder is the systematic baseline we will
-review before deciding on any changes: for every inspectable object type we capture the
-actual `summary` and `full` payloads and define the use-cases each granularity serves.
+developer working through the trace. This folder holds the systematic baseline that drove
+the tuning: for every inspectable object type, the `summary` and `full` payloads and the
+use-cases each granularity serves.
 
 This folder began as a documentation / analysis pass to make the behaviour legible, then
 drove **two phases of implementation**. The captured baseline and the cross-cutting findings
@@ -20,12 +20,13 @@ below are the *original* investigation (kept as the rationale); the current ship
   *performed* on real runs/sessions, judging each payload's information fit.
 - **[`FINDINGS.md`](FINDINGS.md)** — the tracked register F1–F16 with each finding's outcome.
 
-> **Two cross-cutting research notes** live alongside the per-type folders:
+> **Cross-cutting research notes & specs** live alongside the per-type folders:
 > - [`formats.md`](formats.md) — text vs JSON, content parity, and **measured token
 >   efficiency** (JSON costs **2.8–3.1×** the tokens of text for tree/overview payloads).
 > - [`use-cases.md`](use-cases.md) — the workflow-level investigation goals (analyse a
 >   session, write/compare run reports, document a case…) mapped to **fetch paths** under
->   the "gradual exploration" principle. Raw measurement artifacts: [`_measurements/`](_measurements/).
+>   the "gradual exploration" principle. Distilled token measurements:
+>   [`_measurements/token-efficiency.tsv`](_measurements/token-efficiency.tsv).
 > - [`use-cases-by-type.md`](use-cases-by-type.md) — the **micro** use-case catalogue:
 >   per type, who asks what, with the key ones to optimize for flagged.
 > - [`gui-navigator-spec.md`](gui-navigator-spec.md) — the GUI inspect-dialog **navigator**
@@ -33,7 +34,6 @@ below are the *original* investigation (kept as the rationale); the current ship
 > - [`serialization-architecture.md`](serialization-architecture.md) — the implementation
 >   pattern (per-type serializer + single text renderer derived from the JSON payload) that
 >   makes text/JSON equivalent **by construction**.
-> - [`FINDINGS.md`](FINDINGS.md) — the consolidated, triageable findings register (F1–F16).
 
 ## How this folder is organised
 
@@ -68,130 +68,35 @@ API — text is the default; `format: json` returns the structural payload (no l
 The canonical single-turn example is session **`9LJM`** (benchmark run `R-RZNP`, Gemma 4 12B QAT
 on `ha-replay`). Phase 2 added multi-turn (`2ZHT` clean, `RH8P` mid-stream error) and
 analysis/judge (`ZTJE`) session examples, and a 2nd run (`R-AW4J`, Gemma 4 E4B) for the run
-comparison trial. The original 2026-06-27 CLI captures are preserved as raw artifacts in
-[`_measurements/`](_measurements/).
+comparison trial. The distilled token-efficiency numbers (Phase-1 measurement) are in
+[`_measurements/token-efficiency.tsv`](_measurements/token-efficiency.tsv).
 
 ---
 
-## Cross-cutting findings — the *original* baseline (now largely resolved)
+## The themes (original baseline → outcome)
 
-> **Historical context.** The narrative below is the agenda as it stood when we captured the
-> baseline. **Most of it shipped** across Phase 1 + Phase 2 — the readable MCP text view, the
-> benchmark renderers, the uniform error surface, the lean summaries, etc. Read it for the
-> *why*; see [`FINDINGS.md`](FINDINGS.md) for each finding's **current outcome** and
-> [`phase-2-pass.md`](phase-2-pass.md) for what shipped.
+These were the cross-cutting findings from the baseline capture. The full register with
+per-finding evidence and **current outcome** is [`FINDINGS.md`](FINDINGS.md) (F1–F16); the
+shipped design is [`phase-2-pass.md`](phase-2-pass.md). In brief:
 
-The consolidated register (F1–F16, severity + outcome) is in [`FINDINGS.md`](FINDINGS.md); the
-per-type micro use-cases are in [`use-cases-by-type.md`](use-cases-by-type.md).
-
-### 1. The MCP tool returns raw JSON, not the readable text view
-
-The MCP server returns `JSON.stringify(result, null, 2)` for every inspect call
-([`backend/src/mcp/server.ts:47-50`](../../../backend/src/mcp/server.ts)). The nice
-indented text in these examples exists **only in the CLI**
-([`cli/src/commands/inspect.ts`](../../../cli/src/commands/inspect.ts)). So the agents
-that dog-food inspect most heavily — the analysis workflow and the benchmark judge —
-consume the *JSON* shape, while the human-readable rendering we are tuning here is never
-seen by them. Any "tune the payload" decision must be explicit about *which* surface
-(JSON structure vs CLI text) it targets; today they diverge.
-
-Two follow-ons, fully worked in [`formats.md`](formats.md): (a) **measured**, JSON costs
-**2.79–3.10×** the tokens of text for tree/overview payloads (session, turn) and ~1.0× for
-leaf content — so the navigation reads agents repeat most are also the most over-priced;
-and (b) MCP encodes each payload **twice** (`content` JSON string *plus* `structuredContent`
-object, [`server.ts:46-54`](../../../backend/src/mcp/server.ts)) — a client reading both
-pays double. Today's CLI text is also a *lossy* projection of the JSON (drops
-`token_source`, `parent_ref`, `owner_step_id`, …), so "text vs JSON" is not yet a
-content-identical choice — a prerequisite to fix per the user's constraint.
-
-### 2. The CLI text renderer only covers runtime types — benchmark types dump JSON
-
-`runInspect` only has text renderers for `session/turn/step/round/setup/part`; the
-`default` branch falls through to `JSON.stringify`
-([`cli/src/commands/inspect.ts:235-256`](../../../cli/src/commands/inspect.ts)). So
-`mcpscope inspect B-GUDP` / `R-RZNP` / `E-…` give a developer an unformatted JSON blob.
-The benchmark example files in this folder show that fallback verbatim. This is a clear
-gap: benchmark-family objects have **no readable rendering at all**.
-
-### 3. "Summary vs full" is a real dial for only *some* types
-
-Empirically, capturing both modes for every type:
-
-| Type | `--short` (summary) vs default (full) |
-|---|---|
-| session, setup, turn, round, step | **differ** — summary omits part content, keeps token counts |
-| **part** (all subtypes) | **identical** — a direct part lookup is hard-coded to `full` ([`hierarchicalLookup.ts:732`](../../../backend/src/runtime/hierarchicalLookup.ts)) |
-| **benchmark** (`B-`) | **identical** — `resolveBenchmarkInspect` ignores mode ([`benchmarkOperations.ts:307-325`](../../../backend/src/operations/benchmarkOperations.ts)) |
-| **benchmark_case** (`B-.N`) | **identical** — mode ignored |
-| **benchmark_run** (`R-`) | **differ** — full adds the compute-on-read metrics report |
-| **benchmark_evaluation** (`E-`) | **always returns the full scored report** — summary is *not* lighter |
-
-So the summary/full contract is only meaningful for runtime containers and for
-`benchmark_run`. For parts, the meaningful dial is instead *"appears inside a container
-overview (abbreviated)"* vs *"inspected directly (full payload)"*. For `B-`/`B-.N`/`E-`
-the dial does nothing today — a decision point for tuning.
-
-### 4. Some full content is only reachable by direct part lookup
-
-- **Tool definition schemas**: every container/overview view lists tool **names only**;
-  the full JSON schemas come *only* from inspecting the `tool_definitions` part directly
-  ([`hierarchicalLookup.ts:169-180`](../../../backend/src/runtime/hierarchicalLookup.ts)).
-- **Tool call/result payloads**: inside a session/turn/round overview a `tool_call`
-  shows `tool_arguments` capped at 80 chars/value and **no result**; the full
-  untruncated `{ call, result }` comes only from inspecting the `tool_call` part directly
-  ([`hierarchicalLookup.ts:182-208`](../../../backend/src/runtime/hierarchicalLookup.ts)).
-- **Reasoning text** is not inlined in overviews at all — only `user_prompt` and
-  `assistant_answer` content is; reasoning must be read from the part directly.
-
-This is by design (keeps overviews lean) but is a frequent surprise: a *full*-mode
-session inspect is still not "everything". The prescribed workflow is **map the tree
-with a container inspect, then inspect specific part IDs for evidence**
-([`inspect.ts:42-47`](../../../backend/src/operations/inspect.ts)).
-
-### 5. Two distinct dog-fooding patterns drive the requirements
-
-- **Pre-injected / deterministic** — the *analysis workflow* (fast/full session, fast
-  tool) calls `mcpscope_inspect` itself and commits the results into context before the
-  model reasons ([`shared/bootstrapStep.ts`](../../../backend/src/analysis/shared/bootstrapStep.ts),
-  [`shared/toolCallAssessmentStep.ts`](../../../backend/src/analysis/shared/toolCallAssessmentStep.ts)).
-- **Pull-on-demand** — the *benchmark judge* is handed only a session ID and told to
-  inspect-then-drill on its own (`injectEvidence:false`), deliberately dog-fooding the
-  inspect surface a human tester uses
-  ([`benchmarkEvaluation/systemPrompt.ts:22`](../../../backend/src/analysis/benchmarkEvaluation/systemPrompt.ts),
-  [`benchmarkEvaluation/evaluationPrompts.ts:28`](../../../backend/src/analysis/benchmarkEvaluation/evaluationPrompts.ts)).
-
-The judge is the canonical "summary → drill" consumer and the sharpest lens for tuning:
-its prompt explicitly relies on what the session-overview payload does and does not
-contain. Note one doc/code drift: an older design doc
-([`benchmark-llm-evaluation-v1.md`](../../completed/benchmark-llm-evaluation-v1.md))
-says the judge seeds from `short=true`, but the shipped prompt says "default, not short".
-
-### 6. Error inspection is where the payloads are weakest
-
-Now that run `R-RZNP` has completed *with* failures (3 of 25 sessions, plus an errored
-evaluation pass and two judge sessions that returned invalid JSON), the non-success
-payloads — captured in [`errors/`](errors/) — expose the sharpest gaps:
-
-- **The text renderer drops `latest_error`** — an errored step shows only `… error`, never
-  the reason (`json_parse_error`, "Judge response was not valid JSON"). The single most
-  important field for error inspection is invisible in text.
-- **A primary session surfaces no top-level status/error** — you can't tell from the
-  session header that it failed; the reason lives on a turn step and a trailing
-  `diagnostic` part.
-- **Failure is exposed inconsistently across session kinds** (analysis sessions carry a
-  top-level `latest_error`; primary sessions don't).
-- **An evaluation's score doesn't flag its own incompleteness** beyond a `judged < expected`
-  count mismatch.
-
-This also surfaced a part subtype absent from success traces — **`diagnostic` (`-DN`)**,
-the canonical "why did the turn stop" carrier — now documented under [`part/`](part/).
-
-### 7. No internal agent inspects deterministic / compaction steps
-
-Compaction-step payloads are rich (summary = `stripped_part_ids`; full = `stripped_parts`
-with per-part `type`/`tokens`/`reason`), but no system prompt drives an agent into a
-`C`/`W` step. Step inspection is purely a developer/UI affordance today — an asymmetry
-worth noting when we decide where to invest.
+- **Format & efficiency** — MCP returned JSON only (no readable text), double-encoded
+  (`content` + `structuredContent`), and JSON costs **2.79–3.10×** the tokens of text for
+  tree/overview payloads ([`formats.md`](formats.md)). *Shipped:* one backend renderer,
+  `format: text|json` (text default), single channel. (F1–F3, F15, F16)
+- **Granularity** — `summary`/`full` was a real dial only for runtime containers + `R-`;
+  inert for parts, `B-`, `B-.N`, `E-`. *Shipped:* genuine `B-`/`E-` splits; `B-.N` + parts
+  are leaves by decision. (F5, F12)
+- **Reachability** — tool schemas, tool results, and reasoning are not inlined in overviews
+  (by design, to keep them lean); the part **ID + token weight** are the drill signal.
+  (F6, F7)
+- **Error inspection** (the weakest surface) — failures were invisible or inconsistent in
+  text. *Shipped:* uniform top-level `terminal_status` + failure summary across all session
+  kinds, `latest_error` rendered, eval `incomplete` flag. (F8–F11)
+- **Dog-fooding** drives the requirements: the **analysis workflow** pre-injects inspect
+  results (deterministic); the **benchmark judge** is given only a session ID and pulls on
+  demand (`injectEvidence:false`) — the canonical "summary → drill" consumer and the
+  sharpest tuning lens. (See [`use-cases-by-type.md`](use-cases-by-type.md) for the
+  audiences.)
 
 ---
 
