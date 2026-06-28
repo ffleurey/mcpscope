@@ -157,48 +157,57 @@ function buildSessionPreludeMessages(parts: PartRecord[]): ApiMessage[] {
     );
 }
 
-export async function ensureSessionPreludeTokenMetadata(
+/**
+ * Record the context window the model is *actually* loaded with.
+ *
+ * Prefers the gateway's authoritative loaded-context lookup (LM Studio native
+ * API reports the real `context_length` of the running instance). Only when
+ * that is unavailable — and we have nothing recorded yet — does it fall back to
+ * the provider-level resolution (Ollama `/api/show`, OAI `/v1/models`, or the
+ * configured `contextSize`). The fallback never overwrites a previously-captured
+ * real value, so an evicted model on re-entry can't downgrade a good reading.
+ */
+async function captureLoadedContextLength(
   database: BackendDatabase,
   chatCompletionGateway: ChatCompletionGateway,
   session: SessionRecord,
-  parts: PartRecord[],
-): Promise<PartRecord[]> {
-  // Capture the loaded context window size once (on first call, before probing tokens).
-  if (
-    session.loadedContextLength == null &&
-    chatCompletionGateway.getLoadedContextLength
-  ) {
-    const contextLength = await chatCompletionGateway.getLoadedContextLength(
+): Promise<void> {
+  let contextLength: number | null = null;
+
+  if (chatCompletionGateway.getLoadedContextLength) {
+    contextLength = await chatCompletionGateway.getLoadedContextLength(
       session.modelProfileSnapshot.connectionBaseUrl,
       session.modelProfileSnapshot.apiKey ?? undefined,
       session.modelProfileSnapshot.modelKey,
     );
-    if (contextLength != null) {
-      session.loadedContextLength = contextLength;
-    }
   }
 
-  // For providers where the native gateway didn't return context length,
-  // try the provider-specific fallback (Ollama /api/show, OAI /v1/models, etc.).
-  if (session.loadedContextLength == null) {
+  // No authoritative value. Only resolve a fallback if we have nothing yet —
+  // don't clobber a real reading from a prior call with a config echo.
+  if (contextLength == null && session.loadedContextLength == null) {
     const provider = session.modelProfileSnapshot.providerType ?? "lmstudio";
-    const contextLength = await getProviderContextLength(
+    contextLength = await getProviderContextLength(
       session.modelProfileSnapshot.connectionBaseUrl,
       session.modelProfileSnapshot.apiKey ?? undefined,
       session.modelProfileSnapshot.modelKey,
       provider,
       session.modelProfileSnapshot.contextSize,
     );
-    if (contextLength != null) {
-      session.loadedContextLength = contextLength;
-    }
   }
 
-  if (session.loadedContextLength != null) {
+  if (contextLength != null && contextLength !== session.loadedContextLength) {
+    session.loadedContextLength = contextLength;
     session.updatedAt = now();
     updateSessionRecord(database.connection, session);
   }
+}
 
+export async function ensureSessionPreludeTokenMetadata(
+  database: BackendDatabase,
+  chatCompletionGateway: ChatCompletionGateway,
+  session: SessionRecord,
+  parts: PartRecord[],
+): Promise<PartRecord[]> {
   let nextParts = await ensureSystemPromptTokenMetadata(
     database,
     chatCompletionGateway,
@@ -322,6 +331,12 @@ export async function ensureSessionPreludeTokenMetadata(
       );
     }
   }
+
+  // Capture the *actual* loaded context window now that probing has loaded the
+  // model. Must run after the probes, not before: the probe is what triggers the
+  // load, so querying earlier would miss it and fall back to the configured
+  // value (which is exactly what masked models loading at the wrong size).
+  await captureLoadedContextLength(database, chatCompletionGateway, session);
 
   if (updates.size === 0) {
     return nextParts;

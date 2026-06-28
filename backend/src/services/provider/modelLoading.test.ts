@@ -18,8 +18,12 @@ const mockLoad = vi.mocked(loadModel)
 const mockUnload = vi.mocked(unloadModel)
 
 /** Build the subset of LmStudioModelStatus that ensureModelReady reads. */
-function status(key: string, isLoaded: boolean) {
-  return { key, isLoaded } as Awaited<
+function status(
+  key: string,
+  isLoaded: boolean,
+  loadedContextLength: number | null = null,
+) {
+  return { key, isLoaded, loadedContextLength } as Awaited<
     ReturnType<typeof listModelsWithStatus>
   >[number]
 }
@@ -68,6 +72,53 @@ describe('ensureModelReady', () => {
       apiKey: undefined,
       providerType: 'lmstudio',
       modelKey: 'model-a',
+      autoSwap: true,
+    })
+    expect(mockUnload).not.toHaveBeenCalled()
+    expect(mockLoad).not.toHaveBeenCalled()
+  })
+
+  it('reloads the target when it is loaded at a different context size', async () => {
+    mockList.mockResolvedValue([status('model-a', true, 8192)])
+    await ensureModelReady({
+      baseUrl: base('3b'),
+      apiKey: 'key',
+      providerType: 'lmstudio',
+      modelKey: 'model-a',
+      contextSize: 32768,
+      autoSwap: true,
+    })
+    expect(mockUnload).toHaveBeenCalledExactlyOnceWith(base('3b'), 'key', 'model-a')
+    expect(mockLoad).toHaveBeenCalledExactlyOnceWith(
+      base('3b'),
+      'key',
+      'model-a',
+      32768,
+    )
+  })
+
+  it('does not reload when the target is loaded at the requested context size', async () => {
+    mockList.mockResolvedValue([status('model-a', true, 32768)])
+    await ensureModelReady({
+      baseUrl: base('3c'),
+      apiKey: undefined,
+      providerType: 'lmstudio',
+      modelKey: 'model-a',
+      contextSize: 32768,
+      autoSwap: true,
+    })
+    expect(mockUnload).not.toHaveBeenCalled()
+    expect(mockLoad).not.toHaveBeenCalled()
+  })
+
+  it('does not reload when the loaded context size is unknown', async () => {
+    mockList.mockResolvedValue([status('model-a', true, null)])
+    await ensureModelReady({
+      baseUrl: base('3d'),
+      apiKey: undefined,
+      providerType: 'lmstudio',
+      modelKey: 'model-a',
+      contextSize: 32768,
       autoSwap: true,
     })
     expect(mockUnload).not.toHaveBeenCalled()

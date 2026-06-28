@@ -12,7 +12,7 @@ import {
   estimateTokensFromText,
 } from "../services/provider/index.js";
 import type { ChatCompletionGateway } from "./modelTurns.js";
-import { sessionTemperatureBody } from "./modelTurns.js";
+import { sessionContextBody, sessionTemperatureBody } from "./modelTurns.js";
 
 export type LmToolDefinition = {
   type: "function";
@@ -39,6 +39,11 @@ function buildProbeBody(
     model: session.modelProfileSnapshot.modelKey,
     messages,
     ...(tools && tools.length > 0 ? { tools } : {}),
+    // The probe is typically the *first* request to the instance, so it is what
+    // triggers the model load. It must carry `num_ctx` so auto-swap loads the
+    // model at the configured context window — otherwise LM Studio loads it at
+    // its own default and the wrong size sticks for the whole session.
+    ...sessionContextBody(session),
     ...sessionTemperatureBody(session),
     ...buildReasoningParams(
       session.modelProfileSnapshot.reasoning,

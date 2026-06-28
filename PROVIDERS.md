@@ -50,6 +50,8 @@ Key design decisions:
 
 - **Request-level, not a session concern.** Implemented as a gateway decorator `withAutoModelSwap` (`runtime/autoModelSwapGateway.ts`) wrapping the `ChatCompletionGateway` in `app.ts`. Sessions never see the flag — there is no `modelProfileSnapshot` field for it. The flag is read **live** per request, so it self-heals if another process evicts our model mid-session.
 - **One central rule.** `ensureModelReady` (`services/provider/modelLoading.ts`) is the only place that knows the swap logic: no-op unless `providerType === "lmstudio"` *and* the flag is on; otherwise unload every other loaded model, then load the target. Both the decorator and the manual load button call it.
+- **Context size comes from the request body.** The decorator reads `body.num_ctx` and passes it as the load-time `context_length`. The **token probe** during session init is normally the *first* request — so it is what loads the model — and therefore its body **must** carry `num_ctx` (`buildProbeBody` spreads `sessionContextBody`), or the model loads at LM Studio's own default instead of the configured size.
+- **Reload on context mismatch.** If the target is already the loaded model but at a *different* `context_length` than requested, `ensureModelReady` unloads and reloads it at the right size (LM Studio fixes the window at load time). A null/unknown loaded size is left alone.
 - **`baseUrl` identifies the instance.** The decorator resolves the connection by `baseUrl` (same base URL = same physical process = same VRAM). A `baseUrl`-keyed in-process mutex serializes the swap sequence so concurrent requests don't interleave load/unload.
 - **Manual load button** (`POST /api/lm-connections/models/load`) routes through the same `ensureModelReady`; **preflight** skips its `model_not_loaded` 409 for auto-swap connections.
 - **Tradeoff:** two sessions requesting *different* models on one instance will thrash (each turn re-asserts its model) — correct but inefficient. Accepted; LM Studio is single-model under a VRAM limit anyway.
@@ -121,7 +123,11 @@ Resolution order:
 
 ### Context size in request body (`sessionContextBody` in `modelTurns.ts`)
 
-`num_ctx` is sent to all providers. Only Ollama uses it to set the context window; LM Studio and OpenRouter ignore it.
+`num_ctx` is sent to all providers — on chat turns (`modelTurns.ts` / `toolTurns.ts`) **and** on the init token probe (`promptTokenProbing.ts`). Ollama uses it to set the context window. LM Studio and OpenRouter ignore it *for inference*, but the LM Studio auto-swap path reads `num_ctx` off the probe body to choose the load-time `context_length` — so it must be present on the load-triggering probe (see [Auto-swap](#auto-swap-autoswapmodel-connection-flag--lm-studio-only)).
+
+### Recording the loaded context (`loadedContextLength`)
+
+`ensureSessionPreludeTokenMetadata` (`sessionPrelude.ts`) records the context window the model is *actually* loaded with — captured **after** probing has loaded the model, preferring the gateway's authoritative `getLoadedContextLength` (LM Studio native API). The provider-level fallback (configured `contextSize`, etc.) only fills a still-empty value and never overwrites a real reading. Capturing before the load would echo the configured size and mask a model loaded at the wrong window.
 
 ---
 
