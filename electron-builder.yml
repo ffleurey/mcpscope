@@ -1,0 +1,39 @@
+# electron-builder configuration for the mcpscope desktop app (V1, unsigned).
+#
+# There are NO native modules (SQLite is Node's built-in node:sqlite, bundled
+# inside Electron's Node), so packaging needs no electron-rebuild / node-gyp.
+appId: io.mcpscope.app
+productName: mcpscope
+
+directories:
+  output: release
+  buildResources: build
+
+# App payload. electron-builder additionally bundles production `dependencies`
+# from node_modules automatically; dev deps (electron, vite, tsc, …) are excluded.
+files:
+  - electron/dist/**/*
+  - backend/dist/**/*
+  - frontend/dist/**/*
+  - package.json
+
+# asar is disabled for V1: the main process dynamically imports the backend ESM
+# (backend/dist/app.js) and Fastify serves the frontend from disk; running these
+# from a real filesystem avoids ESM-inside-asar edge cases. Revisit (asar: true +
+# asarUnpack) once the pipeline is proven.
+asar: false
+
+linux:
+  target:
+    - AppImage
+    - tar.gz
+  category: Development
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.developer-tools
+
+win:
+  target:
+    - nsis

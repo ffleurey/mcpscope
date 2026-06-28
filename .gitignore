@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 backend/dist
+
+# electron-builder packaged output
+release/
 backend-data/*
 !backend-data/README.md
 !backend-data/test-artifacts/
