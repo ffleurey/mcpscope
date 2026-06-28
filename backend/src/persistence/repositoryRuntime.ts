@@ -27,7 +27,7 @@
  *   raw_exchanges.turn_id          → raw_exchanges.turn_id
  */
 
-import type Database from 'better-sqlite3'
+import { runInTransaction, type BackendConnection } from "./connection.js";
 import type {
   ModelProfileSnapshot,
   McpProfileSnapshot,
@@ -215,7 +215,7 @@ function mapV2SessionSummaryRow(row: V2SessionRow): SessionSummary {
 }
 
 export function insertStepRecord(
-  connection: Database.Database,
+  connection: BackendConnection,
   record: StepPersistenceRecord,
 ): void {
   connection.prepare(`
@@ -241,7 +241,7 @@ export function insertStepRecord(
 }
 
 export function updateStepRecord(
-  connection: Database.Database,
+  connection: BackendConnection,
   record: StepPersistenceRecord,
 ): void {
   connection.prepare(`
@@ -260,7 +260,7 @@ export function updateStepRecord(
   })
 }
 
-export function getStepRecord(connection: Database.Database, stepId: string): StepRecord | null {
+export function getStepRecord(connection: BackendConnection, stepId: string): StepRecord | null {
   const row = connection.prepare(`
     SELECT *
     FROM steps
@@ -270,7 +270,7 @@ export function getStepRecord(connection: Database.Database, stepId: string): St
   return row ? mapV2StepRow(row) : null
 }
 
-export function listStepRecordsBySession(connection: Database.Database, sessionId: string): StepRecord[] {
+export function listStepRecordsBySession(connection: BackendConnection, sessionId: string): StepRecord[] {
   const rows = connection.prepare(`
     SELECT *
     FROM steps
@@ -281,7 +281,7 @@ export function listStepRecordsBySession(connection: Database.Database, sessionI
   return rows.map(mapV2StepRow)
 }
 
-export function getNextChildIndex(connection: Database.Database, sessionId: string): number {
+export function getNextChildIndex(connection: BackendConnection, sessionId: string): number {
   const row = connection.prepare(`
     SELECT COALESCE(MAX(child_index), 0) AS max_child_index
     FROM steps
@@ -296,7 +296,7 @@ export function getNextChildIndex(connection: Database.Database, sessionId: stri
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function createSessionRecord(
-  connection: Database.Database,
+  connection: BackendConnection,
   session: SessionRecord,
 ): void {
   assertValidSessionParent(session)
@@ -351,7 +351,7 @@ export function createSessionRecord(
 }
 
 export function getSessionRecord(
-  connection: Database.Database,
+  connection: BackendConnection,
   sessionId: string,
 ): SessionRecord | null {
   const row = connection.prepare(`
@@ -364,7 +364,7 @@ export function getSessionRecord(
   return mapV2SessionRow(row)
 }
 
-export function updateSessionRecord(connection: Database.Database, session: SessionRecord): void {
+export function updateSessionRecord(connection: BackendConnection, session: SessionRecord): void {
   assertValidSessionParent(session)
   connection.prepare(`
     UPDATE sessions
@@ -393,7 +393,7 @@ export function updateSessionRecord(connection: Database.Database, session: Sess
 }
 
 export function updateSessionAnalysisState(
-  connection: Database.Database,
+  connection: BackendConnection,
   sessionId: string,
   analysisState: Record<string, unknown> | null,
 ): void {
@@ -409,7 +409,7 @@ export function updateSessionAnalysisState(
   })
 }
 
-export function deleteSessionRecord(connection: Database.Database, sessionId: string): boolean {
+export function deleteSessionRecord(connection: BackendConnection, sessionId: string): boolean {
   const result = connection.prepare(`
     WITH RECURSIVE session_tree(id) AS (
       SELECT id
@@ -429,7 +429,7 @@ export function deleteSessionRecord(connection: Database.Database, sessionId: st
   return result.changes > 0
 }
 
-export function listSessionRecords(connection: Database.Database): SessionRecord[] {
+export function listSessionRecords(connection: BackendConnection): SessionRecord[] {
   const rows = connection.prepare(`
     SELECT *
     FROM sessions
@@ -440,7 +440,7 @@ export function listSessionRecords(connection: Database.Database): SessionRecord
 }
 
 /** Returns only primary sessions (session_type_key = 'primary'). Used by GET /api/sessions. */
-export function listSessionSummaries(connection: Database.Database): SessionSummary[] {
+export function listSessionSummaries(connection: BackendConnection): SessionSummary[] {
   const rows = connection.prepare(`
     SELECT *
     FROM sessions
@@ -453,7 +453,7 @@ export function listSessionSummaries(connection: Database.Database): SessionSumm
 
 /** Returns child sessions attached to the given parent. */
 export function listChildSessionSummaries(
-  connection: Database.Database,
+  connection: BackendConnection,
   parentKind: string,
   parentId: string,
 ): SessionSummary[] {
@@ -468,7 +468,7 @@ export function listChildSessionSummaries(
 }
 
 /** Returns all sessions regardless of type. */
-export function listAllSessionSummaries(connection: Database.Database): SessionSummary[] {
+export function listAllSessionSummaries(connection: BackendConnection): SessionSummary[] {
   const rows = connection.prepare(`
     SELECT *
     FROM sessions
@@ -479,7 +479,7 @@ export function listAllSessionSummaries(connection: Database.Database): SessionS
 }
 
 export function findActiveSession(
-  connection: Database.Database,
+  connection: BackendConnection,
   excludeSessionId?: string,
 ): ActiveSessionInfo | null {
   const whereInit = excludeSessionId ? 'AND id != @excludeId' : ''
@@ -509,8 +509,8 @@ export function findActiveSession(
  * Recovers from an unclean server shutdown by marking any steps/turns and sessions
  * that were left in an in-progress state as terminated.
  */
-export function recoverInterruptedState(connection: Database.Database): void {
-  connection.transaction(() => {
+export function recoverInterruptedState(connection: BackendConnection): void {
+  runInTransaction(connection, () => {
     const now = Date.now()
 
     connection.prepare(`
@@ -553,7 +553,7 @@ export function recoverInterruptedState(connection: Database.Database): void {
           updated_at = ?
       WHERE status IN ('pending', 'running', 'paused')
     `).run(now)
-  })()
+  })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -561,7 +561,7 @@ export function recoverInterruptedState(connection: Database.Database): void {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function insertTurnRecord(
-  connection: Database.Database,
+  connection: BackendConnection,
   turn: TurnRecord,
 ): void {
   const ownerStepId = turn.ownerStepId
@@ -621,7 +621,7 @@ export function insertTurnRecord(
   })
 }
 
-export function updateTurnRecord(connection: Database.Database, turn: TurnRecord): void {
+export function updateTurnRecord(connection: BackendConnection, turn: TurnRecord): void {
   if (!turn.ownerStepId) {
     connection.prepare(`
       UPDATE steps
@@ -667,7 +667,7 @@ export function updateTurnRecord(connection: Database.Database, turn: TurnRecord
   })
 }
 
-export function getTurnRecord(connection: Database.Database, turnId: string): TurnRecord | null {
+export function getTurnRecord(connection: BackendConnection, turnId: string): TurnRecord | null {
   const row = connection.prepare(`
     SELECT
       turns.id,
@@ -735,7 +735,7 @@ export function getTurnRecord(connection: Database.Database, turnId: string): Tu
 }
 
 export function listTurnRecordsBySession(
-  connection: Database.Database,
+  connection: BackendConnection,
   sessionId: string,
 ): TurnRecord[] {
   const rows = connection.prepare(`
@@ -805,7 +805,7 @@ export function listTurnRecordsBySession(
 // Round CRUD  (rounds)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function insertRoundRecord(connection: Database.Database, round: RoundRecord): void {
+export function insertRoundRecord(connection: BackendConnection, round: RoundRecord): void {
   connection.prepare(`
     INSERT INTO rounds (
       id, turn_id, session_id, round_index, status, finish_reason,
@@ -834,7 +834,7 @@ export function insertRoundRecord(connection: Database.Database, round: RoundRec
   })
 }
 
-export function updateRoundRecord(connection: Database.Database, round: RoundRecord): void {
+export function updateRoundRecord(connection: BackendConnection, round: RoundRecord): void {
   connection.prepare(`
     UPDATE rounds
     SET status = @status,
@@ -861,7 +861,7 @@ export function updateRoundRecord(connection: Database.Database, round: RoundRec
   })
 }
 
-export function getRoundRecord(connection: Database.Database, roundId: string): RoundRecord | null {
+export function getRoundRecord(connection: BackendConnection, roundId: string): RoundRecord | null {
   const row = connection.prepare(`
     SELECT *
     FROM rounds
@@ -906,7 +906,7 @@ export function getRoundRecord(connection: Database.Database, roundId: string): 
 }
 
 export function listRoundRecordsBySession(
-  connection: Database.Database,
+  connection: BackendConnection,
   sessionId: string,
 ): RoundRecord[] {
   const rows = connection.prepare(`
@@ -954,7 +954,7 @@ export function listRoundRecordsBySession(
 // Part CRUD  (parts)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function insertPartRecord(connection: Database.Database, part: PartRecord): void {
+export function insertPartRecord(connection: BackendConnection, part: PartRecord): void {
   connection.prepare(`
     INSERT INTO parts (
       id, session_id, turn_id, round_id, parent_part_id, ordinal, part_type, role_label,
@@ -999,7 +999,7 @@ export function insertPartRecord(connection: Database.Database, part: PartRecord
   })
 }
 
-export function updatePartRecord(connection: Database.Database, part: PartRecord): void {
+export function updatePartRecord(connection: BackendConnection, part: PartRecord): void {
   connection.prepare(`
     UPDATE parts
     SET parent_part_id = @parentPartId,
@@ -1046,7 +1046,7 @@ export function updatePartRecord(connection: Database.Database, part: PartRecord
   })
 }
 
-export function getPartRecord(connection: Database.Database, partId: string): PartRecord | null {
+export function getPartRecord(connection: BackendConnection, partId: string): PartRecord | null {
   const row = connection.prepare(`
     SELECT *
     FROM parts
@@ -1119,7 +1119,7 @@ export function getPartRecord(connection: Database.Database, partId: string): Pa
 }
 
 export function listPartRecordsBySession(
-  connection: Database.Database,
+  connection: BackendConnection,
   sessionId: string,
 ): PartRecord[] {
   const rows = connection.prepare(`
@@ -1194,7 +1194,7 @@ export function listPartRecordsBySession(
 // Raw exchange CRUD  (raw_exchanges)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function insertRawExchangeRecord(connection: Database.Database, exchange: RawExchangeRecord): void {
+export function insertRawExchangeRecord(connection: BackendConnection, exchange: RawExchangeRecord): void {
   connection.prepare(`
     INSERT INTO raw_exchanges (
       id, session_id, turn_id, round_id, kind, request_url, request_method,
@@ -1221,7 +1221,7 @@ export function insertRawExchangeRecord(connection: Database.Database, exchange:
 }
 
 export function listRawExchangeRecordsBySession(
-  connection: Database.Database,
+  connection: BackendConnection,
   sessionId: string,
 ): RawExchangeRecord[] {
   const rows = connection.prepare(`
@@ -1266,7 +1266,7 @@ export function listRawExchangeRecordsBySession(
 // Sequence helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function getNextTurnNumber(connection: Database.Database, sessionId: string, ownerStepId: string | null): number {
+export function getNextTurnNumber(connection: BackendConnection, sessionId: string, ownerStepId: string | null): number {
   if (ownerStepId) {
     const row = connection.prepare(`
       SELECT COUNT(*) AS cnt
@@ -1285,7 +1285,7 @@ export function getNextTurnNumber(connection: Database.Database, sessionId: stri
   return row.max_turn_number + 1
 }
 
-export function getNextPartOrdinal(connection: Database.Database, sessionId: string): number {
+export function getNextPartOrdinal(connection: BackendConnection, sessionId: string): number {
   const row = connection.prepare(`
     SELECT COALESCE(MAX(ordinal), 0) AS max_ordinal
     FROM parts
@@ -1295,7 +1295,7 @@ export function getNextPartOrdinal(connection: Database.Database, sessionId: str
   return row.max_ordinal + 1
 }
 
-export function getNextRoundPartSequence(connection: Database.Database, roundId: string): number {
+export function getNextRoundPartSequence(connection: BackendConnection, roundId: string): number {
   const row = connection.prepare(`
     SELECT COUNT(*) AS part_count
     FROM parts
@@ -1305,7 +1305,7 @@ export function getNextRoundPartSequence(connection: Database.Database, roundId:
   return row.part_count + 1
 }
 
-export function getNextPreludePartSequence(connection: Database.Database, sessionId: string): number {
+export function getNextPreludePartSequence(connection: BackendConnection, sessionId: string): number {
   const row = connection.prepare(`
     SELECT COUNT(*) AS part_count
     FROM parts

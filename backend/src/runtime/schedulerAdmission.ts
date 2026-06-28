@@ -4,6 +4,7 @@ import {
   insertTurnRecord,
   listTurnRecordsBySession,
 } from '../persistence/repository.js'
+import { runInTransaction } from '../persistence/connection.js'
 import { OperationError } from '../operations/errors.js'
 import { formatTurnId } from '../domain/hierarchicalIds.js'
 import type { TurnRecord } from '../domain/model.js'
@@ -87,7 +88,7 @@ export function reservePrimaryTurn(opCtx: SchedulerContext, sessionId: string): 
     | { kind: 'turn_in_progress' }
     | { kind: 'reserved'; turn: TurnRecord }
 
-  const reservation = opCtx.db.connection.transaction((): ReservationResult => {
+  const reservation = runInTransaction(opCtx.db.connection, (): ReservationResult => {
     const hasPendingTurn = listTurnRecordsBySession(opCtx.db.connection, sessionId)
       .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
     if (hasPendingTurn) return { kind: 'turn_in_progress' }
@@ -116,7 +117,7 @@ export function reservePrimaryTurn(opCtx: SchedulerContext, sessionId: string): 
     }
     insertTurnRecord(opCtx.db.connection, turn)
     return { kind: 'reserved', turn }
-  })()
+  })
 
   if (reservation.kind === 'turn_in_progress') {
     throw new OperationError(

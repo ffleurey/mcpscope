@@ -17,6 +17,7 @@
  * The result contract is the full camelCase SessionRecord shape.
  */
 import { z } from 'zod'
+import { runInTransaction } from '../persistence/connection.js'
 import type { OperationError } from './errors.js'
 import { createSession } from '../runtime/modelTurns.js'
 import { mapSessionIdError } from './sessionCreationShared.js'
@@ -72,7 +73,7 @@ export async function executeCreateExplicit(
     | { kind: 'id_error'; error: OperationError }
     | { kind: 'created'; session: SessionRecord }
 
-  const result: TxResult = db.connection.transaction((): TxResult => {
+  const result: TxResult = runInTransaction(db.connection, (): TxResult => {
     try {
       const session = createSession(db, {
         sessionId: input.sessionId,
@@ -87,7 +88,7 @@ export async function executeCreateExplicit(
       if (mapped) return { kind: 'id_error', error: mapped }
       throw error
     }
-  })()
+  })
 
   if (result.kind === 'id_error') {
     throw result.error

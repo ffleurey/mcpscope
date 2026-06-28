@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runInTransaction } from "../persistence/connection.js";
 import { apiError } from "../errors.js";
 import {
   deleteSessionRecord,
@@ -203,7 +204,7 @@ function resetFailedAnalysisStepForRetry(
     updatedAt: Date.now(),
   };
 
-  const tx = database.connection.transaction(() => {
+  const tx = () => runInTransaction(database.connection, () => {
     updateSessionAnalysisState(
       database.connection,
       sessionId,

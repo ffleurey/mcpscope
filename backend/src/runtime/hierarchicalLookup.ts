@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { BackendConnection } from "../persistence/connection.js";
 import type {
   PartRecord,
   RoundRecord,
@@ -586,7 +586,7 @@ function getTerminalTurnError(
 // ─── Main resolver ────────────────────────────────────────────────────────────
 
 export function resolveHierarchicalId(
-  connection: Database.Database,
+  connection: BackendConnection,
   rawId: string,
   mode: LookupMode,
 ): LookupSuccess | LookupFailure {

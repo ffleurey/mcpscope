@@ -1,4 +1,5 @@
 import type { BackendDatabase } from "../persistence/db.js";
+import { runInTransaction } from "../persistence/connection.js";
 import { insertRawExchangeRecord } from "../persistence/repository.js";
 import type { ApiMessage } from "../domain/selectors.js";
 import type { RawExchangeRecord, SessionRecord } from "../domain/model.js";
@@ -171,7 +172,7 @@ export async function probeRequestPromptTokens(
 
     if (trace) {
       const records = makeProbeRawExchangeRecords(trace, result);
-      const tx = trace.database.connection.transaction(() => {
+      const tx = () => runInTransaction(trace.database.connection, () => {
         records.forEach((record) =>
           insertRawExchangeRecord(trace.database.connection, record),
         );

@@ -20,7 +20,7 @@
  * migration code: a fresh/empty database is initialized to the current schema.
  */
 
-import type Database from "better-sqlite3";
+import type { BackendConnection } from "./connection.js";
 import {
   compactionStrategyValues,
   contextStateValues,
@@ -44,7 +44,7 @@ function sqlEnum(values: readonly string[]): string {
 
 const artifactTypeValues = Object.values(ARTIFACT_TYPE) as string[];
 
-export function initializeSchema(connection: Database.Database): void {
+export function initializeSchema(connection: BackendConnection): void {
   connection.exec(`
     -- ─────────────────────────────────────────────────────────────────────
     -- Backend support tables
@@ -328,11 +328,11 @@ export function initializeSchema(connection: Database.Database): void {
   upsertMeta.run("schema_version", String(SCHEMA_VERSION));
 }
 
-export function validateSchema(connection: Database.Database): void {
+export function validateSchema(connection: BackendConnection): void {
   const getColumns = (table: string): Set<string> => {
     const rows = connection
-      .prepare<[], { name: string }>(`PRAGMA table_info(${table})`)
-      .all();
+      .prepare(`PRAGMA table_info(${table})`)
+      .all() as { name: string }[];
     return new Set(rows.map((r) => r.name));
   };
 
@@ -510,9 +510,9 @@ export function validateSchema(connection: Database.Database): void {
   }
 }
 
-export function querySchemaSummary(connection: Database.Database) {
+export function querySchemaSummary(connection: BackendConnection) {
   const rows = connection
-    .prepare<[], { name: string }>(
+    .prepare(
       `
       SELECT name
       FROM sqlite_master
@@ -520,17 +520,17 @@ export function querySchemaSummary(connection: Database.Database) {
       ORDER BY name
     `,
     )
-    .all();
+    .all() as { name: string }[];
 
   const metaRows = connection
-    .prepare<[], { key: string; value: string }>(
+    .prepare(
       `
       SELECT key, value
       FROM schema_meta
       ORDER BY key
     `,
     )
-    .all();
+    .all() as { key: string; value: string }[];
 
   return {
     tables: rows.map((row) => row.name),

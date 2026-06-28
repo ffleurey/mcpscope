@@ -12,6 +12,7 @@
 
 import crypto from 'node:crypto'
 import type { BackendDatabase } from '../../persistence/db.js'
+import { runInTransaction } from '../../persistence/connection.js'
 import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
 import type { McpGateway } from '../../runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
@@ -80,7 +81,7 @@ export class BootstrapStep extends WorkflowStep {
     const buildIndex = this.config.buildIndexContent ?? defaultIndexContent
     const indexContent = buildIndex(packets)
 
-    this.db.connection.transaction(() => {
+    runInTransaction(this.db.connection, () => {
       insertJsonArtifact(this.db.connection, {
         id: uuid(),
         sessionId: analysisSessionId,
@@ -97,7 +98,7 @@ export class BootstrapStep extends WorkflowStep {
         metadata: { schema_key: this.config.indexSchemaKey },
         createdAt: ts,
       })
-    })()
+    })
 
     // Interactive judges pull evidence themselves via the inspect tool; only
     // pre-inject the trace when the workflow relies on it being in context.

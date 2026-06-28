@@ -1,4 +1,5 @@
 import type { BackendDatabase } from '../persistence/db.js'
+import { runInTransaction } from '../persistence/connection.js'
 import type {
   PartRecord,
   RawExchangeRecord,
@@ -258,7 +259,7 @@ export function importTraceBundle(
     roundId: exchange.roundId ? (roundIdBySource.get(exchange.roundId) ?? null) : null,
   }))
 
-  const tx = database.connection.transaction(() => {
+  const tx = () => runInTransaction(database.connection, () => {
     createSessionRecord(database.connection, session)
 
     for (const sourceStep of sourceSteps) {

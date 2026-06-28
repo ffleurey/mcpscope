@@ -5618,7 +5618,7 @@ describe("analysis launch", () => {
       .prepare(
         `SELECT id FROM parts WHERE session_id = ? AND turn_id = ? AND context_state = 'included'`,
       )
-      .all(childId, deterministicTurns[1]?.id) as Array<{ id: string }>;
+      .all(childId, deterministicTurns[1]?.id ?? null) as Array<{ id: string }>;
     expect(lingeringPacketInspectParts).toHaveLength(0);
 
     // No synthetic evidence inject parts (old prompt-bundle pattern)

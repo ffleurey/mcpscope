@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { BackendDatabase } from "../persistence/db.js";
+import { runInTransaction } from "../persistence/connection.js";
 import { DEFAULT_JUDGE_TEMPERATURE } from "../domain/model.js";
 import type {
   BenchmarkRecord,
@@ -728,7 +729,7 @@ async function runOneRepetition(
   if (!scheduler) throw new OperationError("scheduler unavailable", "scheduler_unavailable");
   const run = getBenchmarkRun(db.connection, runId);
 
-  const session = db.connection.transaction(() => {
+  const session = runInTransaction(db.connection, () => {
     const resolved = resolvePrimarySessionInputs({
       modelConfigId: run?.modelConfigId ?? undefined,
       mcpProfileIds: run?.mcpProfileIds ?? undefined,
@@ -751,7 +752,7 @@ async function runOneRepetition(
       if (mapped) throw mapped;
       throw error;
     }
-  })();
+  });
 
   // Record the session as in-flight immediately so progress polling can see it
   // before init/turn complete.

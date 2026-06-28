@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { BackendConnection } from "../persistence/connection.js";
 import { getSessionRecord } from '../persistence/repository.js'
 import { listArtifactsBySession, type ArtifactRecord } from './artifactRepository.js'
 import { SCHEMA_KEY, type AnalysisPhase, type AnalysisSessionState } from './schemas.js'
@@ -25,7 +25,7 @@ export function getAnalysisWorkflowLabel(workflowKind: string | null | undefined
 
 export function getAnalysisWorkflowKindFromSteps(
   steps: Array<Pick<StepRecord, 'stepTypeKey' | 'params'>>,
-  connection?: Database.Database,
+  connection?: BackendConnection,
   sessionId?: string,
 ): string | null {
   const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
@@ -43,7 +43,7 @@ export function getAnalysisTitlePrefix(workflowKind: string): string {
 }
 
 export function isAnalysisSessionTerminalError(
-  connection: Database.Database,
+  connection: BackendConnection,
   summary: { id: string; sessionType: string; status: string; initStatus: string },
 ): boolean {
   if (summary.initStatus === 'error' || summary.status === 'error') {
@@ -78,7 +78,7 @@ export function getLatestAnalysisDiagnosticSummary(artifacts: ArtifactRecord[]):
 }
 
 export function getLatestAnalysisDiagnosticSummaryForSession(
-  connection: Database.Database,
+  connection: BackendConnection,
   sessionId: string,
 ): AnalysisDiagnosticSummary | null {
   return getLatestAnalysisDiagnosticSummary(listArtifactsBySession(connection, sessionId))
@@ -92,7 +92,7 @@ export function getLatestAnalysisDiagnosticSummaryForSession(
  * just the live event stream.
  */
 export function getLatestSessionErrorSummary(
-  connection: Database.Database,
+  connection: BackendConnection,
   session: Pick<SessionRecord, 'id' | 'sessionType' | 'initError'>,
 ): AnalysisDiagnosticSummary | null {
   if (session.sessionType === 'session_analysis') {

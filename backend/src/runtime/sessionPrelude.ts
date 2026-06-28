@@ -5,6 +5,7 @@ import {
   updatePartRecord,
   updateSessionRecord,
 } from "../persistence/repository.js";
+import { runInTransaction } from "../persistence/connection.js";
 import type { BackendDatabase } from "../persistence/db.js";
 import type { ChatCompletionGateway } from "./modelTurns.js";
 import type { ApiMessage } from "../domain/selectors.js";
@@ -116,7 +117,7 @@ export async function ensureSystemPromptTokenMetadata(
   session.systemPromptTokens = promptTokens;
   session.updatedAt = updatedAt;
 
-  const tx = database.connection.transaction(() => {
+  const tx = () => runInTransaction(database.connection, () => {
     updatePartRecord(database.connection, updatedPart);
     updateSessionRecord(database.connection, session);
   });
@@ -344,7 +345,7 @@ export async function ensureSessionPreludeTokenMetadata(
 
   nextParts = nextParts.map((part) => updates.get(part.id) ?? part);
 
-  const tx = database.connection.transaction(() => {
+  const tx = () => runInTransaction(database.connection, () => {
     nextParts
       .filter((part) => updates.has(part.id))
       .forEach((part) => updatePartRecord(database.connection, part));
