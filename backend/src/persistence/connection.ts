@@ -8,24 +8,36 @@
 // modules in source order, so this installs the warning filter before the first
 // DatabaseSync use emits the experimental warning.
 import "./suppressSqliteWarning.js";
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
+// Type-only import: fully erased at runtime, so it creates NO static link to
+// node:sqlite (and thus no link-time warning) — it only provides the types.
+import type * as NodeSqlite from "node:sqlite";
 
-// Re-export the constructor so callers obtain it via this module — that forces
-// the suppression side-effect import above to run before any DatabaseSync use.
+// Load node:sqlite via require() rather than a static `import`. A static import
+// makes Node *link* node:sqlite during the link phase — before any module body
+// runs — and on Node 22 that link emits the experimental warning before our
+// suppression above can install. require() defers the load to this module's
+// evaluation (after the suppression import has run), so the warning is
+// intercepted on every supported Node version. Re-exporting the constructor from
+// here also guarantees callers can't obtain DatabaseSync without this ordering.
+const { DatabaseSync } = createRequire(import.meta.url)(
+  "node:sqlite",
+) as typeof NodeSqlite;
+
 export { DatabaseSync };
 
 // One shared alias for the connection type so call sites don't depend directly
 // on node:sqlite (previously `Database.Database` from better-sqlite3).
-export type BackendConnection = DatabaseSync;
+export type BackendConnection = NodeSqlite.DatabaseSync;
 
 // node:sqlite has no `db.transaction()` wrapper (unlike better-sqlite3), so we
 // provide one. It mirrors better-sqlite3's behaviour: returns the callback's
 // value, and is savepoint-aware so nested calls on the same connection compose
 // correctly (outer = BEGIN/COMMIT/ROLLBACK, inner = SAVEPOINT/RELEASE/ROLLBACK TO).
-const transactionDepth = new WeakMap<DatabaseSync, number>();
+const transactionDepth = new WeakMap<BackendConnection, number>();
 
 export function runInTransaction<T>(
-  connection: DatabaseSync,
+  connection: BackendConnection,
   fn: () => T,
 ): T {
   const depth = transactionDepth.get(connection) ?? 0;
