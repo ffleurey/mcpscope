@@ -1,7 +1,7 @@
 {
   "name": "mcpscope",
   "private": true,
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Inspect, test, and benchmark MCP servers with local and remote LLMs.",
   "author": "Franck Fleurey <fleurey@gmail.com>",
   "desktopName": "mcpscope.desktop",
