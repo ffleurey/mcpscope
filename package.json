@@ -3,7 +3,8 @@
   "private": true,
   "version": "0.15.0",
   "description": "Inspect, test, and benchmark MCP servers with local and remote LLMs.",
-  "author": "Franck Fleurey",
+  "author": "Franck Fleurey <fleurey@gmail.com>",
+  "desktopName": "mcpscope.desktop",
   "repository": {
     "type": "git",
     "url": "https://github.com/ffleurey/mcpscope.git"

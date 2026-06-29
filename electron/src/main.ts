@@ -92,11 +92,17 @@ async function startBackend(): Promise<string> {
 }
 
 function createWindow(url: string): void {
+  // X11 reads the window icon from here. (Wayland ignores it and matches the
+  // window's app_id to an installed .desktop file instead — so on Wayland the
+  // icon comes from the deb/rpm/AppImage desktop integration, not from this.)
+  const iconPath = path.join(appRoot, "build/icon.png");
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     title: "mcpscope",
     backgroundColor: "#1e1e1e",
+    ...(fs.existsSync(iconPath) ? { icon: iconPath } : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

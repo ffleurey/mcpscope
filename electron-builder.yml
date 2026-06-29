@@ -23,6 +23,7 @@ files:
   - backend/dist/**/*
   - "!backend/dist/**/*.test.*"
   - frontend/dist/**/*
+  - build/icon.png # runtime window icon (X11); set in electron/src/main.ts
   - package.json
 
 # asar is disabled for V1: the main process dynamically imports the backend ESM
@@ -34,8 +35,14 @@ asar: false
 linux:
   target:
     - AppImage
+    - deb
+    - rpm
     - tar.gz
   category: Development
+  # Make the installed .desktop name match StartupWMClass / Electron's app_id, so
+  # desktop environments (notably GNOME/Wayland) link the running window to the
+  # .desktop entry and show our icon instead of a generic fallback.
+  syncDesktopName: true
 
 mac:
   target:
