@@ -111,9 +111,11 @@ Each of 2/3 must pass the compatibility matrix above before merge.
     target per OS and publishes to the GitHub release via electron-builder
     `--publish always`. Unsigned (CSC_IDENTITY_AUTO_DISCOVERY=false). `check:electron`
     added to ci.yml + verify. Assumes release tags are `vX.Y.Z` (matches package version).
-  - **Remaining for C:** app icon + `desktopName` (currently default Electron icon);
-    revisit `asar: true` + asarUnpack; code signing + notarization (deferred past
-    v1 — macOS/Windows will warn on first run); auto-update (electron-updater).
+  - ✅ App icon: `build/icon.png` (1024², rendered from logo-mark.svg);
+    electron-builder derives .icns/.ico per runner. AppImage verified pixel-identical.
+  - **Remaining for C:** `desktopName`/WM_CLASS polish (minor warning); revisit
+    `asar: true` + asarUnpack; code signing + notarization (deferred past v1 —
+    macOS/Windows will warn on first run); auto-update (electron-updater).
   - Dev tip: `npm run start:electron` (after `build:all` + `build:electron`);
     `npm run dist:electron:dir` for a quick unpacked build, `dist:electron` for installers.
 
