@@ -74,6 +74,12 @@ jobs:
           npm run build:all
           npm run build:electron
 
+      # The Linux rpm target builds via fpm, which shells out to rpmbuild.
+      # (deb builds natively on Ubuntu; macOS/Windows skip this.)
+      - name: Install rpm tooling (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
       - name: Package and publish to the release
         run: npx electron-builder --publish always
         env:
