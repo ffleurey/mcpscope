@@ -11,6 +11,11 @@ publish:
   provider: github
   owner: ffleurey
   repo: mcpscope
+  # We publish from a release that's already PUBLISHED (gh release create, which
+  # fires the workflow). electron-builder defaults to releaseType: draft, which is
+  # "not compatible" with an existing published release and silently skips every
+  # upload — so it must be "release".
+  releaseType: release
 
 directories:
   output: release
