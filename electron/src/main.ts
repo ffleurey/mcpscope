@@ -134,6 +134,14 @@ async function shutdown(): Promise<void> {
   app.quit();
 }
 
+// Set the Linux app_id (Wayland) / WM_CLASS (X11) before "ready" so the desktop
+// environment links the window to our installed .desktop file and shows our icon.
+// (Also declared as desktopName in package.json; setting it here guards against
+// Electron's app_id="electron" fallback on Wayland.)
+if (process.platform === "linux") {
+  app.setDesktopName("mcpscope.desktop");
+}
+
 // Single-instance: a second launch would start a second backend (port/DB churn).
 // Focus the existing window instead.
 if (!app.requestSingleInstanceLock()) {
