@@ -106,11 +106,14 @@ Each of 2/3 must pass the compatibility matrix above before merge.
   Confirmed `@electron/rebuild` finds **no native deps** to rebuild.
   - Packaging bug fixed: `fastify` was in both deps + devDeps → electron-builder
     pruned it as dev. Now prod-only.
-  - **Remaining for C:** cross-platform release CI (dmg needs macOS runner, nsis
-    needs Windows runner — can't build locally on Linux); app icon + `desktopName`
-    (currently default Electron icon); decide whether dev (Node 22) still matters
-    after the floor bump. Later: revisit `asar: true` + asarUnpack; code signing
-    + notarization (deferred past v1); auto-update (electron-updater).
+  - ✅ Release CI: `electron` job in `.github/workflows/release.yml` (matrix
+    ubuntu/macos/windows, on `release: published` like Docker) builds the native
+    target per OS and publishes to the GitHub release via electron-builder
+    `--publish always`. Unsigned (CSC_IDENTITY_AUTO_DISCOVERY=false). `check:electron`
+    added to ci.yml + verify. Assumes release tags are `vX.Y.Z` (matches package version).
+  - **Remaining for C:** app icon + `desktopName` (currently default Electron icon);
+    revisit `asar: true` + asarUnpack; code signing + notarization (deferred past
+    v1 — macOS/Windows will warn on first run); auto-update (electron-updater).
   - Dev tip: `npm run start:electron` (after `build:all` + `build:electron`);
     `npm run dist:electron:dir` for a quick unpacked build, `dist:electron` for installers.
 
