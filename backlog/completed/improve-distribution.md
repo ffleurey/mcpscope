@@ -1,5 +1,32 @@
 # Improve Distribution: Single-executable and desktop packaging
 
+> **Status: COMPLETED (2026-06-29), branch `node24-sqlite-and-electron`.** Delivered the desktop
+> distribution by swapping the native SQLite addon for Node's built-in driver, standardising on
+> Node 24, and adding an Electron app with cross-platform release packaging. Details below; the
+> earlier options analysis is kept for reference.
+>
+> **What shipped:**
+> 1. **`better-sqlite3` → built-in `node:sqlite` (`DatabaseSync`).** No native addon, so no
+>    node-gyp / electron-rebuild and it works on musl/alpine + Electron's bundled Node. New
+>    `connection.ts` (shared type + savepoint-aware `runInTransaction`); restored better-sqlite3's
+>    lenient named-param behaviour at the connection factory; node:sqlite experimental warning
+>    suppressed across all run modes (Node 22 *and* 24). `better-sqlite3` removed.
+> 2. **Node 24 floor.** `engines >=24`; Dockerfile on `node:24-alpine` with the native build
+>    toolchain (python3/make/g++) removed. (Kept `tsx` for dev — Node 24's native TS can't resolve
+>    our `.js`→`.ts` NodeNext imports, so dropping it would be a lateral move, not a simplification.)
+> 3. **Electron desktop app + release CI.** `electron/src/main.ts` boots the backend in-process
+>    (free port, single-instance lock, `userData` data dir, app icon, `setDesktopName` for the
+>    Wayland app_id); `electron-builder.yml` produces dmg / nsis .exe / AppImage + deb + rpm
+>    (unsigned V1). The release workflow builds + publishes all OS installers on `release: published`
+>    (matrix ubuntu/macos/windows), same trigger as Docker.
+>
+> **Verified:** `npm run verify` (8 checks + 334 tests) on Node 24; all run modes intact (dev/tsx,
+> `server.js`, `mcpscope serve`, Docker); Linux AppImage/deb/rpm built and boot locally; desktop
+> icon shows on GNOME Wayland after the `setDesktopName` fix.
+>
+> **Deferred (not blocking):** code signing + notarization (macOS/Windows warn on first run);
+> `asar: true` + asarUnpack; auto-update (electron-updater); publishing to the public npm registry.
+
 > **Status (2026-06-21): the recommended near-term path shipped.** `mcpscope serve` boots the
 > bundled backend + frontend and opens the browser, so `npm install -g mcpscope && mcpscope serve`
 > works (runtime deps corrected, `files` ships the built artifacts; publishing to the public npm
