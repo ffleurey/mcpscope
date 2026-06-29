@@ -64,6 +64,11 @@ async function startBackend(): Promise<string> {
   if (!process.env.BACKEND_SQLITE_PATH) {
     process.env.BACKEND_SQLITE_PATH = path.join(dataDir, "mcpscope.db");
   }
+  // Surface the real app version to the backend (config.ts reads APP_VERSION,
+  // defaulting to "dev" otherwise).
+  if (!process.env.APP_VERSION) {
+    process.env.APP_VERSION = app.getVersion();
+  }
 
   const configUrl = pathToFileURL(
     path.join(appRoot, "backend/dist/config.js"),

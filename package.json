@@ -4,6 +4,10 @@
   "version": "0.15.0",
   "description": "Inspect, test, and benchmark MCP servers with local and remote LLMs.",
   "author": "Franck Fleurey",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ffleurey/mcpscope.git"
+  },
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -46,7 +50,7 @@
     "lint:fix": "eslint frontend/src --fix",
     "format": "prettier --write \"frontend/src/**/*.{ts,svelte,css}\"",
     "format:check": "prettier --check \"frontend/src/**/*.{ts,svelte,css}\"",
-    "verify": "npm run format:check && npm run lint && npm run lint:backend && npm run lint:cli && npm run check && npm run check:backend && npm run check:cli && npm test",
+    "verify": "npm run format:check && npm run lint && npm run lint:backend && npm run lint:cli && npm run check && npm run check:backend && npm run check:cli && npm run check:electron && npm test",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest"

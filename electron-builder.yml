@@ -5,6 +5,13 @@
 appId: io.mcpscope.app
 productName: mcpscope
 
+# Release artifacts are published to GitHub Releases by CI (electron-builder
+# --publish always). Local `dist:electron` builds do not publish.
+publish:
+  provider: github
+  owner: ffleurey
+  repo: mcpscope
+
 directories:
   output: release
   buildResources: build
