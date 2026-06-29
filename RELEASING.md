@@ -2,9 +2,18 @@
 
 ## Overview
 
-Releases are driven by **git tags**. When a GitHub Release is published from a tag, the CI workflow automatically builds and pushes a versioned Docker image to the GitHub Container Registry (GHCR) at `ghcr.io/ffleurey/mcpscope`.
+Releases are driven by **git tags**. When a GitHub Release is published from a tag, the CI
+workflow (`.github/workflows/release.yml`) automatically, in parallel:
 
-The version is baked into the image at build time and shown in the app footer.
+- **Docker** — builds and pushes a versioned image to GHCR at `ghcr.io/ffleurey/mcpscope`.
+- **Electron desktop apps** — builds installers on a macOS / Windows / Linux matrix and uploads
+  them to the GitHub Release as assets: macOS `.dmg`, Windows `.exe` (NSIS), and Linux
+  `AppImage` / `.deb` / `.rpm`. Unsigned for now — macOS Gatekeeper / Windows SmartScreen warn
+  on first run.
+
+The version is baked into the Docker image at build time (shown in the app footer); the Electron
+installers take their version from `package.json`, which **must** match the release tag (`vX.Y.Z`).
+`npm version` (step 2) keeps them in sync.
 
 ---
 
@@ -14,9 +23,7 @@ The version is baked into the image at build time and shown in the app footer.
 
 ```bash
 git checkout main && git pull
-npm test
-npm run check && npm run check:backend
-npm run check:cli
+npm run verify   # format + lint + type-check (incl. check:electron) + tests
 ```
 
 ### 2. Bump the version
@@ -45,15 +52,23 @@ gh release create v$(node -p "require('./package.json').version") \
 
 Or use the GitHub web UI: **Releases → Draft a new release → choose the tag**.
 
-### 5. CI builds and publishes the image
+### 5. CI builds and publishes the artifacts
 
-The workflow in `.github/workflows/release.yml` triggers automatically. It pushes:
+The workflow in `.github/workflows/release.yml` triggers automatically and runs two jobs:
+
+**Docker** → pushes to GHCR:
 
 - `ghcr.io/ffleurey/mcpscope:1.2.3` — exact version
 - `ghcr.io/ffleurey/mcpscope:1.2` — major.minor
 - `ghcr.io/ffleurey/mcpscope:latest` — always points to the latest release
 
-Monitor progress under the **Actions** tab on GitHub.
+**Electron** (matrix: ubuntu / macos / windows) → uploads installers to the GitHub Release:
+
+- macOS `.dmg`, Windows `.exe`, Linux `AppImage` + `.deb` + `.rpm` (via electron-builder
+  `--publish always`, attached to the release that matches the tag).
+
+Monitor progress under the **Actions** tab on GitHub. If a single OS build fails, the others
+still publish (`fail-fast: false`); re-run the failed matrix leg from the Actions UI.
 
 ---
 
@@ -92,8 +107,8 @@ gh release create
   → publishes GitHub Release
 
 GitHub Actions (.github/workflows/release.yml)
-  → builds Docker image with --build-arg APP_VERSION=vX.Y.Z
-  → pushes to GHCR with semver tags
+  → (Docker) builds image with --build-arg APP_VERSION=vX.Y.Z → pushes to GHCR with semver tags
+  → (Electron) builds dmg/exe/AppImage/deb/rpm per OS → uploads them to the GitHub Release
 
 Running container
   → APP_VERSION env var → /api/health response → frontend store → UI footer
