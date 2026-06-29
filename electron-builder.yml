@@ -1,0 +1,54 @@
+# electron-builder configuration for the mcpscope desktop app (V1, unsigned).
+#
+# There are NO native modules (SQLite is Node's built-in node:sqlite, bundled
+# inside Electron's Node), so packaging needs no electron-rebuild / node-gyp.
+appId: io.mcpscope.app
+productName: mcpscope
+
+# Release artifacts are published to GitHub Releases by CI (electron-builder
+# --publish always). Local `dist:electron` builds do not publish.
+publish:
+  provider: github
+  owner: ffleurey
+  repo: mcpscope
+
+directories:
+  output: release
+  buildResources: build
+
+# App payload. electron-builder additionally bundles production `dependencies`
+# from node_modules automatically; dev deps (electron, vite, tsc, …) are excluded.
+files:
+  - electron/dist/**/*
+  - backend/dist/**/*
+  - "!backend/dist/**/*.test.*"
+  - frontend/dist/**/*
+  - build/icon.png # runtime window icon (X11); set in electron/src/main.ts
+  - package.json
+
+# asar is disabled for V1: the main process dynamically imports the backend ESM
+# (backend/dist/app.js) and Fastify serves the frontend from disk; running these
+# from a real filesystem avoids ESM-inside-asar edge cases. Revisit (asar: true +
+# asarUnpack) once the pipeline is proven.
+asar: false
+
+linux:
+  target:
+    - AppImage
+    - deb
+    - rpm
+    - tar.gz
+  category: Development
+  # Make the installed .desktop name match StartupWMClass / Electron's app_id, so
+  # desktop environments (notably GNOME/Wayland) link the running window to the
+  # .desktop entry and show our icon instead of a generic fallback.
+  syncDesktopName: true
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.developer-tools
+
+win:
+  target:
+    - nsis

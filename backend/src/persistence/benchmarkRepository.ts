@@ -3,7 +3,7 @@
 // Mirrors the runtime CRUD style: inline prepared statements + row<->record mappers.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type Database from "better-sqlite3";
+import type { BackendConnection } from "./connection.js";
 import type {
   BenchmarkRecord,
   BenchmarkCaseRecord,
@@ -35,7 +35,7 @@ function mapBenchmarkRow(row: BenchmarkRow): BenchmarkRecord {
 }
 
 export function createBenchmark(
-  connection: Database.Database,
+  connection: BackendConnection,
   benchmark: BenchmarkRecord,
 ): void {
   connection
@@ -53,7 +53,7 @@ export function createBenchmark(
 }
 
 export function getBenchmark(
-  connection: Database.Database,
+  connection: BackendConnection,
   id: string,
 ): BenchmarkRecord | null {
   const row = connection
@@ -63,16 +63,16 @@ export function getBenchmark(
 }
 
 export function listBenchmarks(
-  connection: Database.Database,
+  connection: BackendConnection,
 ): BenchmarkRecord[] {
   const rows = connection
     .prepare(`SELECT * FROM benchmarks ORDER BY created_at ASC`)
-    .all() as BenchmarkRow[];
+    .all() as unknown as BenchmarkRow[];
   return rows.map(mapBenchmarkRow);
 }
 
 export function updateBenchmark(
-  connection: Database.Database,
+  connection: BackendConnection,
   benchmark: BenchmarkRecord,
 ): void {
   connection
@@ -90,7 +90,7 @@ export function updateBenchmark(
 }
 
 export function deleteBenchmark(
-  connection: Database.Database,
+  connection: BackendConnection,
   id: string,
 ): void {
   // benchmark_cases and benchmark_runs cascade via FK ON DELETE CASCADE.
@@ -132,7 +132,7 @@ function mapBenchmarkCaseRow(row: BenchmarkCaseRow): BenchmarkCaseRecord {
 }
 
 export function createBenchmarkCase(
-  connection: Database.Database,
+  connection: BackendConnection,
   benchmarkCase: BenchmarkCaseRecord,
 ): void {
   connection
@@ -165,7 +165,7 @@ export function createBenchmarkCase(
 }
 
 export function getBenchmarkCase(
-  connection: Database.Database,
+  connection: BackendConnection,
   id: string,
 ): BenchmarkCaseRecord | null {
   const row = connection
@@ -175,19 +175,19 @@ export function getBenchmarkCase(
 }
 
 export function listBenchmarkCases(
-  connection: Database.Database,
+  connection: BackendConnection,
   benchmarkId: string,
 ): BenchmarkCaseRecord[] {
   const rows = connection
     .prepare(
       `SELECT * FROM benchmark_cases WHERE benchmark_id = ? ORDER BY order_index ASC`,
     )
-    .all(benchmarkId) as BenchmarkCaseRow[];
+    .all(benchmarkId) as unknown as BenchmarkCaseRow[];
   return rows.map(mapBenchmarkCaseRow);
 }
 
 export function updateBenchmarkCase(
-  connection: Database.Database,
+  connection: BackendConnection,
   benchmarkCase: BenchmarkCaseRecord,
 ): void {
   connection
@@ -217,7 +217,7 @@ export function updateBenchmarkCase(
 }
 
 export function deleteBenchmarkCase(
-  connection: Database.Database,
+  connection: BackendConnection,
   id: string,
 ): void {
   connection.prepare(`DELETE FROM benchmark_cases WHERE id = ?`).run(id);
@@ -264,7 +264,7 @@ function mapBenchmarkRunRow(row: BenchmarkRunRow): BenchmarkRunRecord {
 }
 
 export function createBenchmarkRun(
-  connection: Database.Database,
+  connection: BackendConnection,
   run: BenchmarkRunRecord,
 ): void {
   connection
@@ -283,7 +283,7 @@ export function createBenchmarkRun(
 }
 
 export function getBenchmarkRun(
-  connection: Database.Database,
+  connection: BackendConnection,
   id: string,
 ): BenchmarkRunRecord | null {
   const row = connection
@@ -293,19 +293,19 @@ export function getBenchmarkRun(
 }
 
 export function listBenchmarkRuns(
-  connection: Database.Database,
+  connection: BackendConnection,
   benchmarkId: string,
 ): BenchmarkRunRecord[] {
   const rows = connection
     .prepare(
       `SELECT * FROM benchmark_runs WHERE benchmark_id = ? ORDER BY created_at DESC`,
     )
-    .all(benchmarkId) as BenchmarkRunRow[];
+    .all(benchmarkId) as unknown as BenchmarkRunRow[];
   return rows.map(mapBenchmarkRunRow);
 }
 
 export function updateBenchmarkRun(
-  connection: Database.Database,
+  connection: BackendConnection,
   run: BenchmarkRunRecord,
 ): void {
   connection
@@ -323,7 +323,7 @@ export function updateBenchmarkRun(
 }
 
 export function deleteBenchmarkRun(
-  connection: Database.Database,
+  connection: BackendConnection,
   id: string,
 ): void {
   connection.prepare(`DELETE FROM benchmark_runs WHERE id = ?`).run(id);
@@ -394,7 +394,7 @@ function serializeEvaluation(evaluation: BenchmarkEvaluationRecord) {
 }
 
 export function createBenchmarkEvaluation(
-  connection: Database.Database,
+  connection: BackendConnection,
   evaluation: BenchmarkEvaluationRecord,
 ): void {
   connection
@@ -411,7 +411,7 @@ export function createBenchmarkEvaluation(
 }
 
 export function getBenchmarkEvaluation(
-  connection: Database.Database,
+  connection: BackendConnection,
   id: string,
 ): BenchmarkEvaluationRecord | null {
   const row = connection
@@ -421,19 +421,19 @@ export function getBenchmarkEvaluation(
 }
 
 export function listBenchmarkEvaluationsByRun(
-  connection: Database.Database,
+  connection: BackendConnection,
   runId: string,
 ): BenchmarkEvaluationRecord[] {
   const rows = connection
     .prepare(
       `SELECT * FROM benchmark_evaluations WHERE run_id = ? ORDER BY created_at ASC`,
     )
-    .all(runId) as BenchmarkEvaluationRow[];
+    .all(runId) as unknown as BenchmarkEvaluationRow[];
   return rows.map(mapBenchmarkEvaluationRow);
 }
 
 export function updateBenchmarkEvaluation(
-  connection: Database.Database,
+  connection: BackendConnection,
   evaluation: BenchmarkEvaluationRecord,
 ): void {
   connection
@@ -449,7 +449,7 @@ export function updateBenchmarkEvaluation(
 }
 
 export function deleteBenchmarkEvaluation(
-  connection: Database.Database,
+  connection: BackendConnection,
   id: string,
 ): void {
   connection.prepare(`DELETE FROM benchmark_evaluations WHERE id = ?`).run(id);

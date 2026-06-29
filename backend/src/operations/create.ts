@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runInTransaction } from "../persistence/connection.js";
 import type { OperationError } from "./errors.js";
 import type { McpProfileSnapshot } from "../domain/model.js";
 import type { OperationContext } from "./context.js";
@@ -102,7 +103,8 @@ export const createOperation = {
           modelConfigName: string;
         };
 
-    const result: TransactionResult = db.connection.transaction(
+    const result: TransactionResult = runInTransaction(
+      db.connection,
       (): TransactionResult => {
         const resolved = resolvePrimarySessionInputs({
           modelConfigId: input.model_config_id,
@@ -134,7 +136,7 @@ export const createOperation = {
           throw error;
         }
       },
-    )();
+    );
 
     if (result.kind === "resolution_error" || result.kind === "id_error") {
       throw result.error;

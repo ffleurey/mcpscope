@@ -33,6 +33,8 @@ jobs:
         run: npm run check:backend
       - name: Type-check CLI
         run: npm run check:cli
+      - name: Type-check Electron
+        run: npm run check:electron
 
       # Lint and format
       - name: Lint frontend

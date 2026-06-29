@@ -6,7 +6,7 @@
  * the existing repository functions — no MCP loop.
  */
 
-import type Database from 'better-sqlite3'
+import type { BackendConnection } from "../persistence/connection.js";
 import {
   getSessionRecord,
   listStepRecordsBySession,
@@ -231,7 +231,7 @@ function buildCompactionDetails(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function loadSessionTree(
-  connection: Database.Database,
+  connection: BackendConnection,
   sessionId: string,
 ): SessionTree | null {
   const sessionRecord = getSessionRecord(connection, sessionId)

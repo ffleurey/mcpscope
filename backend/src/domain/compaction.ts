@@ -1,6 +1,6 @@
 import { formatCompactionStepId } from "./hierarchicalIds.js";
 import { STEP_TYPE } from "./executionModel.js";
-import type Database from "better-sqlite3";
+import { runInTransaction, type BackendConnection } from "../persistence/connection.js";
 import type {
   CompactionStrategy,
   PartRecord,
@@ -21,7 +21,7 @@ export interface CompactionStepResult {
 }
 
 export function applyContextCompaction(
-  connection: Database.Database,
+  connection: BackendConnection,
   completedTurn: TurnRecord,
   strategy: CompactionStrategy,
 ): CompactionStepResult {
@@ -42,7 +42,7 @@ export function applyContextCompaction(
     contextTokensAtTurnEnd = totalTokens;
   } else {
     const tokenSumRow = connection
-      .prepare<[string], { total: number | null }>(
+      .prepare(
         `
         SELECT SUM(token_count) AS total
         FROM parts
@@ -115,10 +115,7 @@ export function applyContextCompaction(
 
   if (strategy === "strip-reasoning") {
     const reasoningParts = connection
-      .prepare<
-        [string],
-        { id: string; token_count: number | null; token_source: string | null }
-      >(
+      .prepare(
         `
         SELECT id, token_count, token_source
         FROM parts
@@ -169,7 +166,7 @@ export function applyContextCompaction(
         WHERE id = ?
       `);
 
-      const updateAll = connection.transaction(() => {
+      const updateAll = () => runInTransaction(connection, () => {
         for (const partId of strippedPartIds) {
           updatePart.run(stepId, now, partId);
         }

@@ -7,6 +7,7 @@
  * limited to the published catalog in catalog.ts.
  */
 import { z } from "zod";
+import { runInTransaction } from "../persistence/connection.js";
 import { OperationError } from "./errors.js";
 import {
   getSessionCreationDefaults,
@@ -161,7 +162,7 @@ export async function executeAnalysisLaunch(
 
   const requestedModelConfigId = input.model_config_id;
 
-  const result: TxResult = db.connection.transaction((): TxResult => {
+  const result: TxResult = runInTransaction(db.connection, (): TxResult => {
     // Validate target session
     const target = getSessionRecord(db.connection, targetSessionId);
     if (!target) return { kind: "target_not_found" };
@@ -314,7 +315,7 @@ export async function executeAnalysisLaunch(
       if (mapped) return { kind: "id_error", error: mapped };
       throw error;
     }
-  })();
+  });
 
   switch (result.kind) {
     case "target_not_found":

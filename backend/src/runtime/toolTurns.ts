@@ -1,4 +1,5 @@
 import type { BackendDatabase } from "../persistence/db.js";
+import { runInTransaction } from "../persistence/connection.js";
 import type {
   PartRecord,
   RawExchangeRecord,
@@ -335,7 +336,7 @@ async function applyPendingPromptSuffixAttribution(
       updatedAt,
     );
 
-    const tx = database.connection.transaction(() => {
+    const tx = () => runInTransaction(database.connection, () => {
       updatePartRecord(database.connection, updatedPart);
     });
     tx();
@@ -525,7 +526,7 @@ async function applyPendingPromptSuffixAttribution(
     },
   );
 
-  const tx = database.connection.transaction(() => {
+  const tx = () => runInTransaction(database.connection, () => {
     updatedAssistantContentParts.forEach((part) =>
       updatePartRecord(database.connection, part),
     );
@@ -636,7 +637,7 @@ export async function ensureMcpContext(
 
   const nowTs = now();
 
-  database.connection.transaction(() => {
+  runInTransaction(database.connection, () => {
     for (const { init, tools } of pendingRawExchanges) {
       insertRawExchangeRecord(
         database.connection,
@@ -777,7 +778,7 @@ export async function ensureMcpContext(
         updatedAt: nowTs,
       });
     }
-  })();
+  });
 
   return {
     serverContexts,
@@ -1122,7 +1123,7 @@ export async function runDeterministicMcpToolCall(
     derivedFrom: "deterministic-tool-call-payload-estimate",
   };
 
-  database.connection.transaction(() => {
+  runInTransaction(database.connection, () => {
     if (!reservedTurnId) {
       insertTurnRecord(database.connection, turn);
     } else {
@@ -1131,7 +1132,7 @@ export async function runDeterministicMcpToolCall(
     insertRoundRecord(database.connection, round);
     if (userPart) insertPartRecord(database.connection, userPart);
     insertPartRecord(database.connection, toolCallPart);
-  })();
+  });
 
   if (!reservedTurnId) {
     emitEvent?.({ type: "turn-started", turn: { ...turn } });
@@ -1175,7 +1176,7 @@ export async function runDeterministicMcpToolCall(
   round.status = "complete";
   round.completedAt = completedAt;
 
-  database.connection.transaction(() => {
+  runInTransaction(database.connection, () => {
     updateTurnRecord(database.connection, turn);
     updateRoundRecord(database.connection, round);
     insertPartRecord(database.connection, toolResultPart);
@@ -1223,7 +1224,7 @@ export async function runDeterministicMcpToolCall(
         completedAt,
       ),
     );
-  })();
+  });
 
   emitEvent?.({ type: "part-committed", part: { ...toolResultPart } });
   emitEvent?.({ type: "round-committed", round: { ...round } });
@@ -1418,7 +1419,7 @@ export async function createToolEnabledTurn(
     input.userContent,
     startedAt,
   );
-  const initializeTx = database.connection.transaction(() => {
+  const initializeTx = () => runInTransaction(database.connection, () => {
     if (!input.reservedTurn) {
       insertTurnRecord(database.connection, turn);
     }
@@ -1674,7 +1675,7 @@ export async function createToolEnabledTurn(
         );
       }
 
-      const toolTx = database.connection.transaction(() => {
+      const toolTx = () => runInTransaction(database.connection, () => {
         updateRoundRecord(database.connection, currentRound);
         rawExchanges.forEach((exchange) =>
           insertRawExchangeRecord(database.connection, exchange),
@@ -1812,7 +1813,7 @@ export async function createToolEnabledTurn(
       input.userContent,
     );
 
-    const finalizeTx = database.connection.transaction(() => {
+    const finalizeTx = () => runInTransaction(database.connection, () => {
       updateRoundRecord(database.connection, currentRound);
       rawExchanges.forEach((exchange) =>
         insertRawExchangeRecord(database.connection, exchange),
@@ -1940,7 +1941,7 @@ export async function createToolEnabledTurn(
     updatedAt: errorAt,
   };
 
-  const errorTx = database.connection.transaction(() => {
+  const errorTx = () => runInTransaction(database.connection, () => {
     updateRoundRecord(database.connection, currentRound);
     insertPartRecord(database.connection, diagnosticNote);
     updateTurnRecord(database.connection, turn);

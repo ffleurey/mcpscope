@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
-import type Database from 'better-sqlite3'
+import type { BackendConnection } from "./connection.js";
 import { afterEach, describe, expect, it } from 'vitest'
 import { openBackendDatabase, type BackendDatabase } from './db.js'
 import {
@@ -130,7 +130,7 @@ describe('benchmark run rubric snapshot', () => {
 })
 
 describe('benchmark evaluation grouping CRUD', () => {
-  function seedRun(connection: Database.Database): void {
+  function seedRun(connection: BackendConnection): void {
     createBenchmark(connection, { id: 'B-TEST', name: 'B', description: null, createdAt: 1, updatedAt: 1 })
     const run: BenchmarkRunRecord = {
       id: 'R-TEST', benchmarkId: 'B-TEST', benchmarkName: 'B', status: 'complete',

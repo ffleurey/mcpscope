@@ -1,4 +1,5 @@
 import type { BackendDatabase } from "../persistence/db.js";
+import { runInTransaction } from "../persistence/connection.js";
 import {
   createSessionRecord,
   getNextPreludePartSequence,
@@ -220,7 +221,7 @@ export function createSession(
     maxToolRounds: input.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS,
   };
 
-  const tx = database.connection.transaction(() => {
+  const tx = () => runInTransaction(database.connection, () => {
     createSessionRecord(database.connection, session);
     const systemPromptPart = createSystemPromptPart(
       session,
@@ -379,7 +380,7 @@ export async function createModelOnlyTurn(
     updatedAt: startedAt,
   };
 
-  const persistInitialState = database.connection.transaction(() => {
+  const persistInitialState = () => runInTransaction(database.connection, () => {
     if (!input.reservedTurn) {
       insertTurnRecord(database.connection, turn);
     }
@@ -540,7 +541,7 @@ export async function createModelOnlyTurn(
   };
   userPart.updatedAt = completedAt;
 
-  const finalizeTx = database.connection.transaction(() => {
+  const finalizeTx = () => runInTransaction(database.connection, () => {
     updateTurnRecord(database.connection, turn);
     updateRoundRecord(database.connection, round);
     updatePartRecord(database.connection, userPart);

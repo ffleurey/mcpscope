@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runInTransaction } from "../persistence/connection.js";
 import type { OperationError } from "./errors.js";
 import { createSession } from "../runtime/modelTurns.js";
 import { sessionRecordSchema, type SessionRecord } from "../domain/model.js";
@@ -55,7 +56,7 @@ export async function executePrimarySessionLaunch(
     | { kind: "error"; error: OperationError }
     | { kind: "created"; session: SessionRecord };
 
-  const result: TxResult = db.connection.transaction((): TxResult => {
+  const result: TxResult = runInTransaction(db.connection, (): TxResult => {
     const resolved = resolvePrimarySessionInputs({
       modelConfigId: input.model_config_id,
       mcpProfileIds: input.mcp_profile_ids,
@@ -78,7 +79,7 @@ export async function executePrimarySessionLaunch(
       if (mapped) return { kind: "error", error: mapped };
       throw error;
     }
-  })();
+  });
 
   if (result.kind === "error") {
     throw result.error;

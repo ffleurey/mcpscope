@@ -6,7 +6,7 @@
  * artifact_type_key = 'json'.
  */
 
-import type Database from 'better-sqlite3'
+import type { BackendConnection } from "../persistence/connection.js";
 
 export interface ArtifactRecord {
   readonly id: string
@@ -24,7 +24,7 @@ export interface ArtifactRecord {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function insertJsonArtifact(
-  connection: Database.Database,
+  connection: BackendConnection,
   record: ArtifactRecord,
 ): void {
   connection.prepare(`
@@ -46,7 +46,7 @@ export function insertJsonArtifact(
 }
 
 export function updateJsonArtifact(
-  connection: Database.Database,
+  connection: BackendConnection,
   id: string,
   content: unknown,
   metadata: Record<string, unknown>,
@@ -64,7 +64,7 @@ export function updateJsonArtifact(
 }
 
 export function deleteJsonArtifact(
-  connection: Database.Database,
+  connection: BackendConnection,
   id: string,
 ): void {
   connection.prepare(`DELETE FROM artifacts WHERE id = ?`).run(id)
@@ -75,7 +75,7 @@ export function deleteJsonArtifact(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function getArtifact(
-  connection: Database.Database,
+  connection: BackendConnection,
   id: string,
 ): ArtifactRecord | null {
   const row = connection.prepare(`
@@ -96,7 +96,7 @@ export function getArtifact(
 }
 
 export function listArtifactsBySession(
-  connection: Database.Database,
+  connection: BackendConnection,
   sessionId: string,
 ): ArtifactRecord[] {
   const rows = connection.prepare(`
@@ -118,7 +118,7 @@ export function listArtifactsBySession(
 }
 
 export function listArtifactsBySessionAndSchemaKey(
-  connection: Database.Database,
+  connection: BackendConnection,
   sessionId: string,
   schemaKey: string,
 ): ArtifactRecord[] {
@@ -127,7 +127,7 @@ export function listArtifactsBySessionAndSchemaKey(
 }
 
 export function getLatestArtifactBySchemaKey(
-  connection: Database.Database,
+  connection: BackendConnection,
   sessionId: string,
   schemaKey: string,
 ): ArtifactRecord | null {

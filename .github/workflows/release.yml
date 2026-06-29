@@ -43,3 +43,47 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: APP_VERSION=${{ github.ref_name }}
+
+  electron:
+    name: Build Electron (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write # upload installers as release assets
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu → AppImage + tar.gz, macos → dmg, windows → nsis .exe.
+        # electron-builder picks the target from the runner OS (electron-builder.yml).
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app (frontend + backend + cli + electron)
+        run: |
+          npm run build:all
+          npm run build:electron
+
+      # The Linux rpm target builds via fpm, which shells out to rpmbuild.
+      # (deb builds natively on Ubuntu; macOS/Windows skip this.)
+      - name: Install rpm tooling (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Package and publish to the release
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # V1 is unsigned — don't let electron-builder hunt for a macOS signing
+          # identity (it would otherwise try to codesign and fail/ad-hoc sign).
+          CSC_IDENTITY_AUTO_DISCOVERY: false

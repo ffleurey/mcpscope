@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { BackendConnection } from "../persistence/connection.js";
 import { listTurnRecordsBySession } from '../persistence/repository.js'
 import { isAnalysisSessionTerminalError } from '../analysis/analysisSessionPresentation.js'
 
@@ -11,7 +11,7 @@ export type LifecycleState = 'initializing' | 'ready' | 'running' | 'error'
  * initStatus/status === 'error' cases (and the analysis terminal-error phase).
  */
 export function computeLifecycleState(
-  connection: Database.Database,
+  connection: BackendConnection,
   summary: { id: string; status: string; initStatus: string; sessionType: string },
 ): LifecycleState {
   const turns = listTurnRecordsBySession(connection, summary.id)
