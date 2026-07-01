@@ -1,6 +1,8 @@
 <script lang="ts">
   import { highlightJson } from '../jsonHighlight'
   import DialogShell from './DialogShell.svelte'
+  import Icon from './Icon.svelte'
+  import { iconCheck, iconClose } from '../design/icons'
 
   interface TestResult {
     ok: boolean
@@ -26,7 +28,7 @@
   <div class="test-result">
     <div class="status-row">
       <span class="status-icon" class:ok={result.ok} class:err={!result.ok}>
-        {result.ok ? '✓' : '✗'}
+        <Icon path={result.ok ? iconCheck : iconClose} />
       </span>
       <span class="status-label" class:ok={result.ok} class:err={!result.ok}>
         {result.ok ? 'Connected' : 'Failed'}

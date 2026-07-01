@@ -4,6 +4,8 @@
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import IdBadge from './IdBadge.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
+  import Icon from './Icon.svelte'
+  import { iconChevronRight } from '../design/icons'
 
   interface Props {
     parts: PartRecord[]
@@ -49,7 +51,9 @@
         }}
         aria-expanded={!chatCollapsed}
       >
-        <span class="disclosure-arrow" class:open={!chatCollapsed}>▶</span>
+        <span class="disclosure-arrow" class:open={!chatCollapsed}
+          ><Icon path={iconChevronRight} /></span
+        >
         <span class="compact-setup-label">Session Setup</span>
         <span class="compact-setup-status">{statusLabel}</span>
         {#if totalTokens > 0}

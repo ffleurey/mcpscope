@@ -38,8 +38,14 @@
 
   type DisplayMode = 'full' | 'breakdown' | 'turn'
   const initialMode = $derived(defaultMode ?? (contextSize != null ? 'full' : 'breakdown'))
+  // Seed the display mode once from initialMode (which may firm up as props like
+  // contextSize arrive late) — then leave it to the user. A resetting $effect
+  // would clobber their choice when contextSize lands after mount.
+  let seeded = false
   let displayMode = $state<DisplayMode>('breakdown')
   $effect(() => {
+    if (seeded) return
+    seeded = true
     displayMode = initialMode
   })
 

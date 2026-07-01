@@ -2,10 +2,10 @@
   import { chatSessions, selectChat } from '../sessionStore'
   import { activeChatId } from '../sessionStore'
   import { runs, activeRunId, selectRun, removeRun } from '../benchmarkStore'
-  import type { BenchmarkRun, BenchmarkRunStatus } from '../backendTypes'
+  import type { BenchmarkRun } from '../backendTypes'
   import type { SessionSummary } from '../backendTypes'
-  import { formatTreeTimestamp } from '../format'
-  import { iconChevronRight, iconChevronDown } from '../design/icons'
+  import { formatTreeTimestamp, runStatusDotClass } from '../format'
+  import { iconChevronRight, iconChevronDown, iconTrash } from '../design/icons'
   import Icon from './Icon.svelte'
 
   const sortedRuns = $derived([...$runs].sort((a, b) => b.createdAt - a.createdAt))
@@ -36,12 +36,6 @@
     if (next.has(runId)) next.delete(runId)
     else next.add(runId)
     expandedIds = next
-  }
-
-  function dotClass(status: BenchmarkRunStatus): string {
-    if (status === 'running' || status === 'pending') return 'running'
-    if (status === 'error') return 'error'
-    return 'idle'
   }
 
   async function handleSelectRun(run: BenchmarkRun) {
@@ -81,7 +75,7 @@
             <!-- A completed run needs no status dot; the timestamp carries the info.
                  Keep the dot only for in-progress (running/pending) and error. -->
             {#if run.status !== 'complete'}
-              <span class="status-dot {dotClass(run.status)}"></span>
+              <span class="status-dot {runStatusDotClass(run.status)}"></span>
             {/if}
             <span class="run-date">{formatTreeTimestamp(run.createdAt)}</span>
           </button>
@@ -90,7 +84,7 @@
             <button
               class="action-btn delete-btn"
               title="Delete run"
-              onclick={(e) => handleDelete(e, run.id)}>×</button
+              onclick={(e) => handleDelete(e, run.id)}><Icon path={iconTrash} /></button
             >
           </div>
         </div>

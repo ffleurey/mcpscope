@@ -8,7 +8,6 @@
     activeTurnStream,
     chatSessions,
     executeAnalysis,
-    executeAnalysisStep,
     exportActiveTrace,
     isRetryingAnalysis,
     isSendingTurn,
@@ -30,6 +29,15 @@
   import SessionCompactionStepBlock from './SessionCompactionStepBlock.svelte'
   import SessionPreludeBlock from './SessionPreludeBlock.svelte'
   import SessionTurnBlock from './SessionTurnBlock.svelte'
+  import Icon from './Icon.svelte'
+  import {
+    iconExport,
+    iconPlus,
+    iconRefresh,
+    iconWarning,
+    iconPlay,
+    iconCheck,
+  } from '../design/icons'
 
   type TimelineItem =
     | {
@@ -366,7 +374,7 @@
           onclick={exportActiveTrace}
           title="Export session trace as JSON"
         >
-          ⬇ Export
+          <Icon path={iconExport} /> Export
         </button>
       {/if}
       {#if session.session_type === 'primary'}
@@ -375,7 +383,7 @@
           onclick={() => (showExtractCase = true)}
           title="Extract this session as a benchmark case"
         >
-          ＋ Case
+          <Icon path={iconPlus} /> Case
         </button>
       {/if}
     </div>
@@ -424,7 +432,7 @@
               {/if}
             </div>
             <button class="btn btn-sm" onclick={() => retryInit(session.id)}
-              >↻ Retry initialization</button
+              ><Icon path={iconRefresh} /> Retry initialization</button
             >
           </div>
         {/if}
@@ -474,7 +482,7 @@
 
     {#if isExhausted}
       <div class="exhausted-banner">
-        ⚠️ Context window full — this session cannot continue. Start a new session.
+        <Icon path={iconWarning} /> Context window full — this session cannot continue. Start a new session.
       </div>
     {/if}
 
@@ -527,7 +535,7 @@
               disabled={analysisRunDisabled}
               onclick={() => void executeAnalysis()}
             >
-              {sessionHasExecutionJob ? '⏳ Queued…' : '▶ Run Analysis'}
+              {#if sessionHasExecutionJob}Queued…{:else}<Icon path={iconPlay} /> Run Analysis{/if}
             </button>
             {#if analysisFailed}
               <button
@@ -536,21 +544,11 @@
                 onclick={() => void retryFailedAnalysisStep()}
                 title="Reset the failed cursor phase and rerun the failed step once"
               >
-                {$isRetryingAnalysis ? '⏳ Retrying…' : '↻ Retry failed step'}
-              </button>
-            {/if}
-            {#if viewMode === 'inspect'}
-              <button
-                class="btn"
-                disabled={analysisRunDisabled}
-                onclick={() => void executeAnalysisStep()}
-                title="Advance one workflow step (debug)"
-              >
-                {sessionHasExecutionJob ? '⏳ Queued…' : '⏭ Step (Debug)'}
+                {#if $isRetryingAnalysis}Retrying…{:else}<Icon path={iconRefresh} /> Retry failed step{/if}
               </button>
             {/if}
           {:else}
-            <span class="analysis-bar-done">✓ Analysis complete</span>
+            <span class="analysis-bar-done"><Icon path={iconCheck} /> Analysis complete</span>
           {/if}
         </div>
       {:else}
@@ -651,6 +649,11 @@
     min-width: 0;
     flex: 1;
     outline: none;
+  }
+
+  .chat-title-input:focus-visible {
+    outline: none;
+    border-color: var(--amber-bright);
   }
 
   .view-mode-toggle {

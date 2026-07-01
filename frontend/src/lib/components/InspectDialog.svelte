@@ -4,6 +4,8 @@
   import { collectInspectIds, linkify } from '../inspectIds'
   import DialogShell from './DialogShell.svelte'
   import SegmentedControl from './SegmentedControl.svelte'
+  import Icon from './Icon.svelte'
+  import { iconArrowLeft, iconArrowRight, iconCheck } from '../design/icons'
 
   interface Props {
     id: string
@@ -112,14 +114,14 @@
   <div class="inspect-toolbar">
     <div class="nav-group">
       <button class="nav-btn" onclick={back} disabled={!canBack} title="Back" aria-label="Back"
-        >←</button
+        ><Icon path={iconArrowLeft} /></button
       >
       <button
         class="nav-btn"
         onclick={forward}
         disabled={!canForward}
         title="Forward"
-        aria-label="Forward">→</button
+        aria-label="Forward"><Icon path={iconArrowRight} /></button
       >
     </div>
 
@@ -168,7 +170,7 @@
       disabled={loading || error != null}
       title="Copy the displayed payload to the clipboard"
     >
-      {copied ? 'Copied ✓' : 'Copy payload'}
+      {#if copied}<Icon path={iconCheck} /> Copied{:else}Copy payload{/if}
     </button>
   </div>
 

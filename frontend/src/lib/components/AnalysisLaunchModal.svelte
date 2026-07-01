@@ -366,7 +366,7 @@
         rows={4}
         bind:value={evaluationCriteriaText}
         disabled={$isLaunchingAnalysis}
-        placeholder="Example:\nCheck whether retries were justified\nPrefer direct tool use over guesswork"
+        placeholder={'Example:\nCheck whether retries were justified\nPrefer direct tool use over guesswork'}
         onkeydown={handleKeydown}></textarea>
     </div>
 

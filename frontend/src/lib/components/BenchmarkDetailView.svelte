@@ -17,7 +17,8 @@
   import BenchmarkFormModal from './BenchmarkFormModal.svelte'
   import RunLaunchModal from './RunLaunchModal.svelte'
   import { columnResize } from '../actions/columnResize'
-  import type { BenchmarkRun, BenchmarkRunStatus } from '../backendTypes'
+  import { runStatusDotClass, runStatusPillClass } from '../format'
+  import type { BenchmarkRun } from '../backendTypes'
 
   const detail = $derived($activeBenchmarkDetail)
   const benchmark = $derived(detail?.benchmark ?? null)
@@ -66,19 +67,6 @@
   async function onCaseSaved() {
     caseDialog = null
     await refreshActiveBenchmarkDetail()
-  }
-
-  function dotClass(status: BenchmarkRunStatus): string {
-    if (status === 'running' || status === 'pending' || status === 'paused') return 'running'
-    if (status === 'error') return 'error'
-    return 'idle'
-  }
-
-  function statusPillClass(status: BenchmarkRunStatus): string {
-    if (status === 'complete') return 'success'
-    if (status === 'error') return 'error'
-    if (status === 'running' || status === 'paused') return 'soft'
-    return 'dim'
   }
 
   function formatDate(ts: number): string {
@@ -192,8 +180,9 @@
                 <tr class="run-row" onclick={() => openRun(run)}>
                   <td><IdBadge id={run.id} /></td>
                   <td
-                    ><span class="status-dot {dotClass(run.status)}"></span>
-                    <span class="status-pill {statusPillClass(run.status)}">{run.status}</span></td
+                    ><span class="status-dot {runStatusDotClass(run.status)}"></span>
+                    <span class="status-pill {runStatusPillClass(run.status)}">{run.status}</span
+                    ></td
                   >
                   <td class="col-num">{run.repetitions}</td>
                   <td class="col-num">{run.cases.length}</td>
