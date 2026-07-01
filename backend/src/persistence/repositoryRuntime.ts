@@ -151,12 +151,9 @@ function mapV2StepRow(row: V2StepRow): StepRecord {
 }
 
 function mapV2SessionRow(row: V2SessionRow): SessionRecord {
-  const rawParams = JSON.parse(row.params_json) as Record<string, unknown>
-  const params = rawParams as V2SessionParams
+  const params = JSON.parse(row.params_json) as V2SessionParams
   const state = JSON.parse(row.state_json) as V2SessionState
-  // Backward compat: old sessions have mcpProfileSnapshot (singular, nullable)
-  const mcpSnapshots: McpProfileSnapshot[] = params.mcpProfileSnapshots ??
-    (rawParams.mcpProfileSnapshot ? [rawParams.mcpProfileSnapshot as McpProfileSnapshot] : [])
+  const mcpSnapshots: McpProfileSnapshot[] = params.mcpProfileSnapshots ?? []
   return {
     id: row.id,
     title: row.title,
@@ -184,7 +181,6 @@ function mapV2SessionRow(row: V2SessionRow): SessionRecord {
 function mapV2SessionSummaryRow(row: V2SessionRow): SessionSummary {
   const params = JSON.parse(row.params_json) as {
     modelProfileSnapshot?: { name: string }
-    mcpProfileSnapshot?: { name: string } | null
     mcpProfileSnapshots?: { name: string }[]
     compactionStrategy?: SessionSummary['compactionStrategy']
   }
@@ -193,8 +189,7 @@ function mapV2SessionSummaryRow(row: V2SessionRow): SessionSummary {
     loadedContextLength?: number | null
     initError?: SessionRecord['initError']
   }
-  const mcpNames: { name: string }[] = params.mcpProfileSnapshots ??
-    (params.mcpProfileSnapshot ? [params.mcpProfileSnapshot] : [])
+  const mcpNames: { name: string }[] = params.mcpProfileSnapshots ?? []
   return {
     id: row.id,
     title: row.title,

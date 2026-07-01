@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { OperationError } from './errors.js'
-import { getSessionRecord, listTurnRecordsBySession, listStepRecordsBySession } from '../persistence/repository.js'
+import { getSessionRecord, listTurnRecordsBySession } from '../persistence/repository.js'
 import type { OperationContext } from './context.js'
 import { computeLifecycleState } from './lifecycleState.js'
 import {
@@ -65,10 +65,6 @@ export const statusOperation = {
       ?? null
     const latestTurn = turns.at(-1) ?? null
 
-    const workflowSteps = session.sessionType === 'session_analysis'
-      ? listStepRecordsBySession(db.connection, input.session_id)
-      : []
-
     const state = computeLifecycleState(db.connection, session)
 
     const relevantTurn = state === 'running'
@@ -77,7 +73,9 @@ export const statusOperation = {
         ? latestTurn
         : null
 
-    const workflowKind = getAnalysisWorkflowKindFromSteps(workflowSteps, db.connection, input.session_id)
+    const workflowKind = session.sessionType === 'session_analysis'
+      ? getAnalysisWorkflowKindFromSteps(db.connection, input.session_id)
+      : null
     const latestError = state === 'error'
       ? getLatestSessionErrorSummary(db.connection, session) ?? undefined
       : undefined

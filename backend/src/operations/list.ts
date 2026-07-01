@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { listAllSessionSummaries, listStepRecordsBySession } from '../persistence/repository.js'
+import { listAllSessionSummaries } from '../persistence/repository.js'
 import type { OperationContext } from './context.js'
 import { computeLifecycleState } from './lifecycleState.js'
 import {
@@ -76,7 +76,7 @@ export const listOperation = {
       api_version: 1,
       sessions: rows.map(s => {
         const workflowKind = s.sessionType === 'session_analysis'
-          ? getAnalysisWorkflowKindFromSteps(listStepRecordsBySession(ctx.db.connection, s.id), ctx.db.connection, s.id)
+          ? getAnalysisWorkflowKindFromSteps(ctx.db.connection, s.id)
           : null
         const state = computeLifecycleState(ctx.db.connection, s)
         const latestError = state === 'error'

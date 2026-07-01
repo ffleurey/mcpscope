@@ -117,7 +117,7 @@ describe('model-only turn runtime', () => {
     insertStepRecord(db.connection, {
       id: `${session.id}.4W`,
       sessionId: session.id,
-      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
+      stepTypeKey: stepTypeKey('analysis_bootstrap'),
       parentStepId: null,
       childIndex: 3,
       status: 'complete',
@@ -248,7 +248,7 @@ describe('model-only turn runtime', () => {
     insertStepRecord(db.connection, {
       id: `${session.id}.4W`,
       sessionId: session.id,
-      stepTypeKey: stepTypeKey('analysis_v2_cursor'),
+      stepTypeKey: stepTypeKey('analysis_bootstrap'),
       parentStepId: null,
       childIndex: 3,
       status: 'complete',

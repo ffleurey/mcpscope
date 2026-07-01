@@ -14,7 +14,6 @@ import {
 import type { AnalysisWorkflowInput } from '../analysisWorkflowInput.js'
 import {
   SCHEMA_KEY,
-  type AnalysisSessionState,
   type AnalysisTarget,
 } from '../schemas.js'
 import { SCHEMA_KEY as SELF_KEY, fastToolFinalReportSchema, type FastToolWorkIndex } from './schemas.js'
@@ -29,24 +28,6 @@ import { buildFastToolSystemPrompt } from './systemPrompt.js'
 export class FastToolAnalysis extends AnalysisSessionBase {
   static readonly workflowKind = ANALYSIS_WORKFLOW_KIND.FAST_TOOL
   static readonly workflowLabel = 'Fast Tool Analysis'
-  static create(
-    db: BackendDatabase,
-    lm: ChatCompletionGateway,
-    mcp: McpGateway,
-    input: AnalysisWorkflowInput,
-  ): FastToolAnalysis {
-    const state: AnalysisSessionState = {
-      phase: 'bootstrap',
-      analysisSessionId: input.analysisSessionId,
-      targetSessionId: input.targetSessionId,
-      targetTurnId: input.targetTurnId,
-      analysisGoal: input.analysisGoal,
-      selectedToolNames: input.selectedToolNames,
-      onlyFailedToolCalls: input.onlyFailedToolCalls,
-      evaluationCriteria: input.evaluationCriteria,
-    }
-    return new FastToolAnalysis(db, lm, mcp, input, state)
-  }
 
   static rehydrate(
     db: BackendDatabase,
