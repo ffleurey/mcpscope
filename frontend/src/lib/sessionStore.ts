@@ -461,8 +461,11 @@ export async function startSession(input: {
       compaction_strategy: input.compactionStrategy,
       ...(input.maxToolRounds !== undefined ? { max_tool_rounds: input.maxToolRounds } : {}),
     })
-    // Show the chat view immediately (composer locked until initStatus = 'ready')
+    // Navigate to the new session and show the chat view immediately
+    // (composer locked until initStatus = 'ready'). The session record now
+    // exists, so any later init error surfaces in the chat view, not the dialog.
     activeChatId.set(session.id)
+    currentView.set('chats')
     const summary = toSessionSummary(session)
     upsertSessionSummary(session)
     activeTrace.set(createEmptyTrace(summary))

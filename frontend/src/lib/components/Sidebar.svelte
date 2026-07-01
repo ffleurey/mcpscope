@@ -120,7 +120,6 @@
 
   function handleNewChat() {
     openPrimaryLaunchDialog()
-    currentView.set('chats')
   }
 
   function handleImportClick() {
