@@ -30,7 +30,7 @@ CI enforces the full validation set, so run all of it locally **before pushing a
 npm run verify
 ```
 
-which runs `format:check`, all three lints (`lint`, `lint:backend`, `lint:cli`), all three type checks (`check`, `check:backend`, `check:cli`), and `npm test`. `test:integration` is **not** part of the gate (it needs live LM Studio + MCP). Two easy-to-miss items: `format:check` covers `frontend/**` only via Prettier, and a Prettier reflow of a line you didn't touch in a file you did edit will still fail CI — run `npm run format` to auto-fix.
+which runs `format:check`, all three lints (`lint`, `lint:backend`, `lint:cli`), all four type checks (`check`, `check:backend`, `check:cli`, `check:electron`), and `npm test`. `test:integration` is **not** part of the gate (it needs live LM Studio + MCP). Two easy-to-miss items: `format:check` covers `frontend/**` only via Prettier, and a Prettier reflow of a line you didn't touch in a file you did edit will still fail CI — run `npm run format` to auto-fix.
 
 ## Current test layers
 
@@ -99,7 +99,7 @@ exercising live infrastructure:
 
 - **MCP HTTP endpoint smoke test** (`backend/src/mcp/mcp.test.ts`): sends a
   JSON-RPC `tools/list` to the primary `/mcp` endpoint and asserts the response
-  contains all 15 `mcpscope_*` tool names matching the backend catalog.
+  contains all 21 `mcpscope_*` tool names matching the backend catalog.
 - **CLI structural test** (`cli/src/commands/commandCatalog.test.ts`): verifies
   CLI command IDs match the backend operation catalog, and that `mcpscope --help`
   documents every command.

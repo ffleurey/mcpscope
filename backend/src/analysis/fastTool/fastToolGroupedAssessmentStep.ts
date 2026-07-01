@@ -7,9 +7,10 @@ import type { StepContext } from '../../workflow/stepContext.js'
 import type { StepResult, StepTypeKey } from '../../domain/executionModel.js'
 import { STEP_TYPE } from '../../domain/executionModel.js'
 import { getSessionRecord, getPartRecord, updatePartRecord, listPartRecordsBySession } from '../../persistence/repository.js'
-import { insertJsonArtifact, getLatestArtifactBySchemaKey } from '../artifactRepository.js'
+import { insertJsonArtifact, listArtifactsBySessionAndSchemaKey } from '../artifactRepository.js'
 import { runDeterministicMcpToolCallsInSingleTurn } from '../../runtime/toolTurns.js'
 import { runAnalysisTurn } from '../boundedTurn.js'
+import { extractJsonBlock } from '../shared/extractJson.js'
 import {
   SCHEMA_KEY,
   evaluationResultSchema,
@@ -32,10 +33,14 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
   readonly stepLabel = 'Grouped Assessment'
   readonly kind = 'assess'
   readonly stepTypeKey: StepTypeKey = STEP_TYPE.ANALYSIS_TOOL_GROUP_ASSESSMENT
-  get semanticId(): string { return '' }
+  get semanticId(): string { return this.config.workUnit.work_unit_id }
 
   isComplete(db: BackendDatabase, sessionId: string): boolean {
-    return getLatestArtifactBySchemaKey(db.connection, sessionId, this.config.artifactSchemaKey) !== null
+    // One assessment per tool group: distinguish by work_unit_id in metadata so a
+    // completed group doesn't mark the other groups' steps complete (they share a
+    // schema key so FinalAggregationStep can read them all).
+    return listArtifactsBySessionAndSchemaKey(db.connection, sessionId, this.config.artifactSchemaKey)
+      .some(a => (a.metadata.work_unit_id as string | undefined) === this.config.workUnit.work_unit_id)
   }
 
   constructor(
@@ -146,14 +151,4 @@ export class FastToolGroupedAssessmentStep extends WorkflowStep {
       if (userPart) updatePartRecord(conn, { ...userPart, context: { ...userPart.context, state: 'historical-only', note: 'Grouped assessment question excluded' }, updatedAt: mutatedAt })
     }
   }
-}
-
-function extractJsonBlock(text: string): string {
-  const trimmed = text.trim()
-  const fenced = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-  if (fenced?.[1]) return fenced[1].trim()
-  const start = trimmed.indexOf('{')
-  const end = trimmed.lastIndexOf('}')
-  if (start !== -1 && end !== -1 && end > start) return trimmed.slice(start, end + 1)
-  return trimmed
 }

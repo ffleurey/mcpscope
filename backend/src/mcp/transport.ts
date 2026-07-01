@@ -16,24 +16,39 @@ import type { OperationContext } from './server.js'
  * Each request gets a fresh transport in stateless mode.
  * Operations execute directly against the backend (no loopback HTTP).
  */
+type RouteHandler = Parameters<FastifyInstance['route']>[0]['handler']
+type RouteRequest = Parameters<RouteHandler>[0]
+type RouteReply = Parameters<RouteHandler>[1]
+
+// Server factory type: createMcpServer / createAnalysisMcpServer share this shape.
+type McpServerLike = { connect: (transport: Transport) => Promise<void>; close: () => Promise<void> }
+
 export function registerMcpTransport(app: FastifyInstance, ctx: OperationContext): void {
-  const handleMcpRequest = async (
-    request: Parameters<Parameters<FastifyInstance['route']>[0]['handler']>[0],
-    reply: Parameters<Parameters<FastifyInstance['route']>[0]['handler']>[1],
-  ): Promise<void> => {
-    reply.hijack()
+  // Stateless mode: each request gets a fresh transport + server that must be
+  // torn down when the response closes, otherwise per-request server objects and
+  // their listeners accumulate on a long-running daemon (and SSE GETs leak).
+  const makeHandler =
+    (createServer: (ctx: OperationContext) => McpServerLike) =>
+    async (request: RouteRequest, reply: RouteReply): Promise<void> => {
+      reply.hijack()
 
-    // Omitting sessionIdGenerator opts into stateless mode (no session tracking).
-    const transport = new StreamableHTTPServerTransport({})
+      // Omitting sessionIdGenerator opts into stateless mode (no session tracking).
+      const transport = new StreamableHTTPServerTransport({})
+      const server = createServer(ctx)
 
-    const server = createMcpServer(ctx)
-    // Cast needed due to exactOptionalPropertyTypes mismatch in SDK type definitions.
-    await server.connect(transport as unknown as Transport)
+      reply.raw.on('close', () => {
+        void transport.close()
+        void server.close()
+      })
 
-    const parsedBody = request.method === 'POST' ? (request.body as unknown) : undefined
-    await transport.handleRequest(request.raw, reply.raw, parsedBody)
-  }
+      // Cast needed due to exactOptionalPropertyTypes mismatch in SDK type definitions.
+      await server.connect(transport as unknown as Transport)
 
+      const parsedBody = request.method === 'POST' ? (request.body as unknown) : undefined
+      await transport.handleRequest(request.raw, reply.raw, parsedBody)
+    }
+
+  const handleMcpRequest = makeHandler(createMcpServer)
   app.post('/mcp', handleMcpRequest)
   app.get('/mcp', handleMcpRequest)
   app.delete('/mcp', handleMcpRequest)
@@ -41,20 +56,7 @@ export function registerMcpTransport(app: FastifyInstance, ctx: OperationContext
   // ─── Restricted analysis MCP endpoint ────────────────────────────────────────
   // Only exposes inspect + status so analysis agents can read trace data but
   // cannot create sessions, list all sessions, or send arbitrary prompts.
-  const handleAnalysisMcpRequest = async (
-    request: Parameters<Parameters<FastifyInstance['route']>[0]['handler']>[0],
-    reply: Parameters<Parameters<FastifyInstance['route']>[0]['handler']>[1],
-  ): Promise<void> => {
-    reply.hijack()
-
-    const transport = new StreamableHTTPServerTransport({})
-    const server = createAnalysisMcpServer(ctx)
-    await server.connect(transport as unknown as Transport)
-
-    const parsedBody = request.method === 'POST' ? (request.body as unknown) : undefined
-    await transport.handleRequest(request.raw, reply.raw, parsedBody)
-  }
-
+  const handleAnalysisMcpRequest = makeHandler(createAnalysisMcpServer)
   app.post('/mcp/analysis', handleAnalysisMcpRequest)
   app.get('/mcp/analysis', handleAnalysisMcpRequest)
   app.delete('/mcp/analysis', handleAnalysisMcpRequest)

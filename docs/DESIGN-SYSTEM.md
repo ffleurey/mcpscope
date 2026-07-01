@@ -12,8 +12,8 @@ anything visual, and keep it in sync (see **Working in this design system** belo
    rendered by `frontend/src/lib/components/DesignReference.svelte`. It renders **live tokens and
    the real components/classes** (not copies), so it cannot silently drift from `app.css`.
 
-Master brand assets (logo, mark, wordmark, favicon) live in [`design-assets/`](design-assets/) —
-see its [README](design-assets/README.md) for the manifest and the [Logo](#logo) section below for
+Master brand assets (logo, mark, wordmark, favicon) live in [`design-assets/`](../design-assets/) —
+see its [README](../design-assets/README.md) for the manifest and the [Logo](#logo) section below for
 the rules.
 
 ### Working in this design system
@@ -241,7 +241,7 @@ for `<details>` and button-toggle expand/collapse. See the Reference for the ful
 
 ## Logo
 
-Master brand SVGs live in [`design-assets/`](design-assets/); the app serves working copies from
+Master brand SVGs live in [`design-assets/`](../design-assets/); the app serves working copies from
 `frontend/public/` and references them by path (`/logo.svg`, `/favicon.svg`, …). The live demo is the
 **Brand & logo** section of the Design System Reference. Variants:
 

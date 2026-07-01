@@ -16,7 +16,7 @@ The transport operates in **stateless mode** — no server-side session is maint
 
 ## Tool surface
 
-Nineteen tools mirror the shipped CLI surface exactly — every operation in the backend catalog is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP parity). Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
+Twenty-one tools mirror the shipped CLI surface exactly — every operation in the backend catalog is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP parity). Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
 
 Seven session/config tools:
 
@@ -30,7 +30,7 @@ Seven session/config tools:
 | `mcpscope_list_model_configs` | `mcpscope list_model_configs`    | List all model configs |
 | `mcpscope_list_mcp_profiles`  | `mcpscope list_mcp_profiles`     | List all MCP server profiles |
 
-Twelve benchmark tools (the agent-facing benchmark surface — see [BENCHMARK.md](BENCHMARK.md)):
+Fourteen benchmark tools (the agent-facing benchmark surface — see [BENCHMARK.md](BENCHMARK.md)):
 
 | MCP tool name                           | CLI command                                | Description |
 |-----------------------------------------|--------------------------------------------|-------------|
@@ -44,12 +44,14 @@ Twelve benchmark tools (the agent-facing benchmark surface — see [BENCHMARK.md
 | `mcpscope_benchmark_run`                | `mcpscope benchmark_run`                   | Launch a run in the background; returns the run immediately |
 | `mcpscope_benchmark_run_status`         | `mcpscope benchmark_run_status`            | Cheap, pollable run progress (no session traces loaded) |
 | `mcpscope_benchmark_run_report`         | `mcpscope benchmark_run_report`            | Full compute-on-read metrics report (loads session traces) |
+| `mcpscope_benchmark_run_control`        | `mcpscope benchmark_run_control`           | Pause, resume, or stop a benchmark run (resumable; stop keeps partial results) |
 | `mcpscope_benchmark_evaluate`           | `mcpscope benchmark_evaluate`              | Launch an LLM evaluation pass over a completed run with a judge model |
 | `mcpscope_benchmark_run_evaluations`    | `mcpscope benchmark_run_evaluations`       | List a run's evaluation passes with computed rubric scores |
+| `mcpscope_benchmark_evaluation_control` | `mcpscope benchmark_evaluation_control`    | Pause, resume, or stop an LLM evaluation pass (mirrors `benchmark_run_control`) |
 
 `mcpscope_benchmark_run_status` returns lightweight **progress** (overall and per-case completion, the currently running session, terminal status), whereas `mcpscope_benchmark_run_report` returns the **full metrics** (per-case pass rates, tool-call/token stats, per-session metrics, and a cross-case per-tool rollup). Poll status; fetch the report once complete.
 
-`mcpscope_benchmark_evaluate` adds the qualitative dimension: a separate judge model scores each session against its case rubric. It is implemented as a `benchmark_evaluation` **analysis session** per run-session (the same workflow framework as session analysis), so the judge can pull extra evidence via `mcpscope_inspect` on the internal analysis endpoint. Launch returns immediately; poll `mcpscope_benchmark_run_evaluations` for scores. See [BENCHMARK.md → Evaluation](BENCHMARK.md#evaluation-llm-rubric-judging).
+`mcpscope_benchmark_evaluate` launches an LLM evaluation pass (a judge model scores each session against its case rubric); see [BENCHMARK.md → Evaluation](BENCHMARK.md#evaluation-llm-rubric-judging). Launch returns immediately; poll `mcpscope_benchmark_run_evaluations` for scores.
 
 ## Tool inputs
 
@@ -189,7 +191,7 @@ Heavier than status (loads session traces). Returns the run plus the full metric
 |-------------------------|--------|----------|-------------|
 | `run_id`                | string | ✓        | Completed run to evaluate |
 | `judge_model_config_id` | string | ✓        | Model config for the judge (a separate model; never the task model) |
-| `temperature`           | number |          | Judge sampling temperature (default `0` = deterministic) |
+| `temperature`           | number |          | Judge sampling temperature (default `0.2` when omitted; the CLI instead sends `null` = provider default) |
 
 Returns the evaluation immediately with `status: "pending"`; a background coordinator launches one `benchmark_evaluation` analysis session per run-session. Repeatable — call again with a different judge to compare. Poll `mcpscope_benchmark_run_evaluations` for scores.
 
@@ -216,7 +218,7 @@ Result field naming is snake_case throughout (same shapes as CLI `--json` mode).
 
 The tool descriptions, input schemas, output schemas, and execution functions come from the shared backend operation catalog in `backend/src/operations/catalog.ts` and `backend/src/operations/index.ts`. MCP operations execute directly in the backend process — no loopback HTTP.
 
-There is no separate shared package. The backend operation catalog is the single source of truth for both the CLI result types and the MCP tool surface. Backend-only HTTP operations may live nearby in `backend/src/operations/`, but they are not exposed to MCP unless added to the shared catalog.
+The backend operation catalog is the single source of truth for both CLI and MCP — see [ARCHITECTURE.md → Backend-owned operation catalog](docs/ARCHITECTURE.md).
 
 To verify parity: `npm test` — the parity test suite in `backend/src/mcp/mcp.test.ts` enforces:
 
@@ -230,12 +232,6 @@ To verify parity: `npm test` — the parity test suite in `backend/src/mcp/mcp.t
 The MCP interface is hosted on the same port as the backend API (`BACKEND_PORT`, default 3030). No separate process or port is needed.
 
 Example connection string for an MCP client:
-
-```text
-http://localhost:3030/mcp
-```
-
-Inside Docker:
 
 ```text
 http://localhost:3030/mcp
@@ -264,6 +260,6 @@ Its tool surface is intentionally restricted to:
 It is not the general public MCP surface for normal agent use. Its purpose is to let the analysis
 workflow inspect persisted mcpscope evidence without exposing broader session-management tools.
 
-See [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) for how this restricted endpoint is used in the shipped analysis
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for how this restricted endpoint is used in the shipped analysis
 workflow, and [BENCHMARK.md → Evaluation](BENCHMARK.md#evaluation-llm-rubric-judging) for the
 benchmark-evaluation case.

@@ -7,8 +7,8 @@ captured before mcpscope was introduced.
 
 - one prompt per file
 - standalone only, so each prompt can run in a fresh session
-- selected from the manual prompt inventory in
-  `evaluation/archive/prompt-sources/manual-test-prompts.md`
+- selected from the manual prompt inventory
+  <!-- TODO: broken reference to removed evaluation/ tree, fix during case-study rework -->
 - chosen to cover a mix of simple, composite, discovery-heavy, and behavior-inference tasks
 
 ## Prompt set
@@ -48,26 +48,24 @@ session.
 
 Example future harness behavior:
 
-1. enumerate `evaluation/prompts/standalone/*.txt`
+1. enumerate `case-study/prompts/standalone/*.txt`
 2. create a fresh session per file
 3. send the file contents as the user prompt
 4. collect answer, trace, and metrics
 
 ## Current runner
 
-The first standalone batch runner is:
+<!-- TODO: broken reference to removed evaluation/ tree (run-standalone-benchmark.sh
+and evaluation/results paths no longer exist), fix during case-study rework -->
 
-- `bash evaluation/scripts/run-standalone-benchmark.sh`
+The intended batch behavior:
 
-Default behavior:
-
-- runs every `evaluation/prompts/standalone/*.txt` prompt
+- runs every `case-study/prompts/standalone/*.txt` prompt
 - creates a fresh mcpscope session for every run
 - executes each prompt `6` times by default
-- stores artifacts under `evaluation/results/raw/benchmark-runs/<timestamp>/`
+- stores artifacts under a per-run timestamped output directory
 
 Useful environment overrides:
 
 - `MCPSCOPE_RUNS_PER_PROMPT=3`
-- `MCPSCOPE_BENCHMARK_DIR=evaluation/prompts/standalone`
-- `MCPSCOPE_BENCHMARK_OUTPUT_DIR=evaluation/results/raw/my-run`
+- `MCPSCOPE_BENCHMARK_DIR=case-study/prompts/standalone`

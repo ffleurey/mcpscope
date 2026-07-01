@@ -1,0 +1,12 @@
+{
+  // Build-only config for the shipped package. Extends the main tsconfig but
+  // excludes tests, the test harness, and dev-only seed scripts so they are not
+  // emitted into backend/dist (which is published via package.json `files`).
+  // Type-checking of the excluded files still happens via `check:backend`
+  // (which uses ./tsconfig.json and covers everything).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "exclude": ["src/**/*.test.ts", "src/testing/**", "src/dev/**"]
+}

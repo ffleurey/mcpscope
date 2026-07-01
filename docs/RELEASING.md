@@ -23,7 +23,7 @@ installers take their version from `package.json`, which **must** match the rele
 
 ```bash
 git checkout main && git pull
-npm run verify   # format + lint + type-check (incl. check:electron) + tests
+npm run verify   # full gate — see TESTING.md
 ```
 
 ### 2. Bump the version
@@ -75,18 +75,13 @@ still publish (`fail-fast: false`); re-run the failed matrix leg from the Action
 ## Pulling a released image
 
 The end-user run path — GHCR login (PAT with `read:packages`), `docker pull`, and the
-recommended persistent `docker run` — is the [quick-start tutorial](TUTORIAL.md). It is not
+recommended persistent `docker run` — is the [quick-start tutorial](../TUTORIAL.md). It is not
 repeated here so the two docs cannot drift.
 
 Release-side notes for the published image:
 
 - **Tags:** `:X.Y.Z` (exact), `:X.Y` (major.minor), and `:latest` (see step 5 above).
-- **CLI in-container:** the image bundles the CLI, so commands can run against the same container:
-
-  ```bash
-  docker exec -i mcpscope-app mcpscope list
-  docker exec -i mcpscope-app mcpscope create "test session"
-  ```
+- **CLI in-container:** the image bundles the CLI, so commands run against the same container (`docker exec -i mcpscope-app mcpscope <cmd>`) — see [../CLI.md](../CLI.md).
 
 - **docker-compose (optional):** point `image:` at `ghcr.io/ffleurey/mcpscope:latest` (and drop
   the `build: .` line) in `docker-compose.yml`, then `docker compose up -d`.

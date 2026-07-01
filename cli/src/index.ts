@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resolveBackendUrl } from "./config.js";
+import { getPackageVersion } from "./version.js";
 import { CliError, OperationError, printError } from "./errors.js";
 import {
   parseSessionsListArgs,
@@ -106,8 +107,8 @@ export async function main(argv: string[]): Promise<void> {
     return;
   }
 
-  if (cmd === "--version") {
-    process.stdout.write("mcpscope\n");
+  if (cmd === "--version" || cmd === "-v") {
+    process.stdout.write(`mcpscope ${getPackageVersion()}\n`);
     return;
   }
 

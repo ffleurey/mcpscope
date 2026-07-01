@@ -413,10 +413,17 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
   });
 
   app.post("/api/mcp-profiles/test", async (request, reply) => {
-    const { url } = z.object({ url: z.string().url() }).parse(request.body);
+    const { url, authType, authValue } = z
+      .object({
+        url: z.string().url(),
+        authType: z.enum(["none", "bearer", "basic"]).nullable().optional(),
+        authValue: z.string().nullable().optional(),
+      })
+      .parse(request.body);
+    const auth = { type: authType ?? null, value: authValue ?? null };
     try {
-      const init = await initializeMcpSession(url);
-      const toolsResult = await listMcpTools(url, init.sessionId);
+      const init = await initializeMcpSession(url, auth);
+      const toolsResult = await listMcpTools(url, init.sessionId, auth);
       return {
         serverName: init.serverInfo.name,
         serverVersion: init.serverInfo.version,
@@ -448,7 +455,15 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
           baseUrl: z.string(),
           apiKey: z.string().nullable().optional(),
         }),
-        mcpProfileSnapshots: z.array(z.object({ url: z.string() })).default([]),
+        mcpProfileSnapshots: z
+          .array(
+            z.object({
+              url: z.string(),
+              authType: z.enum(["none", "bearer", "basic"]).nullable().optional(),
+              authValue: z.string().nullable().optional(),
+            }),
+          )
+          .default([]),
         selectedModel: z.object({
           modelKey: z.string().min(1),
           modelDisplayName: z.string().min(1).optional(),
@@ -523,7 +538,10 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
 
     for (const mcpRef of mcpProfileSnapshots) {
       try {
-        await initializeMcpSession(mcpRef.url);
+        await initializeMcpSession(mcpRef.url, {
+          type: mcpRef.authType ?? null,
+          value: mcpRef.authValue ?? null,
+        });
       } catch (e) {
         app.log.warn(
           { url: mcpRef.url, err: e instanceof Error ? e.message : String(e) },

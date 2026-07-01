@@ -3,6 +3,7 @@ import os from "node:os";
 import fs from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
+import { getPackageVersion } from "../version.js";
 
 // `serve` is a local launcher, not a catalog operation: it boots the bundled
 // backend in-process, points it at the bundled frontend, and opens the browser.
@@ -94,6 +95,9 @@ export async function runServe(opts: ServeOptions): Promise<void> {
   fs.mkdirSync(dataDir, { recursive: true });
 
   // The backend reads all of this from the environment via getBackendConfig().
+  if (!process.env.APP_VERSION) {
+    process.env.APP_VERSION = getPackageVersion();
+  }
   process.env.BACKEND_HOST = opts.host;
   process.env.BACKEND_PORT = String(opts.port);
   process.env.BACKEND_STATIC_DIR = staticDir;

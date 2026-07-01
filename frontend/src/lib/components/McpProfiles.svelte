@@ -92,7 +92,10 @@
   async function handleTest(profile: McpServerProfile) {
     testState[profile.id] = { status: 'testing', message: 'Testing…' }
     try {
-      const result = await testMcpProfile(profile.url)
+      const result = await testMcpProfile(profile.url, {
+        authType: profile.authType,
+        authValue: profile.authValue,
+      })
       testState[profile.id] = {
         status: 'ok',
         message: `${result.serverName} v${result.serverVersion} · ${result.tools.length} tool${result.tools.length === 1 ? '' : 's'}`,

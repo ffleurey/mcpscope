@@ -1,8 +1,8 @@
 # Developing mcpscope
 
 This guide is for working on **mcpscope itself**. To *use* a released build, see
-[README.md](README.md) and [TUTORIAL.md](TUTORIAL.md). The full documentation index lives in the
-README's **Documentation map**; agents should also read [AGENTS.md](AGENTS.md).
+[README.md](../README.md) and [TUTORIAL.md](../TUTORIAL.md). The full documentation index lives in the
+README's **Documentation** section; agents should also read [AGENTS.md](../AGENTS.md).
 
 mcpscope is centered on persisted LLM sessions. Different session types may steer those sessions
 with deterministic steps and context policy, but that determinism still lives inside the same
@@ -76,10 +76,10 @@ commands, the test strategy, and how to add regressions.
 
 - execution control is backend-owned through an in-memory sequential scheduler, but explicit public step-target enqueue is still tracked as follow-up work
 - pausing execution is boundary-based: the backend stops after the current turn/step finishes; the hard **Stop** abort cancels the in-flight model request
-- runtime state persists on the SQLite runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`); container ownership is recorded on `sessions` columns rather than a separate container table
-- session parent rules remain intentionally narrow: a `primary` session may optionally have a `benchmark` parent, and a `session_analysis` session requires a `session` parent
 - analysis-session deterministic workflow steps ship inside the normal session model; broader generalization and cleanup remain future work
-- production-ready session-analysis *modes* (guided + "skill") are post-V1; the benchmark + LLM rubric evaluation are the shipped quality story (see [BENCHMARK.md](BENCHMARK.md))
+- production-ready session-analysis *modes* (guided + "skill") are post-V1; the benchmark + LLM rubric evaluation are the shipped quality story (see [BENCHMARK.md](../BENCHMARK.md))
+
+Runtime-model limits and parent rules: [DATA-MODEL.md](DATA-MODEL.md); architectural gaps: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Repository notes
 

@@ -406,10 +406,13 @@ const mcpTestResponseSchema = z.object({
   tools: z.array(z.string()),
 })
 
-export function testMcpProfile(url: string) {
+export function testMcpProfile(
+  url: string,
+  auth?: { authType?: string | null; authValue?: string | null },
+) {
   return request('/api/mcp-profiles/test', {
     method: 'POST',
-    body: { url },
+    body: { url, authType: auth?.authType ?? null, authValue: auth?.authValue ?? null },
     schema: mcpTestResponseSchema,
   })
 }
@@ -418,7 +421,7 @@ const preflightResponseSchema = z.object({ ok: z.literal(true) })
 
 export function preflightSession(input: {
   lmConnectionSnapshot: { baseUrl: string; apiKey?: string | null }
-  mcpProfileSnapshots?: { url: string }[]
+  mcpProfileSnapshots?: { url: string; authType?: string | null; authValue?: string | null }[]
   selectedModel: { modelKey: string; modelDisplayName?: string }
   providerType?: 'lmstudio' | 'openrouter' | 'ollama'
 }) {
