@@ -8,6 +8,27 @@ interface JsonRpcResponse {
   }
 }
 
+/** Auth to apply to MCP HTTP requests, taken from an MCP server profile. */
+export interface McpAuth {
+  type: 'none' | 'bearer' | 'basic' | null
+  value: string | null
+}
+
+/**
+ * Build the Authorization header for an MCP request. `bearer` sends the value
+ * verbatim as a Bearer token; `basic` treats the value as `username:password`
+ * and base64-encodes it per RFC 7617. Returns `{}` when auth is absent.
+ */
+export function mcpAuthHeaders(auth?: McpAuth | null): Record<string, string> {
+  if (!auth || !auth.type || auth.type === 'none' || !auth.value) return {}
+  if (auth.type === 'bearer') return { Authorization: `Bearer ${auth.value}` }
+  if (auth.type === 'basic') {
+    const encoded = Buffer.from(auth.value, 'utf-8').toString('base64')
+    return { Authorization: `Basic ${encoded}` }
+  }
+  return {}
+}
+
 interface McpPostResult {
   rpc: JsonRpcResponse
   sessionId: string | null
@@ -60,11 +81,17 @@ export interface McpRawExchange {
   responseBody: unknown
 }
 
-async function mcpPost(url: string, body: object, sessionId?: string): Promise<McpPostResult> {
+async function mcpPost(
+  url: string,
+  body: object,
+  sessionId?: string,
+  auth?: McpAuth | null,
+): Promise<McpPostResult> {
   const requestBodyText = JSON.stringify(body)
   const requestHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json, text/event-stream',
+    ...mcpAuthHeaders(auth),
   }
   if (sessionId) requestHeaders['mcp-session-id'] = sessionId
 
@@ -132,7 +159,7 @@ async function mcpPost(url: string, body: object, sessionId?: string): Promise<M
   }
 }
 
-export async function initializeMcpSession(serverUrl: string): Promise<McpInitializeResult> {
+export async function initializeMcpSession(serverUrl: string, auth?: McpAuth | null): Promise<McpInitializeResult> {
   const normalizedUrl = serverUrl.replace(/\/$/, '')
 
   const { rpc, sessionId, responseBody, responseBodyText, requestBodyText, responseStatus, requestHeaders, responseHeaders } = await mcpPost(normalizedUrl, {
@@ -147,7 +174,7 @@ export async function initializeMcpSession(serverUrl: string): Promise<McpInitia
         version: '0.1.0',
       },
     },
-  })
+  }, undefined, auth)
 
   if (rpc.error) {
     throw new Error(`MCP initialize error ${rpc.error.code}: ${rpc.error.message}`)
@@ -169,6 +196,7 @@ export async function initializeMcpSession(serverUrl: string): Promise<McpInitia
       params: {},
     },
     sessionId ?? undefined,
+    auth,
   )
 
   return {
@@ -193,7 +221,7 @@ export async function initializeMcpSession(serverUrl: string): Promise<McpInitia
   }
 }
 
-export async function listMcpTools(serverUrl: string, sessionId: string | null): Promise<McpToolsListResult> {
+export async function listMcpTools(serverUrl: string, sessionId: string | null, auth?: McpAuth | null): Promise<McpToolsListResult> {
   const normalizedUrl = serverUrl.replace(/\/$/, '')
 
   const { rpc, responseBody, responseBodyText, requestBodyText, responseStatus, requestHeaders, responseHeaders } = await mcpPost(
@@ -205,6 +233,7 @@ export async function listMcpTools(serverUrl: string, sessionId: string | null):
       params: {},
     },
     sessionId ?? undefined,
+    auth,
   )
 
   if (rpc.error) {
@@ -244,6 +273,7 @@ export async function callMcpTool(
   sessionId: string | null,
   name: string,
   args: Record<string, unknown>,
+  auth?: McpAuth | null,
 ): Promise<McpToolCallResult> {
   const normalizedUrl = serverUrl.replace(/\/$/, '')
 
@@ -259,6 +289,7 @@ export async function callMcpTool(
       },
     },
     sessionId ?? undefined,
+    auth,
   )
 
   if (rpc.error) {

@@ -6,15 +6,15 @@ mcpscope is a backend-centered runtime analysis tool for MCP and multi-turn LLM 
 
 Read only what the task needs:
 
-- [README.md](README.md) for the product overview and the **Documentation** index of every doc — start there if the right file isn't listed below; [DEVELOPMENT.md](DEVELOPMENT.md) for run-from-source and dev commands
-- [ARCHITECTURE.md](ARCHITECTURE.md) for runtime flow, persistence, execution, and adapters
-- [DATA-MODEL.md](DATA-MODEL.md) for sessions, turns, rounds, parts, and canonical IDs
-- [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) for the SQLite tables behind that model
-- [TESTING.md](TESTING.md) for regression strategy and test selection
+- [README.md](README.md) for the product overview and the **Documentation** index of every doc — start there if the right file isn't listed below; [DEVELOPMENT.md](docs/DEVELOPMENT.md) for run-from-source and dev commands
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) for runtime flow, persistence, execution, and adapters
+- [DATA-MODEL.md](docs/DATA-MODEL.md) for sessions, turns, rounds, parts, and canonical IDs
+- [DATABASE-SCHEMA.md](docs/DATABASE-SCHEMA.md) for the SQLite tables behind that model
+- [TESTING.md](docs/TESTING.md) for regression strategy and test selection
 - [CLI.md](CLI.md) and [MCP.md](MCP.md) for command and tool behavior
 - [BENCHMARK.md](BENCHMARK.md) for the benchmark suite/case/run feature, deterministic metrics, and LLM rubric evaluation — the latter is implemented **as a `benchmark_evaluation` analysis workflow** (one judge session per run-session), so it shares the analysis subsystem rather than being a separate engine; treat the two as one mechanism when changing either
 - [PROVIDERS.md](PROVIDERS.md) when touching reasoning, token counting, or context-window handling across LM Studio / Ollama / OpenRouter
-- [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) **before any frontend visual change** — tokens, shared primitives, and patterns. Reuse the primitives; keep `DESIGN-SYSTEM.md`, `frontend/src/app.css`, and the live Design System Reference (`DesignReference.svelte`) in sync.
+- [DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md) **before any frontend visual change** — tokens, shared primitives, and patterns. Reuse the primitives; keep `DESIGN-SYSTEM.md`, `frontend/src/app.css`, and the live Design System Reference (`DesignReference.svelte`) in sync.
 
 The docs above are references, not pre-read requirements. Keep context lean and open only the specific files needed for the task at hand.
 
@@ -55,7 +55,7 @@ The docs above are references, not pre-read requirements. Keep context lean and 
 
 ## Validation
 
-Choose the smallest check that matches the change. See [TESTING.md](TESTING.md) for the canonical list of test, type-check, lint, and format commands and when to use each. **Before opening a PR, run the full gate (`npm run verify`) — CI enforces lint, type-check, format, and tests, including `format:check` on `frontend/**`.**
+Choose the smallest check that matches the change; **before opening a PR run the full gate (`npm run verify`)**. See [TESTING.md](docs/TESTING.md) for the canonical command list and exactly what the gate runs.
 
 ## High-Value References
 

@@ -37,12 +37,19 @@
   // Sorted view of the working selection for the persistent "Selected (N)" list.
   const selectedList = $derived([...selection].sort((a, b) => a.localeCompare(b)))
 
-  async function loadServerTools(url: string): Promise<void> {
+  async function loadServerTools(server: {
+    url: string
+    authType?: string | null
+    authValue?: string | null
+  }): Promise<void> {
     loading = true
     loadError = null
     serverTools = []
     try {
-      const { tools } = await testMcpProfile(url)
+      const { tools } = await testMcpProfile(server.url, {
+        authType: server.authType,
+        authValue: server.authValue,
+      })
       serverTools = tools
     } catch (e) {
       loadError = toAppError(e).message
@@ -53,7 +60,7 @@
 
   function onServerChange(): void {
     const server = profiles.find((p) => p.id === selectedServerId)
-    if (server) void loadServerTools(server.url)
+    if (server) void loadServerTools(server)
     else {
       serverTools = []
       loadError = null

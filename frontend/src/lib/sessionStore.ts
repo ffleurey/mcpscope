@@ -446,7 +446,11 @@ export async function startSession(input: {
         baseUrl: selectedConnection.baseUrl,
         apiKey: selectedConnection.apiKey ?? null,
       },
-      mcpProfileSnapshots: mcpSnapshots.map((s) => ({ url: s.url })),
+      mcpProfileSnapshots: mcpSnapshots.map((s) => ({
+        url: s.url,
+        authType: s.authType,
+        authValue: s.authValue,
+      })),
       selectedModel: {
         modelKey: selectedModelConfig.modelKey,
         modelDisplayName: selectedModelConfig.modelDisplayName,

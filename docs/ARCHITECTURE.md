@@ -19,16 +19,15 @@ The value of the project depends on correctness and inspectability:
 ## Documentation boundaries
 
 - [DATA-MODEL.md](DATA-MODEL.md) — compact canonical runtime tree, public part taxonomy, canonical IDs, and lookup-model rules
-- [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) — shipped `session_analysis` workflow and evidence-loading rules
 - [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) — current SQLite tables, foreign keys, singleton defaults, and ER diagram
-- [CLI.md](CLI.md) and [MCP.md](MCP.md) — the shared operation catalog as CLI commands and MCP tools
-- [BENCHMARK.md](BENCHMARK.md) — benchmark suite/case/run feature: model, deterministic metrics, LLM rubric evaluation (built on the analysis workflow), and agent-facing surface
-- [PROVIDERS.md](PROVIDERS.md) — provider-specific reasoning, token-counting, context-window, and model loading/unloading behavior
+- [CLI.md](../CLI.md) and [MCP.md](../MCP.md) — the shared operation catalog as CLI commands and MCP tools
+- [BENCHMARK.md](../BENCHMARK.md) — benchmark suite/case/run feature: model, deterministic metrics, LLM rubric evaluation (built on the analysis workflow), and agent-facing surface
+- [PROVIDERS.md](../PROVIDERS.md) — provider-specific reasoning, token-counting, context-window, and model loading/unloading behavior
 - `ARCHITECTURE.md` — system design, persistence model, streaming model, replay model, and API overview
 
 ## Tech stack
 
-**Backend:** Fastify + TypeScript, SQLite (better-sqlite3), OpenAI-compatible HTTP/SSE client (shared across LM Studio, OpenRouter, and Ollama), MCP HTTP client
+**Backend:** Fastify + TypeScript, SQLite (node:sqlite, Node's built-in), OpenAI-compatible HTTP/SSE client (shared across LM Studio, OpenRouter, and Ollama), MCP HTTP client
 
 **Frontend:** Svelte 5 + TypeScript + Vite — thin UI layer over backend-owned state, lives under `frontend/`
 
@@ -95,9 +94,9 @@ The backend persistence layer is organized around the execution model:
 - `WorkflowStep` — the abstract deterministic step subtype implemented by concrete analysis step classes in `analysis/shared/` and `analysis/fastTool/` (see `backend/src/workflow/workflowStep.ts`); may own zero or more `Turn` children
 - `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records
 
-The persistence-layer record types (`SessionRecord`, `TurnRecord`, `RoundRecord`, `PartRecord`, `RawExchangeRecord`) remain the authoritative source for runtime behavior and replay. They persist to the canonical runtime schema (plain table names, schema version `3`, no migration history). For the record-to-table mapping and column-level details see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
+The persistence-layer record types (`SessionRecord`, `TurnRecord`, `RoundRecord`, `PartRecord`, `RawExchangeRecord`) remain the authoritative source for runtime behavior and replay. They persist to the canonical runtime schema (plain table names, no migration history; for the current schema version and its history see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md#current-schema-version)). For the record-to-table mapping and column-level details see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
 
-Startup runs a single `initializeSchema()` that creates the snapshot/config tables, the runtime tables (`sessions`, `steps`, `turns`, `rounds`, `parts`, `raw_exchanges`, `artifacts`), and the benchmark tables (`benchmarks`, `benchmark_cases`, `benchmark_runs`, `benchmark_evaluations`). There is no migration path and no separate legacy schema: the tables use plain names at schema version `3`, and an out-of-date database is started empty rather than migrated.
+Startup runs a single `initializeSchema()` (no migration path; an out-of-date DB is started empty rather than migrated) — see [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md).
 
 ### Current implementation
 
@@ -120,8 +119,8 @@ The shipped product implements:
 - a `WorkflowStep` abstract class with template-method lifecycle (`execute()` → `run(ctx)`) and concrete analysis step subclasses (bootstrap, tool-call assessment, turn summary, final aggregation, grouped assessment, and the benchmark rubric judge)
 - a backend-owned sequential execution scheduler with one active slot, one in-memory queue, and one global execution event stream
 - `SessionContainer` ownership: sessions may belong to a parent session or a `Benchmark` container
-- the benchmark suite/case/run feature: persisted benchmarks and cases, immutable run snapshots, a sequential run coordinator, and a compute-on-read metrics report — shipped across UI, CLI, and MCP (see [BENCHMARK.md](BENCHMARK.md))
-- benchmark **LLM evaluation**: a per-case rubric, judged after a run by a separate judge model. Implemented **as an analysis workflow** (`benchmark_evaluation`) — one judge session per run-session — reusing the analysis subsystem rather than adding a parallel judging engine (see below and [BENCHMARK.md](BENCHMARK.md))
+- the benchmark suite/case/run feature: persisted benchmarks and cases, immutable run snapshots, a sequential run coordinator, and a compute-on-read metrics report — shipped across UI, CLI, and MCP (see [BENCHMARK.md](../BENCHMARK.md))
+- benchmark **LLM evaluation**: a per-case rubric, judged after a run by a separate judge model — implemented as an analysis workflow, not a parallel judging engine (detailed under "benchmark LLM evaluation" in the backend module map below, and in [BENCHMARK.md](../BENCHMARK.md))
 - generic container/session/step persistence without table-per-subtype growth
 - a registry-based analysis workflow factory (`registerAnalysisWorkflow()` / Map lookup) replacing `switch(workflowKind)`
 - self-contained analysis subclasses (`fullSession/`, `fastSession/`, `fastTool/`, `benchmarkEvaluation/`) each owning its own prompt builders, schema keys, Zod schemas, and system prompt
@@ -130,7 +129,7 @@ The shipped product implements:
 
 What is **not** implemented yet:
 
-- richer benchmark scoring beyond compute-on-read per-pass scores: no stored aggregate, no cross-run / cross-judge comparison view (deterministic checks + LLM rubric evaluation both ship — see [BENCHMARK.md](BENCHMARK.md))
+- richer benchmark scoring beyond compute-on-read per-pass scores: no stored aggregate, no cross-run / cross-judge comparison view (deterministic checks + LLM rubric evaluation both ship — see [BENCHMARK.md](../BENCHMARK.md))
 - public generic step enqueue across all adapters and client helpers
 - broader workflow automation and cleanup beyond the shipped analysis-session workflow
 
@@ -165,15 +164,16 @@ The scheduler is the only execution owner. No route or operation directly runs a
 
 A benchmark run or LLM-evaluation pass is a *coordinator* (in `backend/src/operations/benchmark.ts`) that sits above the scheduler and expands into many jobs (init + turn per session). `backend/src/runtime/runControl.ts` gives each coordinator a controllable lifecycle keyed by run/evaluation id — the scheduler controls *jobs*, run-control controls *runs*.
 
-- **The run is the unit of control**, not the session. Run/eval status adds `paused` and `stopped` (resumable rest states); per-session/judge status adds `cancelled` (a task interrupted by a stop, kept for review).
-- **Work-list driven & resumable.** A coordinator computes the tasks still needed and runs only those, so it is restartable. Resume modes: `continue` (never-started tasks) and `retry` (also re-run cancelled/errored). A run reaches `complete` only when no task is left interrupted; a `continue` that leaves cancelled tasks rests at `stopped`.
-- **Pause** is between tasks (current turn/judge finishes, then it holds). **Stop** aborts the in-flight job and rests at `stopped`; it is interruptible — the coordinator races its job-wait against a stop signal (`RunController.whenStopRequested`), so a stop unwinds even if the model/MCP call ignores the abort and never settles.
+The architectural essence:
+
+- **The run is the unit of control**, not the session — `runControl.ts` keys lifecycle state by run/evaluation id above the per-job scheduler.
+- **Work-list driven & resumable.** A coordinator computes the tasks still needed and runs only those, so it is restartable — the same property that makes a run orphaned by a restart recoverable (reconciled to `stopped`, then resumed).
+- **Stop is interruptible.** The coordinator races its job-wait against a stop signal (`RunController.whenStopRequested`), so a stop unwinds even if the model/MCP call ignores the abort and never settles.
 - **Resume re-enqueues** the run's remaining work into the same scheduler queue — distinct from the scheduler's *global* pause/resume, which gates the whole queue.
 - Each scheduler job carries an `owner` (`benchmark-run` / `benchmark-evaluation`) set at enqueue, so the execution bar groups jobs by run and its Stop / queue-✕ act at the run level.
-- Control state is in-memory; a run orphaned by a restart is reconciled to `stopped` and recovered via resume.
 - A failed turn ≠ a settled job: a session is `complete` only if its last turn actually completed (a swallowed model error settles the job but leaves the turn `error`). Failures are recorded per session and summarized on the run.
 
-Routes: `POST /api/benchmark-runs/:id/{pause,resume,stop}`, same for `/api/benchmark-evaluations/:id` (see [BENCHMARK.md](BENCHMARK.md)).
+Routes: `POST /api/benchmark-runs/:id/{pause,resume,stop}`, same for `/api/benchmark-evaluations/:id`. User-facing pause/resume/stop semantics (resume modes, rest states, what stop keeps) are in [BENCHMARK.md → Run control](../BENCHMARK.md).
 
 ### Backend module map
 
@@ -197,7 +197,7 @@ The backend structure is intentionally split so architectural seams are visible 
 	- `stepContext.ts` — `StepContext` interface carrying execution-scoped data (`sessionId`, `stepTypeKey`, `emitSink`, `workflowState`)
 
 - `backend/src/analysis/` owns analysis-specific behavior built on top of the workflow layer:
-	- `analysisSessionBase.ts` — abstract base class with tree-traversal `buildPlan()` (drives 22 hooks that call `addCommand()`), `findFirstIncomplete()` (artifact-derived position), `resumeOneStep()` (Interpreter). Commands are `WorkflowStep` instances (they implement `AnalysisCommand` from `workflowStep.ts`).
+	- `analysisSessionBase.ts` — abstract base class with tree-traversal `buildPlan()` (drives its workflow hooks that call `addCommand()`), `findFirstIncomplete()` (artifact-derived position), `resumeOneStep()` (Interpreter). Commands are `WorkflowStep` instances (they implement `AnalysisCommand` from `workflowStep.ts`).
 	- `shared/` — reusable `WorkflowStep` subclasses (`BootstrapStep`, `ToolCallAssessmentStep`, `TurnSummaryStep`, `FinalAggregationStep`) that accept behavior via constructor-injected functions (zero knowledge of analysis types)
 	- `fullSession/`, `fastSession/`, `fastTool/`, `benchmarkEvaluation/` — self-contained analysis subclasses, each owning its own prompt builders, schema keys, Zod schemas, and system prompt. `benchmarkEvaluation/` is the benchmark rubric judge (a single-step `benchmark_evaluation` workflow); it is registered exactly like the others, which is why benchmark evaluation needs no judging infrastructure of its own.
 	- `analysisWorkflowFactory.ts` — registry-based factory (`registerAnalysisWorkflow()`) instead of a `switch` on workflow kind. Adding a new analysis type only requires creating a new directory and calling the registration function (`benchmarkEvaluation/` is the most recent example).
@@ -223,7 +223,7 @@ behavior at the edges.
 |---|---|---|---|
 | **Template Method** | `WorkflowStep.execute()` calls abstract `run(ctx)` | Step-record lifecycle (create, emit started, run, complete/fail, emit done) lives in the base class once. Concrete steps write only business logic. |
 | **Command** | `WorkflowStep` implements `AnalysisCommand` — each step carries `kind`, `stepTypeKey`, `semanticId`, and `isComplete()` alongside `run()`. `resumeOneStep()` calls `execute()` directly on the step (no wrapper indirection). | Steps are self-contained: their planning identity and idempotency check live alongside the execution logic. No separate command/step layering. |
-| **Visitor / Hook** | `AnalysisSessionBase.buildPlan()` traverses the target session tree and calls 22 hook methods (e.g. `onToolCall`, `onAfterTurn`). Subclasses override hooks and call `addCommand()` to populate the plan. | Provides consistent, constrained extension points. The base class owns the traversal — subclasses customize only the hooks they need. Hooks plan work by adding commands; they do not execute work directly. |
+| **Visitor / Hook** | `AnalysisSessionBase.buildPlan()` traverses the target session tree and calls its workflow hook methods (e.g. `onToolCall`, `onAfterTurn`). Subclasses override hooks and call `addCommand()` to populate the plan. | Provides consistent, constrained extension points. The base class owns the traversal — subclasses customize only the hooks they need. Hooks plan work by adding commands; they do not execute work directly. |
 | **Strategy** | Steps receive `buildPrompt`, `buildDeterministicReport` as constructor-injected functions | Zero branching on analysis-type identity inside shared code. Each subclass passes its own functions. |
 | **Registry** | `workflowRegistry` Map in `analysisWorkflowFactory.ts` | Replaces `switch(workflowKind)`. Adding a new analysis type calls `registerAnalysisWorkflow()` — no factory edits. |
 | **Interpreter** | `resumeOneStep()` builds the plan (via Visitor/Hooks), finds the first incomplete command (via artifact-derived position), calls `execute()` directly on the step, then rebuilds the plan. `execute()` loops on `resumeOneStep()`. | Separates planning (Visitor/Hooks build the command list) from execution (Interpreter runs one step at a time). No walk cursor, no buildStep() indirection, no flattened hook list. Position is derived from plan vs. artifact state — always consistent. |

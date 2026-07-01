@@ -195,6 +195,10 @@ export async function buildBackendApp(
   >["event"];
   type SsePayload = { type: string; [key: string]: unknown };
 
+  // Periodic SSE comment interval so idle streams stay alive (proxies/browsers
+  // drop silent connections). Matches the scheduler-events endpoint.
+  const SSE_HEARTBEAT_MS = 20000;
+
   async function relaySchedulerJobStream(
     reply: FastifyReply,
     jobId: string,
@@ -211,31 +215,60 @@ export async function buildBackendApp(
     reply.raw.setHeader("cache-control", "no-cache, no-transform");
     reply.raw.setHeader("connection", "keep-alive");
 
+    let closed = false;
+    let unsubscribe: (() => void) | null = null;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+
     const emitSseEvent = (event: SsePayload) => {
-      reply.raw.write(`event: ${event.type}\n`);
-      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+      if (closed || reply.raw.writableEnded) return;
+      try {
+        reply.raw.write(`event: ${event.type}\n`);
+        reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+      } catch {
+        // Client disconnected mid-write; the close/error handler cleans up.
+      }
     };
 
     const emitFailure = (message: string) => {
       emitSseEvent(options.failureEvent(message));
     };
 
-    let closed = false;
-    let unsubscribe: (() => void) | null = null;
+    const cleanup = () => {
+      if (heartbeat) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
+      unsubscribe?.();
+      unsubscribe = null;
+    };
 
     const finish = () => {
       if (closed) return;
       closed = true;
-      unsubscribe?.();
+      cleanup();
       reply.raw.end();
     };
 
-    reply.raw.on("close", () => {
-      if (!closed) {
-        unsubscribe?.();
-        closed = true;
-      }
+    // Without an 'error' listener an EPIPE on the raw socket (client vanished
+    // mid-stream) throws as an unhandled event and crashes the process.
+    reply.raw.on("error", () => {
+      closed = true;
+      cleanup();
     });
+    reply.raw.on("close", () => {
+      closed = true;
+      cleanup();
+    });
+
+    heartbeat = setInterval(() => {
+      if (closed || reply.raw.writableEnded) return;
+      try {
+        reply.raw.write(": ping\n\n");
+      } catch {
+        // Connection closing; handlers clean up.
+      }
+    }, SSE_HEARTBEAT_MS);
+    heartbeat.unref?.();
 
     unsubscribe = scheduler.subscribe((schedulerEvent: SchedulerEvent) => {
       if (

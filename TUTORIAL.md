@@ -2,17 +2,17 @@
 
 Get mcpscope running and start testing an MCP server in minutes. Pick one install method:
 
-- **npm** (recommended) — a global CLI with a `serve` command; needs Node.js 20+.
+- **npm** (recommended) — a global CLI with a `serve` command; needs Node.js 24+.
 - **Docker** — a released container image; needs Docker.
 
 Either way, you then configure mcpscope once in the Web UI and drive it from the UI, the CLI, or
 MCP — **one session at a time**.
 
-If you are developing **mcpscope itself**, see [DEVELOPMENT.md](DEVELOPMENT.md) instead.
+If you are developing **mcpscope itself**, see [DEVELOPMENT.md](docs/DEVELOPMENT.md) instead.
 
 ## What you need
 
-- **npm:** Node.js 20+ — **or** — **Docker:** Docker + a GitHub PAT with `read:packages` for `ghcr.io`
+- **npm:** Node.js 24+ — **or** — **Docker:** Docker + a GitHub PAT with `read:packages` for `ghcr.io`
 - LM Studio (or Ollama) running on your machine
 - your MCP server running on your machine
 
@@ -57,7 +57,7 @@ Then open `http://localhost:3030`.
 - restart later with `docker start mcpscope-app`
 
 For version pinning, the in-container CLI, or the docker-compose variant, see
-[RELEASING.md → Pulling a released image](RELEASING.md#pulling-a-released-image).
+[RELEASING.md → Pulling a released image](docs/RELEASING.md#pulling-a-released-image).
 
 ## 2. Make the CLI easy to use
 

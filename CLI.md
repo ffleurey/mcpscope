@@ -4,23 +4,9 @@ In-repo command surface for driving and inspecting sessions. Talks to the backen
 
 ## Running from Docker
 
-The packaged MVP path is to run the CLI **inside the mcpscope container**:
-
-```bash
-docker exec -i mcpscope-app mcpscope list
-docker exec -i mcpscope-app mcpscope create "test session"
-docker exec -i mcpscope-app mcpscope send ABCD "hello"
-```
+To run the CLI inside the container: `docker exec -i mcpscope-app mcpscope <cmd>` (or define the `mcpscope()` shell helper) — see [TUTORIAL.md](TUTORIAL.md).
 
 Inside the container, `mcpscope` defaults to `http://127.0.0.1:3030`.
-
-If you want a shorter host command, define an alias or shell function:
-
-```bash
-mcpscope() {
-  docker exec -i mcpscope-app mcpscope "$@"
-}
-```
 
 ## Connection
 
@@ -64,6 +50,7 @@ Returns as soon as the session record exists — initialization may still be in 
 | `default_lm_connection_not_found` | LM connection referenced by the default model config was deleted |
 | `invalid_session_id` | `--id` value is not a valid session ID format |
 | `duplicate_session_id` | `--id` value is already in use |
+| `another_session_active` | another session is already active/running; finish or stop the active session first |
 
 ### `mcpscope send <session-id> <prompt> [--json]`
 
@@ -83,6 +70,7 @@ The session must be fully initialized (`status` = `ready`) before sending. The r
 | `session_not_found` | session ID does not exist |
 | `session_not_initialized` | session has not finished initialization yet |
 | `turn_in_progress` | another turn is already active for the session |
+| `another_session_active` | another session is already active/running; finish or stop the active session first |
 
 ### `mcpscope status <session-id> [--json]`
 
@@ -156,8 +144,8 @@ Lists all model configs with their ID, name, connection, model key, and provider
 
 ```text
 $ mcpscope list_model_configs
-home-assistant   Home Assistant    http://host:8123/mcp   enabled
-weather-mcp      Weather MCP       http://host:8000/mcp   disabled
+mc-qwen      Qwen 2.5 7B      LM Studio     qwen2.5-7b-instruct   lmstudio
+mc-sonnet    Claude Sonnet    OpenRouter    anthropic/claude-sonnet-4   openrouter
 ```
 
 `--json` returns the full list: `{ model_configs: [...] }`.
@@ -248,13 +236,21 @@ Text output shows overall and per-case completion, the currently running session
 
 Returns the full compute-on-read **metrics** report for a run (loads session traces): per-case pass rates, tool-call/token stats, per-session metrics, and a cross-case per-tool rollup. Text output leads with the per-tool rollup, then per-case detail. JSON output: `{ run, report }`. For what the metrics mean (pass@k vs pass^k, the per-tool scorecard, what the checks evaluate), see [BENCHMARK.md → Report and metrics](BENCHMARK.md#report-and-metrics).
 
+### `mcpscope benchmark_run_control <run_id> --action <pause|resume|stop> [--mode <continue|retry>] [--json]`
+
+Pauses, resumes, or stops a benchmark run. `--action` is required. `stop` rests the run at `stopped` (resumable, partial results kept); `resume` re-enqueues its remaining work — `--mode continue` (default) picks up never-run sessions, `--mode retry` also re-runs cancelled/errored ones (`--mode` applies to `resume` only). Text output: `{run_id}  {status}`. JSON output: `{ run }`.
+
 ### `mcpscope benchmark_evaluate <run_id> --judge-model <model_config_id> [--temperature <n>] [--json]`
 
-Launches an **LLM evaluation** pass over a completed run: a separate judge model scores every session against its case rubric. `--temperature` sets the judge sampling temperature (default `0` = deterministic; raise it to probe judge stability). Returns immediately (`{ evaluation: { id, status, judge_temperature, ... } }`); the pass runs in the background. Repeatable — run it again with a different `--judge-model`/`--temperature` to compare. The judge runs as a `benchmark_evaluation` analysis session per run-session; see [BENCHMARK.md → Evaluation](BENCHMARK.md#evaluation-llm-rubric-judging). Rubrics are authored via the UI or the `rubric` field on `benchmark_add_case` (MCP/HTTP); they are not a CLI flag.
+Launches an **LLM evaluation** pass over a completed run: a separate judge model scores every session against its case rubric. `--temperature` sets the judge sampling temperature. On the CLI, **omitting `--temperature` sends `null`** — the judge runs with no temperature param, i.e. the provider's own default. Note this differs from the MCP/HTTP path, which defaults to `0.2` when `temperature` is omitted (rationale for the low-temperature default: [BENCHMARK.md](BENCHMARK.md)). Returns immediately (`{ evaluation: { id, status, judge_temperature, ... } }`); the pass runs in the background. Repeatable — run it again with a different `--judge-model`/`--temperature` to compare. See [BENCHMARK.md → Evaluation](BENCHMARK.md#evaluation-llm-rubric-judging). Rubrics are authored via the UI or the `rubric` field on `benchmark_add_case` (MCP/HTTP); they are not a CLI flag.
 
 ### `mcpscope benchmark_run_evaluations <run_id> [--json]`
 
 Lists a run's evaluation passes with scores computed on read from the judge verdicts. Text output shows, per pass, the judge model, status, overall %, and a per-case min/mean/max line. JSON output: `{ evaluations: [{ id, run_id, judge_model_config_id, status, sessions, score: { overall_pct, cases: [{ source_case_id, name, pct_stats, sessions: [{ analysis_session_id, awarded, max, pct, ... }] }] } }] }`. Open an `analysis_session_id` (e.g. with `mcpscope inspect`) to read the judge's verdict and reasoning.
+
+### `mcpscope benchmark_evaluation_control <evaluation_id> --action <pause|resume|stop> [--mode <continue|retry>] [--json]`
+
+Pauses, resumes, or stops an LLM evaluation pass. Mirrors `benchmark_run_control` for evaluations (the judging passes over a completed run). `--action` is required; `stop` aborts the in-flight judge and rests at `stopped` (resumable, scored sessions kept); `resume` re-judges the remaining sessions — `--mode continue` (default) judges never-judged sessions, `--mode retry` also re-judges cancelled/errored ones. Text output: `{evaluation_id}  {status}`. JSON output: `{ evaluation }`.
 
 ### `mcpscope sessions list [--json]`
 
@@ -301,7 +297,7 @@ mcpscope inspect ABCD.1T
 | `--repetitions <n>` | `benchmark_run`   | times to run each case (default: 1) |
 | `--wait`           | `benchmark_run`    | poll run status until terminal, then print final progress |
 | `--judge-model <id>` | `benchmark_evaluate` | model config ID for the judge (required) |
-| `--temperature <n>` | `benchmark_evaluate` | judge sampling temperature (default 0 = deterministic) |
+| `--temperature <n>` | `benchmark_evaluate` | judge sampling temperature; omit to send `null` (provider default). The MCP/HTTP path instead defaults to `0.2` when omitted. |
 
 ## Exit codes
 

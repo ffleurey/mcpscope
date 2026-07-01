@@ -92,14 +92,26 @@ export class FastToolAnalysis extends AnalysisSessionBase {
 
     const workIndex = workIndexArtifact.content as FastToolWorkIndex
     const analysisTarget = targetArtifact.content as AnalysisTarget
-    const workUnit = workIndex.tool_groups[0]
-    if (!workUnit) return
+    const toolGroups = workIndex.tool_groups
+    if (toolGroups.length === 0) return
 
-    this.addCommand(new FastToolGroupedAssessmentStep(this.db, this.lm, this.mcp, {
-      artifactSchemaKey: SELF_KEY.GROUP_ASSESSMENT,
-      workUnit,
-      analysisTarget,
-    }))
+    // One assessment step per tool group. Each writes under the shared
+    // GROUP_ASSESSMENT schema key (keyed by work_unit_id) so FinalAggregationStep
+    // reads them all. Assessing only tool_groups[0] silently dropped every other
+    // tool from the report.
+    for (const workUnit of toolGroups) {
+      this.addCommand(new FastToolGroupedAssessmentStep(this.db, this.lm, this.mcp, {
+        artifactSchemaKey: SELF_KEY.GROUP_ASSESSMENT,
+        workUnit,
+        analysisTarget,
+      }))
+    }
+
+    const totalToolCallCount = toolGroups.reduce(
+      (sum, g) => sum + g.tool_call_part_ids.length,
+      0,
+    )
+
     this.addCommand(new FinalAggregationStep(this.db, this.lm, this.mcp, {
       assessmentSchemaKey: SELF_KEY.GROUP_ASSESSMENT,
       summarySchemaKey: SELF_KEY.GROUP_ASSESSMENT,
@@ -107,10 +119,12 @@ export class FastToolAnalysis extends AnalysisSessionBase {
       buildPrompt: (params) => buildFastToolFinalAggregationPrompt({
         analysisTarget: params.analysisTarget as AnalysisTarget,
         assessmentCount: params.assessmentCount as number,
-        totalToolCallCount: params.assessmentCount as number,
+        totalToolCallCount,
       }),
       reportSchema: fastToolFinalReportSchema,
       buildDeterministicReport: (_sid, assessments) => {
+        // Fast path only for a single strong tool group; multi-group sessions fall
+        // through to the LLM aggregation (return null).
         if (assessments.length !== 1) return null
         const a = assessments[0]
         if (!a || a.verdict === 'fail' || a.score <= 2) return null
@@ -121,7 +135,7 @@ export class FastToolAnalysis extends AnalysisSessionBase {
           repeated_failure_patterns: [] as unknown[],
           follow_up_candidates: [] as unknown[],
           total_tool_groups_assessed: 1,
-          total_tool_calls_assessed: assessments.length,
+          total_tool_calls_assessed: totalToolCallCount,
         }
       },
     }))

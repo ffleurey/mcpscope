@@ -56,6 +56,7 @@ import {
 } from "./modelTurns.js";
 import type { ApiMessage } from "../domain/selectors.js";
 import type {
+  McpAuth,
   McpRawExchange,
   McpToolCallResult,
   McpToolsListResult,
@@ -76,7 +77,10 @@ import type { TurnStreamEventSink } from "./streamEvents.js";
 import { maybeApplyAutomaticSessionTitle } from "./sessionTitles.js";
 
 export interface McpGateway {
-  initializeSession(serverUrl: string): Promise<{
+  initializeSession(
+    serverUrl: string,
+    auth?: McpAuth | null,
+  ): Promise<{
     sessionId: string | null;
     instructions?: string | undefined;
     rawExchange: McpRawExchange;
@@ -84,18 +88,29 @@ export interface McpGateway {
   listTools(
     serverUrl: string,
     sessionId: string | null,
+    auth?: McpAuth | null,
   ): Promise<McpToolsListResult>;
   callTool(
     serverUrl: string,
     sessionId: string | null,
     name: string,
     args: Record<string, unknown>,
+    auth?: McpAuth | null,
   ): Promise<McpToolCallResult>;
+}
+
+/** Extract the auth config from an MCP profile snapshot. */
+function authForProfile(profile: {
+  authType: McpAuth["type"];
+  authValue: string | null;
+}): McpAuth {
+  return { type: profile.authType, value: profile.authValue };
 }
 
 export interface McpServerContext {
   sessionId: string | null;
   instructions: string | null;
+  auth: McpAuth | null;
 }
 
 export interface McpContextResult {
@@ -600,15 +615,18 @@ export async function ensureMcpContext(
   }> = [];
 
   for (const profile of session.mcpProfileSnapshots) {
-    const initialized = await mcpGateway.initializeSession(profile.url);
+    const auth = authForProfile(profile);
+    const initialized = await mcpGateway.initializeSession(profile.url, auth);
     const toolsList = await mcpGateway.listTools(
       profile.url,
       initialized.sessionId,
+      auth,
     );
 
     serverContexts.set(profile.url, {
       sessionId: initialized.sessionId,
       instructions: initialized.instructions ?? null,
+      auth,
     });
 
     pendingRawExchanges.push({
@@ -965,8 +983,11 @@ export async function runDeterministicMcpToolCall(
     throw new Error("MCP profile is required for deterministic tool calls");
   }
   const deterministicToolServerMap = new Map<string, string>();
+  const serverAuthMap = new Map<string, McpAuth>();
   for (const profile of session.mcpProfileSnapshots) {
-    for (const tool of (await mcpGateway.listTools(profile.url, null)).tools) {
+    const auth = authForProfile(profile);
+    serverAuthMap.set(profile.url, auth);
+    for (const tool of (await mcpGateway.listTools(profile.url, null, auth)).tools) {
       if (!deterministicToolServerMap.has(tool.name)) {
         deterministicToolServerMap.set(tool.name, profile.url);
       }
@@ -976,6 +997,7 @@ export async function runDeterministicMcpToolCall(
   if (!serverUrl) {
     throw new Error(`No MCP server found for tool "${toolName}"`);
   }
+  const serverAuth = serverAuthMap.get(serverUrl) ?? null;
   const ts = now();
   const turnNumber = reservedTurnId
     ? parseInt(
@@ -1142,12 +1164,13 @@ export async function runDeterministicMcpToolCall(
   emitEvent?.({ type: "part-committed", part: { ...toolCallPart } });
 
   // Perform the actual MCP tool call
-  const mcpSession = await mcpGateway.initializeSession(serverUrl);
+  const mcpSession = await mcpGateway.initializeSession(serverUrl, serverAuth);
   const toolResult = await mcpGateway.callTool(
     serverUrl,
     mcpSession.sessionId,
     toolName,
     toolArgs,
+    serverAuth,
   );
 
   const completedAt = now();
@@ -1630,6 +1653,7 @@ export async function createToolEnabledTurn(
           serverCtx?.sessionId ?? null,
           toolCall.name,
           parsedArgs,
+          serverCtx?.auth ?? null,
         );
         const toolResultPart = createToolResultPart(
           session,

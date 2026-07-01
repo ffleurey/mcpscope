@@ -8,6 +8,7 @@ import type { StepResult, StepTypeKey } from '../../domain/executionModel.js'
 import { STEP_TYPE } from '../../domain/executionModel.js'
 import { insertJsonArtifact, getLatestArtifactBySchemaKey } from '../artifactRepository.js'
 import { runAnalysisTurn } from '../boundedTurn.js'
+import { extractJsonBlock } from '../shared/extractJson.js'
 import { SCHEMA_KEY as CORE_KEY, type AnalysisSessionState, type AnalysisTarget } from '../schemas.js'
 import type { RubricCriterion } from '../../domain/model.js'
 import { SCHEMA_KEY, benchmarkVerdictSchema, clampVerdictToRubric } from './schemas.js'
@@ -91,14 +92,4 @@ export class RubricJudgeStep extends WorkflowStep {
     })
     return { status: 'complete', outputArtifacts: [] }
   }
-}
-
-function extractJsonBlock(text: string): string {
-  const trimmed = text.trim()
-  const fenced = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-  if (fenced?.[1]) return fenced[1].trim()
-  const start = trimmed.indexOf('{')
-  const end = trimmed.lastIndexOf('}')
-  if (start !== -1 && end !== -1 && end > start) return trimmed.slice(start, end + 1)
-  return trimmed
 }

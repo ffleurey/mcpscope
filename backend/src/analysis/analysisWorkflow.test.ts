@@ -30,8 +30,14 @@ import { buildRepeatedAttemptGuidance } from "./shared/turnSummaryStep.js";
 import {
   SCHEMA_KEY,
   type AnalysisSessionState,
+  type AnalysisTarget,
   type EvidencePacketIndex,
 } from "./schemas.js";
+import { FastToolGroupedAssessmentStep } from "./fastTool/fastToolGroupedAssessmentStep.js";
+import {
+  SCHEMA_KEY as FAST_TOOL_KEY,
+  type FastToolWorkGroup,
+} from "./fastTool/schemas.js";
 import { SCHEMA_KEY as FULL_KEY } from "./fullSession/schemas.js";
 import { finalAnalysisReportSchema } from "./fullSession/schemas.js";
 import type { StepPersistenceRecord } from "../domain/persistenceContract.js";
@@ -271,6 +277,58 @@ describe("analysis workflow helpers", () => {
     fs.rmSync(dataDir, { recursive: true, force: true });
     bootstrapInspectIds.length = 0;
     db = undefined;
+  });
+
+  it("fast-tool grouped assessment tracks completion per tool group (not just the first)", () => {
+    db = makeTestDatabase();
+    createSessionRecord(
+      db.connection,
+      makeSessionRecord({ id: "ANLY", sessionType: "primary" }),
+    );
+
+    const makeGroup = (id: string, tool: string, part: string): FastToolWorkGroup => ({
+      work_unit_id: id,
+      tool_name: tool,
+      tool_call_part_ids: [part],
+      tool_result_part_ids: [],
+      reasoning_before_part_ids: [],
+      reasoning_after_part_ids: [],
+      turn_ids: [],
+      round_ids: [],
+    });
+    const makeStep = (workUnit: FastToolWorkGroup): FastToolGroupedAssessmentStep =>
+      new FastToolGroupedAssessmentStep(
+        db!,
+        null as unknown as ChatCompletionGateway,
+        null as unknown as McpGateway,
+        {
+          artifactSchemaKey: FAST_TOOL_KEY.GROUP_ASSESSMENT,
+          workUnit,
+          analysisTarget: {} as unknown as AnalysisTarget,
+        },
+      );
+
+    const stepA = makeStep(makeGroup("g1", "toolA", "p1"));
+    const stepB = makeStep(makeGroup("g2", "toolB", "p2"));
+
+    expect(stepA.isComplete(db, "ANLY")).toBe(false);
+    expect(stepB.isComplete(db, "ANLY")).toBe(false);
+
+    // Group g1's assessment lands under the shared GROUP_ASSESSMENT key.
+    insertJsonArtifact(db.connection, {
+      id: "art-g1",
+      sessionId: "ANLY",
+      stepId: null,
+      content: {},
+      metadata: { schema_key: FAST_TOOL_KEY.GROUP_ASSESSMENT, work_unit_id: "g1" },
+      createdAt: 1,
+    });
+
+    // Only g1 is complete; g2 must still run. The previous implementation keyed
+    // completion off "any artifact under the schema key exists", which marked g2
+    // complete too and silently dropped every tool group after the first.
+    expect(stepA.isComplete(db, "ANLY")).toBe(true);
+    expect(stepB.isComplete(db, "ANLY")).toBe(false);
   });
 
   it("bootstrap indexes tool-call packets with reasoning before and cross-round reasoning after", async () => {

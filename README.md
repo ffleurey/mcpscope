@@ -34,7 +34,7 @@ your machine.
 
 ## Install and run
 
-Requires **Node.js 20+** and a running LLM backend, either local ([LM Studio](https://lmstudio.ai),
+Requires **Node.js 24+** and a running LLM backend, either local ([LM Studio](https://lmstudio.ai),
 [Ollama](https://ollama.com)) or remote ([OpenRouter](https://openrouter.ai)).
 
 ```bash
@@ -48,8 +48,8 @@ is stored in `~/.mcpscope`; stop with `Ctrl-C`. Flags: `--port <n>`, `--host <ho
 
 ## Other ways to run
 
-- **Docker**: a released image is published to GHCR. See [TUTORIAL.md](TUTORIAL.md) for the step-by-step path and [RELEASING.md](RELEASING.md) for image tags.
-- **From source**: for working on mcpscope itself, see [DEVELOPMENT.md](DEVELOPMENT.md).
+- **Docker**: a released image is published to GHCR. See [TUTORIAL.md](TUTORIAL.md) for the step-by-step path and [RELEASING.md](docs/RELEASING.md) for image tags.
+- **From source**: for working on mcpscope itself, see [DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## First steps
 
@@ -83,14 +83,14 @@ The full walkthrough, including the CLI and a repeatable MCP-server testing loop
 
 ### Internals & contributing
 
-- [DEVELOPMENT.md](DEVELOPMENT.md) - run from source, build, dev helpers, and repository notes
+- [DEVELOPMENT.md](docs/DEVELOPMENT.md) - run from source, build, dev helpers, and repository notes
 - [AGENTS.md](AGENTS.md) - guide for AI coding agents: project shape, parity principle, working style, validation
-- [ARCHITECTURE.md](ARCHITECTURE.md) - system design, persistence, streaming, replay, and API surface
-- [DATA-MODEL.md](DATA-MODEL.md) - canonical runtime tree, part taxonomy, and IDs
-- [DATABASE-SCHEMA.md](DATABASE-SCHEMA.md) - SQLite tables, foreign keys, and ER diagram
-- [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) - frontend design system: brand, tokens, primitives, patterns
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - system design, persistence, streaming, replay, and API surface
+- [DATA-MODEL.md](docs/DATA-MODEL.md) - canonical runtime tree, part taxonomy, and IDs
+- [DATABASE-SCHEMA.md](docs/DATABASE-SCHEMA.md) - SQLite tables, foreign keys, and ER diagram
+- [DESIGN-SYSTEM.md](docs/DESIGN-SYSTEM.md) - frontend design system: brand, tokens, primitives, patterns
 - [design-assets/](design-assets/) - master brand SVGs (logo, mark, wordmark, favicon); see its README
-- [TESTING.md](TESTING.md) - test strategy, replay, and how to add regressions
-- [RELEASING.md](RELEASING.md) - tag-driven release workflow and GHCR publishing
-- [HISTORY.md](HISTORY.md) - chronological log of releases and major decisions
-- [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) - the `session_analysis` workflow (also the engine behind benchmark evaluation)
+- [TESTING.md](docs/TESTING.md) - test strategy, replay, and how to add regressions
+- [RELEASING.md](docs/RELEASING.md) - tag-driven release workflow and GHCR publishing
+
+Internal/contributor docs live under [`docs/`](docs/); user-facing guides stay at the repository root.

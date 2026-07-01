@@ -20,12 +20,12 @@ For the backing SQLite storage layout, foreign keys, and singleton defaults tabl
 - `Turn` — the LLM-specific step subtype; owns `Round`, `Part`, and `RawExchange` records, and may optionally belong to one `WorkflowStep`
 - the runtime tree described below for persisted sessions (unchanged from user perspective)
 - one session contains one setup and zero or more turns
-- hierarchical IDs for session/setup/step/turn/round/part runtime nodes, with `W` for workflow steps, `T` for turns, and `C` for compaction steps. Benchmarks add their own type-tagged IDs (`B-XXXX` benchmark, `B-XXXX.N` case, `R-XXXX` run, `E-XXXX` evaluation) — see [BENCHMARK.md](BENCHMARK.md)
+- hierarchical IDs for session/setup/step/turn/round/part runtime nodes, with `W` for workflow steps, `T` for turns, and `C` for compaction steps. Benchmarks add their own type-tagged IDs (`B-XXXX` benchmark, `B-XXXX.N` case, `R-XXXX` run, `E-XXXX` evaluation) — see [BENCHMARK.md](../BENCHMARK.md)
 - session ownership through `parent_container_type_key` / `parent_container_id` on `sessions`
 - generic persistence for sessions, steps, and turns (`sessions`, `steps`, `turns`)
 - existing child-session behavior still works through the new model
-- the benchmark suite/case/run feature: benchmarks and cases are first-class persisted objects, a run is an immutable snapshot of selected cases + settings, and a session created by a run carries that run as its `benchmark` parent (see [BENCHMARK.md](BENCHMARK.md))
-- benchmark **LLM evaluation**: an optional per-case rubric judged by a separate model after a run. An evaluation reuses the analysis model directly — it spawns one `session_analysis` session (workflow kind `benchmark_evaluation`) per run-session, parented to that run-session — so it adds no new session type or parent rule (see [BENCHMARK.md](BENCHMARK.md))
+- the benchmark suite/case/run feature: benchmarks and cases are first-class persisted objects, a run is an immutable snapshot of selected cases + settings, and a session created by a run carries that run as its `benchmark` parent (see [BENCHMARK.md](../BENCHMARK.md))
+- benchmark **LLM evaluation**: an optional per-case rubric judged by a separate model after a run. An evaluation reuses the analysis model directly — it spawns one `session_analysis` session (workflow kind `benchmark_evaluation`) per run-session, parented to that run-session — so it adds no new session type or parent rule (see [BENCHMARK.md](../BENCHMARK.md))
 
 **Not implemented yet:**
 
@@ -249,7 +249,7 @@ Part suffixes encode the public part type: `SP` `system_prompt`, `MI` `mcp_instr
 **Benchmark-family IDs** extend the same type-tagged scheme *outside* the runtime tree — a bare
 4-char code is always a session, a prefixed code is a benchmark object: `B-7K3M` (benchmark),
 `B-7K3M.3` (case), `R-9QX4` (run), `E-2F8P` (evaluation). Their structure and lifecycles are
-owned by [BENCHMARK.md → IDs](BENCHMARK.md#ids).
+owned by [BENCHMARK.md → IDs](../BENCHMARK.md#ids).
 
 ## Lookup model rules
 
@@ -262,7 +262,7 @@ owned by [BENCHMARK.md → IDs](BENCHMARK.md#ids).
 - full mode adds allowed content; it does not invent a different object model
 - the tables above describe the canonical properties expected on those nodes
 - **one inspect, every surface**: the UI id-pill (`GET /api/lookup/:id`), the CLI (`mcpscope inspect`), and the MCP `mcpscope_inspect` tool all call the single `inspect` operation, so any given ID inspects to the same payload everywhere — if one surface resolves it, they all do
-- `inspect` also resolves benchmark-family IDs (`B-`/`B-.N`/`R-`/`E-`) to the matching benchmark/case/run/evaluation payload (full mode adds a run's metrics report); see [BENCHMARK.md](BENCHMARK.md)
+- `inspect` also resolves benchmark-family IDs (`B-`/`B-.N`/`R-`/`E-`) to the matching benchmark/case/run/evaluation payload (full mode adds a run's metrics report); see [BENCHMARK.md](../BENCHMARK.md)
 
 ## Session classification and parent model
 

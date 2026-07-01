@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import {
   lmStudioConnectionSchema,
@@ -135,11 +136,14 @@ export class ConfigStore {
             }
           : null,
     };
-    const dir = this.filePath.substring(0, this.filePath.lastIndexOf("/"));
-    if (dir !== "") {
+    const dir = path.dirname(this.filePath);
+    if (dir !== "" && dir !== ".") {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), "utf-8");
+    // Write atomically: a crash mid-write must not corrupt the config file.
+    const tmpPath = `${this.filePath}.${process.pid}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
+    fs.renameSync(tmpPath, this.filePath);
   }
 
   // ── LM Connections ────────────────────────────────────────────────────────

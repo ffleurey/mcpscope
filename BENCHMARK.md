@@ -16,11 +16,8 @@ re-run it. Quality is measured in two complementary layers:
 
 mcpscope owns session/run/evaluation creation; you do not script it.
 
-See [backlog/completed/benchmark-v1.md](backlog/completed/benchmark-v1.md) for the
-deterministic-metrics record and [backlog/research/benchmark-success-criteria.md](backlog/research/benchmark-success-criteria.md)
-for the evaluation-design research. The shared analysis framework is documented in
-[backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md) and
-[ARCHITECTURE.md](ARCHITECTURE.md).
+The shared analysis framework that benchmark evaluation is built on is documented in
+[ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Vocabulary
 
@@ -59,13 +56,13 @@ left-pane tree as a container of its sessions. The verdict notes cite these hier
 so a finding always points back at the exact session/turn/tool-call it refers to. Every
 benchmark ID resolves through the one shared `inspect` operation, so it inspects identically
 from the UI id-pill, the CLI, and MCP (see
-[DATA-MODEL.md → Lookup model rules](DATA-MODEL.md#lookup-model-rules)).
+[DATA-MODEL.md → Lookup model rules](docs/DATA-MODEL.md#lookup-model-rules)).
 
 ## Data model
 
 The backing tables (`benchmarks`, `benchmark_cases`, `benchmark_runs`,
 `benchmark_evaluations`) and their columns are defined in
-[DATABASE-SCHEMA.md](DATABASE-SCHEMA.md); this section describes the domain shape.
+[DATABASE-SCHEMA.md](docs/DATABASE-SCHEMA.md); this section describes the domain shape.
 
 - **Benchmark** (editable blueprint): `id, name, description, createdAt, updatedAt`.
 - **Case**: `id, benchmarkId, name, prompt, orderIndex, expectedToolsCalled[],
@@ -122,10 +119,10 @@ case can have checks, a rubric, both, or neither.
 
 ## Agent-facing surface (CLI + MCP)
 
-The agent-facing benchmark capabilities now live in the shared **operation catalog**
-(`backend/src/operations/catalog.ts`), so each is exposed identically through both adapters:
-every operation is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP
-parity). These ops return **snake_case** results, the operation-catalog convention. The fourteen
+The agent-facing benchmark capabilities live in the shared **operation catalog**, so each is
+exposed identically as a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool, returning
+**snake_case** results (the CLI/MCP parity rule and catalog mechanism are in
+[AGENTS.md](AGENTS.md) and [ARCHITECTURE.md](docs/ARCHITECTURE.md)). The fourteen
 benchmark operations are:
 
 `benchmark_create`, `benchmark_list`, `benchmark_inspect`, `benchmark_add_case`,
@@ -221,7 +218,7 @@ the identical operations as `mcpscope_<id>` tools.
 
 ## CLI / MCP
 
-The twelve `benchmark_*` operations are flat, catalog-backed commands, each exposed identically
+The fourteen `benchmark_*` operations are flat, catalog-backed commands, each exposed identically
 as a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool. The exact per-command flags,
 arguments, and text/JSON output live in one place — [CLI.md](CLI.md) (Benchmark commands) and
 [MCP.md](MCP.md) (tool inputs/results) — and are not repeated here to avoid drift. The
@@ -288,7 +285,7 @@ Because it *is* an analysis session, each judge session is individually inspecta
 left-pane tree (parented to the session it scored), retryable, and reuses analysis
 persistence, prompting, and scheduling. The shared framework — `AnalysisSessionBase`,
 `WorkflowStep`, the workflow registry — is documented in
-[ARCHITECTURE.md](ARCHITECTURE.md) and [backlog/completed/SESSION-ANALYSIS.md](backlog/completed/SESSION-ANALYSIS.md);
+[ARCHITECTURE.md](docs/ARCHITECTURE.md);
 the benchmark-specific pieces live in `backend/src/analysis/benchmarkEvaluation/`.
 
 ### Rubric and verdict
