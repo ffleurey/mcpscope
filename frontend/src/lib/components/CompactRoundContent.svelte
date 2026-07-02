@@ -7,6 +7,8 @@
   import MarkdownPreviewDialog from './MarkdownPreviewDialog.svelte'
   import StreamingRoundDeltaBlock from './StreamingRoundDeltaBlock.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
+  import Icon from './Icon.svelte'
+  import { iconView } from '../design/icons'
   import { highlightStructuredText } from '../textHighlight'
 
   function fmtTokenCount(count: number | null, isEstimated: boolean): string {
@@ -216,23 +218,7 @@
             aria-label="Render preview"
             title="Render preview"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-              ><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle
-                cx="12"
-                cy="12"
-                r="3"
-              /></svg
-            >
+            <Icon path={iconView} />
           </button>
         {/if}
       </section>

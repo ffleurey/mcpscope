@@ -346,13 +346,13 @@ function createReplayChatCompletionGateway(
 ): ChatCompletionGateway {
   const probePairs = pairRawExchanges(
     trace.rawExchanges,
-    ["lmstudio-probe-request", "llm-probe-request"],
-    ["lmstudio-probe-response", "llm-probe-response"],
+    ["llm-probe-request"],
+    ["llm-probe-response"],
   );
   const streamedPairs = pairRawExchanges(
     trace.rawExchanges,
-    ["lmstudio-request", "llm-request"],
-    ["lmstudio-response", "llm-response"],
+    ["llm-request"],
+    ["llm-response"],
   );
   let probeIndex = 0;
   let streamedIndex = 0;

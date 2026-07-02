@@ -8,6 +8,8 @@
   import TracePartBlock from './TracePartBlock.svelte'
   import { looksLikeMarkdown } from '../markdownRender'
   import { highlightStructuredText } from '../textHighlight'
+  import Icon from './Icon.svelte'
+  import { iconChevronRight, iconArrowDown, iconView } from '../design/icons'
 
   interface Props {
     turn: TurnRecord
@@ -100,7 +102,9 @@
         }}
         title={promptCollapsed ? 'Expand prompt' : 'Collapse prompt'}
       >
-        <span class="disclosure-arrow" class:open={!promptCollapsed}>▶</span>
+        <span class="disclosure-arrow" class:open={!promptCollapsed}
+          ><Icon path={iconChevronRight} /></span
+        >
         <span class="toggle-label">Assessment Prompt</span>
       </button>
       {#if !promptCollapsed}
@@ -134,7 +138,9 @@
             chatCollapsed = !chatCollapsed
           }}
         >
-          <span class="disclosure-arrow" class:open={!chatCollapsed}>▶</span>
+          <span class="disclosure-arrow" class:open={!chatCollapsed}
+            ><Icon path={iconChevronRight} /></span
+          >
           <span class="status-pill dim" class:error={turn.status === 'error'}>
             {turn.status}
           </span>
@@ -167,23 +173,7 @@
                 aria-label="Render preview"
                 title="Render preview"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                  ><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle
-                    cx="12"
-                    cy="12"
-                    r="3"
-                  /></svg
-                >
+                <Icon path={iconView} />
               </button>
             {/if}
           </div>
@@ -293,7 +283,9 @@
     {#if mode === 'inspect' && turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
       <div class="compaction-summary">
         {#if turn.compactionTokensRemoved !== null && turn.compactionTokensRemoved > 0}
-          <span class="compaction-label">↓ {turn.compactionApplied}</span>
+          <span class="compaction-label"
+            ><Icon path={iconArrowDown} /> {turn.compactionApplied}</span
+          >
           <span class="compaction-tokens"
             >−{turn.compactionTokensRemoved.toLocaleString()} tokens</span
           >
@@ -303,7 +295,9 @@
             >
           {/if}
         {:else}
-          <span class="compaction-label">↓ {turn.compactionApplied}</span>
+          <span class="compaction-label"
+            ><Icon path={iconArrowDown} /> {turn.compactionApplied}</span
+          >
           <span class="compaction-tokens">no tokens removed</span>
         {/if}
       </div>

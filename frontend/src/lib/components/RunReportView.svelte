@@ -15,6 +15,7 @@
   import { chatSessions, selectChat } from '../sessionStore'
   import { modelConfigs } from '../connectionStore'
   import { columnResize } from '../actions/columnResize'
+  import { runStatusPillClass } from '../format'
   import IdBadge from './IdBadge.svelte'
   import Icon from './Icon.svelte'
   import DialogShell from './DialogShell.svelte'
@@ -134,13 +135,6 @@
     return run?.mcpProfileIds ?? []
   })
 
-  function statusPillClass(status: string): string {
-    if (status === 'complete') return 'success'
-    if (status === 'error') return 'error'
-    if (status === 'running' || status === 'paused') return 'soft'
-    return 'dim'
-  }
-
   // Per-tool rollup sorted by error rate then calls (worst offenders first).
   const perToolRows = $derived.by(() => {
     if (!report) return []
@@ -250,7 +244,7 @@
       <div class="header-line">
         <h2 class="benchmark-name">{run.benchmarkName}</h2>
         <IdBadge id={run.id} />
-        <span class="status-pill {statusPillClass(run.status)}">{run.status}</span>
+        <span class="status-pill {runStatusPillClass(run.status)}">{run.status}</span>
         <span class="header-actions">
           {#if canPauseRun}
             <button
@@ -284,7 +278,7 @@
           {/if}
           {#if canStopRun}
             <button
-              class="btn btn-sm danger"
+              class="btn btn-sm btn-danger"
               disabled={controlBusy}
               onclick={() => withControlBusy(stopActiveRun)}
               title="Stop now: aborts the in-flight session; completed ones are kept"
@@ -477,7 +471,7 @@
                 <span class="eval-judge"
                   >Judge: <span class="meta-value">{judgeName(ev.judgeModelConfigId)}</span></span
                 >
-                <span class="status-pill {statusPillClass(ev.status)}">{ev.status}</span>
+                <span class="status-pill {runStatusPillClass(ev.status)}">{ev.status}</span>
                 {#if evalIncomplete(ev)}
                   <span class="eval-incomplete" title="Not all run sessions have been judged">
                     {ev.judgedSessions}/{ev.expectedSessions} judged
@@ -603,7 +597,7 @@
                                         run <IdBadge id={s.runSessionId} /> · judge
                                         <IdBadge id={s.analysisSessionId} />
                                       </span>
-                                      <span class="status-pill {statusPillClass(s.status)}"
+                                      <span class="status-pill {runStatusPillClass(s.status)}"
                                         >{s.status}</span
                                       >
                                     </div>

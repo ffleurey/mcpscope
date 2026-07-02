@@ -16,10 +16,16 @@
 import {
   mdiChevronRight,
   mdiChevronDown,
+  mdiChevronUp,
   mdiChevronDoubleLeft,
   mdiChevronDoubleRight,
+  mdiArrowLeft,
+  mdiArrowRight,
+  mdiArrowDown,
   mdiPlus,
   mdiClose,
+  mdiCheck,
+  mdiAlertOutline,
   mdiPencilOutline,
   mdiTrashCanOutline,
   mdiLanConnect,
@@ -51,12 +57,18 @@ import {
 // ── Navigation & layout ────────────────────────────────────────────
 export const iconChevronRight = mdiChevronRight
 export const iconChevronDown = mdiChevronDown
+export const iconChevronUp = mdiChevronUp
 export const iconCollapse = mdiChevronDoubleLeft
 export const iconExpand = mdiChevronDoubleRight
+export const iconArrowLeft = mdiArrowLeft
+export const iconArrowRight = mdiArrowRight
+export const iconArrowDown = mdiArrowDown
 
 // ── Actions ─────────────────────────────────────────────────────────
 export const iconPlus = mdiPlus
 export const iconClose = mdiClose
+export const iconCheck = mdiCheck
+export const iconWarning = mdiAlertOutline
 export const iconEdit = mdiPencilOutline
 export const iconTrash = mdiTrashCanOutline
 export const iconTest = mdiLanConnect

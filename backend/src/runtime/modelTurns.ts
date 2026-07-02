@@ -572,12 +572,6 @@ export async function createModelOnlyTurn(
       part,
     }),
   );
-  compaction.parts.forEach((part) =>
-    emitEvent?.({
-      type: "part-committed",
-      part,
-    }),
-  );
   emitEvent?.({
     type: "round-committed",
     round: { ...round },
@@ -606,9 +600,7 @@ export async function createModelOnlyTurn(
     turn,
     round,
     rounds: [round],
-    parts: persistedParts.filter(
-      (part) => part.turnId === turnId || part.turnId === compaction.step.id,
-    ),
+    parts: persistedParts.filter((part) => part.turnId === turnId),
     transcript: trace.transcript,
     context: trace.context,
   };

@@ -3,7 +3,7 @@ import { getSessionRecord } from '../persistence/repository.js'
 import { listArtifactsBySession, type ArtifactRecord } from './artifactRepository.js'
 import { SCHEMA_KEY, type AnalysisPhase, type AnalysisSessionState } from './schemas.js'
 import type { SessionRecord, StepRecord } from '../domain/model.js'
-import { isKnownWorkflowKind, getWorkflowLabel } from './analysisWorkflowFactory.js'
+import { getWorkflowLabel } from './analysisWorkflowFactory.js'
 
 export interface AnalysisDiagnosticSummary {
   step_id: string | null
@@ -11,25 +11,14 @@ export interface AnalysisDiagnosticSummary {
   message: string
 }
 
-export function getAnalysisWorkflowKindFromStep(step: Pick<StepRecord, 'params'> | null | undefined): string | null {
-  const workflowKind = (step?.params as { workflow_kind?: string } | null)?.workflow_kind
-  if (workflowKind && isKnownWorkflowKind(workflowKind)) {
-    return workflowKind
-  }
-  return null
-}
-
 export function getAnalysisWorkflowLabel(workflowKind: string | null | undefined): string | null {
   return workflowKind ? getWorkflowLabel(workflowKind) : null
 }
 
 export function getAnalysisWorkflowKindFromSteps(
-  steps: Array<Pick<StepRecord, 'stepTypeKey' | 'params'>>,
   connection?: BackendConnection,
   sessionId?: string,
 ): string | null {
-  const cursorStep = steps.find(step => step.stepTypeKey === 'analysis_v2_cursor')
-  if (cursorStep) return getAnalysisWorkflowKindFromStep(cursorStep)
   if (connection && sessionId) {
     const session = getSessionRecord(connection, sessionId)
     const analysisState = session?.analysisState as unknown as AnalysisSessionState | null

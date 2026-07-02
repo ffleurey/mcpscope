@@ -8,7 +8,6 @@
     activeTurnStream,
     chatSessions,
     executeAnalysis,
-    executeAnalysisStep,
     exportActiveTrace,
     isRetryingAnalysis,
     isSendingTurn,
@@ -30,6 +29,15 @@
   import SessionCompactionStepBlock from './SessionCompactionStepBlock.svelte'
   import SessionPreludeBlock from './SessionPreludeBlock.svelte'
   import SessionTurnBlock from './SessionTurnBlock.svelte'
+  import Icon from './Icon.svelte'
+  import {
+    iconExport,
+    iconPlus,
+    iconRefresh,
+    iconWarning,
+    iconPlay,
+    iconCheck,
+  } from '../design/icons'
 
   type TimelineItem =
     | {
@@ -79,7 +87,6 @@
   let traceTurns = $derived(
     [...($activeTrace?.turns ?? [])].sort((a, b) => a.turnNumber - b.turnNumber),
   )
-  let renderableSteps = $derived(traceSteps)
   let analysisWorkflowSteps = $derived($activeTrace?.workflowSteps ?? [])
   let analysisLooseTurns = $derived.by(() =>
     isAnalysisSession ? traceTurns.filter((turn) => turn.ownerStepId === null) : [],
@@ -92,7 +99,6 @@
       return tA === tB ? a.roundIndex - b.roundIndex : tA - tB
     })
   })
-  let traceRawExchanges = $derived($activeTrace?.rawExchanges ?? [])
   let partsByTurn = $derived.by(() => {
     const m = new Map<string, typeof transcriptParts>()
     for (const p of transcriptParts) {
@@ -115,7 +121,6 @@
     }
     return m
   })
-  let sessionPreludeRawExchanges = $derived(traceRawExchanges.filter((x) => x.turnId === null))
   let sessionHasExecutionJob = $derived.by(() => {
     return sessionHasQueuedOrActiveJob($schedulerSnapshot, session?.id)
   })
@@ -129,7 +134,7 @@
         sortTime: turn.createdAt,
         turn,
       })),
-      ...renderableSteps.map((step) => ({
+      ...traceSteps.map((step) => ({
         kind: 'step' as const,
         id: step.id,
         timelineKey: `step:${step.id}`,
@@ -217,7 +222,6 @@
     isInitError ||
       isInitializing ||
       sessionPreludeParts.length > 0 ||
-      sessionPreludeRawExchanges.length > 0 ||
       timelineItems.length > 0 ||
       analysisWorkflowSteps.length > 0 ||
       analysisLooseTurns.length > 0,
@@ -274,7 +278,7 @@
     const turnCount = traceTurns.length
     const streamingTurnId = activeStreamingTurnId
     // access reactive dependencies so this effect re-runs
-    visibleParts.length + sessionPreludeRawExchanges.length + streamingSignature.length
+    visibleParts.length + streamingSignature.length
 
     const sessionChanged = sessionId !== lastSessionId
     const newTurnStarted =
@@ -366,7 +370,7 @@
           onclick={exportActiveTrace}
           title="Export session trace as JSON"
         >
-          ⬇ Export
+          <Icon path={iconExport} /> Export
         </button>
       {/if}
       {#if session.session_type === 'primary'}
@@ -375,7 +379,7 @@
           onclick={() => (showExtractCase = true)}
           title="Extract this session as a benchmark case"
         >
-          ＋ Case
+          <Icon path={iconPlus} /> Case
         </button>
       {/if}
     </div>
@@ -424,7 +428,7 @@
               {/if}
             </div>
             <button class="btn btn-sm" onclick={() => retryInit(session.id)}
-              >↻ Retry initialization</button
+              ><Icon path={iconRefresh} /> Retry initialization</button
             >
           </div>
         {/if}
@@ -474,7 +478,7 @@
 
     {#if isExhausted}
       <div class="exhausted-banner">
-        ⚠️ Context window full — this session cannot continue. Start a new session.
+        <Icon path={iconWarning} /> Context window full — this session cannot continue. Start a new session.
       </div>
     {/if}
 
@@ -527,7 +531,7 @@
               disabled={analysisRunDisabled}
               onclick={() => void executeAnalysis()}
             >
-              {sessionHasExecutionJob ? '⏳ Queued…' : '▶ Run Analysis'}
+              {#if sessionHasExecutionJob}Queued…{:else}<Icon path={iconPlay} /> Run Analysis{/if}
             </button>
             {#if analysisFailed}
               <button
@@ -536,21 +540,11 @@
                 onclick={() => void retryFailedAnalysisStep()}
                 title="Reset the failed cursor phase and rerun the failed step once"
               >
-                {$isRetryingAnalysis ? '⏳ Retrying…' : '↻ Retry failed step'}
-              </button>
-            {/if}
-            {#if viewMode === 'inspect'}
-              <button
-                class="btn"
-                disabled={analysisRunDisabled}
-                onclick={() => void executeAnalysisStep()}
-                title="Advance one workflow step (debug)"
-              >
-                {sessionHasExecutionJob ? '⏳ Queued…' : '⏭ Step (Debug)'}
+                {#if $isRetryingAnalysis}Retrying…{:else}<Icon path={iconRefresh} /> Retry failed step{/if}
               </button>
             {/if}
           {:else}
-            <span class="analysis-bar-done">✓ Analysis complete</span>
+            <span class="analysis-bar-done"><Icon path={iconCheck} /> Analysis complete</span>
           {/if}
         </div>
       {:else}
@@ -651,6 +645,11 @@
     min-width: 0;
     flex: 1;
     outline: none;
+  }
+
+  .chat-title-input:focus-visible {
+    outline: none;
+    border-color: var(--amber-bright);
   }
 
   .view-mode-toggle {

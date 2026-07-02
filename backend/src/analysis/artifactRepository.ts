@@ -45,24 +45,6 @@ export function insertJsonArtifact(
   })
 }
 
-export function updateJsonArtifact(
-  connection: BackendConnection,
-  id: string,
-  content: unknown,
-  metadata: Record<string, unknown>,
-): void {
-  connection.prepare(`
-    UPDATE artifacts
-    SET content_json = @contentJson,
-        metadata_json = @metadataJson
-    WHERE id = @id
-  `).run({
-    id,
-    contentJson: JSON.stringify(content),
-    metadataJson: JSON.stringify(metadata),
-  })
-}
-
 export function deleteJsonArtifact(
   connection: BackendConnection,
   id: string,
@@ -73,27 +55,6 @@ export function deleteJsonArtifact(
 // ─────────────────────────────────────────────────────────────────────────────
 // Read
 // ─────────────────────────────────────────────────────────────────────────────
-
-export function getArtifact(
-  connection: BackendConnection,
-  id: string,
-): ArtifactRecord | null {
-  const row = connection.prepare(`
-    SELECT id, session_id, step_id, content_json, metadata_json, created_at
-    FROM artifacts
-    WHERE id = ?
-  `).get(id) as {
-    id: string
-    session_id: string
-    step_id: string | null
-    content_json: string | null
-    metadata_json: string | null
-    created_at: number
-  } | undefined
-
-  if (!row) return null
-  return mapArtifactRow(row)
-}
 
 export function listArtifactsBySession(
   connection: BackendConnection,

@@ -6,10 +6,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { BackendConfig } from "./config.js";
 import { openBackendDatabase } from "./persistence/db.js";
-import {
-  recoverInterruptedState,
-  type ActiveSessionInfo,
-} from "./persistence/repository.js";
+import { recoverInterruptedState } from "./persistence/repository.js";
 import { getLoadedContextLength } from "./services/lmstudio/client.js";
 import {
   createChatCompletion,
@@ -85,17 +82,6 @@ export async function buildBackendApp(
       return operationErrorResponse(err);
     }
     throw err;
-  }
-
-  // Used by routes that are not yet delegating to the operation layer.
-  function anotherSessionActiveError(active: ActiveSessionInfo) {
-    return operationErrorResponse(
-      new OperationError(
-        "Another session is currently active. Nothing was started.",
-        "another_session_active",
-        { id: active.id, state: active.state },
-      ),
-    );
   }
 
   app.setErrorHandler((error, _request, reply) => {
@@ -340,7 +326,6 @@ export async function buildBackendApp(
     scheduler,
     opCtx,
     handleOperationError,
-    anotherSessionActiveError,
     toLifecycleState,
     relaySchedulerJobStream,
   };

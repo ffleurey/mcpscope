@@ -5,7 +5,7 @@
   import AnalysisLaunchModal from './AnalysisLaunchModal.svelte'
   import type { SessionSummary } from '../backendTypes'
   import { formatTreeTimestamp } from '../format'
-  import { iconChevronRight, iconChevronDown } from '../design/icons'
+  import { iconChevronRight, iconChevronDown, iconAnalysis, iconTrash } from '../design/icons'
   import Icon from './Icon.svelte'
 
   // ─── Modal state ────────────────────────────────────────────────────────────
@@ -121,13 +121,13 @@
               <button
                 class="action-btn analyze-btn"
                 title="Launch analysis"
-                onclick={(e) => openAnalysis(e, session)}>∑</button
+                onclick={(e) => openAnalysis(e, session)}><Icon path={iconAnalysis} /></button
               >
             {/if}
             <button
               class="action-btn delete-btn"
               title="Delete session"
-              onclick={(e) => handleDelete(e, session.id)}>×</button
+              onclick={(e) => handleDelete(e, session.id)}><Icon path={iconTrash} /></button
             >
           </div>
         </div>
@@ -152,7 +152,7 @@
                     <button
                       class="action-btn delete-btn"
                       title="Delete analysis session"
-                      onclick={(e) => handleDelete(e, child.id)}>×</button
+                      onclick={(e) => handleDelete(e, child.id)}><Icon path={iconTrash} /></button
                     >
                   </div>
                 </div>

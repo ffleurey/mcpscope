@@ -114,7 +114,6 @@ export class ToolCallAssessmentStep extends WorkflowStep {
       this.writeDiagnostic(analysisSessionId, packet, 'json_parse_error',
         'LLM response was not valid JSON',
         { raw_response: turnResult.responseText, error: String(e) }, parseTs)
-      this.setErrorPhase(state)
       return { status: 'error', outputArtifacts: [] }
     }
 
@@ -123,7 +122,6 @@ export class ToolCallAssessmentStep extends WorkflowStep {
       this.writeDiagnostic(analysisSessionId, packet, 'schema_validation_error',
         'LLM response did not match evaluation_result schema',
         { raw_response: turnResult.responseText, errors: (parsed.error as ZodError).issues }, parseTs)
-      this.setErrorPhase(state)
       return { status: 'error', outputArtifacts: [] }
     }
 
@@ -135,7 +133,6 @@ export class ToolCallAssessmentStep extends WorkflowStep {
           expected: { subject_scope: 'tool_call', subject_id: packet.tool_call_part_id },
           actual: { subject_scope: parsed.data.subject_scope, subject_id: parsed.data.subject_id },
         }, parseTs)
-      this.setErrorPhase(state)
       return { status: 'error', outputArtifacts: [] }
     }
 
@@ -181,9 +178,6 @@ export class ToolCallAssessmentStep extends WorkflowStep {
       },
       createdAt: ts,
     })
-  }
-
-  private setErrorPhase(_state: AnalysisSessionState): void {
   }
 
   private mutateContextAfterAssessment(

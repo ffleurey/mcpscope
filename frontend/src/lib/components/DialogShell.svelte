@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { Snippet } from 'svelte'
+  import Icon from './Icon.svelte'
+  import { iconClose } from '../design/icons'
 
   interface Props {
     title: string
@@ -94,7 +96,9 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="dialog-header" onmousedown={startDrag}>
       <span class="dialog-title">{title}</span>
-      <button class="close-btn" onclick={onClose} aria-label="Close">✕</button>
+      <button class="close-btn" onclick={onClose} aria-label="Close"
+        ><Icon path={iconClose} /></button
+      >
     </div>
     <div class="dialog-body" class:flush>
       {@render children()}

@@ -198,6 +198,11 @@ Active tab: 2px `--amber-bright` underline + `--text-bright`. Inactive: `--text-
 `.warn` (amber), `.error` (red). Flat — no glow. `.status-pill` (+ `.dim/.soft/.error/.success`) for a
 rounded status label.
 
+For **run status** (benchmark/analysis runs) the dot and pill modifier come from the shared
+`runStatusDotClass` / `runStatusPillClass` helpers in `src/lib/format.ts` — one source of truth so every
+run row renders identically (in particular, `paused` reads as an active dot, not idle). Don't re-derive
+these per component.
+
 ### Tables
 
 The shared **`.data-table`** primitive (config admin pages, run reports; live demo in the Reference):
@@ -236,6 +241,14 @@ for `<details>` and button-toggle expand/collapse. See the Reference for the ful
   file changes.
 - Render with the **`<Icon path={iconX} />`** component (`Icon.svelte`) — plain `<svg><path>` markup, never
   `{@html}`. Size via `font-size` (1em), color via `currentColor`.
+- **The rule:** every icon in the app is an `<Icon path={iconX} />` fed from the canonical
+  `design/icons.ts` set. **Never** hand-inline a raw Unicode glyph (`✕`, `▶`, `↑`, `∑`, `⚠️`, `✓`, …) or a
+  hand-written `<svg>` in a component as an icon — add a token to `icons.ts` and render it through `<Icon>`.
+- **Disclosure arrows** use `<span class="disclosure-arrow" class:open={…}><Icon path={iconChevronRight} /></span>`.
+  The `.disclosure-arrow` span is what rotates (`.open` → `transform: rotate(90deg)`); the chevron itself is a
+  normal `<Icon>`. Don't rotate a triangle glyph.
+- **The one allowed exception** is a CSS pseudo-element triangle: `::before { content: '▶' }`. A `::before`
+  can't hold a Svelte component, so those (and only those) may keep the literal glyph in CSS.
 
 ---
 

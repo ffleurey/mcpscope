@@ -18,7 +18,13 @@
     isPrimaryLaunchDialogOpen,
     openPrimaryLaunchDialog,
   } from '../sessionStore'
-  import { iconChevronRight, iconChevronDown, iconPlus, iconHome } from '../design/icons'
+  import {
+    iconChevronRight,
+    iconChevronDown,
+    iconPlus,
+    iconHome,
+    iconImport,
+  } from '../design/icons'
   import Icon from './Icon.svelte'
   import PrimarySessionLaunchModal from './PrimarySessionLaunchModal.svelte'
   import BenchmarkFormModal from './BenchmarkFormModal.svelte'
@@ -162,7 +168,7 @@
   {/if}
   {#if collapsed}
     <button class="icon-btn icon-btn-dim" onclick={() => (collapsed = false)} title="Expand sidebar"
-      >›</button
+      ><Icon path={iconChevronRight} /></button
     >
   {:else}
     <input
@@ -305,7 +311,8 @@
               class="icon-btn icon-btn-dim"
               onclick={handleImportClick}
               disabled={$isImportingTrace}
-              title={$isImportingTrace ? 'Importing…' : 'Import trace'}>↑</button
+              title={$isImportingTrace ? 'Importing…' : 'Import trace'}
+              ><Icon path={iconImport} /></button
             >
           </div>
         </div>

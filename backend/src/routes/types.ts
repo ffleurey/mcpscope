@@ -4,8 +4,6 @@ import type { OperationContext } from '../operations/index.js'
 import type { ExecutionScheduler } from '../runtime/scheduler.js'
 import type { SchedulerEvent } from '../runtime/schedulerTypes.js'
 import type { openBackendDatabase } from '../persistence/db.js'
-import type { ActiveSessionInfo } from '../persistence/repository.js'
-
 export type BackendDatabaseHandle = ReturnType<typeof openBackendDatabase>
 
 export interface RouteDeps {
@@ -15,7 +13,6 @@ export interface RouteDeps {
   scheduler: ExecutionScheduler
   opCtx: OperationContext
   handleOperationError: (err: unknown, reply: { code(n: number): void }) => { error: Record<string, unknown> }
-  anotherSessionActiveError: (active: ActiveSessionInfo) => { error: Record<string, unknown> }
   toLifecycleState: (summary: { id: string; status: string; initStatus: string; sessionType?: string }) => 'initializing' | 'ready' | 'running' | 'error'
   relaySchedulerJobStream: (
     reply: FastifyReply,

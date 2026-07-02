@@ -752,10 +752,13 @@
   <section class="ref-section" id="icons">
     <h2>Icon set</h2>
     <p class="ref-note">
-      All icons live in <code class="mono">src/lib/design/icons.ts</code> as inline SVG strings. No
-      icon font dependency. Style via <code class="mono">font-size</code> and
+      All icons are Material Design Icons via <code class="mono">@mdi/js</code>, exposed under
+      semantic names in <code class="mono">src/lib/design/icons.ts</code>, and rendered with
+      <code class="mono">&lt;Icon path={'{'}iconX{'}'} /&gt;</code>. No icon font dependency, and
+      never a raw Unicode glyph in a component. Style via <code class="mono">font-size</code> (1em)
+      and
       <code class="mono">color</code>
-      on the wrapping element.
+      (currentColor) on the wrapping element.
     </p>
 
     <div class="icon-grid">

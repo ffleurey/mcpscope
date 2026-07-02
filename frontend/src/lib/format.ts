@@ -12,3 +12,25 @@ export function formatTreeTimestamp(ts: number): string {
   const MM = String(d.getMinutes()).padStart(2, '0')
   return `${dd}/${mm} ${HH}:${MM}`
 }
+
+/**
+ * Status-dot class for a run (benchmark or analysis). In-progress states
+ * (running/pending/paused) all read as an active dot; error is error; anything
+ * else (complete/idle) is idle. Shared so every run row renders identically.
+ */
+export function runStatusDotClass(status: string): string {
+  if (status === 'running' || status === 'pending' || status === 'paused') return 'running'
+  if (status === 'error') return 'error'
+  return 'idle'
+}
+
+/**
+ * Status-pill class for a run. Complete → success, error → error, active
+ * (running/paused) → soft, everything else → dim.
+ */
+export function runStatusPillClass(status: string): string {
+  if (status === 'complete') return 'success'
+  if (status === 'error') return 'error'
+  if (status === 'running' || status === 'paused') return 'soft'
+  return 'dim'
+}

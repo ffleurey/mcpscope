@@ -64,11 +64,9 @@ function buildSessionSummaryPayload(
     mcpProfileSnapshots: { name: string }[];
   },
 ) {
-  const steps = listStepRecordsBySession(deps.database.connection, summary.id);
   const workflowKind =
     summary.sessionType === "session_analysis"
       ? getAnalysisWorkflowKindFromSteps(
-          steps,
           deps.database.connection,
           summary.id,
         )

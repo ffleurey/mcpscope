@@ -13,7 +13,15 @@
   import { followRunning } from '../followStore'
   import { selectChat, activeChatId, chatSessions } from '../sessionStore'
   import Icon from './Icon.svelte'
-  import { iconView, iconStop } from '../design/icons'
+  import {
+    iconView,
+    iconStop,
+    iconPause,
+    iconPlay,
+    iconChevronUp,
+    iconChevronDown,
+    iconClose,
+  } from '../design/icons'
   import type { ExecutionJobOwner } from '../backendTypes'
 
   let showQueue = $state(false)
@@ -195,14 +203,14 @@
           ? 'Pause the queue (after the current step)'
           : 'Resume the queue'}
       >
-        {snapshot.controlState === 'running' ? '⏸' : '▶'}
+        <Icon path={snapshot.controlState === 'running' ? iconPause : iconPlay} />
       </button>
 
       <!-- Queue button -->
       {#if pendingGroups.length > 0}
         <button class="btn btn-sm" onclick={() => (showQueue = !showQueue)} title="Show queue">
           Queue ({pendingGroups.length})
-          <span class="chevron">{showQueue ? '▲' : '▼'}</span>
+          <span class="chevron"><Icon path={showQueue ? iconChevronUp : iconChevronDown} /></span>
         </button>
       {/if}
     </div>
@@ -222,7 +230,7 @@
           disabled={isActioning}
           title={group.ownerKind
             ? 'Remove this run from the queue (stops it; resume it later from the run view)'
-            : 'Remove from queue'}>✕</button
+            : 'Remove from queue'}><Icon path={iconClose} /></button
         >
       </div>
     {/each}

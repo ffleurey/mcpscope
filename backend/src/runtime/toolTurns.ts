@@ -1864,12 +1864,6 @@ export async function createToolEnabledTurn(
         part,
       }),
     );
-    compaction.parts.forEach((part) =>
-      emitEvent?.({
-        type: "part-committed",
-        part,
-      }),
-    );
     emitEvent?.({
       type: "round-committed",
       round: { ...currentRound },
@@ -1902,9 +1896,7 @@ export async function createToolEnabledTurn(
       turn,
       round: currentRound,
       rounds,
-      parts: persistedParts.filter(
-        (part) => part.turnId === turnId || part.turnId === compaction.step.id,
-      ),
+      parts: persistedParts.filter((part) => part.turnId === turnId),
       transcript: trace.transcript,
       context: trace.context,
     };

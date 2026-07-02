@@ -18,7 +18,6 @@ import {
 import type { AnalysisWorkflowInput } from '../analysisWorkflowInput.js'
 import {
   SCHEMA_KEY,
-  type AnalysisSessionState,
   type AnalysisTarget,
   type EvidencePacketIndex,
   type EvidencePacket,
@@ -38,24 +37,6 @@ import { buildFullSessionSystemPrompt } from './systemPrompt.js'
 export class FullSessionAnalysis extends AnalysisSessionBase {
   static readonly workflowKind = ANALYSIS_WORKFLOW_KIND.FULL_SESSION
   static readonly workflowLabel = 'Full Analysis'
-  static create(
-    db: BackendDatabase,
-    lm: ChatCompletionGateway,
-    mcp: McpGateway,
-    input: AnalysisWorkflowInput,
-  ): FullSessionAnalysis {
-    const state: AnalysisSessionState = {
-      phase: 'bootstrap',
-      analysisSessionId: input.analysisSessionId,
-      targetSessionId: input.targetSessionId,
-      targetTurnId: input.targetTurnId,
-      analysisGoal: input.analysisGoal,
-      selectedToolNames: input.selectedToolNames,
-      onlyFailedToolCalls: input.onlyFailedToolCalls,
-      evaluationCriteria: input.evaluationCriteria,
-    }
-    return new FullSessionAnalysis(db, lm, mcp, input, state)
-  }
 
   static rehydrate(
     db: BackendDatabase,

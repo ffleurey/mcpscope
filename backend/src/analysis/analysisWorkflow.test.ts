@@ -365,7 +365,7 @@ describe("analysis workflow helpers", () => {
         id: "ANLY.step.bootstrap",
         sessionId: "ANLY",
         stepTypeKey:
-          "analysis_v2_cursor" as StepPersistenceRecord["stepTypeKey"],
+          "analysis_bootstrap" as StepPersistenceRecord["stepTypeKey"],
         childIndex: 0,
       }),
     );
@@ -572,7 +572,7 @@ describe("analysis workflow helpers", () => {
         id: "ANLY.step.bootstrap",
         sessionId: "ANLY",
         stepTypeKey:
-          "analysis_v2_cursor" as StepPersistenceRecord["stepTypeKey"],
+          "analysis_bootstrap" as StepPersistenceRecord["stepTypeKey"],
         childIndex: 0,
       }),
     );
@@ -721,7 +721,7 @@ describe("analysis workflow helpers", () => {
         id: "step-1",
         sessionId: "ANLY",
         stepTypeKey:
-          "analysis_v2_cursor" as StepPersistenceRecord["stepTypeKey"],
+          "analysis_bootstrap" as StepPersistenceRecord["stepTypeKey"],
         childIndex: 0,
       }),
     );
@@ -731,7 +731,7 @@ describe("analysis workflow helpers", () => {
         id: "step-2",
         sessionId: "ANLY",
         stepTypeKey:
-          "analysis_v2_cursor" as StepPersistenceRecord["stepTypeKey"],
+          "analysis_bootstrap" as StepPersistenceRecord["stepTypeKey"],
         childIndex: 1,
       }),
     );
@@ -741,7 +741,7 @@ describe("analysis workflow helpers", () => {
         id: "step-3",
         sessionId: "ANLY",
         stepTypeKey:
-          "analysis_v2_cursor" as StepPersistenceRecord["stepTypeKey"],
+          "analysis_bootstrap" as StepPersistenceRecord["stepTypeKey"],
         childIndex: 2,
       }),
     );
@@ -812,7 +812,7 @@ describe("analysis workflow helpers", () => {
         id: "step-1",
         sessionId: "ANLY",
         stepTypeKey:
-          "analysis_v2_cursor" as StepPersistenceRecord["stepTypeKey"],
+          "analysis_bootstrap" as StepPersistenceRecord["stepTypeKey"],
         childIndex: 0,
         createdAt: 1,
         completedAt: 1,
@@ -824,7 +824,7 @@ describe("analysis workflow helpers", () => {
         id: "step-2",
         sessionId: "ANLY",
         stepTypeKey:
-          "analysis_v2_cursor" as StepPersistenceRecord["stepTypeKey"],
+          "analysis_bootstrap" as StepPersistenceRecord["stepTypeKey"],
         childIndex: 1,
         createdAt: 1,
         completedAt: 1,
@@ -836,7 +836,7 @@ describe("analysis workflow helpers", () => {
         id: "step-3",
         sessionId: "ANLY",
         stepTypeKey:
-          "analysis_v2_cursor" as StepPersistenceRecord["stepTypeKey"],
+          "analysis_bootstrap" as StepPersistenceRecord["stepTypeKey"],
         childIndex: 2,
         createdAt: 1,
         completedAt: 1,
