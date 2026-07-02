@@ -744,9 +744,10 @@ export async function executeAnalysis(): Promise<void> {
 
 /**
  * Advance the analysis workflow by exactly one step, then stop.
- * Used by the Step button for step-by-step debugging.
+ * Internal helper — invoked by retryFailedAnalysisStep (the standalone
+ * step-debug button was removed).
  */
-export async function executeAnalysisStep(): Promise<void> {
+async function executeAnalysisStep(): Promise<void> {
   const sessionId = get(activeChatId)
   if (!sessionId) {
     setSessionError(new AppError('No active analysis session', 'internal', 0))

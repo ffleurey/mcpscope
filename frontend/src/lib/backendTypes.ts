@@ -94,6 +94,9 @@ export const tokenSourceSchema = z.enum([
   'unknown',
 ])
 export const tokenConfidenceSchema = z.enum(['exact', 'corrected', 'estimated', 'unknown'])
+// Mirrors the backend's exchangeKindValues (backend/src/domain/model.ts). The
+// legacy `lmstudio-*` kinds were dropped there (fresh-DB, no migration), so they
+// are gone here too.
 export const exchangeKindSchema = z.enum([
   'llm-request',
   'llm-response',
@@ -101,10 +104,6 @@ export const exchangeKindSchema = z.enum([
   'llm-probe-response',
   'mcp-request',
   'mcp-response',
-  'lmstudio-request',
-  'lmstudio-response',
-  'lmstudio-probe-request',
-  'lmstudio-probe-response',
 ])
 export const lmStudioStreamDeltaSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -378,6 +377,8 @@ export const sessionTraceBundleSchema = z.object({
   turns: z.array(turnRecordSchema),
   rounds: z.array(roundRecordSchema),
   parts: z.array(partRecordSchema),
+  // The UI does not render raw exchanges (payloads are viewed via the inspect
+  // dialog); they are carried in the trace so trace export/replay stays complete.
   rawExchanges: z.array(rawExchangeRecordSchema),
   artifacts: z.array(traceArtifactSchema).optional().default([]),
   workflowSteps: z.array(workflowStepTraceSchema).optional().default([]),
