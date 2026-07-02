@@ -87,7 +87,6 @@
   let traceTurns = $derived(
     [...($activeTrace?.turns ?? [])].sort((a, b) => a.turnNumber - b.turnNumber),
   )
-  let renderableSteps = $derived(traceSteps)
   let analysisWorkflowSteps = $derived($activeTrace?.workflowSteps ?? [])
   let analysisLooseTurns = $derived.by(() =>
     isAnalysisSession ? traceTurns.filter((turn) => turn.ownerStepId === null) : [],
@@ -100,7 +99,6 @@
       return tA === tB ? a.roundIndex - b.roundIndex : tA - tB
     })
   })
-  let traceRawExchanges = $derived($activeTrace?.rawExchanges ?? [])
   let partsByTurn = $derived.by(() => {
     const m = new Map<string, typeof transcriptParts>()
     for (const p of transcriptParts) {
@@ -123,7 +121,6 @@
     }
     return m
   })
-  let sessionPreludeRawExchanges = $derived(traceRawExchanges.filter((x) => x.turnId === null))
   let sessionHasExecutionJob = $derived.by(() => {
     return sessionHasQueuedOrActiveJob($schedulerSnapshot, session?.id)
   })
@@ -137,7 +134,7 @@
         sortTime: turn.createdAt,
         turn,
       })),
-      ...renderableSteps.map((step) => ({
+      ...traceSteps.map((step) => ({
         kind: 'step' as const,
         id: step.id,
         timelineKey: `step:${step.id}`,
@@ -225,7 +222,6 @@
     isInitError ||
       isInitializing ||
       sessionPreludeParts.length > 0 ||
-      sessionPreludeRawExchanges.length > 0 ||
       timelineItems.length > 0 ||
       analysisWorkflowSteps.length > 0 ||
       analysisLooseTurns.length > 0,
@@ -282,7 +278,7 @@
     const turnCount = traceTurns.length
     const streamingTurnId = activeStreamingTurnId
     // access reactive dependencies so this effect re-runs
-    visibleParts.length + sessionPreludeRawExchanges.length + streamingSignature.length
+    visibleParts.length + streamingSignature.length
 
     const sessionChanged = sessionId !== lastSessionId
     const newTurnStarted =

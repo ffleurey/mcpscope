@@ -1,8 +1,8 @@
 <script lang="ts">
-  // Experimental combined configuration page: the three existing config views
-  // (providers, model configs, MCP servers) reused verbatim inside Home-style
-  // cards. No config UI is duplicated here — these are the same components the
-  // standalone Configuration pages render.
+  // The configuration page: the three config sections (providers, model
+  // configs, MCP servers) rendered as Home-style cards. These are the shared
+  // LmConnections/ModelConfigs/McpProfiles section components — no config UI is
+  // duplicated here.
   import LmConnections from './LmConnections.svelte'
   import ModelConfigs from './ModelConfigs.svelte'
   import McpProfiles from './McpProfiles.svelte'
