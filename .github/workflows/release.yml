@@ -79,9 +79,14 @@ jobs:
 
       # The Linux rpm target builds via fpm, which shells out to rpmbuild.
       # (deb builds natively on Ubuntu; macOS/Windows skip this.)
+      # `apt-get update` is best-effort: a flaky third-party runner repo (e.g.
+      # packages.microsoft.com) must not fail the step — rpm lives in the base
+      # Ubuntu repo, and the install below surfaces a genuine failure.
       - name: Install rpm tooling (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y rpm
+        run: |
+          sudo apt-get update || true
+          sudo apt-get install -y rpm
 
       - name: Package and publish to the release
         run: npx electron-builder --publish always
