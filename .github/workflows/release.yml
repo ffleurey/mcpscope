@@ -40,6 +40,10 @@ jobs:
         with:
           context: .
           push: true
+          # Single-platform image, no SBOM/provenance attestations — those wrap
+          # the image in a manifest list and inflate what gets pushed/pulled.
+          provenance: false
+          sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # The metadata action's semver output has no leading 'v', so every

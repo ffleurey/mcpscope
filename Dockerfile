@@ -5,9 +5,11 @@ FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-# Install all dependencies (dev + prod) so we can build
+# Install all dependencies (dev + prod) so we can build. The BuildKit cache
+# mount keeps the npm download cache across builds so a rebuild doesn't
+# re-fetch every package.
 COPY package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Copy source and build everything
 COPY . .
@@ -38,9 +40,12 @@ COPY --from=builder /app/frontend/dist ./frontend/dist
 COPY docker/mcpscope-cli /usr/local/bin/mcpscope
 RUN chmod +x /usr/local/bin/mcpscope
 
-# Data directory — mount a volume here for SQLite persistence. Owned by the
-# unprivileged node user the container runs as.
-RUN mkdir -p /data && chown -R node:node /data /app
+# Data directory — mount a volume here for SQLite persistence. Only /data needs
+# to be writable by the unprivileged node user; /app is read-only at runtime
+# (the app reads its own files and writes only to /data), so it stays
+# root-owned and world-readable. A `chown -R /app` here would duplicate the
+# whole node_modules tree into an extra image layer (~75 MB) for nothing.
+RUN mkdir -p /data && chown node:node /data
 USER node
 
 EXPOSE 3030
