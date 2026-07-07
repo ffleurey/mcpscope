@@ -96,6 +96,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # OIDC trusted publishing: GitHub mints a short-lived token per run that
+      # npm verifies against the package's configured trusted publisher — no
+      # stored NPM_TOKEN, and provenance attestations are generated automatically.
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -106,6 +110,10 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
           cache: npm
+
+      # Trusted publishing requires npm >= 11.5.1.
+      - name: Ensure npm supports trusted publishing
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
@@ -121,8 +129,14 @@ jobs:
           fi
 
       # `prepublishOnly` runs `build:all` (frontend + backend + cli), producing
-      # the dist directories listed in package.json "files".
-      - name: Publish
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # the dist directories listed in package.json "files". The first release
+      # (0.1.0) was published manually to bootstrap the package before trusted
+      # publishing could be configured, so skip any version already on npm.
+      - name: Publish (skips a version already on npm)
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if npm view "mcpscope@$version" version >/dev/null 2>&1; then
+            echo "mcpscope@$version is already on npm — skipping publish."
+          else
+            npm publish --access public
+          fi
