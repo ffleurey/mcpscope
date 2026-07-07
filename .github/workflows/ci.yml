@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    name: Type-check, lint, test
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Type checks — svelte-check catches frontend type errors such as
+      # "Module has no exported member"; the others cover backend and CLI.
+      - name: Type-check frontend
+        run: npm run check
+      - name: Type-check backend
+        run: npm run check:backend
+      - name: Type-check CLI
+        run: npm run check:cli
+      - name: Type-check Electron
+        run: npm run check:electron
+
+      # Lint and format
+      - name: Lint frontend
+        run: npm run lint
+      - name: Lint backend
+        run: npm run lint:backend
+      - name: Lint CLI
+        run: npm run lint:cli
+      - name: Check formatting
+        run: npm run format:check
+
+      # Deterministic tests (live LM Studio / MCP integration tests are excluded)
+      - name: Test
+        run: npm test
+
+      # Production build — catches Vite/rollup-only failures that type checks
+      # and tests can't (otherwise these first surface in the release workflow).
+      - name: Build (production)
+        run: npm run build:all

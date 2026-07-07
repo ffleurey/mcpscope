@@ -1,0 +1,52 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+backend/dist
+
+# electron-builder packaged output
+release/
+backend-data/*
+!backend-data/README.md
+!backend-data/test-artifacts/
+backend-data/test-artifacts/*
+.tmp-test-data
+test-results/
+*.env
+.env
+.env.dev
+*.db
+*.db-shm
+*.db-wal
+*.local
+*.tsbuildinfo
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AI agent / editor state
+.claude/
+.kilo/
+.zed/
+
+# Local exports (trace dumps are user data)
+exports/
+
+# Local, uncommitted review/scratch notes
+*.local.md

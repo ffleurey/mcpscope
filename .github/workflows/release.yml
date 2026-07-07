@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  docker:
+    name: Build and push Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # The metadata action's semver output has no leading 'v', so every
+          # channel reports the same version string as package.json (Electron
+          # and `mcpscope serve` do).
+          build-args: APP_VERSION=${{ steps.meta.outputs.version }}
+
+  electron:
+    name: Build Electron (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write # upload installers as release assets
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu → AppImage + tar.gz, macos → dmg, windows → nsis .exe.
+        # electron-builder picks the target from the runner OS (electron-builder.yml).
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app (frontend + backend + cli + electron)
+        run: |
+          npm run build:all
+          npm run build:electron
+
+      # The Linux rpm target builds via fpm, which shells out to rpmbuild.
+      # (deb builds natively on Ubuntu; macOS/Windows skip this.)
+      - name: Install rpm tooling (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Package and publish to the release
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Releases are currently unsigned — don't let electron-builder hunt for a macOS signing
+          # identity (it would otherwise try to codesign and fail/ad-hoc sign).
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+  npm:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # RELEASING.md: package.json version MUST match the release tag.
+      - name: Assert package version matches the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "Tag v$tag does not match package.json version $version" >&2
+            exit 1
+          fi
+
+      # `prepublishOnly` runs `build:all` (frontend + backend + cli), producing
+      # the dist directories listed in package.json "files".
+      - name: Publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

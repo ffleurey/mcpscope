@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="mcpscope">
+  <rect width="48" height="48" rx="11" fill="#141414"></rect>
+  <path d="M11 13 L20 24 L11 35" fill="none" stroke="#E49000" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"></path>
+  <g fill="#E49000">
+    <rect x="25" y="11" width="14" height="7.2" rx="1.8"></rect>
+    <rect x="25" y="20.4" width="14" height="7.2" rx="1.8"></rect>
+    <rect x="25" y="29.8" width="14" height="7.2" rx="1.8"></rect>
+  </g>
+</svg>

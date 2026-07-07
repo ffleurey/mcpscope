@@ -1,0 +1,31 @@
+# Build context exclusions — keep the Docker build context lean
+node_modules
+backend/dist
+frontend/dist
+dist
+backend-data
+exports
+
+# Development / IDE
+.env
+.env.*
+*.local
+.vscode
+.idea
+
+# Test artefacts
+coverage
+.tmp-test-data
+*.test-db
+
+# Git
+.git
+.gitignore
+
+# Docker files themselves (not needed inside the image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation / misc
+*.md

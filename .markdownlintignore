@@ -1,0 +1,4 @@
+node_modules/
+exports/
+*.local.md
+backend-data/test-artifacts/
