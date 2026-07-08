@@ -48,14 +48,14 @@ RUN chmod +x /usr/local/bin/mcpscope
 RUN mkdir -p /data && chown node:node /data
 USER node
 
-EXPOSE 3030
+EXPOSE 3066
 
 ENV BACKEND_HOST=0.0.0.0
-ENV BACKEND_PORT=3030
+ENV BACKEND_PORT=3066
 ENV BACKEND_DATA_DIR=/data
 ENV BACKEND_STATIC_DIR=/app/frontend/dist
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
-  CMD wget -q -O /dev/null http://127.0.0.1:3030/api/health || exit 1
+  CMD wget -q -O /dev/null http://127.0.0.1:3066/api/health || exit 1
 
 CMD ["node", "backend/dist/server.js"]

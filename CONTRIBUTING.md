@@ -10,7 +10,7 @@ build, dev helpers, repo layout) is in **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.
 
 ```bash
 npm ci
-npm run dev        # backend on :3030, frontend on :5173
+npm run dev        # backend on :3066, frontend on :5173
 ```
 
 ## Before you open a pull request

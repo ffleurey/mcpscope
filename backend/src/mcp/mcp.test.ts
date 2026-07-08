@@ -204,7 +204,7 @@ describe("MCP HTTP endpoint execution", () => {
     const dataDir = `.tmp-test-data/${crypto.randomUUID()}`;
     const app = await buildBackendApp({
       host: "127.0.0.1",
-      port: 3030,
+      port: 3066,
       corsOrigin: true,
       dataDir,
       sqlitePath: `${dataDir}/test.db`,

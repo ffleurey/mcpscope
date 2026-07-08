@@ -25,6 +25,7 @@ import {
   mdiPlus,
   mdiClose,
   mdiCheck,
+  mdiContentCopy,
   mdiAlertOutline,
   mdiPencilOutline,
   mdiTrashCanOutline,
@@ -67,6 +68,7 @@ export const iconArrowDown = mdiArrowDown
 export const iconPlus = mdiPlus
 export const iconClose = mdiClose
 export const iconCheck = mdiCheck
+export const iconCopy = mdiContentCopy
 export const iconWarning = mdiAlertOutline
 export const iconEdit = mdiPencilOutline
 export const iconTrash = mdiTrashCanOutline

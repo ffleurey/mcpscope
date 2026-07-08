@@ -39,7 +39,7 @@ function parseIntEnv(name: string, fallback: number): number {
 
 export function getBackendConfig(): BackendConfig {
   const host = process.env.BACKEND_HOST ?? '127.0.0.1'
-  const port = parseIntEnv('BACKEND_PORT', 3030)
+  const port = parseIntEnv('BACKEND_PORT', 3066)
   const corsOrigin = process.env.BACKEND_CORS_ORIGIN ?? LOCAL_ORIGINS
   const dataDir = process.env.BACKEND_DATA_DIR ?? defaultDataDir
   const sqlitePath = process.env.BACKEND_SQLITE_PATH ?? path.join(dataDir, 'mcpscope.db')

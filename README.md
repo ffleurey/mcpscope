@@ -54,8 +54,11 @@ server**, load a model, and note its model id — the server URL is `http://loca
 Download the installer for your OS from the
 [**Releases page**](https://github.com/ffleurey/mcpscope/releases) (macOS `.dmg`, Windows
 `.exe`, Linux `AppImage`/`.deb`/`.rpm`). Everything is bundled — launch it and the workbench
-opens; data lives in `~/.mcpscope`. The builds are unsigned for now, so macOS Gatekeeper /
-Windows SmartScreen warn on first run.
+opens; data lives in `~/.mcpscope`. While it runs it serves the same backend as `mcpscope serve`
+at **`http://localhost:3066`** (MCP interface at `/mcp`), so coding agents and other MCP clients
+can connect to it directly — set the `BACKEND_HOST` / `BACKEND_PORT` environment variables before
+launching to change the address (shown in the app under **Configuration → Server**). The builds
+are unsigned for now, so macOS Gatekeeper / Windows SmartScreen warn on first run.
 
 ### npm — for developing an MCP server (adds the CLI)
 
@@ -69,7 +72,7 @@ mcpscope serve
 
 Or run it without installing: `npx mcpscope serve`.
 
-`mcpscope serve` starts mcpscope at **`http://localhost:3030`** and opens it in your browser. Data
+`mcpscope serve` starts mcpscope at **`http://localhost:3066`** and opens it in your browser. Data
 is stored in `~/.mcpscope`; stop with `Ctrl-C`. Flags: `--port <n>`, `--host <host>`,
 `--data-dir <path>`, `--no-open`.
 
@@ -89,16 +92,16 @@ mcpscope speaks MCP itself — connect your agent and it can drive the whole loo
 sessions you see in the UI:
 
 ```bash
-claude mcp add --transport http mcpscope http://localhost:3030/mcp
+claude mcp add --transport http mcpscope http://localhost:3066/mcp
 ```
 
 ```json
-{ "mcpServers": { "mcpscope": { "type": "http", "url": "http://localhost:3030/mcp" } } }
+{ "mcpServers": { "mcpscope": { "type": "http", "url": "http://localhost:3066/mcp" } } }
 ```
 
 Then a prompt like this is enough to put the agent to work:
 
-> mcpscope is running at localhost:3030 (MCP at /mcp; the `mcpscope` CLI is the identical
+> mcpscope is running at localhost:3066 (MCP at /mcp; the `mcpscope` CLI is the identical
 > surface). Use its `mcpscope_*` tools to benchmark my MCP server: start with
 > `mcpscope_list_mcp_profiles` and `mcpscope_list_model_configs`, create sessions and send
 > prompts with `wait: true` so you never poll, and follow the loop in EXAMPLE.md.

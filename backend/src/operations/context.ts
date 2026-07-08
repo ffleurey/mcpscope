@@ -14,7 +14,7 @@ export interface OperationContext {
   chatCompletionGateway: ChatCompletionGateway
   mcpGateway: McpGateway
   maxToolRounds: number
-  /** URL of mcpscope's own restricted analysis MCP endpoint (e.g. http://127.0.0.1:3030/mcp/analysis). */
+  /** URL of mcpscope's own restricted analysis MCP endpoint (e.g. http://127.0.0.1:3066/mcp/analysis). */
   analysisMcpUrl?: string
   /** Optional logger for background error reporting. */
   logger?: { error: (data: Record<string, unknown>, msg: string) => void }

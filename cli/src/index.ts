@@ -60,8 +60,8 @@ import {
 
 function printHelp(): void {
   process.stdout.write(`mcpscope — local-first workbench for developing, inspecting, and benchmarking MCP servers.
-Backend + Web UI at http://localhost:3030 (mcpscope serve); this CLI and the MCP interface
-(http://localhost:3030/mcp) drive the same sessions. The core loop — create --wait, send --wait,
+Backend + Web UI at http://localhost:3066 (mcpscope serve); this CLI and the MCP interface
+(http://localhost:3066/mcp) drive the same sessions. The core loop — create --wait, send --wait,
 inspect — is walked through with real numbers in EXAMPLE.md.
 
 Usage: mcpscope <command> [options]
@@ -97,7 +97,7 @@ Usage: mcpscope <command> [options]
 
 Options:
   --json        emit JSON instead of text
-  --url <url>   backend URL  (default: http://localhost:3030, or MCPSCOPE_URL)
+  --url <url>   backend URL  (default: http://localhost:3066, or MCPSCOPE_URL)
 `);
 }
 

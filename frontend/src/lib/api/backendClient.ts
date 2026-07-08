@@ -117,7 +117,13 @@ const healthResponseSchema = z.object({
   service: z.string(),
   version: z.string(),
   sqlitePath: z.string(),
+  host: z.string(),
+  port: z.number().int(),
+  url: z.string(),
+  mcpUrl: z.string(),
 })
+
+export type HealthResponse = z.infer<typeof healthResponseSchema>
 
 export function fetchHealth() {
   return request('/api/health', { schema: healthResponseSchema })

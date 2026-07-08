@@ -7,7 +7,7 @@ function makeTestConfig() {
   const dataDir = `.tmp-test-data/${crypto.randomUUID()}`;
   return {
     host: "127.0.0.1",
-    port: 3030,
+    port: 3066,
     corsOrigin: true as const,
     dataDir,
     sqlitePath: `${dataDir}/test.db`,
@@ -354,7 +354,7 @@ describe("benchmark run", () => {
     // (createChatCompletion) + an analysis-capable MCP gateway (/mcp/analysis).
     const base = stubGateways() as NonNullable<Parameters<typeof buildBackendApp>[1]>;
     const mcpRaw = {
-      requestUrl: "http://localhost:3030/mcp/analysis",
+      requestUrl: "http://localhost:3066/mcp/analysis",
       requestMethod: "POST",
       requestBodyText: "{}",
       responseStatus: 200,

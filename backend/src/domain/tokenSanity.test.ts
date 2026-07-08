@@ -416,7 +416,7 @@ async function captureModelOnlyTrace(
   const app = await buildBackendApp(
     {
       host: "127.0.0.1",
-      port: 3030,
+      port: 3066,
       corsOrigin: true,
       dataDir: path.dirname(sqlitePath),
       sqlitePath,
@@ -789,7 +789,7 @@ async function captureToolEnabledTrace(): Promise<SessionTraceBundle> {
   const app = await buildBackendApp(
     {
       host: "127.0.0.1",
-      port: 3030,
+      port: 3066,
       corsOrigin: true,
       dataDir: path.dirname(sqlitePath),
       sqlitePath,
