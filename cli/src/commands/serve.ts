@@ -30,7 +30,7 @@ interface FastifyLike {
 export function parseServeArgs(
   args: string[],
 ): { opts: ServeOptions } | { help: true } | { error: string } {
-  const opts: ServeOptions = { port: 3030, host: "127.0.0.1", open: true };
+  const opts: ServeOptions = { port: 3066, host: "127.0.0.1", open: true };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "-h" || a === "--help") return { help: true };

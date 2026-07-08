@@ -2,13 +2,27 @@ import { healthResponseSchema } from '../domain/apiSchemas.js'
 import { getDomainModelSummary } from '../domain/model.js'
 import type { RouteDeps } from './types.js'
 
+/**
+ * Host part of a URL a client on this machine can actually connect to: wildcard
+ * binds (0.0.0.0 / ::) are reachable via localhost, IPv6 literals need brackets.
+ */
+function connectableHost(host: string): string {
+  if (host === '0.0.0.0' || host === '::') return 'localhost'
+  return host.includes(':') ? `[${host}]` : host
+}
+
 export function registerSystemRoutes({ app, config, database }: RouteDeps): void {
   app.get('/api/health', async () => {
+    const url = `http://${connectableHost(config.host)}:${config.port}`
     return healthResponseSchema.parse({
       status: 'ok',
       service: 'mcpscope-backend',
       version: config.appVersion ?? 'dev',
       sqlitePath: database.path,
+      host: config.host,
+      port: config.port,
+      url,
+      mcpUrl: `${url}/mcp`,
     })
   })
 

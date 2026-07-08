@@ -145,7 +145,7 @@ describe('token count sanity — live LM Studio integration', () => {
   it('model-only single turn: part token counts are proportional to content', async () => {
     const env = getIntegrationEnv()
     app = await buildBackendApp(
-      { host: '127.0.0.1', port: 3030, corsOrigin: true, dataDir: '.tmp-test-data', sqlitePath, maxToolRounds: 5 },
+      { host: '127.0.0.1', port: 3066, corsOrigin: true, dataDir: '.tmp-test-data', sqlitePath, maxToolRounds: 5 },
     )
 
     const sessionRes = await app.inject({
@@ -185,7 +185,7 @@ describe('token count sanity — live LM Studio integration', () => {
   it('model-only two turns: context sums are consistent and grow monotonically', async () => {
     const env = getIntegrationEnv()
     app = await buildBackendApp(
-      { host: '127.0.0.1', port: 3030, corsOrigin: true, dataDir: '.tmp-test-data', sqlitePath, maxToolRounds: 5 },
+      { host: '127.0.0.1', port: 3066, corsOrigin: true, dataDir: '.tmp-test-data', sqlitePath, maxToolRounds: 5 },
     )
 
     const sessionRes = await app.inject({
@@ -238,7 +238,7 @@ describe('token count sanity — live LM Studio integration', () => {
   it('tool-enabled two turns: all part types have sensible token counts and sums are consistent', async () => {
     const env = getIntegrationEnv()
     app = await buildBackendApp(
-      { host: '127.0.0.1', port: 3030, corsOrigin: true, dataDir: '.tmp-test-data', sqlitePath, maxToolRounds: 5 },
+      { host: '127.0.0.1', port: 3066, corsOrigin: true, dataDir: '.tmp-test-data', sqlitePath, maxToolRounds: 5 },
     )
 
     const sessionRes = await app.inject({

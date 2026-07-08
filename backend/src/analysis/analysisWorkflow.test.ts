@@ -210,7 +210,7 @@ function makeStepRecord(
 }
 
 const fakeRawExchange = {
-  requestUrl: "http://localhost:3030/mcp/analysis",
+  requestUrl: "http://localhost:3066/mcp/analysis",
   requestMethod: "POST",
   requestHeaders: {},
   requestBodyText: "{}",
@@ -349,7 +349,7 @@ describe("analysis workflow helpers", () => {
           {
             id: "analysis-mcp",
             name: "mcpscope-analysis",
-            url: "http://localhost:3030/mcp/analysis",
+            url: "http://localhost:3066/mcp/analysis",
             transport: "streamable-http",
             authType: null,
             authValue: null,
@@ -556,7 +556,7 @@ describe("analysis workflow helpers", () => {
           {
             id: "analysis-mcp",
             name: "mcpscope-analysis",
-            url: "http://localhost:3030/mcp/analysis",
+            url: "http://localhost:3066/mcp/analysis",
             transport: "streamable-http",
             authType: null,
             authValue: null,
@@ -951,7 +951,7 @@ describe("analysis workflow helpers", () => {
           {
             id: "analysis-mcp",
             name: "mcpscope-analysis",
-            url: "http://localhost:3030/mcp/analysis",
+            url: "http://localhost:3066/mcp/analysis",
             transport: "streamable-http",
             authType: null,
             authValue: null,
@@ -1215,7 +1215,7 @@ describe("analysis workflow helpers", () => {
           {
             id: "analysis-mcp",
             name: "analysis-mcp",
-            url: "http://localhost:3030/mcp/analysis",
+            url: "http://localhost:3066/mcp/analysis",
             transport: "streamable-http",
             authType: null,
             authValue: null,

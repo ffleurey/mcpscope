@@ -58,7 +58,7 @@ function makeTestConfig() {
   const dataDir = `.tmp-test-data/${crypto.randomUUID()}`;
   return {
     host: "127.0.0.1",
-    port: 3030,
+    port: 3066,
     corsOrigin: true as const,
     dataDir,
     sqlitePath: `${dataDir}/test.db`,
@@ -128,6 +128,29 @@ describe("backend foundation", () => {
     expect(response.json()).toMatchObject({
       status: "ok",
       service: "mcpscope-backend",
+      host: "127.0.0.1",
+      port: 3066,
+      url: "http://127.0.0.1:3066",
+      mcpUrl: "http://127.0.0.1:3066/mcp",
+    });
+  });
+
+  it("reports a connectable URL in health when bound to a wildcard address", async () => {
+    const config = { ...makeTestConfig(), host: "0.0.0.0" };
+    dataDir = config.dataDir;
+    app = await buildBackendApp(config);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/health",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      host: "0.0.0.0",
+      port: 3066,
+      url: "http://localhost:3066",
+      mcpUrl: "http://localhost:3066/mcp",
     });
   });
 
@@ -4359,7 +4382,7 @@ describe("analysis launch", () => {
    */
   function makeAnalysisMcpGateway(inspectIds: string[] = []) {
     const rawExchange = {
-      requestUrl: "http://localhost:3030/mcp/analysis",
+      requestUrl: "http://localhost:3066/mcp/analysis",
       requestMethod: "POST",
       requestBodyText: "{}",
       responseStatus: 200,

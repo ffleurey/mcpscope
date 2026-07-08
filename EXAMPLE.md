@@ -205,7 +205,7 @@ all is refused up front (`benchmark_no_rubric`).
 
 ## Run this loop with your coding agent
 
-Every command above is an MCP tool on `http://localhost:3030/mcp`. An agent iterating on your
+Every command above is an MCP tool on `http://localhost:3066/mcp`. An agent iterating on your
 MCP server runs the identical loop:
 
 ```jsonc

@@ -13,7 +13,7 @@ function makeTestConfig() {
   const dataDir = `.tmp-test-data/${crypto.randomUUID()}`;
   return {
     host: "127.0.0.1",
-    port: 3030,
+    port: 3066,
     corsOrigin: true as const,
     dataDir,
     sqlitePath: `${dataDir}/test.db`,

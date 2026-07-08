@@ -5,6 +5,10 @@ export const healthResponseSchema = z.object({
   service: z.literal('mcpscope-backend'),
   version: z.string(),
   sqlitePath: z.string(),
+  host: z.string(),
+  port: z.number().int(),
+  url: z.string(),
+  mcpUrl: z.string(),
 })
 
 export const modelProfileSnapshotInputSchema = z.object({

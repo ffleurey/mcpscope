@@ -11,6 +11,7 @@ import {
   deleteMcpProfile,
   deleteModelConfig,
   fetchHealth,
+  type HealthResponse,
   getSessionCreationDefaults,
   listLmConnections,
   listMcpProfiles,
@@ -23,6 +24,10 @@ import {
 
 export const backendError = writable<string | null>(null)
 export const appVersion = writable<string>('dev')
+
+// Where the backend is listening (host, port, connectable URLs) — from
+// /api/health at startup; null until the backend has answered.
+export const serverInfo = writable<HealthResponse | null>(null)
 
 // Connections
 export const lmConnections = writable<LmStudioConnection[]>([])
@@ -102,6 +107,7 @@ export async function initConnectionStore(): Promise<void> {
     const [health, connectionsResponse, modelConfigsResponse, mcpProfilesResponse] =
       await Promise.all([fetchHealth(), listLmConnections(), listModelConfigs(), listMcpProfiles()])
     appVersion.set(health.version)
+    serverInfo.set(health)
     lmConnections.set(sortByUpdatedAtDesc(connectionsResponse.lmConnections))
     modelConfigs.set(sortByUpdatedAtDesc(modelConfigsResponse.modelConfigs))
     mcpProfiles.set(sortByUpdatedAtDesc(mcpProfilesResponse.mcpProfiles))

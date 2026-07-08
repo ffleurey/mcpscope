@@ -1,23 +1,24 @@
 <script lang="ts">
   // The configuration page: the three config sections (providers, model
-  // configs, MCP servers) rendered as Home-style cards. These are the shared
-  // LmConnections/ModelConfigs/McpProfiles section components — no config UI is
-  // duplicated here.
+  // configs, MCP servers) plus the server-info card, rendered as Home-style
+  // cards. These are shared section components — no config UI is duplicated here.
   import LmConnections from './LmConnections.svelte'
   import ModelConfigs from './ModelConfigs.svelte'
   import McpProfiles from './McpProfiles.svelte'
+  import ServerInfo from './ServerInfo.svelte'
 </script>
 
 <div class="config-page">
   <div class="config-page-inner">
     <header class="config-head">
       <h1>Configuration</h1>
-      <p>Providers, model configs, and MCP servers — all in one place.</p>
+      <p>Providers, model configs, MCP servers, and the server address — all in one place.</p>
     </header>
 
     <section class="config-card"><LmConnections /></section>
     <section class="config-card"><ModelConfigs /></section>
     <section class="config-card"><McpProfiles /></section>
+    <section class="config-card"><ServerInfo /></section>
   </div>
 </div>
 

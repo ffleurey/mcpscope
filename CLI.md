@@ -6,14 +6,14 @@ In-repo command surface for driving and inspecting sessions. Talks to the backen
 
 To run the CLI inside the container: `docker exec -i mcpscope-app mcpscope <cmd>` (or define the `mcpscope()` shell helper) — see [TUTORIAL.md](TUTORIAL.md).
 
-Inside the container, `mcpscope` defaults to `http://127.0.0.1:3030`.
+Inside the container, `mcpscope` defaults to `http://127.0.0.1:3066`.
 
 ## Connection
 
 ```sh
-mcpscope --url http://host:3030 <command>    # explicit
-MCPSCOPE_URL=http://host:3030 mcpscope …    # env var
-mcpscope …                                  # default: http://localhost:3030
+mcpscope --url http://host:3066 <command>    # explicit
+MCPSCOPE_URL=http://host:3066 mcpscope …    # env var
+mcpscope …                                  # default: http://localhost:3066
 ```
 
 ## Commands
@@ -167,8 +167,8 @@ the config key to set (and cannot be used to create a session until then).
 ```text
 $ mcpscope list_mcp_profiles
 home-assistant       Home Assistant                 http://host:8123/mcp   [default]
-builtin-open-meteo   Open-Meteo Weather (built-in)  http://localhost:3030/companions/open-meteo/mcp   [built-in]
-builtin-guardian     The Guardian News (built-in)   http://localhost:3030/companions/guardian/mcp   [built-in]
+builtin-open-meteo   Open-Meteo Weather (built-in)  http://localhost:3066/companions/open-meteo/mcp   [built-in]
+builtin-guardian     The Guardian News (built-in)   http://localhost:3066/companions/guardian/mcp   [built-in]
     unavailable: Set companions.guardian.api_key in the mcpscope config file to enable this server.
 ```
 

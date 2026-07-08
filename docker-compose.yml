@@ -3,7 +3,7 @@ services:
     build: .
     image: mcpscope
     ports:
-      - "3030:3030"
+      - "3066:3066"
     # Lets the container reach LM Studio / your MCP server on the host —
     # the tutorial's URLs use host.docker.internal.
     extra_hosts:
@@ -19,7 +19,7 @@ services:
       # mounted somewhere other than the default /data/mcpscope.config.json:
       # MCPSCOPE_CONFIG_PATH: /config/mcpscope.config.json
       BACKEND_HOST: "0.0.0.0"
-      BACKEND_PORT: "3030"
+      BACKEND_PORT: "3066"
       BACKEND_DATA_DIR: "/data"
       BACKEND_STATIC_DIR: "/app/frontend/dist"
     restart: unless-stopped

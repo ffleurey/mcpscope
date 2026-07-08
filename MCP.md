@@ -16,21 +16,21 @@ The transport operates in **stateless mode** — no server-side session is maint
 
 ## Connecting a client
 
-The MCP interface is served at **`http://localhost:3030/mcp`** (Streamable HTTP, same port as
+The MCP interface is served at **`http://localhost:3066/mcp`** (Streamable HTTP, same port as
 the backend — no separate process). Point any MCP client at it:
 
 ```bash
 # Claude Code
-claude mcp add --transport http mcpscope http://localhost:3030/mcp
+claude mcp add --transport http mcpscope http://localhost:3066/mcp
 ```
 
 ```json
-{ "mcpServers": { "mcpscope": { "type": "http", "url": "http://localhost:3030/mcp" } } }
+{ "mcpServers": { "mcpscope": { "type": "http", "url": "http://localhost:3066/mcp" } } }
 ```
 
 A paste-able prompt that onboards an agent from zero:
 
-> mcpscope is running at localhost:3030. Use its `mcpscope_*` tools to test my MCP server:
+> mcpscope is running at localhost:3066. Use its `mcpscope_*` tools to test my MCP server:
 > discover ids with `mcpscope_list_mcp_profiles` and `mcpscope_list_model_configs`, create a
 > session and send prompts with `wait: true` (terminal results in one call, no polling), inspect
 > with `mcpscope_inspect`, then build a benchmark and run it.
@@ -290,12 +290,12 @@ judge-temperature default).
 
 ## Configuration
 
-The MCP interface is hosted on the same port as the backend API (`BACKEND_PORT`, default 3030). No separate process or port is needed.
+The MCP interface is hosted on the same port as the backend API (`BACKEND_PORT`, default 3066). No separate process or port is needed.
 
 Example connection string for an MCP client:
 
 ```text
-http://localhost:3030/mcp
+http://localhost:3066/mcp
 ```
 
 ## Internal analysis MCP endpoint
@@ -303,7 +303,7 @@ http://localhost:3030/mcp
 mcpscope also exposes an internal restricted MCP endpoint for analysis sessions:
 
 ```text
-http://localhost:3030/mcp/analysis
+http://localhost:3066/mcp/analysis
 ```
 
 This endpoint is backend-owned and used by `session_analysis` sessions — including the

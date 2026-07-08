@@ -29,8 +29,12 @@ If you are developing **mcpscope itself**, see [DEVELOPMENT.md](docs/DEVELOPMENT
 Download the installer for your OS from the
 [Releases page](https://github.com/ffleurey/mcpscope/releases) — macOS `.dmg`, Windows `.exe`
 (NSIS), Linux `AppImage` / `.deb` / `.rpm`. Launch it: the full workbench opens as a desktop
-window, with the backend bundled and data stored in `~/.mcpscope`. The builds are unsigned for
-now, so macOS Gatekeeper / Windows SmartScreen warn on first run.
+window, with the backend bundled and data stored in `~/.mcpscope`. While the app runs, its
+backend (including the MCP interface, §8) listens at `http://localhost:3066` — the same address
+as `mcpscope serve` — so agents and scripts can connect to it; set `BACKEND_HOST` /
+`BACKEND_PORT` before launching to change it (the current address is shown under
+**Configuration → Server**). The builds are unsigned for now, so macOS Gatekeeper / Windows
+SmartScreen warn on first run.
 
 The desktop app is the GUI experience only — it does not put the `mcpscope` CLI on your PATH.
 For the CLI/agent workflows in §4 and later, install via npm (Option B; both can share the same
@@ -43,7 +47,7 @@ npm install -g mcpscope
 mcpscope serve
 ```
 
-`mcpscope serve` starts mcpscope at `http://localhost:3030`, opens your browser, and stores data
+`mcpscope serve` starts mcpscope at `http://localhost:3066`, opens your browser, and stores data
 in `~/.mcpscope`. Stop with `Ctrl-C`; run `mcpscope serve` again to resume. Flags: `--port <n>`,
 `--host <host>`, `--data-dir <path>`, `--no-open`.
 
@@ -60,12 +64,12 @@ docker run -d \
   --name mcpscope-app \
   --restart unless-stopped \
   --add-host=host.docker.internal:host-gateway \
-  -p 3030:3030 \
+  -p 3066:3066 \
   -v mcpscope-data:/data \
   ghcr.io/ffleurey/mcpscope:latest
 ```
 
-Then open `http://localhost:3030`.
+Then open `http://localhost:3066`.
 
 - `-v mcpscope-data:/data` keeps sessions and config persistent
 - `--add-host=host.docker.internal:host-gateway` lets the container reach LM Studio and your MCP server on the host — with Docker, use `host.docker.internal` (not `localhost`) for those services
@@ -92,7 +96,7 @@ mcpscope list
 
 ## 3. Configure mcpscope once in the Web UI
 
-In `http://localhost:3030`, create:
+In `http://localhost:3066`, create:
 
 1. an **LM connection** — the base URL of your LLM backend (LM Studio: `http://localhost:1234/v1`)
 2. a **model config** — pick the connection and the model id of the model you loaded
@@ -248,17 +252,17 @@ one thing, and watch the token metric move — see **[EXAMPLE.md](EXAMPLE.md)**.
 mcpscope is built as a collaboration tool between you and your coding agent: connected over MCP,
 the agent can do the heavy lifting of §7 — author benchmark cases, run the sweeps, read every
 trace — on the same sessions and IDs you watch in the Web UI. mcpscope's MCP interface is served
-at **`http://localhost:3030/mcp`** (Streamable HTTP, same port as the UI — nothing extra to run).
+at **`http://localhost:3066/mcp`** (Streamable HTTP, same port as the UI — nothing extra to run).
 
 ```bash
 # Claude Code
-claude mcp add --transport http mcpscope http://localhost:3030/mcp
+claude mcp add --transport http mcpscope http://localhost:3066/mcp
 ```
 
 Most other agents and IDEs take a JSON entry along these lines in their MCP settings:
 
 ```json
-{ "mcpServers": { "mcpscope": { "type": "http", "url": "http://localhost:3030/mcp" } } }
+{ "mcpServers": { "mcpscope": { "type": "http", "url": "http://localhost:3066/mcp" } } }
 ```
 
 The exact steps (and key names) vary by tool and change often, so follow your tool's own MCP
@@ -278,7 +282,7 @@ agent takes it from there. The tool surface and result shapes are documented in
 ```bash
 # Install + start (npm)
 npm install -g mcpscope
-mcpscope serve            # http://localhost:3030 — configure connections in the UI first
+mcpscope serve            # http://localhost:3066 — configure connections in the UI first
 
 # One session against the built-in Open-Meteo companion (after configuring a default model;
 # ABCD = the session ID your create prints). --wait: no polling needed.

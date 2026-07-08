@@ -34,7 +34,7 @@ describe("companion built-in profile synthesis", () => {
   it("gates key-requiring companions and leaves keyless ones enabled", () => {
     initStoreWith(undefined); // no companions section at all
     const byId = Object.fromEntries(
-      companionProfiles("127.0.0.1", 3030).map((p) => [p.id, p]),
+      companionProfiles("127.0.0.1", 3066).map((p) => [p.id, p]),
     );
 
     // Keyless companions are always enabled.
@@ -52,16 +52,16 @@ describe("companion built-in profile synthesis", () => {
 
     // URLs track the given host/port.
     expect(byId["builtin-guardian"]?.url).toBe(
-      "http://127.0.0.1:3030/companions/guardian/mcp",
+      "http://127.0.0.1:3066/companions/guardian/mcp",
     );
   });
 
   it("brackets an IPv6 host in the synthesized profile URL", () => {
     initStoreWith(undefined);
-    const profile = companionProfiles("::1", 3030).find(
+    const profile = companionProfiles("::1", 3066).find(
       (p) => p.id === "builtin-open-meteo",
     );
-    expect(profile?.url).toBe("http://[::1]:3030/companions/open-meteo/mcp");
+    expect(profile?.url).toBe("http://[::1]:3066/companions/open-meteo/mcp");
   });
 
   it("enables a key-gated companion once its key is configured", () => {
@@ -70,7 +70,7 @@ describe("companion built-in profile synthesis", () => {
       brave: { api_key: "brave-key" },
     });
     const byId = Object.fromEntries(
-      companionProfiles("127.0.0.1", 3030).map((p) => [p.id, p]),
+      companionProfiles("127.0.0.1", 3066).map((p) => [p.id, p]),
     );
     expect(byId["builtin-websearch"]?.disabledReason).toBeNull(); // key present
     expect(byId["builtin-guardian"]?.disabledReason).not.toBeNull(); // still unset

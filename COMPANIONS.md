@@ -37,7 +37,7 @@ They show up automatically in the MCP-server list in the Web UI and CLI — no p
   fields in the JSON/tool output. Pass their id to `create` like any other profile — a profile
   whose key is unconfigured shows an `unavailable:` line and is refused at session creation.
 - **From an external MCP client:** each is reachable over Streamable HTTP at
-  `http://<host>:<port>/companions/<name>/mcp` (e.g. `http://localhost:3030/companions/open-meteo/mcp`).
+  `http://<host>:<port>/companions/<name>/mcp` (e.g. `http://localhost:3066/companions/open-meteo/mcp`).
 
 The profile URL always tracks the host/port mcpscope is currently running on, so it never goes
 stale.

@@ -7,7 +7,6 @@
 // built-in node:sqlite, which is compiled into Electron's bundled Node — no native
 // rebuild / electron-rebuild needed.
 import { app, BrowserWindow, dialog, shell } from "electron";
-import net from "node:net";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,22 +32,6 @@ let server: FastifyLike | null = null;
 let mainWindow: BrowserWindow | null = null;
 let appUrl: string | null = null;
 
-// Ask the OS for a free port up front. We can't listen on port 0 and read it
-// back, because the backend uses config.port internally (the analysis MCP URL),
-// so it must know the real port before it starts.
-function findFreePort(host: string): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = net.createServer();
-    probe.unref();
-    probe.on("error", reject);
-    probe.listen(0, host, () => {
-      const address = probe.address();
-      const port = typeof address === "object" && address ? address.port : 0;
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
 async function startBackend(): Promise<string> {
   const staticDir = path.join(appRoot, "frontend/dist");
   // Same data directory as `mcpscope serve` (see cli/src/commands/serve.ts) —
@@ -58,12 +41,10 @@ async function startBackend(): Promise<string> {
     process.env.BACKEND_DATA_DIR ?? path.join(os.homedir(), ".mcpscope");
   fs.mkdirSync(dataDir, { recursive: true });
 
-  const host = "127.0.0.1";
-  const port = await findFreePort(host);
-
-  // The backend reads all of this from the environment via getBackendConfig().
-  process.env.BACKEND_HOST = host;
-  process.env.BACKEND_PORT = String(port);
+  // Host and port are NOT set here: getBackendConfig() resolves BACKEND_HOST /
+  // BACKEND_PORT from the environment, defaulting to 127.0.0.1:3066 — the same
+  // fixed address as `mcpscope serve` and Docker, so MCP clients and agents can
+  // rely on a stable URL across restarts and deployment modes.
   process.env.BACKEND_STATIC_DIR = staticDir;
   process.env.BACKEND_DATA_DIR = dataDir;
   if (!process.env.BACKEND_SQLITE_PATH) {
@@ -91,9 +72,29 @@ async function startBackend(): Promise<string> {
 
   const config = getBackendConfig();
   server = await buildBackendApp(config);
-  await server.listen({ host: config.host, port: config.port });
+  try {
+    await server.listen({ host: config.host, port: config.port });
+  } catch (error) {
+    if ((error as { code?: string }).code === "EADDRINUSE") {
+      // A fixed port can collide — most likely with `mcpscope serve` or another
+      // mcpscope on the same shared ~/.mcpscope store. Fail with guidance
+      // rather than silently moving to a random port (a moving MCP endpoint is
+      // exactly what the fixed default exists to prevent).
+      throw new Error(
+        `Port ${config.port} on ${config.host} is already in use.\n\n` +
+          "Another mcpscope is probably running (desktop app or `mcpscope serve`) — " +
+          "they share one data store, so use that one instead.\n\n" +
+          "To run this app on a different address, set the BACKEND_PORT (and/or BACKEND_HOST) environment variables.",
+        { cause: error },
+      );
+    }
+    throw error;
+  }
 
-  return `http://${host}:${port}`;
+  // The window needs a connectable address: a wildcard bind address is not one.
+  const windowHost =
+    config.host === "0.0.0.0" || config.host === "::" ? "127.0.0.1" : config.host;
+  return `http://${windowHost}:${config.port}`;
 }
 
 function createWindow(url: string): void {

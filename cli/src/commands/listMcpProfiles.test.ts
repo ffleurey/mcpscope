@@ -35,7 +35,7 @@ describe("renderListMcpProfilesText", () => {
         {
           id: "builtin-open-meteo",
           name: "Open-Meteo Weather (built-in)",
-          url: "http://localhost:3030/companions/open-meteo/mcp",
+          url: "http://localhost:3066/companions/open-meteo/mcp",
           default_enabled: false,
           source: "builtin",
           disabled_reason: null,
@@ -43,7 +43,7 @@ describe("renderListMcpProfilesText", () => {
         {
           id: "builtin-guardian",
           name: "The Guardian News (built-in)",
-          url: "http://localhost:3030/companions/guardian/mcp",
+          url: "http://localhost:3066/companions/guardian/mcp",
           default_enabled: false,
           source: "builtin",
           disabled_reason:
