@@ -84,7 +84,7 @@ async function startBackend(): Promise<string> {
         `Port ${config.port} on ${config.host} is already in use.\n\n` +
           "Another mcpscope is probably running (desktop app or `mcpscope serve`) — " +
           "they share one data store, so use that one instead.\n\n" +
-          "To run this app on a different port, set the BACKEND_PORT environment variable.",
+          "To run this app on a different address, set the BACKEND_PORT (and/or BACKEND_HOST) environment variables.",
         { cause: error },
       );
     }
