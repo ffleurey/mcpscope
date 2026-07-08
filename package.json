@@ -1,6 +1,6 @@
 {
   "name": "mcpscope",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A local-first workbench for developing, inspecting, and benchmarking MCP servers against local (LM Studio, Ollama) or remote (OpenRouter) models — Web UI, CLI, and MCP interface over one shared store.",
   "license": "Apache-2.0",
   "author": "Franck Fleurey <756491+ffleurey@users.noreply.github.com>",
