@@ -37,6 +37,11 @@ files:
 # asarUnpack) once the pipeline is proven.
 asar: false
 
+# The UI is English-only; don't ship Chromium's ~50 other locale packs
+# (~47 MB unpacked, ~10-15 MB per installer).
+electronLanguages:
+  - en-US
+
 linux:
   target:
     - AppImage
