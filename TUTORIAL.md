@@ -27,8 +27,8 @@ If you are developing **mcpscope itself**, see [DEVELOPMENT.md](docs/DEVELOPMENT
 ### Option A — Desktop app (easiest)
 
 Download the installer for your OS from the
-[Releases page](https://github.com/ffleurey/mcpscope/releases) — macOS `.dmg`, Windows `.exe`
-(NSIS), Linux `AppImage` / `.deb` / `.rpm`. Launch it: the full workbench opens as a desktop
+[Releases page](https://github.com/ffleurey/mcpscope/releases) — macOS `.dmg` (Apple Silicon
+only), Windows `.exe` (NSIS), Linux `AppImage` / `.deb` / `.rpm`. Launch it: the full workbench opens as a desktop
 window, with the backend bundled and data stored in `~/.mcpscope`. While the app runs, its
 backend (including the MCP interface, §8) listens at `http://localhost:3066` — the same address
 as `mcpscope serve` — so agents and scripts can connect to it; set `BACKEND_HOST` /

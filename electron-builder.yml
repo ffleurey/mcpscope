@@ -50,8 +50,11 @@ linux:
   syncDesktopName: true
 
 mac:
+  # Apple Silicon only (arm64) — deliberate, not an accident of the runner
+  # arch. Intel Macs are not supported; add x64/universal here if that changes.
   target:
-    - dmg
+    - target: dmg
+      arch: [arm64]
   category: public.app-category.developer-tools
 
 win:
