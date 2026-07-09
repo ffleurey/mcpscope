@@ -33,6 +33,32 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
 
+      # Build to the local daemon and boot the image before anything is
+      # pushed: the production stage assembles a bare-Alpine runtime (node
+      # binary copied out of the builder), so a builder/base drift must fail
+      # here, not on the user's machine. The push below reuses the layer cache,
+      # so this costs seconds, not a second build.
+      - name: Build image for smoke test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: mcpscope:smoke
+          build-args: APP_VERSION=${{ steps.meta.outputs.version }}
+
+      - name: Smoke-test the image before pushing
+        run: |
+          docker run -d --rm --name smoke -p 3066:3066 mcpscope:smoke
+          ok=""
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3066/api/health >/dev/null 2>&1; then ok=1; break; fi
+            sleep 1
+          done
+          if [ -z "$ok" ]; then docker logs smoke; exit 1; fi
+          curl -fsS http://127.0.0.1:3066/api/health; echo
+          docker exec smoke mcpscope --version
+          docker stop smoke
+
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
