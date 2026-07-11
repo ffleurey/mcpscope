@@ -37,6 +37,11 @@ files:
 # asarUnpack) once the pipeline is proven.
 asar: false
 
+# The UI is English-only; don't ship Chromium's ~50 other locale packs
+# (~47 MB unpacked, ~10-15 MB per installer).
+electronLanguages:
+  - en-US
+
 linux:
   target:
     - AppImage
@@ -50,8 +55,11 @@ linux:
   syncDesktopName: true
 
 mac:
+  # Apple Silicon only (arm64) — deliberate, not an accident of the runner
+  # arch. Intel Macs are not supported; add x64/universal here if that changes.
   target:
-    - dmg
+    - target: dmg
+      arch: [arm64]
   category: public.app-category.developer-tools
 
 win:

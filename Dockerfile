@@ -21,8 +21,31 @@ RUN npm run build:cli      # tsc  → cli/dist/
 # production stage copies only the small runtime tree.
 RUN npm prune --omit=dev
 
+# Strip docs, TypeScript declarations, and sourcemaps from the production
+# dependency tree (~25 MB of the ~55 MB) — none of it is read at runtime.
+# LICENSE files are kept: we redistribute these packages in the image.
+RUN find node_modules -type f \
+  \( -name '*.md' -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -name '*.map' \) \
+  -delete
+
+# Strip the node binary's debug symbols (~128 MB → ~111 MB). The dynamic
+# symbol table survives stripping, and there are no native addons anyway.
+RUN apk add --no-cache binutils && strip /usr/local/bin/node
+
 # ─── Stage 2: Production image ────────────────────────────────────────────────
-FROM node:24-alpine AS production
+# Not node:24-alpine: that base also carries npm (~18 MB), the Node headers
+# (~7 MB), yarn (~5 MB) and corepack — none of which is needed to *run* the app.
+# Starting from bare Alpine and copying in only the node binary (plus its two
+# shared-library deps via libstdc++) cuts the image by ~100 MB. The Alpine
+# version is pinned to the one the builder's node binary was linked against;
+# the release workflow smoke-tests the image before pushing, so a mismatch
+# after a base bump fails the build, not the user.
+FROM alpine:3.24 AS production
+
+RUN apk add --no-cache libstdc++ \
+  && addgroup -g 1000 node \
+  && adduser -u 1000 -G node -s /bin/sh -D node
+COPY --from=builder /usr/local/bin/node /usr/local/bin/node
 
 ARG APP_VERSION=dev
 ENV APP_VERSION=$APP_VERSION

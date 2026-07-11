@@ -9,9 +9,9 @@ workflow (`.github/workflows/release.yml`) automatically, in parallel:
   [trusted publishing (OIDC)](#npm-trusted-publishing) — no stored token.
 - **Docker** — builds and pushes a versioned image to GHCR at `ghcr.io/ffleurey/mcpscope`.
 - **Electron desktop apps** — builds installers on a macOS / Windows / Linux matrix and uploads
-  them to the GitHub Release as assets: macOS `.dmg`, Windows `.exe` (NSIS), and Linux
-  `AppImage` / `.deb` / `.rpm` / `.tar.gz`. Unsigned for now — macOS Gatekeeper / Windows SmartScreen warn
-  on first run.
+  them to the GitHub Release as assets: macOS `.dmg` (**Apple Silicon / arm64 only** — set in
+  `electron-builder.yml`), Windows `.exe` (NSIS), and Linux `AppImage` / `.deb` / `.rpm` /
+  `.tar.gz`. Unsigned for now — macOS Gatekeeper / Windows SmartScreen warn on first run.
 
 The version is baked into the Docker image at build time (shown in the app footer); the Electron
 installers take their version from `package.json`, which **must** match the release tag (`vX.Y.Z`).

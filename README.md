@@ -52,8 +52,8 @@ server**, load a model, and note its model id — the server URL is `http://loca
 ### Desktop app — the easiest way to try mcpscope
 
 Download the installer for your OS from the
-[**Releases page**](https://github.com/ffleurey/mcpscope/releases) (macOS `.dmg`, Windows
-`.exe`, Linux `AppImage`/`.deb`/`.rpm`). Everything is bundled — launch it and the workbench
+[**Releases page**](https://github.com/ffleurey/mcpscope/releases) (macOS `.dmg` — Apple
+Silicon only, Windows `.exe`, Linux `AppImage`/`.deb`/`.rpm`). Everything is bundled — launch it and the workbench
 opens; data lives in `~/.mcpscope`. While it runs it serves the same backend as `mcpscope serve`
 at **`http://localhost:3066`** (MCP interface at `/mcp`), so coding agents and other MCP clients
 can connect to it directly — set the `BACKEND_HOST` / `BACKEND_PORT` environment variables before
