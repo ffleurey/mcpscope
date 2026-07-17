@@ -24,6 +24,7 @@ import type { ChatCompletionGateway } from "./runtime/modelTurns.js";
 import { withAutoModelSwap } from "./runtime/autoModelSwapGateway.js";
 import type { McpGateway } from "./runtime/toolTurns.js";
 import { registerMcpTransport } from "./mcp/index.js";
+import { registerAnalysisSessionPresenter } from "./analysis/analysisSessionPresentation.js";
 import { registerCompanionServers } from "./companions/index.js";
 import {
   OperationError,
@@ -137,6 +138,12 @@ export async function buildBackendApp(
 
   const database = openBackendDatabase(config.sqlitePath);
   app.decorate("backendDb", database);
+
+  // Workbench wiring: register the analysis presenter in the engine's
+  // session-presentation registry so generic operations (list/status/
+  // lifecycle) surface analysis sessions' workflow_kind, terminal error
+  // phase, and latest diagnostic without the engine importing analysis code.
+  registerAnalysisSessionPresenter();
 
   // On an unclean shutdown (crash, kill, server restart mid-turn) turns and sessions
   // can be left in in-progress states. Recover them before serving any requests so

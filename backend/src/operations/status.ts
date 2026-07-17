@@ -4,9 +4,9 @@ import { getSessionRecord, listTurnRecordsBySession } from '../persistence/repos
 import type { OperationContext } from './context.js'
 import { computeLifecycleState } from './lifecycleState.js'
 import {
-  getAnalysisWorkflowKindFromSteps,
   getLatestSessionErrorSummary,
-} from '../analysis/analysisSessionPresentation.js'
+  getSessionWorkflowKind,
+} from './sessionPresentation.js'
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
@@ -73,9 +73,7 @@ export const statusOperation = {
         ? latestTurn
         : null
 
-    const workflowKind = session.sessionType === 'session_analysis'
-      ? getAnalysisWorkflowKindFromSteps(db.connection, input.session_id)
-      : null
+    const workflowKind = getSessionWorkflowKind(db.connection, session)
     const latestError = state === 'error'
       ? getLatestSessionErrorSummary(db.connection, session) ?? undefined
       : undefined

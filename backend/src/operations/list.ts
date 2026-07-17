@@ -3,9 +3,9 @@ import { listAllSessionSummaries } from '../persistence/repository.js'
 import type { OperationContext } from './context.js'
 import { computeLifecycleState } from './lifecycleState.js'
 import {
-  getAnalysisWorkflowKindFromSteps,
   getLatestSessionErrorSummary,
-} from '../analysis/analysisSessionPresentation.js'
+  getSessionWorkflowKind,
+} from './sessionPresentation.js'
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
@@ -75,9 +75,7 @@ export const listOperation = {
     return {
       api_version: 1,
       sessions: rows.map(s => {
-        const workflowKind = s.sessionType === 'session_analysis'
-          ? getAnalysisWorkflowKindFromSteps(ctx.db.connection, s.id)
-          : null
+        const workflowKind = getSessionWorkflowKind(ctx.db.connection, s)
         const state = computeLifecycleState(ctx.db.connection, s)
         const latestError = state === 'error'
           ? getLatestSessionErrorSummary(ctx.db.connection, s) ?? undefined

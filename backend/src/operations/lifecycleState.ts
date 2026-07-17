@@ -1,14 +1,15 @@
 import type { BackendConnection } from "../persistence/connection.js";
 import { listTurnRecordsBySession } from '../persistence/repository.js'
-import { isAnalysisSessionTerminalError } from '../analysis/analysisSessionPresentation.js'
+import { isSessionTerminalError } from './sessionPresentation.js'
 
 export type LifecycleState = 'initializing' | 'ready' | 'running' | 'error'
 
 /**
  * Canonical session lifecycle-state computation. Single source of truth shared by
  * the list operation, the status operation, and the route-summary builder so they
- * cannot diverge. `isAnalysisSessionTerminalError` already covers the
- * initStatus/status === 'error' cases (and the analysis terminal-error phase).
+ * cannot diverge. `isSessionTerminalError` already covers the
+ * initStatus/status === 'error' cases (plus any presenter-registered terminal
+ * signal, e.g. the analysis workflow's error phase).
  */
 export function computeLifecycleState(
   connection: BackendConnection,
@@ -21,7 +22,7 @@ export function computeLifecycleState(
       .find(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools') ?? null
   const latestTurn = turns.at(-1) ?? null
 
-  if (isAnalysisSessionTerminalError(connection, summary) || latestTurn?.status === 'error') {
+  if (isSessionTerminalError(connection, summary) || latestTurn?.status === 'error') {
     return 'error'
   }
   if (summary.initStatus === 'pending' || summary.initStatus === 'initializing') {

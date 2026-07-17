@@ -53,7 +53,7 @@ import { createSession } from "../runtime/modelTurns.js";
 import { executeAnalysisLaunch } from "./launchAnalysis.js";
 import { ANALYSIS_WORKFLOW_KIND } from "../analysis/workflowKinds.js";
 import { getLatestArtifactBySchemaKey } from "../analysis/artifactRepository.js";
-import { getLatestSessionErrorSummary } from "../analysis/analysisSessionPresentation.js";
+import { getLatestSessionErrorSummary } from "./sessionPresentation.js";
 import { SCHEMA_KEY as BENCHMARK_EVAL_KEY } from "../analysis/benchmarkEvaluation/schemas.js";
 import type { OperationContext } from "./context.js";
 import type { ExecutionScheduler, TerminalJob } from "../runtime/scheduler.js";

@@ -88,6 +88,15 @@ export type { InspectInput, InspectResult } from "./operations/inspect.js";
 export { computeLifecycleState } from "./operations/lifecycleState.js";
 export type { LifecycleState } from "./operations/lifecycleState.js";
 
+// Session-presentation hook: the workbench registers per-session-type
+// presenters (e.g. the analysis presenter) so generic operations can surface
+// type-specific summaries without the engine importing concrete analysis code.
+export { registerSessionPresenter } from "./operations/sessionPresentation.js";
+export type {
+  SessionPresenter,
+  SessionErrorSummary,
+} from "./operations/sessionPresentation.js";
+
 // ── Domain records and trace ─────────────────────────────────────────────────
 export type { SessionRecord, TurnRecord, PartRecord } from "./domain/model.js";
 

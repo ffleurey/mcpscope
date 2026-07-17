@@ -2,14 +2,15 @@ import type { BackendConnection } from "../persistence/connection.js";
 import { getSessionRecord } from '../persistence/repository.js'
 import { listArtifactsBySession, type ArtifactRecord } from './artifactRepository.js'
 import { SCHEMA_KEY, type AnalysisPhase, type AnalysisSessionState } from './schemas.js'
-import type { SessionRecord, StepRecord } from '../domain/model.js'
+import type { StepRecord } from '../domain/model.js'
 import { getWorkflowLabel } from './analysisWorkflowFactory.js'
+import {
+  registerSessionPresenter,
+  type SessionErrorSummary,
+} from '../operations/sessionPresentation.js'
 
-export interface AnalysisDiagnosticSummary {
-  step_id: string | null
-  error_kind: string | null
-  message: string
-}
+/** Analysis diagnostics use the engine's shared latest_error shape. */
+export type AnalysisDiagnosticSummary = SessionErrorSummary
 
 export function getAnalysisWorkflowLabel(workflowKind: string | null | undefined): string | null {
   return workflowKind ? getWorkflowLabel(workflowKind) : null
@@ -31,20 +32,24 @@ export function getAnalysisTitlePrefix(workflowKind: string): string {
   return getWorkflowLabel(workflowKind) ?? workflowKind
 }
 
-export function isAnalysisSessionTerminalError(
-  connection: BackendConnection,
-  summary: { id: string; sessionType: string; status: string; initStatus: string },
-): boolean {
-  if (summary.initStatus === 'error' || summary.status === 'error') {
-    return true
-  }
-  if (summary.sessionType !== 'session_analysis') {
-    return false
-  }
-
-  const session = getSessionRecord(connection, summary.id)
-  const analysisState = session?.analysisState as unknown as AnalysisSessionState | null
-  return (analysisState?.phase === 'error') === true
+/**
+ * Register the analysis presenter in the engine's session-presentation
+ * registry so generic operations (list/status/lifecycle) surface analysis
+ * sessions' workflow_kind, terminal error phase, and latest diagnostic
+ * without importing analysis code. Called by the workbench at startup
+ * (`buildBackendApp`), mirroring `registerAnalysisWorkflow()`.
+ */
+export function registerAnalysisSessionPresenter(): void {
+  registerSessionPresenter({
+    sessionType: 'session_analysis',
+    getWorkflowKind: getAnalysisWorkflowKindFromSteps,
+    isTerminalError(connection, summary) {
+      const session = getSessionRecord(connection, summary.id)
+      const analysisState = session?.analysisState as unknown as AnalysisSessionState | null
+      return analysisState?.phase === 'error'
+    },
+    getLatestErrorSummary: getLatestAnalysisDiagnosticSummaryForSession,
+  })
 }
 
 export function getLatestAnalysisDiagnosticSummary(artifacts: ArtifactRecord[]): AnalysisDiagnosticSummary | null {
@@ -71,27 +76,6 @@ export function getLatestAnalysisDiagnosticSummaryForSession(
   sessionId: string,
 ): AnalysisDiagnosticSummary | null {
   return getLatestAnalysisDiagnosticSummary(listArtifactsBySession(connection, sessionId))
-}
-
-/**
- * Latest error summary for any session, in the shared latest_error shape.
- * Prefers an analysis diagnostic (richest, for session_analysis workflows) and
- * falls back to a persisted session init failure — so an MCP-handshake or
- * token-probe failure during init is diagnosable from list/status/inspect, not
- * just the live event stream.
- */
-export function getLatestSessionErrorSummary(
-  connection: BackendConnection,
-  session: Pick<SessionRecord, 'id' | 'sessionType' | 'initError'>,
-): AnalysisDiagnosticSummary | null {
-  if (session.sessionType === 'session_analysis') {
-    const diagnostic = getLatestAnalysisDiagnosticSummaryForSession(connection, session.id)
-    if (diagnostic) return diagnostic
-  }
-  if (session.initError) {
-    return { step_id: null, error_kind: session.initError.errorKind, message: session.initError.message }
-  }
-  return null
 }
 
 export function getLatestAnalysisDiagnosticSummaryForStep(
