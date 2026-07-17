@@ -4,7 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { BackendConfig } from "mcpscope-engine/config.js";
+import type { BackendConfig } from "./config.js";
 import { openBackendDatabase } from "mcpscope-engine/persistence/db.js";
 import { registerBenchmarkSchema } from "./persistence/benchmarkSchema.js";
 import { registerBenchmarkRecovery } from "./persistence/benchmarkRecovery.js";

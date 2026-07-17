@@ -7,13 +7,10 @@
  *
  * Re-exports only — no logic, no side effects beyond module evaluation.
  *
- * Note: the in-process app factory (`buildBackendApp`/`BackendHandle`) still
- * lives in the workbench (it wires HTTP/benchmark/analysis). A standalone
- * `createEngine()` factory is the next step; until then embedders obtain a
- * handle through the workbench app.
+ * Embedders use `createEngine()` below. The workbench's own in-process app
+ * factory (`buildBackendApp`/`BackendHandle`) lives in the workbench, since it
+ * wires HTTP/benchmark/analysis; the engine does not re-export it.
  */
-
-export type { BackendConfig } from "./config.js";
 
 // ── Standalone in-process factory ────────────────────────────────────────────
 export { createEngine } from "./createEngine.js";

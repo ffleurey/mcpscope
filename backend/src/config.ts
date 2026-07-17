@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { DEFAULT_MAX_TOOL_ROUNDS } from './domain/model.js'
+import { DEFAULT_MAX_TOOL_ROUNDS } from 'mcpscope-engine/domain/model.js'
 
 export interface BackendConfig {
   host: string

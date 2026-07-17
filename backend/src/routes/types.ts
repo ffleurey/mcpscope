@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
-import type { BackendConfig } from 'mcpscope-engine/config.js'
+import type { BackendConfig } from '../config.js'
 import type { OperationContext } from '../operations/index.js'
 import type { ExecutionScheduler } from 'mcpscope-engine/runtime/scheduler.js'
 import type { SchedulerEvent } from 'mcpscope-engine/runtime/schedulerTypes.js'

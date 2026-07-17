@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getBackendConfig } from 'mcpscope-engine/config.js'
+import { getBackendConfig } from '../config.js'
 import { deriveContextEntries, deriveTranscriptEntries } from 'mcpscope-engine/domain/selectors.js'
 import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from 'mcpscope-engine/domain/trace.js'
 import { openBackendDatabase } from 'mcpscope-engine/persistence/db.js'

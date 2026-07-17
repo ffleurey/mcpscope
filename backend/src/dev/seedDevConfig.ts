@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config as loadDotEnv } from "dotenv";
 import { z } from "zod";
-import { getBackendConfig } from "mcpscope-engine/config.js";
+import { getBackendConfig } from "../config.js";
 
 const envSchema = z.object({
   lmStudioBaseUrl: z.string().url(),

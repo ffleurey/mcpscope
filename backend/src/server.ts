@@ -1,4 +1,4 @@
-import { getBackendConfig } from 'mcpscope-engine/config.js'
+import { getBackendConfig } from './config.js'
 import { buildBackendApp } from './app.js'
 
 async function start() {
