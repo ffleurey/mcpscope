@@ -125,7 +125,7 @@ describe("benchmark run failures are surfaced (not silent)", () => {
   it("marks a failed-turn session as errored and the all-failed run as errored", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, failingTurnGateways());
+    app = (await buildBackendApp(config, failingTurnGateways())).app;
     await seedModelConfig(app);
 
     const created = await app.inject({

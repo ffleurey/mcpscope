@@ -36,14 +36,14 @@ describe('backend runtime integration', () => {
   it('creates a session and completes a model-only backend turn against LM Studio', async () => {
     const env = getIntegrationEnv()
 
-    app = await buildBackendApp({
+    app = (await buildBackendApp({
       host: '127.0.0.1',
       port: 3066,
       corsOrigin: true,
       dataDir: '.tmp-test-data',
       sqlitePath,
       maxToolRounds: 5,
-    })
+    })).app
 
     const sessionResponse = await app.inject({
       method: 'POST',
@@ -123,14 +123,14 @@ describe('backend runtime integration', () => {
   it('completes a tool-enabled backend turn against LM Studio and the local MCP server', async () => {
     const env = getIntegrationEnv()
 
-    app = await buildBackendApp({
+    app = (await buildBackendApp({
       host: '127.0.0.1',
       port: 3066,
       corsOrigin: true,
       dataDir: '.tmp-test-data',
       sqlitePath,
       maxToolRounds: 5,
-    })
+    })).app
 
     const sessionResponse = await app.inject({
       method: 'POST',
@@ -226,14 +226,14 @@ describe('backend runtime integration', () => {
     const env = getIntegrationEnv()
     const outdoorEntityId = 'sensor.sensor_ab12_temperature'
 
-    app = await buildBackendApp({
+    app = (await buildBackendApp({
       host: '127.0.0.1',
       port: 3066,
       corsOrigin: true,
       dataDir: '.tmp-test-data',
       sqlitePath,
       maxToolRounds: 10,
-    })
+    })).app
 
     const sessionResponse = await app.inject({
       method: 'POST',
@@ -369,14 +369,14 @@ describe('backend runtime integration', () => {
     const env = getIntegrationEnv()
     const outdoorEntityId = 'sensor.sensor_ab12_temperature'
 
-    app = await buildBackendApp({
+    app = (await buildBackendApp({
       host: '127.0.0.1',
       port: 3066,
       corsOrigin: true,
       dataDir: '.tmp-test-data',
       sqlitePath,
       maxToolRounds: 12,
-    })
+    })).app
 
     const sessionResponse = await app.inject({
       method: 'POST',

@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import staticFiles from "@fastify/static";
-import Fastify, { type FastifyReply } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
@@ -51,6 +51,17 @@ interface RuntimeDependencies {
   mcpGateway: McpGateway;
 }
 
+/**
+ * Handle over a built backend: the Fastify HTTP app plus the engine pieces
+ * assembled inside it. HTTP-only callers use `app`; embedders reach the
+ * runtime directly through `scheduler` and `opCtx`.
+ */
+export interface BackendHandle {
+  app: FastifyInstance;
+  scheduler: ExecutionScheduler;
+  opCtx: OperationContext;
+}
+
 export async function buildBackendApp(
   config: BackendConfig,
   dependencies: RuntimeDependencies = {
@@ -67,7 +78,7 @@ export async function buildBackendApp(
       callTool: callMcpTool,
     },
   },
-) {
+): Promise<BackendHandle> {
   const app = Fastify({
     logger: true,
     bodyLimit: 50 * 1024 * 1024, // 50MB — large trace files can be several MB
@@ -349,7 +360,7 @@ export async function buildBackendApp(
     database.connection.close();
   });
 
-  return app;
+  return { app, scheduler, opCtx };
 }
 
 declare module "fastify" {

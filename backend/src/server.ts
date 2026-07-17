@@ -3,7 +3,7 @@ import { buildBackendApp } from './app.js'
 
 async function start() {
   const config = getBackendConfig()
-  const app = await buildBackendApp(config)
+  const { app } = await buildBackendApp(config)
 
   try {
     await app.listen({

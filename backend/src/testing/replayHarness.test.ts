@@ -15,7 +15,7 @@ async function captureTraceFixture(input: {
   dependencies: Parameters<typeof buildBackendApp>[1]
 }): Promise<SessionTraceBundle> {
   const sqlitePath = makeSqlitePath()
-  const app = await buildBackendApp(
+  const app = (await buildBackendApp(
     {
       host: '127.0.0.1',
       port: 3066,
@@ -25,7 +25,7 @@ async function captureTraceFixture(input: {
       maxToolRounds: 5,
     },
     input.dependencies,
-  )
+  )).app
 
   try {
     const sessionResponse = await app.inject({

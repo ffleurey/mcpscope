@@ -67,11 +67,13 @@ async function startBackend(): Promise<string> {
     getBackendConfig: () => BackendConfigShape;
   };
   const { buildBackendApp } = (await import(backendUrl)) as {
-    buildBackendApp: (config: BackendConfigShape) => Promise<FastifyLike>;
+    // Minimal structural view of the backend's BackendHandle — only the fields
+    // used here, to avoid importing backend types.
+    buildBackendApp: (config: BackendConfigShape) => Promise<{ app: FastifyLike }>;
   };
 
   const config = getBackendConfig();
-  server = await buildBackendApp(config);
+  server = (await buildBackendApp(config)).app;
   try {
     await server.listen({ host: config.host, port: config.port });
   } catch (error) {

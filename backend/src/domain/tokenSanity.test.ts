@@ -413,7 +413,7 @@ async function captureModelOnlyTrace(
   userInputs: string[],
 ): Promise<SessionTraceBundle> {
   const sqlitePath = makeSqlitePath();
-  const app = await buildBackendApp(
+  const app = (await buildBackendApp(
     {
       host: "127.0.0.1",
       port: 3066,
@@ -426,7 +426,7 @@ async function captureModelOnlyTrace(
       chatCompletionGateway: makeModelOnlyGateway(userInputs.length as 1 | 2),
       mcpGateway: noopMcpGateway,
     },
-  );
+  )).app;
 
   try {
     const sessionRes = await app.inject({
@@ -786,7 +786,7 @@ function makeToolGateway() {
 async function captureToolEnabledTrace(): Promise<SessionTraceBundle> {
   const sqlitePath = makeSqlitePath();
   const deps = makeToolGateway();
-  const app = await buildBackendApp(
+  const app = (await buildBackendApp(
     {
       host: "127.0.0.1",
       port: 3066,
@@ -796,7 +796,7 @@ async function captureToolEnabledTrace(): Promise<SessionTraceBundle> {
       maxToolRounds: 5,
     },
     deps,
-  );
+  )).app;
 
   try {
     const sessionRes = await app.inject({
