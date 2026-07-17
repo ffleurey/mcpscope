@@ -151,6 +151,7 @@ loop where you and your coding agent iterate on your own MCP server together.
 
 - [MCP.md](MCP.md) - MCP interface: transport, tool surface, and structured results
 - [CLI.md](CLI.md) - CLI commands, flags, output format, and exit codes
+- [EMBEDDING.md](EMBEDDING.md) - embed the `mcpscope-engine` package in your own Node.js/TypeScript app: `createEngine()`, config, sessions, events, and a full Express integration
 
 ### Internals & contributing
 

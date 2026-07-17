@@ -86,6 +86,13 @@ the embedder's job. It exposes **no HTTP surface**; you own the transport and
 fan events out to your own clients. Benchmarking, evaluation, and analysis live
 in the mcpscope workbench, not here.
 
+## Full guide
+
+This README is the summary. The complete integration tutorial — configuration,
+the event/transparency model, a full Express example, testing, and a
+coding-agent quick reference — is in
+[EMBEDDING.md](https://github.com/ffleurey/mcpscope/blob/main/EMBEDDING.md).
+
 ## License
 
 Apache-2.0. See `LICENSE` and `NOTICE`.
