@@ -26,6 +26,7 @@ import type { McpGateway } from "./runtime/toolTurns.js";
 import { registerMcpTransport } from "./mcp/index.js";
 import { registerAnalysisSessionPresenter } from "./analysis/analysisSessionPresentation.js";
 import { registerAnalysisSessionExecutor } from "./analysis/analysisSessionExecutor.js";
+import { registerBenchmarkInspectResolver } from "./operations/benchmarkOperations.js";
 import { registerCompanionServers } from "./companions/index.js";
 import {
   OperationError,
@@ -150,6 +151,10 @@ export async function buildBackendApp(
   // session-executor registry so the scheduler can dispatch and rehydrate
   // session_analysis jobs without the engine importing analysis code.
   registerAnalysisSessionExecutor();
+  // Workbench wiring: register the benchmark-family ID resolver (B-/R-/E-) in
+  // the engine's inspect registry so `inspect` resolves benchmark objects
+  // without the engine importing benchmark code.
+  registerBenchmarkInspectResolver();
 
   // On an unclean shutdown (crash, kill, server restart mid-turn) turns and sessions
   // can be left in in-progress states. Recover them before serving any requests so

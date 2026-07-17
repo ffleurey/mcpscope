@@ -9,6 +9,7 @@
 import { z } from "zod";
 import type { OperationContext } from "./context.js";
 import { OperationError } from "./errors.js";
+import { registerInspectIdResolver } from "./inspect.js";
 import {
   createBenchmarkEntry,
   listBenchmarkEntries,
@@ -597,6 +598,16 @@ export function resolveBenchmarkInspect(
     };
   }
   return null;
+}
+
+/**
+ * Register the benchmark-family resolver (B-/R-/E- IDs) in the engine's
+ * inspect-ID resolver registry so `inspect` resolves benchmark objects without
+ * importing benchmark code. Called by the workbench at startup
+ * (`buildBackendApp`), mirroring `registerAnalysisSessionExecutor()`.
+ */
+export function registerBenchmarkInspectResolver(): void {
+  registerInspectIdResolver("benchmark", resolveBenchmarkInspect);
 }
 
 // ── Shared zod output sub-shapes ─────────────────────────────────────────────

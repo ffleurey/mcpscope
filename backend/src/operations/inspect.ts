@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { OperationError } from './errors.js'
 import { resolveHierarchicalId } from '../runtime/hierarchicalLookup.js'
-import { resolveBenchmarkInspect } from './benchmarkOperations.js'
 import { renderInspect } from '../inspect/renderInspect.js'
 import type { OperationContext } from './context.js'
 
@@ -42,6 +41,26 @@ export const inspectOutputSchema = {
   data: z.record(z.string(), z.unknown()),
 }
 
+/**
+ * Inspect-ID resolver registry — the engine-side hook that lets the workbench
+ * teach inspect about non-runtime ID families (benchmark B-/R-/E-) without the
+ * engine importing benchmark code. Mirrors the session-executor registry in
+ * `runtime/schedulerDispatch.ts`. A resolver returns null when the ID is not
+ * one of its family, so inspect falls through to the runtime hierarchical
+ * resolver. Registration is keyed so repeated startup wiring stays idempotent.
+ */
+export type InspectIdResolver = (
+  ctx: OperationContext,
+  id: string,
+  mode: 'summary' | 'full',
+) => InspectResult | null
+
+const inspectIdResolvers = new Map<string, InspectIdResolver>()
+
+export function registerInspectIdResolver(key: string, resolver: InspectIdResolver): void {
+  inspectIdResolvers.set(key, resolver)
+}
+
 export const inspectOperation = {
   id: 'inspect' as const,
   description:
@@ -57,10 +76,12 @@ export const inspectOperation = {
     const { db } = ctx
     const mode = input.short === true ? 'summary' : 'full'
 
-    // Benchmark-family IDs (B-/R-/E-) resolve through the same snake_case payloads
-    // as the dedicated benchmark_* operations; runtime IDs fall through below.
-    const benchmark = resolveBenchmarkInspect(ctx, input.id, mode)
-    if (benchmark) return benchmark
+    // Registered ID families (e.g. the workbench's benchmark B-/R-/E- IDs)
+    // resolve first; runtime IDs fall through below.
+    for (const resolve of inspectIdResolvers.values()) {
+      const resolved = resolve(ctx, input.id, mode)
+      if (resolved) return resolved
+    }
 
     const resolved = resolveHierarchicalId(db.connection, input.id, mode)
 

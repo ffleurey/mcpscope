@@ -16,7 +16,11 @@ import type {
 } from '../domain/model.js'
 import type { OperationContext } from './context.js'
 import { inspectOperation } from './inspect.js'
-import { resolveBenchmarkInspect } from './benchmarkOperations.js'
+import { registerBenchmarkInspectResolver, resolveBenchmarkInspect } from './benchmarkOperations.js'
+
+// The workbench registers the benchmark resolver at startup (buildBackendApp);
+// these tests exercise inspect without an app, so register it here.
+registerBenchmarkInspectResolver()
 
 // inspect is the single operation shared by the UI id-pill lookup (/api/lookup),
 // the CLI, and the MCP tool — so resolving these IDs here proves all three surfaces

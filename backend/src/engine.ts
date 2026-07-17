@@ -94,8 +94,12 @@ export type {
   McpProfileSummary,
 } from "./operations/listConfigs.js";
 
-export { inspectOperation } from "./operations/inspect.js";
-export type { InspectInput, InspectResult } from "./operations/inspect.js";
+export { inspectOperation, registerInspectIdResolver } from "./operations/inspect.js";
+export type {
+  InspectInput,
+  InspectResult,
+  InspectIdResolver,
+} from "./operations/inspect.js";
 
 export { computeLifecycleState } from "./operations/lifecycleState.js";
 export type { LifecycleState } from "./operations/lifecycleState.js";
