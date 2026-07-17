@@ -8,12 +8,7 @@
  * copy-pasted MCP snapshot builder, and the repeated SessionId* -> OperationError
  * mapping that previously lived independently in each operation.
  */
-import {
-  getSessionCreationDefaults,
-  listLmConnections,
-  listMcpServerProfiles,
-  listModelConfigs,
-} from "../persistence/repository.js";
+import type { ConfigStore } from "../config/configStore.js";
 import { type McpServerProfile } from "../domain/configuration.js";
 import type { McpProfileSnapshot, ModelProfileSnapshot } from "../domain/model.js";
 import { OperationError } from "./errors.js";
@@ -83,9 +78,10 @@ export interface FailedPrimarySessionInputs {
  * model profile snapshot. Must be called inside a DB transaction by the caller.
  */
 export function resolvePrimarySessionInputs(
+  configStore: ConfigStore,
   params: ResolvePrimarySessionInputsParams,
 ): ResolvedPrimarySessionInputs | FailedPrimarySessionInputs {
-  const defaults = getSessionCreationDefaults();
+  const defaults = configStore.getSessionCreationDefaults();
   const resolvedModelConfigId =
     params.modelConfigId ?? defaults.defaultModelConfigId;
 
@@ -102,7 +98,7 @@ export function resolvePrimarySessionInputs(
     };
   }
 
-  const modelConfig = listModelConfigs().find(
+  const modelConfig = configStore.listModelConfigs().find(
     (c) => c.id === resolvedModelConfigId,
   );
   if (!modelConfig) {
@@ -115,7 +111,7 @@ export function resolvePrimarySessionInputs(
     };
   }
 
-  const lmConnection = listLmConnections().find(
+  const lmConnection = configStore.listLmConnections().find(
     (c) => c.id === modelConfig.connectionId,
   );
   if (!lmConnection) {
@@ -128,7 +124,7 @@ export function resolvePrimarySessionInputs(
     };
   }
 
-  const allProfiles = listMcpServerProfiles();
+  const allProfiles = configStore.listMcpServerProfiles();
   const resolvedMcpIds =
     params.mcpProfileIds ??
     allProfiles.filter((p) => p.defaultEnabled).map((p) => p.id);

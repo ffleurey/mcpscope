@@ -17,10 +17,13 @@ import type {
 import type { OperationContext } from './context.js'
 import { inspectOperation } from './inspect.js'
 import { registerBenchmarkInspectResolver, resolveBenchmarkInspect } from './benchmarkOperations.js'
+import { registerBenchmarkSchema } from '../persistence/benchmarkSchema.js'
 
-// The workbench registers the benchmark resolver at startup (buildBackendApp);
-// these tests exercise inspect without an app, so register it here.
+// The workbench registers the benchmark resolver and schema extension at
+// startup (buildBackendApp); these tests exercise inspect without an app, so
+// register them here (schema before any openBackendDatabase call).
 registerBenchmarkInspectResolver()
+registerBenchmarkSchema()
 
 // inspect is the single operation shared by the UI id-pill lookup (/api/lookup),
 // the CLI, and the MCP tool — so resolving these IDs here proves all three surfaces

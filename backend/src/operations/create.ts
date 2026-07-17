@@ -115,7 +115,7 @@ export const createOperation = {
     const result: TransactionResult = runInTransaction(
       db.connection,
       (): TransactionResult => {
-        const resolved = resolvePrimarySessionInputs({
+        const resolved = resolvePrimarySessionInputs(ctx.configStore, {
           modelConfigId: input.model_config_id,
           mcpProfileIds: input.mcp_profile_ids,
         });

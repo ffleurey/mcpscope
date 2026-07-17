@@ -62,7 +62,20 @@ const configFileSchema = z.object({
 
 type ConfigFile = z.infer<typeof configFileSchema>;
 
-// ─── Singleton store ──────────────────────────────────────────────────────────
+// ─── Store ────────────────────────────────────────────────────────────────────
+// One instance per backend app, created and owned by `buildBackendApp` and
+// reached via `OperationContext.configStore`. There is deliberately no
+// module-level singleton: two apps in one process must not share config state.
+
+/**
+ * Bundled companion MCP servers surface as read-only "builtin" profiles that
+ * are never persisted to the user's config file. `buildBackendApp` registers
+ * the provider on its store at startup (it needs the backend host/port to
+ * build the URLs). `listMcpServerProfiles` merges these ahead of the user's
+ * own profiles so they appear in every listing consumer (UI/CLI/MCP) and
+ * resolve by id at session creation.
+ */
+const BUILTIN_PROFILE_PREFIX = "builtin-";
 
 export class ConfigStore {
   private lmConnections = new Map<string, LmStudioConnection>();
@@ -76,6 +89,7 @@ export class ConfigStore {
     guardian: { api_key: null },
     brave: { api_key: null },
   };
+  private companionProfileProvider: () => ListedMcpServerProfile[] = () => [];
   private filePath: string;
 
   constructor(filePath: string) {
@@ -217,16 +231,35 @@ export class ConfigStore {
 
   // ── MCP Server Profiles ───────────────────────────────────────────────────
 
-  listMcpServerProfiles(): McpServerProfile[] {
-    return Array.from(this.mcpServerProfiles.values());
+  /** Register the provider of read-only built-in companion profiles (see BUILTIN_PROFILE_PREFIX doc). */
+  setCompanionProfileProvider(provider: () => ListedMcpServerProfile[]): void {
+    this.companionProfileProvider = provider;
+  }
+
+  /** Built-in companion profiles (if a provider is registered) ahead of the user's own profiles. */
+  listMcpServerProfiles(): ListedMcpServerProfile[] {
+    const userProfiles: ListedMcpServerProfile[] = Array.from(
+      this.mcpServerProfiles.values(),
+    ).map((p) => ({ ...p, source: "user", disabledReason: null }));
+    return [...this.companionProfileProvider(), ...userProfiles];
   }
 
   upsertMcpServerProfile(record: McpServerProfile): void {
+    if (record.id.startsWith(BUILTIN_PROFILE_PREFIX)) {
+      throw new ConfigFileError(
+        `Cannot modify built-in companion profile "${record.id}"`,
+      );
+    }
     this.mcpServerProfiles.set(record.id, record);
     this.flush();
   }
 
   deleteMcpServerProfile(id: string): boolean {
+    if (id.startsWith(BUILTIN_PROFILE_PREFIX)) {
+      throw new ConfigFileError(
+        `Cannot delete built-in companion profile "${id}"`,
+      );
+    }
     const existed = this.mcpServerProfiles.has(id);
     this.mcpServerProfiles.delete(id);
     if (existed) this.flush();
@@ -255,107 +288,3 @@ export class ConfigStore {
   }
 }
 
-// ─── Module-level instance ─────────────────────────────────────────────────────
-// Initialized at startup by app.ts. The repository re-exports delegate to this.
-
-let instance: ConfigStore | null = null;
-
-export function initializeConfigStore(filePath: string): ConfigStore {
-  const store = new ConfigStore(filePath);
-  store.load();
-  instance = store;
-  return store;
-}
-
-export function getConfigStore(): ConfigStore {
-  if (!instance) {
-    throw new ConfigFileError(
-      "Config store not initialized. Call initializeConfigStore() first.",
-    );
-  }
-  return instance;
-}
-
-// ─── Standalone wrappers (delegated via module-level instance) ─────────────────
-// These are re-exported from repository.ts so callers don't need to know about
-// the ConfigStore class. They work on the module-level instance initialized at startup.
-
-export function listLmConnections(): LmStudioConnection[] {
-  return getConfigStore().listLmConnections();
-}
-
-export function upsertLmConnection(record: LmStudioConnection): void {
-  getConfigStore().upsertLmConnection(record);
-}
-
-export function deleteLmConnection(id: string): boolean {
-  return getConfigStore().deleteLmConnection(id);
-}
-
-export function listModelConfigs(): ModelConfig[] {
-  return getConfigStore().listModelConfigs();
-}
-
-export function upsertModelConfig(record: ModelConfig): void {
-  getConfigStore().upsertModelConfig(record);
-}
-
-export function deleteModelConfig(id: string): boolean {
-  return getConfigStore().deleteModelConfig(id);
-}
-
-export function getCompanionsConfig(): CompanionsConfig {
-  return getConfigStore().getCompanionsConfig();
-}
-
-// ─── Built-in companion profile provider ────────────────────────────────────────
-// Bundled companion MCP servers surface as read-only "builtin" profiles that are
-// never persisted to the user's config file. app.ts registers the provider at
-// startup (it needs the backend host/port to build the URLs). `listMcpServerProfiles`
-// merges these ahead of the user's own profiles so they appear in every listing
-// consumer (UI/CLI/MCP) and resolve by id at session creation.
-
-const BUILTIN_PROFILE_PREFIX = "builtin-";
-
-let companionProfileProvider: () => ListedMcpServerProfile[] = () => [];
-
-export function setCompanionProfileProvider(
-  provider: () => ListedMcpServerProfile[],
-): void {
-  companionProfileProvider = provider;
-}
-
-export function listMcpServerProfiles(): ListedMcpServerProfile[] {
-  const userProfiles: ListedMcpServerProfile[] = getConfigStore()
-    .listMcpServerProfiles()
-    .map((p) => ({ ...p, source: "user", disabledReason: null }));
-  return [...companionProfileProvider(), ...userProfiles];
-}
-
-export function upsertMcpServerProfile(record: McpServerProfile): void {
-  if (record.id.startsWith(BUILTIN_PROFILE_PREFIX)) {
-    throw new ConfigFileError(
-      `Cannot modify built-in companion profile "${record.id}"`,
-    );
-  }
-  getConfigStore().upsertMcpServerProfile(record);
-}
-
-export function deleteMcpServerProfile(id: string): boolean {
-  if (id.startsWith(BUILTIN_PROFILE_PREFIX)) {
-    throw new ConfigFileError(
-      `Cannot delete built-in companion profile "${id}"`,
-    );
-  }
-  return getConfigStore().deleteMcpServerProfile(id);
-}
-
-export function getSessionCreationDefaults(): SessionCreationDefaults {
-  return getConfigStore().getSessionCreationDefaults();
-}
-
-export function upsertSessionCreationDefaults(
-  defaults: SessionCreationDefaults,
-): void {
-  getConfigStore().upsertSessionCreationDefaults(defaults);
-}

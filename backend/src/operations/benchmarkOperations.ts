@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { OperationContext } from "./context.js";
 import { OperationError } from "./errors.js";
 import { registerInspectIdResolver } from "./inspect.js";
+import { registerOperationExtension } from "./catalog.js";
 import {
   createBenchmarkEntry,
   listBenchmarkEntries,
@@ -1454,3 +1455,32 @@ export const benchmarkEvaluationControlOperation = {
     return { evaluation: evaluationToSnake(evaluation) };
   },
 };
+
+/**
+ * Register the benchmark operation family in the engine's operation catalog
+ * (keyed, idempotent — appended after the engine's chat-path operations).
+ * Called from `buildBackendApp` at startup, before the MCP/CLI surfaces
+ * consume the catalog. Tests that use the full catalog without an app must
+ * call this in their setup, mirroring `registerBenchmarkInspectResolver()`.
+ */
+export function registerBenchmarkOperations(): void {
+  registerOperationExtension("benchmark", [
+    benchmarkCreateOperation,
+    benchmarkListOperation,
+    benchmarkInspectOperation,
+    benchmarkAddCaseOperation,
+    benchmarkAddCaseFromSessionOperation,
+    benchmarkUpdateCaseOperation,
+    benchmarkDeleteCaseOperation,
+    benchmarkDeleteOperation,
+    benchmarkRunOperation,
+    benchmarkRunStatusOperation,
+    benchmarkRunReportOperation,
+    benchmarkRunControlOperation,
+    benchmarkDeleteRunOperation,
+    benchmarkEvaluateOperation,
+    benchmarkRunEvaluationsOperation,
+    benchmarkEvaluationControlOperation,
+    benchmarkDeleteEvaluationOperation,
+  ]);
+}

@@ -1,10 +1,4 @@
 import { z } from "zod";
-import {
-  listLmConnections,
-  listModelConfigs,
-  listMcpServerProfiles,
-  getSessionCreationDefaults,
-} from "../persistence/repository.js";
 import type { OperationContext } from "./context.js";
 
 // ─── Model Configs ────────────────────────────────────────────────────────────
@@ -47,12 +41,13 @@ export const listModelConfigsOperation = {
   schema: listModelConfigsInputSchema,
   outputSchema: listModelConfigsOutputSchema,
   async execute(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     _input: ListModelConfigsInput,
   ): Promise<ListModelConfigsResult> {
-    const configs = listModelConfigs();
-    const connections = listLmConnections();
-    const defaultId = getSessionCreationDefaults().defaultModelConfigId;
+    const configs = ctx.configStore.listModelConfigs();
+    const connections = ctx.configStore.listLmConnections();
+    const defaultId =
+      ctx.configStore.getSessionCreationDefaults().defaultModelConfigId;
 
     return {
       model_configs: configs.map((mc) => {
@@ -119,10 +114,10 @@ export const listMcpProfilesOperation = {
   schema: listMcpProfilesInputSchema,
   outputSchema: listMcpProfilesOutputSchema,
   async execute(
-    _ctx: OperationContext,
+    ctx: OperationContext,
     _input: ListMcpProfilesInput,
   ): Promise<ListMcpProfilesResult> {
-    const profiles = listMcpServerProfiles();
+    const profiles = ctx.configStore.listMcpServerProfiles();
 
     return {
       mcp_profiles: profiles.map((p) => ({

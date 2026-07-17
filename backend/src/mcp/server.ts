@@ -1,10 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { OperationError } from '../operations/errors.js'
-import { operationList } from '../operations/index.js'
-import type { operationCatalog } from '../operations/index.js'
+import { getOperationList } from '../operations/index.js'
+import type { BackendOperation } from '../operations/index.js'
 import type { OperationContext } from '../operations/index.js'
 
-type Operation = (typeof operationCatalog)[keyof typeof operationCatalog]
+type Operation = BackendOperation
 
 // MCP tool name prefix applied automatically to all canonical operation IDs.
 const TOOL_PREFIX = 'mcpscope_'
@@ -98,9 +98,13 @@ export function buildMcpServer(
   return server
 }
 
-/** Create an McpServer exposing the full operation catalog. */
+/**
+ * Create an McpServer exposing the full operation catalog — the engine
+ * operations plus any workbench extensions registered by startup wiring
+ * (buildBackendApp registers the benchmark set before serving requests).
+ */
 export function createMcpServer(ctx: OperationContext): McpServer {
-  return buildMcpServer(ctx, operationList)
+  return buildMcpServer(ctx, getOperationList())
 }
 
 export { TOOL_PREFIX }

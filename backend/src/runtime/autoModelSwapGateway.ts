@@ -1,11 +1,10 @@
-import { listLmConnections } from "../config/configStore.js";
 import { ensureModelReady } from "../services/provider/index.js";
 import type { ProviderConnection } from "../domain/configuration.js";
 import type { ChatCompletionGateway } from "./modelTurns.js";
 
 interface AutoModelSwapDeps {
-  /** Live connection list — overridable for tests. */
-  listConnections?: () => ProviderConnection[];
+  /** Live connection list — the app's config store in production, a stub in tests. */
+  listConnections: () => ProviderConnection[];
   /** Swap implementation — overridable for tests. */
   ensureReady?: typeof ensureModelReady;
 }
@@ -24,9 +23,9 @@ interface AutoModelSwapDeps {
  */
 export function withAutoModelSwap(
   inner: ChatCompletionGateway,
-  deps: AutoModelSwapDeps = {},
+  deps: AutoModelSwapDeps,
 ): ChatCompletionGateway {
-  const listConnections = deps.listConnections ?? listLmConnections;
+  const listConnections = deps.listConnections;
   const ensureReady = deps.ensureReady ?? ensureModelReady;
 
   async function swapIfNeeded(

@@ -10,11 +10,8 @@ import { z } from "zod";
 import { runInTransaction } from "../persistence/connection.js";
 import { OperationError } from "./errors.js";
 import {
-  getSessionCreationDefaults,
   getSessionRecord,
   getTurnRecord,
-  listLmConnections,
-  listModelConfigs,
   updateSessionAnalysisState,
 } from "../persistence/repository.js";
 import { createSession } from "../runtime/modelTurns.js";
@@ -196,10 +193,10 @@ export async function executeAnalysisLaunch(
     if (!targetTurnOk) return { kind: "target_turn_not_complete" };
 
     // Resolve model config and LM connection
-    const modelConfigs = listModelConfigs();
+    const modelConfigs = ctx.configStore.listModelConfigs();
     let resolvedModelConfigId = requestedModelConfigId;
     if (!resolvedModelConfigId) {
-      const defaults = getSessionCreationDefaults();
+      const defaults = ctx.configStore.getSessionCreationDefaults();
       if (!defaults.defaultModelConfigId) {
         return { kind: "default_model_not_configured" };
       }
@@ -222,7 +219,7 @@ export async function executeAnalysisLaunch(
       };
     }
 
-    const lmConnections = listLmConnections();
+    const lmConnections = ctx.configStore.listLmConnections();
     const lmConnection = lmConnections.find(
       (c) => c.id === modelConfig.connectionId,
     );

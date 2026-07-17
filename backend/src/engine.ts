@@ -136,3 +136,9 @@ export type {
 // ── Persistence ──────────────────────────────────────────────────────────────
 export { openBackendDatabase } from "./persistence/db.js";
 export type { BackendDatabase } from "./persistence/db.js";
+
+// Schema-extension hook: the workbench registers extra DDL (e.g. the benchmark
+// tables) so `openBackendDatabase` creates and validates it alongside the core
+// engine schema. Register extensions BEFORE opening the database.
+export { registerSchemaExtension } from "./persistence/schema.js";
+export type { SchemaExtension } from "./persistence/schema.js";

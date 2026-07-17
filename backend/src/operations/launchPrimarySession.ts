@@ -57,7 +57,7 @@ export async function executePrimarySessionLaunch(
     | { kind: "created"; session: SessionRecord };
 
   const result: TxResult = runInTransaction(db.connection, (): TxResult => {
-    const resolved = resolvePrimarySessionInputs({
+    const resolved = resolvePrimarySessionInputs(ctx.configStore, {
       modelConfigId: input.model_config_id,
       mcpProfileIds: input.mcp_profile_ids,
     });

@@ -112,9 +112,12 @@ describe('withAutoModelSwap', () => {
   })
 
   it('omits optional methods that the inner gateway does not provide', () => {
-    const gw = withAutoModelSwap({
-      createChatCompletion: vi.fn(),
-    })
+    const gw = withAutoModelSwap(
+      {
+        createChatCompletion: vi.fn(),
+      },
+      { listConnections: () => [] },
+    )
     expect(gw.streamChatCompletion).toBeUndefined()
     expect(gw.probePromptTokens).toBeUndefined()
     expect(gw.getLoadedContextLength).toBeUndefined()

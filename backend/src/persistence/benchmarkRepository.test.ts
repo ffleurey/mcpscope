@@ -21,6 +21,12 @@ import type {
   BenchmarkRunRecord,
   RubricCriterion,
 } from '../domain/model.js'
+import { registerBenchmarkSchema } from './benchmarkSchema.js'
+
+// The workbench registers the benchmark schema extension at startup
+// (buildBackendApp); these tests open the database directly, so register it
+// here before any openBackendDatabase call.
+registerBenchmarkSchema()
 
 let dataDir: string | undefined
 let db: BackendDatabase | undefined

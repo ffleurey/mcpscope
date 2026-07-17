@@ -101,8 +101,13 @@ export {
   benchmarkDeleteEvaluationOutputSchema,
 } from "./benchmarkOperations.js";
 
-export { operationCatalog, operationList } from "./catalog.js";
-export type { BackendOperationId } from "./catalog.js";
+export {
+  engineOperationList,
+  registerOperationExtension,
+  getOperationList,
+  getOperationCatalog,
+} from "./catalog.js";
+export type { BackendOperation } from "./catalog.js";
 
 export type { OperationContext } from "./context.js";
 

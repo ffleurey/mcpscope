@@ -1,8 +1,16 @@
 import type { BackendDatabase } from '../persistence/db.js'
+import type { ConfigStore } from '../config/configStore.js'
 import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
 import type { McpGateway } from '../runtime/toolTurns.js'
 import type { ExecutionScheduler } from '../runtime/scheduler.js'
-import type { RunControlRegistry } from '../runtime/runControl.js'
+
+/**
+ * Workbench-owned context extensions, declaration-merged from the modules that
+ * own them (e.g. `runtime/runControl.ts` adds `runControl`). Keeps the engine's
+ * context free of benchmark/analysis imports while extension consumers stay
+ * fully typed.
+ */
+export interface OperationContextExtensions {}
 
 /**
  * Runtime context passed to every backend operation execute function.
@@ -11,6 +19,8 @@ import type { RunControlRegistry } from '../runtime/runControl.js'
  */
 export interface OperationContext {
   db: BackendDatabase
+  /** App-owned editable configuration (LM connections, model configs, MCP profiles). */
+  configStore: ConfigStore
   chatCompletionGateway: ChatCompletionGateway
   mcpGateway: McpGateway
   maxToolRounds: number
@@ -20,9 +30,6 @@ export interface OperationContext {
   logger?: { error: (data: Record<string, unknown>, msg: string) => void }
   /** Backend-owned execution scheduler. Present when the app is initialized normally. */
   scheduler?: ExecutionScheduler
-  /**
-   * Control plane for long-running coordinators (benchmark/evaluation runs):
-   * pause/resume/stop keyed by run id. Present when the app is initialized normally.
-   */
-  runControl?: RunControlRegistry
+  /** Workbench-registered extensions (see OperationContextExtensions). */
+  extensions?: OperationContextExtensions
 }

@@ -186,3 +186,17 @@ export class RunControlRegistry {
     return this.controllers.get(runId)?.requestStop() ?? false
   }
 }
+
+// The engine's OperationContext knows nothing about run control (a workbench
+// concern); this module contributes the typed `extensions.runControl` slot via
+// declaration merging. Any module importing run control sees the merged type.
+declare module '../operations/context.js' {
+  interface OperationContextExtensions {
+    /**
+     * Control plane for long-running coordinators (benchmark/evaluation runs):
+     * pause/resume/stop keyed by run id. Present when the app is initialized
+     * normally.
+     */
+    runControl?: RunControlRegistry
+  }
+}

@@ -11,7 +11,7 @@
  * backend tests that need to seed a session from a fully-resolved snapshot.
  *
  * This operation is NOT part of the CLI/MCP catalog. It does not appear in
- * operationList or operationCatalog. It is a thin backend-owned execution
+ * the operation catalog (catalog.ts). It is a thin backend-owned execution
  * function consumed only by the /api/sessions HTTP route.
  *
  * The result contract is the full camelCase SessionRecord shape.

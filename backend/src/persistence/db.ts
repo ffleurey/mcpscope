@@ -15,7 +15,11 @@ export interface BackendDatabase {
 }
 
 export function openBackendDatabase(sqlitePath: string): BackendDatabase {
-  fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
+  // ':memory:' is node:sqlite's in-memory database name, not a file path —
+  // creating a directory for it would be wrong (and mkdirSync('.') noisy).
+  if (sqlitePath !== ":memory:") {
+    fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
+  }
 
   const connection = new DatabaseSync(sqlitePath);
   connection.exec("PRAGMA journal_mode = WAL");

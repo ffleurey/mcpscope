@@ -1,19 +1,9 @@
-// ─── Config CRUD — delegated to JSON-backed config store ──────────────────────
-export {
-  listLmConnections,
-  upsertLmConnection,
-  deleteLmConnection,
-  listModelConfigs,
-  upsertModelConfig,
-  deleteModelConfig,
-  listMcpServerProfiles,
-  upsertMcpServerProfile,
-  deleteMcpServerProfile,
-  getSessionCreationDefaults,
-  upsertSessionCreationDefaults,
-  type SessionCreationDefaults,
-  ConfigFileError,
-} from "../config/configStore.js";
+// ─── Runtime repository (engine-owned) ────────────────────────────────────────
+// Editable configuration lives on the app-owned ConfigStore instance
+// (config/configStore.ts, reached via OperationContext.configStore), and the
+// benchmark repository is imported directly from
+// persistence/benchmarkRepository.js by workbench code — neither is
+// re-exported here.
 
 export type { ActiveSessionInfo } from "./repositoryRuntime.js";
 export {
@@ -52,27 +42,3 @@ export {
   getNextRoundPartSequence,
   getNextPreludePartSequence,
 } from "./repositoryRuntime.js";
-
-// ─── Benchmark CRUD ───────────────────────────────────────────────────────────
-export {
-  createBenchmark,
-  getBenchmark,
-  listBenchmarks,
-  updateBenchmark,
-  deleteBenchmark,
-  createBenchmarkCase,
-  getBenchmarkCase,
-  listBenchmarkCases,
-  updateBenchmarkCase,
-  deleteBenchmarkCase,
-  createBenchmarkRun,
-  getBenchmarkRun,
-  listBenchmarkRuns,
-  updateBenchmarkRun,
-  deleteBenchmarkRun,
-  createBenchmarkEvaluation,
-  getBenchmarkEvaluation,
-  listBenchmarkEvaluationsByRun,
-  updateBenchmarkEvaluation,
-  deleteBenchmarkEvaluation,
-} from "./benchmarkRepository.js";

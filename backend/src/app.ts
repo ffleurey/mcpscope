@@ -6,6 +6,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { BackendConfig } from "./config.js";
 import { openBackendDatabase } from "./persistence/db.js";
+import { registerBenchmarkSchema } from "./persistence/benchmarkSchema.js";
 import { recoverInterruptedState } from "./persistence/repository.js";
 import { getLoadedContextLength } from "./services/lmstudio/client.js";
 import {
@@ -26,7 +27,10 @@ import type { McpGateway } from "./runtime/toolTurns.js";
 import { registerMcpTransport } from "./mcp/index.js";
 import { registerAnalysisSessionPresenter } from "./analysis/analysisSessionPresentation.js";
 import { registerAnalysisSessionExecutor } from "./analysis/analysisSessionExecutor.js";
-import { registerBenchmarkInspectResolver } from "./operations/benchmarkOperations.js";
+import {
+  registerBenchmarkInspectResolver,
+  registerBenchmarkOperations,
+} from "./operations/benchmarkOperations.js";
 import { registerCompanionServers } from "./companions/index.js";
 import {
   OperationError,
@@ -44,10 +48,7 @@ import { registerSessionRoutes } from "./routes/sessionRoutes.js";
 import { registerSystemRoutes } from "./routes/systemRoutes.js";
 import { registerTraceRoutes } from "./routes/traceRoutes.js";
 import { computeLifecycleState } from "./operations/lifecycleState.js";
-import {
-  initializeConfigStore,
-  ConfigFileError,
-} from "./config/configStore.js";
+import { ConfigStore, ConfigFileError } from "./config/configStore.js";
 
 interface RuntimeDependencies {
   chatCompletionGateway: ChatCompletionGateway;
@@ -67,20 +68,7 @@ export interface BackendHandle {
 
 export async function buildBackendApp(
   config: BackendConfig,
-  dependencies: RuntimeDependencies = {
-    chatCompletionGateway: withAutoModelSwap({
-      createChatCompletion,
-      streamChatCompletion,
-      probePromptTokens,
-      probePromptTokensDetailed,
-      getLoadedContextLength,
-    }),
-    mcpGateway: {
-      initializeSession: initializeMcpSession,
-      listTools: listMcpTools,
-      callTool: callMcpTool,
-    },
-  },
+  dependencies?: RuntimeDependencies,
 ): Promise<BackendHandle> {
   const app = Fastify({
     logger: true,
@@ -138,6 +126,11 @@ export async function buildBackendApp(
     });
   }
 
+  // Workbench wiring: register the benchmark tables in the engine's
+  // schema-extension registry. MUST run before openBackendDatabase below —
+  // opening the database applies registered DDL and validates the schema.
+  registerBenchmarkSchema();
+
   const database = openBackendDatabase(config.sqlitePath);
   app.decorate("backendDb", database);
 
@@ -155,6 +148,10 @@ export async function buildBackendApp(
   // the engine's inspect registry so `inspect` resolves benchmark objects
   // without the engine importing benchmark code.
   registerBenchmarkInspectResolver();
+  // Workbench wiring: append the benchmark operation family to the engine's
+  // operation catalog so the MCP/CLI surfaces expose it without the engine
+  // catalog importing benchmark code. Must run before registerMcpTransport.
+  registerBenchmarkOperations();
 
   // On an unclean shutdown (crash, kill, server restart mid-turn) turns and sessions
   // can be left in in-progress states. Recover them before serving any requests so
@@ -173,7 +170,8 @@ export async function buildBackendApp(
   // Control plane for long-running coordinators (benchmark/evaluation runs).
   const runControl = new RunControlRegistry(scheduler);
 
-  // Initialize the JSON-backed config store.
+  // Initialize the JSON-backed config store — owned by this app instance, so
+  // two apps in one process never share config state.
   // Default path: {dataDir}/mcpscope.config.json, override via MCPSCOPE_CONFIG_PATH.
   const configPath =
     process.env.MCPSCOPE_CONFIG_PATH ??
@@ -186,8 +184,9 @@ export async function buildBackendApp(
       "No config file found. Starting with empty configuration. Use the Settings UI to configure LM connections, model configs, and MCP server profiles.",
     );
   }
+  const configStore = new ConfigStore(configPath);
   try {
-    initializeConfigStore(configPath);
+    configStore.load();
   } catch (err) {
     if (err instanceof ConfigFileError) {
       app.log.error({ configPath, err: err.message }, "Failed to load config");
@@ -196,21 +195,47 @@ export async function buildBackendApp(
     throw err;
   }
 
+  // Default runtime gateways. The chat gateway reads the live connection list
+  // from this app's config store (auto-model-swap), so it is built after the
+  // store rather than as a parameter default.
+  const chatCompletionGateway =
+    dependencies?.chatCompletionGateway ??
+    withAutoModelSwap(
+      {
+        createChatCompletion,
+        streamChatCompletion,
+        probePromptTokens,
+        probePromptTokensDetailed,
+        getLoadedContextLength,
+      },
+      { listConnections: () => configStore.listLmConnections() },
+    );
+  const mcpGateway = dependencies?.mcpGateway ?? {
+    initializeSession: initializeMcpSession,
+    listTools: listMcpTools,
+    callTool: callMcpTool,
+  };
+
   const opCtx: OperationContext = {
     db: database,
-    chatCompletionGateway: dependencies.chatCompletionGateway,
-    mcpGateway: dependencies.mcpGateway,
+    configStore,
+    chatCompletionGateway,
+    mcpGateway,
     maxToolRounds: config.maxToolRounds,
     analysisMcpUrl,
     logger: app.log,
     scheduler,
-    runControl,
+    extensions: { runControl },
   };
   registerMcpTransport(app, opCtx);
 
   // Bundled companion MCP servers: mounted in-process at /companions/<name>/mcp
   // and surfaced as read-only built-in profiles selectable with no configuration.
-  registerCompanionServers(app, { host: config.host, port: config.port });
+  registerCompanionServers(app, {
+    host: config.host,
+    port: config.port,
+    configStore,
+  });
 
   type SchedulerExecutionPayload = Extract<
     SchedulerEvent,

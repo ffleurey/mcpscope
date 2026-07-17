@@ -1,17 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import { registerStreamableHttpMcp } from "../mcp/streamableHttp.js";
-import {
-  getCompanionsConfig,
-  setCompanionProfileProvider,
-  type CompanionsConfig,
-} from "../config/configStore.js";
+import type { CompanionsConfig, ConfigStore } from "../config/configStore.js";
 import type { ListedMcpServerProfile } from "../domain/configuration.js";
 import { COMPANIONS, type CompanionDefinition } from "./registry.js";
 
 /** Resolve a companion's upstream API key from config (null when keyless or unset). */
-function resolveApiKey(companion: CompanionDefinition): string | null {
+function resolveApiKey(
+  configStore: ConfigStore,
+  companion: CompanionDefinition,
+): string | null {
   if (!companion.requiresKey) return null;
-  const config = getCompanionsConfig();
+  const config = configStore.getCompanionsConfig();
   const section = config[companion.requiresKey as keyof CompanionsConfig];
   return section?.api_key ?? null;
 }
@@ -27,17 +26,20 @@ function resolveApiKey(companion: CompanionDefinition): string | null {
  */
 export function registerCompanionServers(
   app: FastifyInstance,
-  opts: { host: string; port: number },
+  opts: { host: string; port: number; configStore: ConfigStore },
 ): void {
+  const { configStore } = opts;
   for (const companion of COMPANIONS) {
     registerStreamableHttpMcp(app, `/companions/${companion.name}/mcp`, () =>
       // Read the key from the config store on each request rather than baking it
       // into the mount closure. (The store itself is loaded at startup, so editing
       // the config file still needs a restart to take effect.)
-      companion.createServer({ apiKey: resolveApiKey(companion) }),
+      companion.createServer({ apiKey: resolveApiKey(configStore, companion) }),
     );
   }
-  setCompanionProfileProvider(() => companionProfiles(opts.host, opts.port));
+  configStore.setCompanionProfileProvider(() =>
+    companionProfiles(configStore, opts.host, opts.port),
+  );
 }
 
 /** Format a bind host for a URL, bracketing IPv6 literals (e.g. `::1` → `[::1]`). */
@@ -54,6 +56,7 @@ function hostForUrl(host: string): string {
  * at registration), so `disabledReason` reflects the current config each listing.
  */
 export function companionProfiles(
+  configStore: ConfigStore,
   host: string,
   port: number,
 ): ListedMcpServerProfile[] {
@@ -63,7 +66,8 @@ export function companionProfiles(
     // configured is still listed but carries a tooltip naming the config key to set;
     // the frontend greys it out and CLI/MCP surface the same reason.
     const missingKey =
-      companion.requiresKey !== null && resolveApiKey(companion) === null;
+      companion.requiresKey !== null &&
+      resolveApiKey(configStore, companion) === null;
     return {
       id: `builtin-${companion.name}`,
       name: companion.title,

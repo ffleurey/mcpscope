@@ -38,6 +38,8 @@ import {
   listBenchmarkEvaluationsByRun,
   updateBenchmarkEvaluation,
   deleteBenchmarkEvaluation,
+} from "../persistence/benchmarkRepository.js";
+import {
   getSessionRecord,
   deleteSessionRecord,
   listPartRecordsBySession,
@@ -467,7 +469,7 @@ export function launchBenchmarkRun(
 
   // Resolve the effective model/MCP now: fail fast on bad config and record the
   // concrete selection so the run is self-describing and stable across reps.
-  const resolved = resolvePrimarySessionInputs({
+  const resolved = resolvePrimarySessionInputs(ctx.configStore, {
     modelConfigId: input.modelConfigId,
     mcpProfileIds: input.mcpProfileIds,
   });
@@ -577,7 +579,7 @@ async function runBenchmarkCoordinator(
   mode: ResumeMode = "continue",
 ): Promise<void> {
   const { db } = ctx;
-  const controller = ctx.runControl?.acquire(runId);
+  const controller = ctx.extensions?.runControl?.acquire(runId);
 
   // Sequential: each task is awaited to completion before the next starts. Soft
   // failures (init never reaches ready, tool errors, non-complete turns) are
@@ -614,7 +616,7 @@ async function runBenchmarkCoordinator(
     let resolvedInputs: ResolvedPrimarySessionInputs | null = null;
     if (tasks.length > 0) {
       const resolved = runInTransaction(db.connection, () =>
-        resolvePrimarySessionInputs({
+        resolvePrimarySessionInputs(ctx.configStore, {
           modelConfigId: reconciled.modelConfigId ?? undefined,
           mcpProfileIds: reconciled.mcpProfileIds ?? undefined,
         }),
@@ -736,7 +738,7 @@ async function runBenchmarkCoordinator(
       }
     }
   } finally {
-    ctx.runControl?.release(runId);
+    ctx.extensions?.runControl?.release(runId);
   }
 }
 
@@ -930,7 +932,7 @@ export function pauseBenchmarkRun(
   runId: string,
 ): BenchmarkRunRecord {
   const run = requireRunRecord(ctx, runId);
-  if (!ctx.runControl?.pause(runId)) {
+  if (!ctx.extensions?.runControl?.pause(runId)) {
     throw new OperationError(
       `Benchmark run "${runId}" is not running (status '${run.status}').`,
       "benchmark_run_not_pausable",
@@ -955,7 +957,7 @@ export function stopBenchmarkRun(
   runId: string,
 ): BenchmarkRunRecord {
   const run = requireRunRecord(ctx, runId);
-  const signalled = ctx.runControl?.stop(runId) ?? false;
+  const signalled = ctx.extensions?.runControl?.stop(runId) ?? false;
   if (signalled) {
     // Coordinator will persist 'stopped' shortly; report it optimistically.
     return { ...run, status: "stopped" };
@@ -996,7 +998,7 @@ export function resumeBenchmarkRun(
   }
 
   // Live, paused coordinator → un-pause in place.
-  if (ctx.runControl?.resume(runId)) {
+  if (ctx.extensions?.runControl?.resume(runId)) {
     const updated: BenchmarkRunRecord = {
       ...run,
       status: "running",
@@ -1340,7 +1342,7 @@ export function pauseBenchmarkEvaluation(
   evaluationId: string,
 ): BenchmarkEvaluationRecord {
   const evaluation = requireEvaluationRecord(ctx, evaluationId);
-  if (!ctx.runControl?.pause(evaluationId)) {
+  if (!ctx.extensions?.runControl?.pause(evaluationId)) {
     throw new OperationError(
       `Benchmark evaluation "${evaluationId}" is not running (status '${evaluation.status}').`,
       "benchmark_evaluation_not_pausable",
@@ -1361,7 +1363,7 @@ export function stopBenchmarkEvaluation(
   evaluationId: string,
 ): BenchmarkEvaluationRecord {
   const evaluation = requireEvaluationRecord(ctx, evaluationId);
-  const signalled = ctx.runControl?.stop(evaluationId) ?? false;
+  const signalled = ctx.extensions?.runControl?.stop(evaluationId) ?? false;
   if (signalled) {
     return { ...evaluation, status: "stopped" };
   }
@@ -1401,7 +1403,7 @@ export function resumeBenchmarkEvaluation(
     );
   }
 
-  if (ctx.runControl?.resume(evaluationId)) {
+  if (ctx.extensions?.runControl?.resume(evaluationId)) {
     const updated: BenchmarkEvaluationRecord = {
       ...evaluation,
       status: "running",
@@ -1591,7 +1593,7 @@ async function runEvaluationCoordinator(
   mode: ResumeMode = "continue",
 ): Promise<void> {
   const { db } = ctx;
-  const controller = ctx.runControl?.acquire(evaluationId);
+  const controller = ctx.extensions?.runControl?.acquire(evaluationId);
 
   // Sequential, mirroring the run coordinator: each run-session is judged to
   // completion before the next. A per-session failure (model not loaded, launch /
@@ -1712,7 +1714,7 @@ async function runEvaluationCoordinator(
       }
     }
   } finally {
-    ctx.runControl?.release(evaluationId);
+    ctx.extensions?.runControl?.release(evaluationId);
   }
 }
 

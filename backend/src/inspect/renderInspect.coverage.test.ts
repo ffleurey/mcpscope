@@ -16,6 +16,12 @@ import {
 import { resolveBenchmarkInspect } from "../operations/benchmarkOperations.js";
 import { inspectOperation } from "../operations/inspect.js";
 import type { OperationContext } from "../operations/context.js";
+import { registerBenchmarkSchema } from "../persistence/benchmarkSchema.js";
+
+// The workbench registers the benchmark schema extension at startup
+// (buildBackendApp); these tests open the database directly, so register it
+// here before any openBackendDatabase call.
+registerBenchmarkSchema();
 
 // The directional guarantee (serialization-architecture.md, Rule 2):
 //   - text ⊆ json is by construction (the renderer's only input is the payload);

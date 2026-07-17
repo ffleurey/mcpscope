@@ -1,10 +1,12 @@
 /**
  * Canonical persistence schema for the session-backed execution model.
  *
- * `initializeSchema` creates everything: the backend support tables
- * (schema_meta, model_profiles, mcp_profiles) and the runtime tables
- * (sessions/steps/turns/rounds/parts/raw_exchanges/artifacts), then records
- * the single schema version in schema_meta.
+ * `initializeSchema` creates the backend support tables (schema_meta,
+ * model_profiles, mcp_profiles) and the runtime tables
+ * (sessions/steps/turns/rounds/parts/raw_exchanges/artifacts), applies any
+ * registered schema extensions (e.g. the workbench's benchmark tables — see
+ * `registerSchemaExtension` below), then records the single schema version in
+ * schema_meta.
  *
  * Runtime table roles:
  *   - `sessions`       — sessions with generic params/state JSON, typed container ref
@@ -33,16 +35,45 @@ import {
   tokenConfidenceValues,
   tokenSourceValues,
   turnStatusValues,
-  benchmarkRunStatusValues,
   SCHEMA_VERSION,
 } from "../domain/model.js";
 import { ARTIFACT_TYPE } from "../domain/executionModel.js";
 
-function sqlEnum(values: readonly string[]): string {
+export function sqlEnum(values: readonly string[]): string {
   return values.map((v) => `'${v}'`).join(", ");
 }
 
 const artifactTypeValues = Object.values(ARTIFACT_TYPE) as string[];
+
+/**
+ * Schema-extension registry — the engine-side hook that lets the workbench
+ * add its own tables (e.g. the benchmark suite/run tables) to the shared
+ * database without the engine's DDL knowing about them. Mirrors the other
+ * startup registries (session presenters/executors, inspect resolvers):
+ * registration is keyed so repeated startup wiring stays idempotent.
+ *
+ * IMPORTANT: extensions must be registered BEFORE `openBackendDatabase` runs,
+ * because it applies the DDL and validates the schema on open. The workbench
+ * registers the benchmark extension in `buildBackendApp` right before opening
+ * the database (see `registerBenchmarkSchema()` in
+ * `persistence/benchmarkSchema.ts`); tests that open a database directly and
+ * touch extension tables must do the same in their setup.
+ */
+export interface SchemaExtension {
+  /** Applies the extension's DDL (CREATE TABLE IF NOT EXISTS style, idempotent). */
+  apply(connection: BackendConnection): void;
+  /** Required columns per table, merged into `validateSchema`'s check. */
+  requiredColumns: Record<string, readonly string[]>;
+}
+
+const schemaExtensions = new Map<string, SchemaExtension>();
+
+export function registerSchemaExtension(
+  name: string,
+  extension: SchemaExtension,
+): void {
+  schemaExtensions.set(name, extension);
+}
 
 export function initializeSchema(connection: BackendConnection): void {
   connection.exec(`
@@ -256,74 +287,14 @@ export function initializeSchema(connection: BackendConnection): void {
 
     CREATE INDEX IF NOT EXISTS idx_artifacts_session_id ON artifacts(session_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_step_id ON artifacts(step_id);
-
-    -- ─────────────────────────────────────────────────────────────────────
-    -- Benchmarks (static test suite), cases, and runs
-    -- A run produces normal primary sessions with parent_container_type_key
-    -- = 'benchmark' and parent_container_id = the run id.
-    -- ─────────────────────────────────────────────────────────────────────
-    CREATE TABLE IF NOT EXISTS benchmarks (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS benchmark_cases (
-      id TEXT PRIMARY KEY,
-      benchmark_id TEXT NOT NULL REFERENCES benchmarks(id) ON DELETE CASCADE,
-      name TEXT,
-      prompt TEXT NOT NULL,
-      order_index INTEGER NOT NULL,
-      expected_tools_called_json TEXT NOT NULL DEFAULT '[]',
-      expected_tools_not_called_json TEXT NOT NULL DEFAULT '[]',
-      rubric_json TEXT NOT NULL DEFAULT '[]',
-      source_session_id TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_benchmark_cases_benchmark ON benchmark_cases(benchmark_id);
-
-    -- A run is independent of its source benchmark (no cascade): a benchmark is an
-    -- editable blueprint, a run is an immutable snapshot spawned from it.
-    CREATE TABLE IF NOT EXISTS benchmark_runs (
-      id TEXT PRIMARY KEY,
-      benchmark_id TEXT NOT NULL,
-      benchmark_name TEXT NOT NULL,
-      status TEXT NOT NULL CHECK (status IN (${sqlEnum(benchmarkRunStatusValues)})),
-      model_config_id TEXT NOT NULL,
-      mcp_profile_ids_json TEXT NOT NULL DEFAULT '[]',
-      cases_json TEXT NOT NULL DEFAULT '[]',
-      repetitions INTEGER NOT NULL,
-      max_tool_rounds INTEGER NOT NULL DEFAULT 20, -- see DEFAULT_MAX_TOOL_ROUNDS; inserts always set it explicitly
-      sessions_json TEXT NOT NULL DEFAULT '[]',
-      error TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      started_at INTEGER,
-      completed_at INTEGER
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_benchmark_runs_benchmark ON benchmark_runs(benchmark_id);
-
-    -- A run carries 0..N evaluations (judging passes). Thin grouping/index over the
-    -- reused session_analysis children; verdicts live in analysis artifacts.
-    CREATE TABLE IF NOT EXISTS benchmark_evaluations (
-      id TEXT PRIMARY KEY,
-      run_id TEXT NOT NULL REFERENCES benchmark_runs(id) ON DELETE CASCADE,
-      judge_model_config_id TEXT NOT NULL,
-      judge_temperature REAL, -- nullable: NULL => send no temperature (provider default). Otherwise see DEFAULT_JUDGE_TEMPERATURE.
-      status TEXT NOT NULL CHECK (status IN (${sqlEnum(benchmarkRunStatusValues)})),
-      sessions_json TEXT NOT NULL DEFAULT '[]',
-      error TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_benchmark_evaluations_run ON benchmark_evaluations(run_id);
   `);
+
+  // Registered schema extensions (e.g. the workbench's benchmark tables) apply
+  // their DDL after the core tables and before the version stamp — the same
+  // position their DDL occupied when it was inlined here.
+  for (const extension of schemaExtensions.values()) {
+    extension.apply(connection);
+  }
 
   const upsertMeta = connection.prepare(`
     INSERT INTO schema_meta (key, value)
@@ -488,51 +459,14 @@ export function validateSchema(connection: BackendConnection): void {
       "metadata_json",
       "created_at",
     ],
-    benchmarks: ["id", "name", "description", "created_at", "updated_at"],
-    benchmark_cases: [
-      "id",
-      "benchmark_id",
-      "name",
-      "prompt",
-      "order_index",
-      "expected_tools_called_json",
-      "expected_tools_not_called_json",
-      "rubric_json",
-      "source_session_id",
-      "created_at",
-      "updated_at",
-    ],
-    benchmark_runs: [
-      "id",
-      "benchmark_id",
-      "benchmark_name",
-      "status",
-      "model_config_id",
-      "mcp_profile_ids_json",
-      "cases_json",
-      "repetitions",
-      "max_tool_rounds",
-      "sessions_json",
-      "error",
-      "created_at",
-      "updated_at",
-      "started_at",
-      "completed_at",
-    ],
-    benchmark_evaluations: [
-      "id",
-      "run_id",
-      "judge_model_config_id",
-      "judge_temperature",
-      "status",
-      "sessions_json",
-      "error",
-      "created_at",
-      "updated_at",
-    ],
   };
 
   const missing: string[] = [];
+  for (const extension of schemaExtensions.values()) {
+    for (const [table, columns] of Object.entries(extension.requiredColumns)) {
+      required[table] = [...(required[table] ?? []), ...columns];
+    }
+  }
   for (const [table, columns] of Object.entries(required)) {
     const existing = getColumns(table);
     for (const col of columns) {
