@@ -6,7 +6,6 @@ import type {
   TurnRecord,
 } from "../domain/model.js";
 import { DEFAULT_MAX_TOOL_ROUNDS } from "../domain/model.js";
-import type { AnalysisWorkflowKind } from "../analysis/workflowKinds.js";
 import {
   formatSetupId,
   parseHierarchicalId,
@@ -22,12 +21,16 @@ import {
   listStepRecordsBySession,
   listTurnRecordsBySession,
 } from "../persistence/repository.js";
-import { listArtifactsBySession } from "../analysis/artifactRepository.js";
+// Session-type-specific presentation (workflow labels, step diagnostics)
+// comes from the session-presenter registry: the engine resolves the plain
+// runtime tree and registered presenters (e.g. the analysis presenter) supply
+// the type-specific fields.
 import {
-  getAnalysisWorkflowLabel,
-  getLatestAnalysisDiagnosticSummary,
-  getLatestAnalysisDiagnosticSummaryForStep,
-} from "../analysis/analysisSessionPresentation.js";
+  getLatestSessionErrorSummary,
+  getSessionStepErrorSummary,
+  getSessionWorkflowLabel,
+  type SessionErrorSummary,
+} from "../operations/sessionPresentation.js";
 
 type LookupMode = "summary" | "full";
 
@@ -399,7 +402,7 @@ function buildStepNode(
   turns: TurnRecord[],
   rounds: RoundRecord[],
   allParts: PartRecord[],
-  artifacts: ReturnType<typeof listArtifactsBySession>,
+  getStepError: (stepId: string) => SessionErrorSummary | null,
   mode: LookupMode,
   isDirectLookup: boolean,
 ): object {
@@ -457,10 +460,7 @@ function buildStepNode(
     step.stepTypeKey === "compaction"
       ? buildCompactionStepEvidence(step, allParts, mode)
       : {};
-  const diagnostic = getLatestAnalysisDiagnosticSummaryForStep(
-    artifacts,
-    step.id,
-  );
+  const diagnostic = getStepError(step.id);
 
   const isCompaction = step.stepTypeKey === "compaction";
 
@@ -611,7 +611,6 @@ export function resolveHierarchicalId(
     const allSteps = listStepRecordsBySession(connection, session.id);
     const steps = allSteps.filter((step) => step.stepTypeKey !== "turn");
     const allParts = listPartRecordsBySession(connection, session.id);
-    const artifacts = listArtifactsBySession(connection, session.id);
     const setupParts = allParts
       .filter((p) => p.turnId === null)
       .sort((a, b) => a.ordinal - b.ordinal);
@@ -620,27 +619,24 @@ export function resolveHierarchicalId(
       workflow_kind?: string;
       phase?: string;
     } | null;
-    const workflowKind = (analysisState?.workflow_kind ??
-      null) as AnalysisWorkflowKind | null;
-    const workflowLabel = getAnalysisWorkflowLabel(workflowKind);
+    const workflowKind = analysisState?.workflow_kind ?? null;
+    const workflowLabel = getSessionWorkflowLabel(connection, session);
+    const getStepError = (stepId: string) =>
+      getSessionStepErrorSummary(connection, session, stepId);
     const terminalStatus = deriveSessionTerminalStatus(
       session,
       turns,
       analysisState?.phase ?? null,
     );
     // One uniform "how did this end and why" across session kinds (F9/F10):
-    // prefer an analysis diagnostic, then a persisted init failure, then — for any
-    // session that errored — the trailing `diagnostic` part's stop reason, and
-    // finally the errored turn itself (a mid-stream failure leaves no diagnostic).
-    let latestError =
-      getLatestAnalysisDiagnosticSummary(artifacts) ??
-      (session.initError
-        ? {
-            step_id: null as string | null,
-            error_kind: session.initError.errorKind as string | null,
-            message: session.initError.message,
-          }
-        : null);
+    // prefer a presenter-provided summary (e.g. the latest analysis diagnostic),
+    // then a persisted init failure, then — for any session that errored — the
+    // trailing `diagnostic` part's stop reason, and finally the errored turn
+    // itself (a mid-stream failure leaves no diagnostic).
+    let latestError: SessionErrorSummary | null = getLatestSessionErrorSummary(
+      connection,
+      session,
+    );
     if (!latestError && terminalStatus === "error") {
       latestError =
         getTrailingDiagnosticError(allParts) ?? getTerminalTurnError(turns);
@@ -667,7 +663,7 @@ export function resolveHierarchicalId(
           turns,
           allRounds,
           allParts,
-          artifacts,
+          getStepError,
           mode,
           false,
         ),
@@ -767,14 +763,18 @@ export function resolveHierarchicalId(
     const rounds = listRoundRecordsBySession(connection, step.sessionId);
     const parts = listPartRecordsBySession(connection, step.sessionId);
     const steps = listStepRecordsBySession(connection, step.sessionId);
-    const artifacts = listArtifactsBySession(connection, step.sessionId);
+    const stepSession = getSessionRecord(connection, step.sessionId);
+    const getStepError = (stepId: string) =>
+      stepSession
+        ? getSessionStepErrorSummary(connection, stepSession, stepId)
+        : null;
     const data = buildStepNode(
       step,
       steps,
       turns,
       rounds,
       parts,
-      artifacts,
+      getStepError,
       mode,
       true,
     );

@@ -28,6 +28,8 @@ export interface SessionPresenter {
   readonly sessionType: string
   /** Workflow kind surfaced as `workflow_kind` in list/status results, if any. */
   getWorkflowKind(connection: BackendConnection, sessionId: string): string | null
+  /** Human-readable workflow label surfaced as `workflow_label` in inspect results, if any. */
+  getWorkflowLabel(connection: BackendConnection, sessionId: string): string | null
   /** Session-type-specific terminal-error signal beyond the generic status/initStatus checks. */
   isTerminalError(
     connection: BackendConnection,
@@ -35,6 +37,15 @@ export interface SessionPresenter {
   ): boolean
   /** Session-type-specific latest-error summary, richer than the init-failure fallback. */
   getLatestErrorSummary(connection: BackendConnection, sessionId: string): SessionErrorSummary | null
+  /**
+   * Step-scoped latest-error summary (e.g. the step's latest analysis
+   * diagnostic), surfaced as the step's `latest_error` in inspect results.
+   */
+  getStepErrorSummary(
+    connection: BackendConnection,
+    sessionId: string,
+    stepId: string,
+  ): SessionErrorSummary | null
 }
 
 const presenterRegistry = new Map<string, SessionPresenter>()
@@ -49,6 +60,25 @@ export function getSessionWorkflowKind(
   session: { id: string; sessionType: string },
 ): string | null {
   return presenterRegistry.get(session.sessionType)?.getWorkflowKind(connection, session.id) ?? null
+}
+
+/** Human-readable workflow label for a session, via its registered presenter (null for plain sessions). */
+export function getSessionWorkflowLabel(
+  connection: BackendConnection,
+  session: { id: string; sessionType: string },
+): string | null {
+  return presenterRegistry.get(session.sessionType)?.getWorkflowLabel(connection, session.id) ?? null
+}
+
+/** Step-scoped latest-error summary for a session's step, via its registered presenter (null for plain sessions). */
+export function getSessionStepErrorSummary(
+  connection: BackendConnection,
+  session: { id: string; sessionType: string },
+  stepId: string,
+): SessionErrorSummary | null {
+  return (
+    presenterRegistry.get(session.sessionType)?.getStepErrorSummary(connection, session.id, stepId) ?? null
+  )
 }
 
 /**

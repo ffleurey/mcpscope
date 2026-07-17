@@ -28,7 +28,19 @@ export type {
   ExecutionSnapshot,
   SchedulerEvent,
   SchedulerEventListener,
+  SchedulerExecutionEvent,
+  ExecutorStreamEvent,
 } from "./runtime/schedulerTypes.js";
+
+// Session-executor hook: the workbench registers per-session-type executors
+// (e.g. the analysis executor) so the scheduler can dispatch concrete session
+// types without the engine importing analysis code. The engine registers the
+// `primary` executor itself.
+export { registerSessionExecutor } from "./runtime/schedulerDispatch.js";
+export type {
+  SessionExecutor,
+  SessionExecutionOptions,
+} from "./runtime/schedulerDispatch.js";
 
 // Turn stream events (chat path). Analysis stream events are deliberately
 // excluded — they belong to the analysis subsystem, not the engine.

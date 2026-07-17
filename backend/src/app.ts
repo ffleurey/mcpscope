@@ -25,6 +25,7 @@ import { withAutoModelSwap } from "./runtime/autoModelSwapGateway.js";
 import type { McpGateway } from "./runtime/toolTurns.js";
 import { registerMcpTransport } from "./mcp/index.js";
 import { registerAnalysisSessionPresenter } from "./analysis/analysisSessionPresentation.js";
+import { registerAnalysisSessionExecutor } from "./analysis/analysisSessionExecutor.js";
 import { registerCompanionServers } from "./companions/index.js";
 import {
   OperationError,
@@ -141,9 +142,14 @@ export async function buildBackendApp(
 
   // Workbench wiring: register the analysis presenter in the engine's
   // session-presentation registry so generic operations (list/status/
-  // lifecycle) surface analysis sessions' workflow_kind, terminal error
-  // phase, and latest diagnostic without the engine importing analysis code.
+  // lifecycle/inspect) surface analysis sessions' workflow_kind, workflow
+  // label, terminal error phase, and latest diagnostics without the engine
+  // importing analysis code.
   registerAnalysisSessionPresenter();
+  // Workbench wiring: register the analysis session executor in the engine's
+  // session-executor registry so the scheduler can dispatch and rehydrate
+  // session_analysis jobs without the engine importing analysis code.
+  registerAnalysisSessionExecutor();
 
   // On an unclean shutdown (crash, kill, server restart mid-turn) turns and sessions
   // can be left in in-progress states. Recover them before serving any requests so

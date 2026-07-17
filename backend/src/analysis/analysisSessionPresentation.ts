@@ -43,12 +43,18 @@ export function registerAnalysisSessionPresenter(): void {
   registerSessionPresenter({
     sessionType: 'session_analysis',
     getWorkflowKind: getAnalysisWorkflowKindFromSteps,
+    getWorkflowLabel(connection, sessionId) {
+      return getAnalysisWorkflowLabel(getAnalysisWorkflowKindFromSteps(connection, sessionId))
+    },
     isTerminalError(connection, summary) {
       const session = getSessionRecord(connection, summary.id)
       const analysisState = session?.analysisState as unknown as AnalysisSessionState | null
       return analysisState?.phase === 'error'
     },
     getLatestErrorSummary: getLatestAnalysisDiagnosticSummaryForSession,
+    getStepErrorSummary(connection, sessionId, stepId) {
+      return getLatestAnalysisDiagnosticSummaryForStep(listArtifactsBySession(connection, sessionId), stepId)
+    },
   })
 }
 

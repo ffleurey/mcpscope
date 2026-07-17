@@ -1,4 +1,4 @@
-import type { TurnStreamEvent, AnalysisStreamEvent } from './streamEvents.js'
+import type { TurnStreamEvent } from './streamEvents.js'
 import type { PreludeStreamEvent } from './sessionInit.js'
 import type { BackendDatabase } from '../persistence/db.js'
 import type { ChatCompletionGateway } from './modelTurns.js'
@@ -21,10 +21,30 @@ export type ExecutionTarget =
  * The long-running coordinator that owns a job, when one does. Lets the UI group
  * a run's many jobs (init + turn per session) under one controllable unit instead
  * of showing loose sessions. Absent for ad-hoc (interactive) session jobs.
+ *
+ * `kind` is caller-defined: the engine attaches owners opaquely and never
+ * branches on them. Coordinators built on top of the engine supply their own
+ * kinds (the workbench uses 'benchmark-run' and 'benchmark-evaluation').
  */
-export type ExecutionJobOwner =
-  | { kind: 'benchmark-run'; id: string }
-  | { kind: 'benchmark-evaluation'; id: string }
+export interface ExecutionJobOwner {
+  kind: string
+  id: string
+}
+
+/**
+ * A stream event relayed through the scheduler while a job executes. The
+ * engine itself emits TurnStreamEvent (chat turns) and PreludeStreamEvent
+ * (session init); registered session executors may emit additional event
+ * shapes (e.g. the analysis workflow's analysis-* events), which the
+ * scheduler relays opaquely to subscribers.
+ */
+export type SchedulerExecutionEvent =
+  | TurnStreamEvent
+  | PreludeStreamEvent
+  | ExecutorStreamEvent
+
+/** Executor-defined stream event; the scheduler relays it without interpreting it. */
+export type ExecutorStreamEvent = { type: string; [key: string]: unknown }
 
 export interface ExecutionJob {
   jobId: string
@@ -59,7 +79,7 @@ export type SchedulerEvent =
   | { type: 'scheduler-job-removed'; jobId: string; target: ExecutionTarget }
   | { type: 'scheduler-paused' }
   | { type: 'scheduler-resumed' }
-  | { type: 'scheduler-execution-event'; sessionId: string; jobId: string; event: TurnStreamEvent | AnalysisStreamEvent | PreludeStreamEvent }
+  | { type: 'scheduler-execution-event'; sessionId: string; jobId: string; event: SchedulerExecutionEvent }
 
 export type SchedulerEventListener = (event: SchedulerEvent) => void
 

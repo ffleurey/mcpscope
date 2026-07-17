@@ -20,7 +20,7 @@ import {
   getSessionRecord,
   updateSessionAnalysisState,
 } from "../persistence/repository.js";
-import type { AnalysisStreamEventSink } from "../runtime/streamEvents.js";
+import type { AnalysisStreamEventSink } from "./analysisStreamEvents.js";
 import type { AnalysisWorkflowInput } from "./analysisWorkflowInput.js";
 import type { StepContext } from "../workflow/stepContext.js";
 import { type StepTypeKey } from "../domain/executionModel.js";

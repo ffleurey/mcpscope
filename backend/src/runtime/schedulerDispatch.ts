@@ -1,34 +1,61 @@
 import {
   getSessionRecord,
-  listPartRecordsBySession,
-  listRawExchangeRecordsBySession,
-  listRoundRecordsBySession,
-  listStepRecordsBySession,
   listTurnRecordsBySession,
-  updateSessionRecord,
   updateTurnRecord,
 } from '../persistence/repository.js'
-import { listArtifactsBySession } from '../analysis/artifactRepository.js'
-import { buildSessionTraceBundle } from '../domain/trace.js'
-import { deriveContextEntries, deriveTranscriptEntries } from '../domain/selectors.js'
 import { ChatSession } from './chatSession.js'
-import { rehydrateAnalysisWorkflow } from '../analysis/analysisWorkflowFactory.js'
 import { runSessionInitialization } from './sessionInit.js'
 import type { TurnRecord } from '../domain/model.js'
 import type {
   ActiveExecutionJob,
   SchedulerContext,
+  SchedulerExecutionEvent,
 } from './schedulerTypes.js'
-import type { PreludeStreamEvent } from './sessionInit.js'
-import type { AnalysisStreamEvent, TurnStreamEvent } from './streamEvents.js'
+
+/**
+ * Session-executor registry — the engine-side hook that lets the workbench
+ * teach the scheduler how to execute concrete session types without the
+ * engine importing any analysis code. Mirrors the session-presenter registry
+ * in `operations/sessionPresentation.ts`.
+ *
+ * The engine registers the `primary` executor itself (below). The workbench
+ * registers the analysis executor at startup (see
+ * `registerAnalysisSessionExecutor()` in `analysis/analysisSessionExecutor.ts`,
+ * called from `buildBackendApp`).
+ */
+
+export interface SessionExecutionOptions {
+  emitExecutionEvent: (event: SchedulerExecutionEvent) => void
+  shouldPauseAtBoundary: () => boolean
+}
+
+export interface SessionExecutor {
+  /** Session type this executor handles (e.g. 'primary', 'session_analysis'). */
+  readonly sessionType: string
+  /** Execute a `session`-kind job (a full run for this session type). */
+  executeSession(
+    job: ActiveExecutionJob,
+    opCtx: SchedulerContext,
+    options: SessionExecutionOptions,
+  ): Promise<void>
+  /** Execute a `step`-kind job (single-step advance), for session types that support it. */
+  executeStep?(
+    job: ActiveExecutionJob,
+    opCtx: SchedulerContext,
+    options: SessionExecutionOptions,
+  ): Promise<void>
+}
+
+const executorRegistry = new Map<string, SessionExecutor>()
+
+export function registerSessionExecutor(executor: SessionExecutor): void {
+  executorRegistry.set(executor.sessionType, executor)
+}
 
 export async function dispatchSchedulerJob(
   job: ActiveExecutionJob,
   opCtx: SchedulerContext,
-  options: {
-    emitExecutionEvent: (event: TurnStreamEvent | AnalysisStreamEvent | PreludeStreamEvent) => void
-    shouldPauseAtBoundary: () => boolean
-  },
+  options: SessionExecutionOptions,
 ): Promise<void> {
   const { target } = job
   const session = getSessionRecord(opCtx.db.connection, target.sessionId)
@@ -40,26 +67,27 @@ export async function dispatchSchedulerJob(
     await executeInitJob(job, opCtx, options.emitExecutionEvent)
     return
   }
+
+  const executor = executorRegistry.get(session.sessionType)
+  if (!executor) {
+    throw new Error(`Unsupported session type: ${session.sessionType}`)
+  }
+
   if (target.kind === 'step') {
-    await executeAnalysisOneStepJob(job, opCtx, options.emitExecutionEvent as (event: TurnStreamEvent | AnalysisStreamEvent) => void)
-    return
-  }
-  if (session.sessionType === 'primary') {
-    await executePrimaryJob(job, opCtx, options.emitExecutionEvent as (event: TurnStreamEvent) => void)
-    return
-  }
-  if (session.sessionType === 'session_analysis') {
-    await executeAnalysisJob(job, opCtx, options)
+    if (!executor.executeStep) {
+      throw new Error(`Session type ${session.sessionType} does not support step execution`)
+    }
+    await executor.executeStep(job, opCtx, options)
     return
   }
 
-  throw new Error(`Unsupported session type: ${session.sessionType}`)
+  await executor.executeSession(job, opCtx, options)
 }
 
 async function executeInitJob(
   job: ActiveExecutionJob,
   opCtx: SchedulerContext,
-  emitExecutionEvent: (event: PreludeStreamEvent) => void,
+  emitExecutionEvent: (event: SchedulerExecutionEvent) => void,
 ): Promise<void> {
   await runSessionInitialization(opCtx.db, opCtx.chatCompletionGateway, opCtx.mcpGateway, job.target.sessionId, emitExecutionEvent)
 }
@@ -67,7 +95,7 @@ async function executeInitJob(
 async function executePrimaryJob(
   job: ActiveExecutionJob,
   opCtx: SchedulerContext,
-  emitExecutionEvent: (event: TurnStreamEvent) => void,
+  options: SessionExecutionOptions,
 ): Promise<void> {
   const prompt = job.prompt
   if (!prompt) {
@@ -93,108 +121,16 @@ async function executePrimaryJob(
     session.mcpProfileSnapshots.length > 0 ? opCtx.mcpGateway : null,
     activeTurn,
     prompt,
-    emitExecutionEvent,
+    options.emitExecutionEvent,
   )
 
   await chatSession.execute()
 }
 
-async function executeAnalysisJob(
-  job: ActiveExecutionJob,
-  opCtx: SchedulerContext,
-  options: {
-    emitExecutionEvent: (event: TurnStreamEvent | AnalysisStreamEvent) => void
-    shouldPauseAtBoundary: () => boolean
-  },
-): Promise<void> {
-  const session = getSessionRecord(opCtx.db.connection, job.target.sessionId)
-  if (!session) throw new Error(`Session ${job.target.sessionId} not found at analysis execution time`)
-
-  session.status = 'active'
-  session.updatedAt = Date.now()
-  updateSessionRecord(opCtx.db.connection, session)
-
-  try {
-    const instance = rehydrateAnalysisWorkflow(opCtx.db, opCtx.chatCompletionGateway, opCtx.mcpGateway, job.target.sessionId)
-    if (!instance) {
-      throw new Error('Failed to rehydrate analysis session')
-    }
-
-    while (instance.canContinue()) {
-      await instance.resumeOneStep(options.emitExecutionEvent)
-      if (options.shouldPauseAtBoundary()) {
-        break
-      }
-    }
-  } finally {
-    const finalSession = getSessionRecord(opCtx.db.connection, job.target.sessionId) ?? session
-    if (finalSession.status === 'active') {
-      finalSession.status = 'ready'
-      finalSession.updatedAt = Date.now()
-      updateSessionRecord(opCtx.db.connection, finalSession)
-    }
-  }
-
-  const finalSession = getSessionRecord(opCtx.db.connection, job.target.sessionId)
-  const analysisState = finalSession?.analysisState as { phase?: string } | null
-  const phase = analysisState?.phase ?? null
-  if (phase === 'complete' || phase === 'error') {
-    const trace = buildAnalysisTrace(opCtx, job.target.sessionId)
-    options.emitExecutionEvent({ type: 'analysis-complete', trace })
-  }
-}
-
-async function executeAnalysisOneStepJob(
-  job: ActiveExecutionJob,
-  opCtx: SchedulerContext,
-  emitExecutionEvent: (event: TurnStreamEvent | AnalysisStreamEvent) => void,
-): Promise<void> {
-  const session = getSessionRecord(opCtx.db.connection, job.target.sessionId)
-  if (!session) throw new Error(`Session ${job.target.sessionId} not found at one-step execution time`)
-
-  session.status = 'active'
-  session.updatedAt = Date.now()
-  updateSessionRecord(opCtx.db.connection, session)
-
-  try {
-    const instance = rehydrateAnalysisWorkflow(opCtx.db, opCtx.chatCompletionGateway, opCtx.mcpGateway, job.target.sessionId)
-    if (!instance) {
-      throw new Error('Failed to rehydrate analysis session')
-    }
-    await instance.resumeOneStep(emitExecutionEvent)
-  } finally {
-    const finalSession = getSessionRecord(opCtx.db.connection, job.target.sessionId) ?? session
-    if (finalSession.status === 'active') {
-      finalSession.status = 'ready'
-      finalSession.updatedAt = Date.now()
-      updateSessionRecord(opCtx.db.connection, finalSession)
-    }
-  }
-
-  const finalSession = getSessionRecord(opCtx.db.connection, job.target.sessionId)
-  const analysisState = finalSession?.analysisState as { phase?: string } | null
-  const phase = analysisState?.phase ?? null
-  if (phase === 'complete' || phase === 'error') {
-    const trace = buildAnalysisTrace(opCtx, job.target.sessionId)
-    emitExecutionEvent({ type: 'analysis-complete', trace })
-  }
-}
-
-function buildAnalysisTrace(opCtx: SchedulerContext, sessionId: string) {
-  const session = getSessionRecord(opCtx.db.connection, sessionId)
-  if (!session) {
-    throw new Error(`Session ${sessionId} not found while building analysis trace`)
-  }
-  const parts = listPartRecordsBySession(opCtx.db.connection, sessionId)
-  return buildSessionTraceBundle({
-    session,
-    steps: listStepRecordsBySession(opCtx.db.connection, sessionId),
-    turns: listTurnRecordsBySession(opCtx.db.connection, sessionId),
-    rounds: listRoundRecordsBySession(opCtx.db.connection, sessionId),
-    parts,
-    rawExchanges: listRawExchangeRecordsBySession(opCtx.db.connection, sessionId),
-    artifacts: listArtifactsBySession(opCtx.db.connection, sessionId),
-    transcript: deriveTranscriptEntries(parts),
-    context: deriveContextEntries(parts),
-  })
-}
+// The engine's own default executor. Registered here, in the module that owns
+// the registry — same-module registration, no cross-layer import-order
+// dependency.
+registerSessionExecutor({
+  sessionType: 'primary',
+  executeSession: executePrimaryJob,
+})
