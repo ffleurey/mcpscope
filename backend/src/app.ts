@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { BackendConfig } from "mcpscope-engine/config.js";
 import { openBackendDatabase } from "mcpscope-engine/persistence/db.js";
 import { registerBenchmarkSchema } from "./persistence/benchmarkSchema.js";
+import { registerBenchmarkRecovery } from "./persistence/benchmarkRecovery.js";
 import { recoverInterruptedState } from "mcpscope-engine/persistence/repository.js";
 import { getLoadedContextLength } from "mcpscope-engine/services/lmstudio/client.js";
 import {
@@ -130,6 +131,10 @@ export async function buildBackendApp(
   // schema-extension registry. MUST run before openBackendDatabase below —
   // opening the database applies registered DDL and validates the schema.
   registerBenchmarkSchema();
+  // Workbench wiring: recover orphaned benchmark runs/evaluations as part of
+  // the engine's startup recovery (runs inside recoverInterruptedState below;
+  // the benchmark schema is registered just above so the tables exist).
+  registerBenchmarkRecovery();
 
   const database = openBackendDatabase(config.sqlitePath);
   app.decorate("backendDb", database);

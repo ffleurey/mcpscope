@@ -504,6 +504,22 @@ export function findActiveSession(
  * Recovers from an unclean server shutdown by marking any steps/turns and sessions
  * that were left in an in-progress state as terminated.
  */
+/**
+ * Recovery-step registry — the engine-side hook that lets the workbench recover
+ * its own tables (e.g. orphaned benchmark runs) on startup without the engine's
+ * core recovery knowing about them. Mirrors the schema-extension registry;
+ * registration is keyed so repeated startup wiring stays idempotent. Steps run
+ * inside `recoverInterruptedState`'s transaction, so the tables they touch must
+ * already exist (register the matching schema extension too).
+ */
+export type RecoveryStep = (connection: BackendConnection, now: number) => void
+
+const recoverySteps = new Map<string, RecoveryStep>()
+
+export function registerRecoveryStep(name: string, step: RecoveryStep): void {
+  recoverySteps.set(name, step)
+}
+
 export function recoverInterruptedState(connection: BackendConnection): void {
   runInTransaction(connection, () => {
     const now = Date.now()
@@ -528,29 +544,8 @@ export function recoverInterruptedState(connection: BackendConnection): void {
       WHERE init_status = 'initializing'
     `).run(now)
 
-    // Benchmark runs and evaluations are driven by in-process coordinators that do
-    // not survive a restart. Any left non-terminal is orphaned → mark it 'stopped'
-    // (the resumable rest state) so the user can resume/retry the remaining work,
-    // rather than spinning forever as 'running'. Stale per-task sessions left
-    // 'running' inside the record are reconciled to 'cancelled' when the coordinator
-    // resumes. 'paused' runs are equally orphaned (the in-memory gate is gone).
-    // No completed_at stamp: 'stopped' is a resumable rest state, not a
-    // completion — the coordinator stamps completed_at only on complete/error.
-    connection.prepare(`
-      UPDATE benchmark_runs
-      SET status = 'stopped',
-          error = COALESCE(error, 'Interrupted by a server restart; resume to recover.'),
-          updated_at = ?
-      WHERE status IN ('pending', 'running', 'paused')
-    `).run(now)
-
-    connection.prepare(`
-      UPDATE benchmark_evaluations
-      SET status = 'stopped',
-          error = COALESCE(error, 'Interrupted by a server restart; resume to recover.'),
-          updated_at = ?
-      WHERE status IN ('pending', 'running', 'paused')
-    `).run(now)
+    // Workbench-registered recovery (e.g. orphaned benchmark runs/evaluations).
+    for (const step of recoverySteps.values()) step(connection, now)
   })
 }
 

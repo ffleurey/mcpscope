@@ -170,6 +170,9 @@ export class ConfigStore {
   }
 
   private flush(): void {
+    // In-memory mode (":memory:", mirroring node:sqlite): never touch disk, so
+    // an embedder can run a fully programmatic, file-less engine.
+    if (this.filePath === ":memory:") return;
     const data: ConfigFile = {
       lm_connections: Array.from(this.lmConnections.values()),
       model_configs: Array.from(this.modelConfigs.values()),

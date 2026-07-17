@@ -15,6 +15,15 @@
 
 export type { BackendConfig } from "./config.js";
 
+// ── Standalone in-process factory ────────────────────────────────────────────
+export { createEngine } from "./createEngine.js";
+export type {
+  Engine,
+  CreateEngineOptions,
+  EngineStorage,
+  EngineConfigSeed,
+} from "./createEngine.js";
+
 // ── Scheduler ────────────────────────────────────────────────────────────────
 export { ExecutionScheduler } from "./runtime/scheduler.js";
 export { SCHEDULER_ERROR } from "./runtime/schedulerTypes.js";
