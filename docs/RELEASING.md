@@ -101,17 +101,30 @@ GitHub Actions mints a short-lived, per-run token that npm verifies against the 
 configured trusted publisher. There is **no `NPM_TOKEN` secret** to store or rotate, and each
 publish carries an automatic provenance attestation.
 
-One-time setup (already done for `mcpscope`):
+One-time setup **per package** (done for `mcpscope`; **`mcpscope-engine` still needs it**):
 
 1. **Bootstrap the package** — trusted publishing can only be configured on a package that already
-   exists, so `0.1.0` was published once manually (`npm publish --access public` after `npm login`).
-2. **Enable the trusted publisher** on npmjs.com → the `mcpscope` package → *Settings → Publishing
+   exists, so the very first version must be published manually with a token that can create the
+   package:
+
+   ```bash
+   npm login                                              # an account allowed to create the package
+   npm publish --workspace mcpscope-engine --access public   # first publish of the engine
+   npm publish --access public                               # first publish of the root, if not on npm
+   ```
+
+   > **A brand-new workspace package fails the automated release on its first release** with
+   > `npm error 404 … PUT …/<pkg> - Not found` — the OIDC token has no permission to *create* a
+   > package, only to publish new versions of an existing, trusted-publisher-configured one. This is
+   > exactly what happened when `mcpscope-engine` was introduced in `v0.1.2`.
+
+2. **Enable the trusted publisher** on npmjs.com → the package → *Settings → Publishing
    access → Trusted Publisher → GitHub Actions*, with organization/user `ffleurey`, repository
-   `mcpscope`, and workflow `release.yml`.
+   `mcpscope`, and workflow `release.yml`. Do this for **both** `mcpscope` and `mcpscope-engine`.
 
 The workflow needs `permissions: id-token: write` and npm ≥ 11.5.1 (both set in `release.yml`);
-the publish step skips any version already on the registry, so `0.1.0` is a no-op and re-running a
-release is safe.
+the publish step skips any version already on the registry, so re-running a release after the
+bootstrap is safe (already-published versions are no-ops).
 
 ---
 
