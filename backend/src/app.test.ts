@@ -117,7 +117,7 @@ describe("backend foundation", () => {
   it("serves a health endpoint", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const response = await app.inject({
       method: "GET",
@@ -138,7 +138,7 @@ describe("backend foundation", () => {
   it("reports a connectable URL in health when bound to a wildcard address", async () => {
     const config = { ...makeTestConfig(), host: "0.0.0.0" };
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const response = await app.inject({
       method: "GET",
@@ -157,7 +157,7 @@ describe("backend foundation", () => {
   it("exposes the canonical backend domain model and schema", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const response = await app.inject({
       method: "GET",
@@ -206,7 +206,7 @@ describe("backend foundation", () => {
   it("lists sessions in reverse updated order and deletes them through the backend API", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const firstResponse = await app.inject({
       method: "POST",
@@ -300,7 +300,7 @@ describe("backend foundation", () => {
   it("supports explicit session IDs and validates duplicates/format", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const createPayload = {
       sessionId: "AB23",
@@ -357,7 +357,7 @@ describe("backend foundation", () => {
   it("stores backend-owned LM connections, model configs, and MCP profiles", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const lmConnection = {
       id: "lm-1",
@@ -488,7 +488,7 @@ describe("backend foundation", () => {
   it("imports a captured multi-round trace bundle and re-exposes it through the canonical trace API", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const capturedTrace: SessionTraceBundle = {
       session: capturedReasoningThreeBatchSession,
@@ -568,7 +568,7 @@ describe("backend foundation", () => {
   it("normalizes imported active execution state so trace imports cannot recreate a lock", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const capturedTrace: SessionTraceBundle = {
       session: {
@@ -664,7 +664,7 @@ describe("backend foundation", () => {
   it("imports deterministic compaction steps so they remain visible in trace and lookup APIs", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const sourceSessionId = "SRC1";
     const sourceTurnId = `${sourceSessionId}.1T`;
@@ -974,7 +974,7 @@ describe("backend foundation", () => {
   it("returns expected lookup payloads for session/turn/round/part on a multi-turn tool baseline", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
     // A synthetic multi-turn tool trace (system prompt + tool definitions in
     // setup, user prompts, tool calls/results across two turns) — the shippable
     // stand-in for the earlier captured baseline.
@@ -1417,7 +1417,7 @@ describe("backend foundation", () => {
   it("streams model-only turn events as deltas followed by committed parts", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async probePromptTokensDetailed(_baseUrl, _apiKey, body) {
           return {
@@ -1510,7 +1510,7 @@ describe("backend foundation", () => {
           throw new Error("not used");
         },
       },
-    });
+    })).app;
 
     const sessionResponse = await app.inject({
       method: "POST",
@@ -1583,7 +1583,7 @@ describe("backend foundation", () => {
   it("streams tool-enabled turn events as deltas followed by committed parts", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async probePromptTokensDetailed(_baseUrl, _apiKey, body) {
           const messages = body.messages as Array<{
@@ -1830,7 +1830,7 @@ describe("backend foundation", () => {
           };
         },
       },
-    });
+    })).app;
 
     const sessionResponse = await app.inject({
       method: "POST",
@@ -1933,7 +1933,7 @@ describe("backend foundation", () => {
   it("creates a session and completes a backend-owned model-only turn", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async probePromptTokens() {
           return 3;
@@ -2011,7 +2011,7 @@ describe("backend foundation", () => {
           throw new Error("not used");
         },
       },
-    });
+    })).app;
 
     const sessionResponse = await app.inject({
       method: "POST",
@@ -2083,7 +2083,7 @@ describe("backend foundation", () => {
   it("completes a tool-enabled turn through the backend route", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async probePromptTokens(_baseUrl, _apiKey, body) {
           const messages = body.messages as Array<{
@@ -2352,7 +2352,7 @@ describe("backend foundation", () => {
           };
         },
       },
-    });
+    })).app;
 
     const sessionResponse = await app.inject({
       method: "POST",
@@ -2475,7 +2475,7 @@ describe("error handling contract", () => {
   it("returns structured { error: { type, message } } on 404", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const response = await app.inject({
       method: "GET",
@@ -2492,7 +2492,7 @@ describe("error handling contract", () => {
   it("returns 503 with upstream error shape when MCP test endpoint cannot connect", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const response = await app.inject({
       method: "POST",
@@ -2510,7 +2510,7 @@ describe("error handling contract", () => {
   it("returns 503 with provider_unreachable code when preflight cannot reach the provider", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const response = await app.inject({
       method: "POST",
@@ -2539,7 +2539,7 @@ describe("error handling contract", () => {
   it("returns 409 with model_not_loaded when preflight selected model is not loaded", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const lmServer = createServer((req, res) => {
       if (req.url === "/v1/models") {
@@ -2613,7 +2613,7 @@ describe("error handling contract", () => {
   it("emits turn-failed SSE event with errorType when streaming gateway throws", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async probePromptTokensDetailed(_baseUrl, _apiKey, body) {
           return {
@@ -2658,7 +2658,7 @@ describe("error handling contract", () => {
           throw new Error("not used");
         },
       },
-    });
+    })).app;
 
     const sessionRes = await app.inject({
       method: "POST",
@@ -2720,7 +2720,7 @@ describe("session-creation-defaults API", () => {
   it("returns null defaults on fresh database", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const response = await app.inject({
       method: "GET",
@@ -2735,7 +2735,7 @@ describe("session-creation-defaults API", () => {
   it("sets and clears defaults", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const modelConfig = {
       id: "model-config-1",
@@ -2778,7 +2778,7 @@ describe("session-creation-defaults API", () => {
   it("rejects unknown model config ID", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const response = await app.inject({
       method: "PUT",
@@ -2795,7 +2795,7 @@ describe("session-creation-defaults API", () => {
   it("prevents deleting a model config that is set as default", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const modelConfig = {
       id: "model-config-1",
@@ -2835,7 +2835,7 @@ describe("session-creation-defaults API", () => {
   it("prevents deleting an LM connection that is still referenced by a model config", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const lmConnection = {
       id: "lm-1",
@@ -2879,7 +2879,7 @@ describe("session-creation-defaults API", () => {
   it("allows deleting model config and MCP profile that are not defaults", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const modelConfig = {
       id: "model-config-1",
@@ -3027,7 +3027,7 @@ describe("CLI session lifecycle endpoints", () => {
   it("POST /api/sessions/from-defaults fails when no default model is configured", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, baseGateway);
+    app = (await buildBackendApp(config, baseGateway)).app;
 
     const response = await app.inject({
       method: "POST",
@@ -3041,7 +3041,7 @@ describe("CLI session lifecycle endpoints", () => {
   it("POST /api/sessions/from-defaults fails when default model config no longer exists", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, baseGateway);
+    app = (await buildBackendApp(config, baseGateway)).app;
 
     // Set a default that references a now-deleted config ID
     // Use direct DB manipulation via the PUT defaults endpoint (which validates first)
@@ -3095,7 +3095,7 @@ describe("CLI session lifecycle endpoints", () => {
   it("POST /api/sessions/from-defaults fails when default LM connection is missing", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, baseGateway);
+    app = (await buildBackendApp(config, baseGateway)).app;
 
     // Model config exists but its connection does not
     const modelConfig = {
@@ -3132,7 +3132,7 @@ describe("CLI session lifecycle endpoints", () => {
   it("POST /api/sessions/from-defaults creates session with model and optional MCP", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, baseGateway);
+    app = (await buildBackendApp(config, baseGateway)).app;
 
     const lmConnection = {
       id: "lm-1",
@@ -3205,7 +3205,7 @@ describe("CLI session lifecycle endpoints", () => {
   it("POST /api/session-constructors/primary creates a session from constructor parameters", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, baseGateway);
+    app = (await buildBackendApp(config, baseGateway)).app;
 
     const lmConnection = {
       id: "lm-1",
@@ -3275,7 +3275,7 @@ describe("CLI session lifecycle endpoints", () => {
   it("auto-titles an unnamed session from the first prompt only", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, baseGateway);
+    app = (await buildBackendApp(config, baseGateway)).app;
 
     const sessionRes = await app.inject({
       method: "POST",
@@ -3322,7 +3322,7 @@ describe("CLI session lifecycle endpoints", () => {
   it("POST /api/sessions/from-defaults rejects duplicate session ID", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, baseGateway);
+    app = (await buildBackendApp(config, baseGateway)).app;
 
     const lmConnection = {
       id: "lm-1",
@@ -3383,7 +3383,7 @@ describe("CLI session lifecycle endpoints", () => {
   it("GET /api/sessions/:sessionId/status returns initializing for new session", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, baseGateway);
+    app = (await buildBackendApp(config, baseGateway)).app;
 
     const sessionRes = await app.inject({
       method: "POST",
@@ -3421,7 +3421,7 @@ describe("CLI session lifecycle endpoints", () => {
   it("GET /api/sessions/:sessionId/status returns 404 for unknown session", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, baseGateway);
+    app = (await buildBackendApp(config, baseGateway)).app;
 
     const response = await app.inject({
       method: "GET",
@@ -3434,7 +3434,7 @@ describe("CLI session lifecycle endpoints", () => {
   it("POST /api/sessions/:sessionId/turns/start rejects when session not initialized", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, baseGateway);
+    app = (await buildBackendApp(config, baseGateway)).app;
 
     const sessionRes = await app.inject({
       method: "POST",
@@ -3470,7 +3470,7 @@ describe("CLI session lifecycle endpoints", () => {
   it("POST /api/sessions/:sessionId/turns/start returns turn ID immediately", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, baseGateway);
+    app = (await buildBackendApp(config, baseGateway)).app;
 
     const sessionRes = await app.inject({
       method: "POST",
@@ -3517,7 +3517,7 @@ describe("CLI session lifecycle endpoints", () => {
     dataDir = config.dataDir;
 
     const releaseCompletion = createDeferred<void>();
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       ...baseGateway,
       chatCompletionGateway: {
         ...baseGateway.chatCompletionGateway,
@@ -3549,7 +3549,7 @@ describe("CLI session lifecycle endpoints", () => {
           };
         },
       },
-    });
+    })).app;
 
     const sessionRes = await app.inject({
       method: "POST",
@@ -3601,7 +3601,7 @@ describe("CLI session lifecycle endpoints", () => {
     dataDir = config.dataDir;
 
     const releaseProbe = createDeferred<void>();
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       ...baseGateway,
       chatCompletionGateway: {
         ...baseGateway.chatCompletionGateway,
@@ -3614,7 +3614,7 @@ describe("CLI session lifecycle endpoints", () => {
           );
         },
       },
-    });
+    })).app;
 
     const sessionRes = await app.inject({
       method: "POST",
@@ -3742,7 +3742,7 @@ describe("CLI session lifecycle endpoints", () => {
     it("POST /api/sessions is allowed when another session is initializing", async () => {
       const config = makeTestConfig();
       dataDir = config.dataDir;
-      app = await buildBackendApp(config, baseGateway);
+      app = (await buildBackendApp(config, baseGateway)).app;
 
       // Create first session and move it to 'initializing' (pending alone no longer counts)
       const first = await app.inject({
@@ -3773,7 +3773,7 @@ describe("CLI session lifecycle endpoints", () => {
     it("POST /api/sessions is allowed when another session is running a turn", async () => {
       const config = makeTestConfig();
       dataDir = config.dataDir;
-      app = await buildBackendApp(config, baseGateway);
+      app = (await buildBackendApp(config, baseGateway)).app;
 
       const blockerId = await createReadySession(app);
       makeSessionRunning(app, blockerId);
@@ -3793,7 +3793,7 @@ describe("CLI session lifecycle endpoints", () => {
     it("POST /api/sessions/from-defaults is allowed when another session is active", async () => {
       const config = makeTestConfig();
       dataDir = config.dataDir;
-      app = await buildBackendApp(config, baseGateway);
+      app = (await buildBackendApp(config, baseGateway)).app;
 
       const lmConnection = {
         id: "lm-1",
@@ -3854,7 +3854,7 @@ describe("CLI session lifecycle endpoints", () => {
     it("POST /api/sessions/:sessionId/initialize is allowed when another session is running", async () => {
       const config = makeTestConfig();
       dataDir = config.dataDir;
-      app = await buildBackendApp(config, baseGateway);
+      app = (await buildBackendApp(config, baseGateway)).app;
 
       // Create blocker session and mark it ready (no active turn yet)
       const blockerId = await createReadySession(app, "Blocker");
@@ -3881,7 +3881,7 @@ describe("CLI session lifecycle endpoints", () => {
     it("POST /api/sessions/:sessionId/turns/start is allowed when another session is initializing", async () => {
       const config = makeTestConfig();
       dataDir = config.dataDir;
-      app = await buildBackendApp(config, baseGateway);
+      app = (await buildBackendApp(config, baseGateway)).app;
 
       // Create blocker session (starts as pending)
       const blockerRes = await app.inject({
@@ -3923,7 +3923,7 @@ describe("CLI session lifecycle endpoints", () => {
     it("POST /api/sessions/:sessionId/turns/start is allowed when another session is running", async () => {
       const config = makeTestConfig();
       dataDir = config.dataDir;
-      app = await buildBackendApp(config, baseGateway);
+      app = (await buildBackendApp(config, baseGateway)).app;
 
       // Create blocker session, mark ready
       const blockerRes = await app.inject({
@@ -3969,7 +3969,7 @@ describe("CLI session lifecycle endpoints", () => {
     it("POST /api/sessions/:sessionId/turns is allowed when another session is active", async () => {
       const config = makeTestConfig();
       dataDir = config.dataDir;
-      app = await buildBackendApp(config, baseGateway);
+      app = (await buildBackendApp(config, baseGateway)).app;
 
       // Create blocker and target via DB manipulation to bypass lock
       const blockerRes = await app.inject({
@@ -4010,7 +4010,7 @@ describe("CLI session lifecycle endpoints", () => {
     it("POST /api/sessions/:sessionId/turns/stream is allowed when another session is active", async () => {
       const config = makeTestConfig();
       dataDir = config.dataDir;
-      app = await buildBackendApp(config, baseGateway);
+      app = (await buildBackendApp(config, baseGateway)).app;
 
       const blockerRes = await app.inject({
         method: "POST",
@@ -4054,7 +4054,7 @@ describe("CLI session lifecycle endpoints", () => {
     it("global lock does not block operations on the same session", async () => {
       const config = makeTestConfig();
       dataDir = config.dataDir;
-      app = await buildBackendApp(config, baseGateway);
+      app = (await buildBackendApp(config, baseGateway)).app;
 
       // Create and mark ready
       const res = await app.inject({
@@ -4084,7 +4084,7 @@ describe("CLI session lifecycle endpoints", () => {
     it("POST /api/sessions/preflight is not blocked when another session is initializing", async () => {
       const config = makeTestConfig();
       dataDir = config.dataDir;
-      app = await buildBackendApp(config, baseGateway);
+      app = (await buildBackendApp(config, baseGateway)).app;
 
       // Create a session and move it to 'initializing' (pending alone does not block)
       const blockerRes = await app.inject({
@@ -4127,7 +4127,7 @@ describe("CLI session lifecycle endpoints", () => {
       const releaseProbe = createDeferred<void>();
       const config = makeTestConfig();
       dataDir = config.dataDir;
-      app = await buildBackendApp(config, {
+      app = (await buildBackendApp(config, {
         ...baseGateway,
         chatCompletionGateway: {
           ...baseGateway.chatCompletionGateway,
@@ -4140,7 +4140,7 @@ describe("CLI session lifecycle endpoints", () => {
             );
           },
         },
-      });
+      })).app;
 
       // Create and initialize session A
       const sessionAId = await createReadySession(app, "Session A");
@@ -4210,7 +4210,7 @@ describe("analysis launch", () => {
   async function setupBackendApp() {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
     return { config, app };
   }
 
@@ -4784,10 +4784,10 @@ describe("analysis launch", () => {
   it("creates a session_analysis child session with correct parent link (v2 backend-owned workflow)", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
     const turnId = createCompleteTurn(app, targetId);
@@ -4860,10 +4860,10 @@ describe("analysis launch", () => {
   it("POST /api/session-constructors/session-analysis launches an analysis child session", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
     const turnId = createCompleteTurn(app, targetId);
@@ -4909,10 +4909,10 @@ describe("analysis launch", () => {
   it("uses a launch-time system prompt override verbatim when supplied", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
     const turnId = createCompleteTurn(app, targetId);
@@ -4940,10 +4940,10 @@ describe("analysis launch", () => {
   it("uses the default model config when none is explicitly supplied", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
     const turnId = createCompleteTurn(app, targetId);
@@ -4972,10 +4972,10 @@ describe("analysis launch", () => {
   it("prefers an explicitly supplied model config over the default", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
     const turnId = createCompleteTurn(app, targetId);
@@ -5041,10 +5041,10 @@ describe("analysis launch", () => {
   it("uses a built-in default analysis goal when none is supplied", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
     const appInst = app;
     const targetId = await createReadySession(appInst);
     await createAnalysisModelConfig(appInst);
@@ -5079,10 +5079,10 @@ describe("analysis launch", () => {
   it("analysis child session appears in both default and include_children session lists", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
     const turnId = createCompleteTurn(app, targetId);
@@ -5132,10 +5132,10 @@ describe("analysis launch", () => {
   it("analysis launch and queued execution are allowed while another session is running", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
 
     const blockerId = await createReadySession(app);
     insertTurnRecord(app.backendDb.connection, {
@@ -5307,10 +5307,10 @@ describe("analysis launch", () => {
   it("v2 bootstrap creates analysis artifacts for a session with no tool calls", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
     const turnId = createCompleteTurn(app, targetId);
@@ -5364,7 +5364,7 @@ describe("analysis launch", () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
     const base = makeAnalysisMockGateway();
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         ...base,
         async createChatCompletion() {
@@ -5395,7 +5395,7 @@ describe("analysis launch", () => {
         },
       },
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
 
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
@@ -5467,7 +5467,7 @@ describe("analysis launch", () => {
     // We capture it via a shared mutable ref.
     const turnRef = { id: "" };
     let callCount = 0;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++;
@@ -5557,7 +5557,7 @@ describe("analysis launch", () => {
         },
       },
       mcpGateway: makeAnalysisMcpGateway(inspectIds),
-    });
+    })).app;
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
     const turnId = createCompleteTurnWithToolCall(app, targetId);
@@ -5683,7 +5683,7 @@ describe("analysis launch", () => {
     const turnRef = { id: "" };
     let callCount = 0;
 
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++;
@@ -5803,7 +5803,7 @@ describe("analysis launch", () => {
         },
       },
       mcpGateway: makeAnalysisMcpGateway(inspectIds),
-    });
+    })).app;
 
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
@@ -5860,7 +5860,7 @@ describe("analysis launch", () => {
     const turnRef = { id: "" };
     let callCount = 0;
 
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++;
@@ -5942,7 +5942,7 @@ describe("analysis launch", () => {
         },
       },
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
 
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
@@ -5994,7 +5994,7 @@ describe("analysis launch", () => {
     const turnRef = { id: "" };
     let callCount = 0;
 
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++;
@@ -6090,7 +6090,7 @@ describe("analysis launch", () => {
         },
       },
       mcpGateway: makeAnalysisMcpGateway(inspectIds),
-    });
+    })).app;
 
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
@@ -6143,7 +6143,7 @@ describe("analysis launch", () => {
     const turnRef = { id: "" };
     let callCount = 0;
 
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++;
@@ -6228,7 +6228,7 @@ describe("analysis launch", () => {
         },
       },
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
 
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
@@ -6314,7 +6314,7 @@ describe("analysis launch", () => {
     dataDir = config.dataDir;
     const turnRef = { id: "" };
 
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async createChatCompletion() {
           return {
@@ -6388,7 +6388,7 @@ describe("analysis launch", () => {
         },
       },
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
 
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
@@ -6443,7 +6443,7 @@ describe("analysis launch", () => {
     const turnRef = { id: "" };
     let callCount = 0;
 
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++;
@@ -6532,7 +6532,7 @@ describe("analysis launch", () => {
         },
       },
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
 
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
@@ -6586,10 +6586,10 @@ describe("analysis launch", () => {
   it("single-step execute (?single_step=true) advances exactly one cursor step", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
     const turnId = createCompleteTurn(app, targetId);
@@ -6649,7 +6649,7 @@ describe("analysis launch", () => {
       allowFirstLmCallToFinish = resolve;
     });
 
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         async createChatCompletion() {
           const idx = callCount++;
@@ -6754,7 +6754,7 @@ describe("analysis launch", () => {
         },
       },
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
 
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
@@ -6840,10 +6840,10 @@ describe("analysis launch", () => {
   it("single-step execute on non-analysis session returns 400", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
     const primaryId = await createReadySession(app);
 
     const res = await app.inject({
@@ -6856,10 +6856,10 @@ describe("analysis launch", () => {
   it("full execute (no single_step flag) runs the complete workflow", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, {
+    app = (await buildBackendApp(config, {
       chatCompletionGateway: makeAnalysisMockGateway(),
       mcpGateway: makeAnalysisMcpGateway(),
-    });
+    })).app;
     const targetId = await createReadySession(app);
     await createAnalysisModelConfig(app);
     const turnId = createCompleteTurn(app, targetId);

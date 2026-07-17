@@ -145,7 +145,7 @@ describe("benchmark run", () => {
   it("runs a benchmark end to end and computes a report", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, stubGateways());
+    app = (await buildBackendApp(config, stubGateways())).app;
     await seedModelConfig(app);
 
     // Create a benchmark.
@@ -253,7 +253,7 @@ describe("benchmark run", () => {
   it("runs via the snake_case catalog operations and reports progress", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, stubGateways());
+    app = (await buildBackendApp(config, stubGateways())).app;
     await seedModelConfig(app);
 
     // The catalog ops (CLI/MCP surface) are mounted under /api/operations/*.
@@ -321,7 +321,7 @@ describe("benchmark run", () => {
   it("surfaces benchmark errors as HTTP statuses", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config, stubGateways());
+    app = (await buildBackendApp(config, stubGateways())).app;
     await seedModelConfig(app);
 
     // Unknown run id → 404.
@@ -424,7 +424,7 @@ describe("benchmark run", () => {
         },
       },
     };
-    app = await buildBackendApp(config, gateways);
+    app = (await buildBackendApp(config, gateways)).app;
     await seedModelConfig(app);
 
     const benchmarkId = (

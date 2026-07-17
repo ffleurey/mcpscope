@@ -261,7 +261,7 @@ describe("benchmark run control (pause / stop / resume)", () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
     const ctl = controllableGateways();
-    app = await buildBackendApp(config, ctl.gateways);
+    app = (await buildBackendApp(config, ctl.gateways)).app;
     await seedModelConfig(app);
 
     const { runId } = await setupRun(3);
@@ -316,7 +316,7 @@ describe("benchmark run control (pause / stop / resume)", () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
     const ctl = controllableGateways();
-    app = await buildBackendApp(config, ctl.gateways);
+    app = (await buildBackendApp(config, ctl.gateways)).app;
     await seedModelConfig(app);
 
     const { runId } = await setupRun(2);
@@ -350,7 +350,7 @@ describe("benchmark run control (pause / stop / resume)", () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
     const ctl = controllableGateways();
-    app = await buildBackendApp(config, ctl.gateways);
+    app = (await buildBackendApp(config, ctl.gateways)).app;
     await seedModelConfig(app);
 
     const { runId } = await setupRun(2);
@@ -393,7 +393,7 @@ describe("benchmark run control (pause / stop / resume)", () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
     const ctl = controllableGateways();
-    app = await buildBackendApp(config, ctl.gateways);
+    app = (await buildBackendApp(config, ctl.gateways)).app;
     await seedModelConfig(app);
 
     const { runId } = await setupRun(2);
@@ -416,7 +416,7 @@ describe("benchmark run control (pause / stop / resume)", () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
     const hung = hungTurnGateways();
-    app = await buildBackendApp(config, hung.gateways);
+    app = (await buildBackendApp(config, hung.gateways)).app;
     await seedModelConfig(app);
 
     const { runId } = await setupRun(1);

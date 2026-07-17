@@ -66,7 +66,7 @@ afterEach(async () => {
 async function makeApp() {
   const config = makeTestConfig();
   dataDir = config.dataDir;
-  app = await buildBackendApp(config);
+  app = (await buildBackendApp(config)).app;
   return { app, config };
 }
 

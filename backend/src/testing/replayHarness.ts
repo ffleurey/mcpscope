@@ -604,7 +604,7 @@ export async function replayTrace(
   trace: SessionTraceBundle,
 ): Promise<ReplayResult> {
   const sqlitePath = makeSqlitePath();
-  const app = await buildBackendApp(
+  const { app } = await buildBackendApp(
     {
       host: "127.0.0.1",
       port: 3066,

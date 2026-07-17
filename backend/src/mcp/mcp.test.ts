@@ -202,14 +202,14 @@ describe("MCP structured output — outputSchema defined for all operations", ()
 describe("MCP HTTP endpoint execution", () => {
   it("responds to JSON-RPC tools/list and returns every mcpscope tool in the catalog", async () => {
     const dataDir = `.tmp-test-data/${crypto.randomUUID()}`;
-    const app = await buildBackendApp({
+    const app = (await buildBackendApp({
       host: "127.0.0.1",
       port: 3066,
       corsOrigin: true,
       dataDir,
       sqlitePath: `${dataDir}/test.db`,
       maxToolRounds: 5,
-    });
+    })).app;
 
     try {
       const listToolsRequest = {

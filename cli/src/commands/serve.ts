@@ -110,11 +110,13 @@ export async function runServe(opts: ServeOptions): Promise<void> {
     getBackendConfig: () => BackendConfigShape;
   };
   const { buildBackendApp } = (await import(pathToFileURL(appPath).href)) as {
-    buildBackendApp: (config: BackendConfigShape) => Promise<FastifyLike>;
+    // Minimal structural view of the backend's BackendHandle — only the fields
+    // used here, to avoid importing backend types.
+    buildBackendApp: (config: BackendConfigShape) => Promise<{ app: FastifyLike }>;
   };
 
   const config = getBackendConfig();
-  const app = await buildBackendApp(config);
+  const { app } = await buildBackendApp(config);
   await app.listen({ host: config.host, port: config.port });
 
   const displayHost =

@@ -659,7 +659,7 @@ describe("session metadata API", () => {
   it("GET /api/sessions includes analysis sessions and their failure metadata", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     // Create a primary session
     const createRes = await app.inject({
@@ -782,7 +782,7 @@ describe("session metadata API", () => {
   it("GET /api/sessions returns session_type in list payload", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     await app.inject({
       method: "POST",
@@ -806,7 +806,7 @@ describe("session metadata API", () => {
   it("GET /api/lookup/:id exposes session_type and parent_ref in session payload", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     // Insert a primary session
     const ts = Date.now();
@@ -873,7 +873,7 @@ describe("session metadata API", () => {
   it("GET /api/sessions/:sessionId/children returns session children", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const ts = Date.now();
     createSessionRecord(app.backendDb.connection, {
@@ -930,7 +930,7 @@ describe("session metadata API", () => {
   it("GET /api/lookup and retry-failed-step expose and reset failed analysis sessions", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const ts = Date.now();
     createSessionRecord(app.backendDb.connection, {
@@ -1148,7 +1148,7 @@ describe("session metadata API", () => {
   it("GET /api/sessions/:sessionId/children returns 404 for unknown session", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const res = await app.inject({
       method: "GET",
@@ -1160,7 +1160,7 @@ describe("session metadata API", () => {
   it("DELETE /api/sessions/:sessionId cascades to session children", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const ts = Date.now();
     createSessionRecord(app.backendDb.connection, {
@@ -1217,7 +1217,7 @@ describe("session metadata API", () => {
   it("session_type and parent_ref appear in trace payload", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
-    app = await buildBackendApp(config);
+    app = (await buildBackendApp(config)).app;
 
     const ts = Date.now();
     createSessionRecord(app.backendDb.connection, {
