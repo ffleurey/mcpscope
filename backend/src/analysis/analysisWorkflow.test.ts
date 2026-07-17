@@ -1,24 +1,24 @@
 import fs from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
-import type { BackendDatabase } from "../persistence/db.js";
-import { openBackendDatabase } from "../persistence/db.js";
+import type { BackendDatabase } from "mcpscope-engine/persistence/db.js";
+import { openBackendDatabase } from "mcpscope-engine/persistence/db.js";
 import {
   createSessionRecord,
   insertPartRecord,
   insertRoundRecord,
   insertStepRecord,
   insertTurnRecord,
-} from "../persistence/repository.js";
+} from "mcpscope-engine/persistence/repository.js";
 import type {
   PartRecord,
   RoundRecord,
   SessionRecord,
   TurnRecord,
-} from "../domain/model.js";
-import type { ChatCompletionGateway } from "../runtime/modelTurns.js";
-import type { McpGateway } from "../runtime/toolTurns.js";
+} from "mcpscope-engine/domain/model.js";
+import type { ChatCompletionGateway } from "mcpscope-engine/runtime/modelTurns.js";
+import type { McpGateway } from "mcpscope-engine/runtime/toolTurns.js";
 import { BootstrapStep } from "./shared/bootstrapStep.js";
-import { STEP_TYPE } from "../domain/executionModel.js";
+import { STEP_TYPE } from "mcpscope-engine/domain/executionModel.js";
 import {
   getLatestArtifactBySchemaKey,
   insertJsonArtifact,
@@ -40,7 +40,7 @@ import {
 } from "./fastTool/schemas.js";
 import { SCHEMA_KEY as FULL_KEY } from "./fullSession/schemas.js";
 import { finalAnalysisReportSchema } from "./fullSession/schemas.js";
-import type { StepPersistenceRecord } from "../domain/persistenceContract.js";
+import type { StepPersistenceRecord } from "mcpscope-engine/domain/persistenceContract.js";
 import type { AnalysisSessionBase } from "./analysisSessionBase.js";
 
 function makeTestDatabase(): BackendDatabase {

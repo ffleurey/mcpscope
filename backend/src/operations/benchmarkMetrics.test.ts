@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PartRecord, TurnRecord } from "../domain/model.js";
+import type { PartRecord, TurnRecord } from "mcpscope-engine/domain/model.js";
 import {
   deriveSessionMetrics,
   evaluateSession,

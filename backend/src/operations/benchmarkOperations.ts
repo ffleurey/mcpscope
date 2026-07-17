@@ -7,8 +7,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { z } from "zod";
-import type { OperationContext } from "./context.js";
-import { OperationError } from "./errors.js";
+import type { OperationContext } from "mcpscope-engine/operations/context.js";
+import { OperationError } from "mcpscope-engine/operations/errors.js";
+import { registerInspectIdResolver } from "mcpscope-engine/operations/inspect.js";
+import { registerOperationExtension } from "mcpscope-engine/operations/catalog.js";
 import {
   createBenchmarkEntry,
   listBenchmarkEntries,
@@ -41,14 +43,14 @@ import {
   getBenchmarkEvaluation,
   listBenchmarkEvaluationsByRun,
 } from "../persistence/benchmarkRepository.js";
-import { getSessionRecord } from "../persistence/repository.js";
+import { getSessionRecord } from "mcpscope-engine/persistence/repository.js";
 import {
   rubricCriterionSchema,
   type BenchmarkRecord,
   type BenchmarkCaseRecord,
   type BenchmarkRunRecord,
   type BenchmarkEvaluationRecord,
-} from "../domain/model.js";
+} from "mcpscope-engine/domain/model.js";
 import type {
   RunReport,
   CaseReport,
@@ -597,6 +599,16 @@ export function resolveBenchmarkInspect(
     };
   }
   return null;
+}
+
+/**
+ * Register the benchmark-family resolver (B-/R-/E- IDs) in the engine's
+ * inspect-ID resolver registry so `inspect` resolves benchmark objects without
+ * importing benchmark code. Called by the workbench at startup
+ * (`buildBackendApp`), mirroring `registerAnalysisSessionExecutor()`.
+ */
+export function registerBenchmarkInspectResolver(): void {
+  registerInspectIdResolver("benchmark", resolveBenchmarkInspect);
 }
 
 // ── Shared zod output sub-shapes ─────────────────────────────────────────────
@@ -1443,3 +1455,32 @@ export const benchmarkEvaluationControlOperation = {
     return { evaluation: evaluationToSnake(evaluation) };
   },
 };
+
+/**
+ * Register the benchmark operation family in the engine's operation catalog
+ * (keyed, idempotent — appended after the engine's chat-path operations).
+ * Called from `buildBackendApp` at startup, before the MCP/CLI surfaces
+ * consume the catalog. Tests that use the full catalog without an app must
+ * call this in their setup, mirroring `registerBenchmarkInspectResolver()`.
+ */
+export function registerBenchmarkOperations(): void {
+  registerOperationExtension("benchmark", [
+    benchmarkCreateOperation,
+    benchmarkListOperation,
+    benchmarkInspectOperation,
+    benchmarkAddCaseOperation,
+    benchmarkAddCaseFromSessionOperation,
+    benchmarkUpdateCaseOperation,
+    benchmarkDeleteCaseOperation,
+    benchmarkDeleteOperation,
+    benchmarkRunOperation,
+    benchmarkRunStatusOperation,
+    benchmarkRunReportOperation,
+    benchmarkRunControlOperation,
+    benchmarkDeleteRunOperation,
+    benchmarkEvaluateOperation,
+    benchmarkRunEvaluationsOperation,
+    benchmarkEvaluationControlOperation,
+    benchmarkDeleteEvaluationOperation,
+  ]);
+}

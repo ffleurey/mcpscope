@@ -3,7 +3,7 @@
 // Mirrors the runtime CRUD style: inline prepared statements + row<->record mappers.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { BackendConnection } from "./connection.js";
+import type { BackendConnection } from "mcpscope-engine/persistence/connection.js";
 import type {
   BenchmarkRecord,
   BenchmarkCaseRecord,
@@ -12,7 +12,7 @@ import type {
   BenchmarkEvaluationRecord,
   BenchmarkEvaluationSession,
   RubricCriterion,
-} from "../domain/model.js";
+} from "mcpscope-engine/domain/model.js";
 
 // ── benchmarks ────────────────────────────────────────────────────────────────
 

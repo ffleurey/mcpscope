@@ -12,9 +12,9 @@ import fs from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildBackendApp } from "../app.js";
-import { openBackendDatabase } from "../persistence/db.js";
+import { openBackendDatabase } from "mcpscope-engine/persistence/db.js";
 import { createBenchmarkRun } from "../persistence/benchmarkRepository.js";
-import type { BenchmarkRunRecord } from "../domain/model.js";
+import type { BenchmarkRunRecord } from "mcpscope-engine/domain/model.js";
 
 function makeTestConfig() {
   const dataDir = `.tmp-test-data/${crypto.randomUUID()}`;

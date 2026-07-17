@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { runInTransaction } from "../persistence/connection.js";
+import { runInTransaction } from "mcpscope-engine/persistence/connection.js";
 import { apiError } from "../errors.js";
 import {
   deleteSessionRecord,
@@ -12,7 +12,7 @@ import {
   updatePartRecord,
   updateSessionAnalysisState,
   updateSessionRecord,
-} from "../persistence/repository.js";
+} from "mcpscope-engine/persistence/repository.js";
 import {
   createOperation,
   inspectOperation,
@@ -27,14 +27,14 @@ import {
   launchAnalysisSessionOperation,
   launchPrimarySessionOperation,
 } from "../operations/internal.js";
-import { renderInspect } from "../inspect/renderInspect.js";
+import { renderInspect } from "mcpscope-engine/inspect/renderInspect.js";
 import {
   buildAnalysisSystemPrompt,
   normalizeAnalysisGoal,
 } from "../analysis/systemPrompt.js";
 import type { RouteDeps } from "./types.js";
-import type { ChatCompletionGateway } from "../runtime/modelTurns.js";
-import type { McpGateway } from "../runtime/toolTurns.js";
+import type { ChatCompletionGateway } from "mcpscope-engine/runtime/modelTurns.js";
+import type { McpGateway } from "mcpscope-engine/runtime/toolTurns.js";
 import {
   getAnalysisWorkflowKindFromSteps,
   getLatestAnalysisDiagnosticSummaryForSession,

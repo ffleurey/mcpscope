@@ -1,5 +1,5 @@
-import type { AnalysisStreamEventSink } from '../runtime/streamEvents.js'
-import type { StepTypeKey } from '../domain/executionModel.js'
+import type { AnalysisStreamEventSink } from '../analysis/analysisStreamEvents.js'
+import type { StepTypeKey } from 'mcpscope-engine/domain/executionModel.js'
 
 export interface StepContext {
   sessionId: string

@@ -8,16 +8,16 @@
 
 import { describe, expect, it } from "vitest";
 import crypto from "node:crypto";
-import { openBackendDatabase } from "../persistence/db.js";
+import { openBackendDatabase } from "mcpscope-engine/persistence/db.js";
 import {
   createSessionRecord,
   insertStepRecord,
-} from "../persistence/repository.js";
+} from "mcpscope-engine/persistence/repository.js";
 import { insertJsonArtifact } from "./artifactRepository.js";
 import { SCHEMA_KEY } from "./schemas.js";
-import type { BackendDatabase } from "../persistence/db.js";
-import type { StepTypeKey } from "../domain/executionModel.js";
-import type { StepResult } from "../domain/executionModel.js";
+import type { BackendDatabase } from "mcpscope-engine/persistence/db.js";
+import type { StepTypeKey } from "mcpscope-engine/domain/executionModel.js";
+import type { StepResult } from "mcpscope-engine/domain/executionModel.js";
 
 function makeDb(): BackendDatabase {
   return openBackendDatabase(`/tmp/test-tree-${crypto.randomUUID()}.db`);

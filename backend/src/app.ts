@@ -4,26 +4,34 @@ import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { BackendConfig } from "./config.js";
-import { openBackendDatabase } from "./persistence/db.js";
-import { recoverInterruptedState } from "./persistence/repository.js";
-import { getLoadedContextLength } from "./services/lmstudio/client.js";
+import type { BackendConfig } from "mcpscope-engine/config.js";
+import { openBackendDatabase } from "mcpscope-engine/persistence/db.js";
+import { registerBenchmarkSchema } from "./persistence/benchmarkSchema.js";
+import { registerBenchmarkRecovery } from "./persistence/benchmarkRecovery.js";
+import { recoverInterruptedState } from "mcpscope-engine/persistence/repository.js";
+import { getLoadedContextLength } from "mcpscope-engine/services/lmstudio/client.js";
 import {
   createChatCompletion,
   probePromptTokens,
   probePromptTokensDetailed,
   streamChatCompletion,
-} from "./services/openai/client.js";
+} from "mcpscope-engine/services/openai/client.js";
 import {
   callMcpTool,
   initializeMcpSession,
   listMcpTools,
-} from "./services/mcp/httpClient.js";
+} from "mcpscope-engine/services/mcp/httpClient.js";
 import { apiError } from "./errors.js";
-import type { ChatCompletionGateway } from "./runtime/modelTurns.js";
-import { withAutoModelSwap } from "./runtime/autoModelSwapGateway.js";
-import type { McpGateway } from "./runtime/toolTurns.js";
+import type { ChatCompletionGateway } from "mcpscope-engine/runtime/modelTurns.js";
+import { withAutoModelSwap } from "mcpscope-engine/runtime/autoModelSwapGateway.js";
+import type { McpGateway } from "mcpscope-engine/runtime/toolTurns.js";
 import { registerMcpTransport } from "./mcp/index.js";
+import { registerAnalysisSessionPresenter } from "./analysis/analysisSessionPresentation.js";
+import { registerAnalysisSessionExecutor } from "./analysis/analysisSessionExecutor.js";
+import {
+  registerBenchmarkInspectResolver,
+  registerBenchmarkOperations,
+} from "./operations/benchmarkOperations.js";
 import { registerCompanionServers } from "./companions/index.js";
 import {
   OperationError,
@@ -31,20 +39,17 @@ import {
   operationErrorToHttpStatus,
   type OperationContext,
 } from "./operations/index.js";
-import { ExecutionScheduler } from "./runtime/scheduler.js";
+import { ExecutionScheduler } from "mcpscope-engine/runtime/scheduler.js";
 import { RunControlRegistry } from "./runtime/runControl.js";
-import type { SchedulerEvent } from "./runtime/schedulerTypes.js";
+import type { SchedulerEvent } from "mcpscope-engine/runtime/schedulerTypes.js";
 import { registerConfigurationRoutes } from "./routes/configurationRoutes.js";
 import { registerBenchmarkRoutes } from "./routes/benchmarkRoutes.js";
 import { registerSchedulerRoutes } from "./routes/schedulerRoutes.js";
 import { registerSessionRoutes } from "./routes/sessionRoutes.js";
 import { registerSystemRoutes } from "./routes/systemRoutes.js";
 import { registerTraceRoutes } from "./routes/traceRoutes.js";
-import { computeLifecycleState } from "./operations/lifecycleState.js";
-import {
-  initializeConfigStore,
-  ConfigFileError,
-} from "./config/configStore.js";
+import { computeLifecycleState } from "mcpscope-engine/operations/lifecycleState.js";
+import { ConfigStore, ConfigFileError } from "mcpscope-engine/config/configStore.js";
 
 interface RuntimeDependencies {
   chatCompletionGateway: ChatCompletionGateway;
@@ -64,20 +69,7 @@ export interface BackendHandle {
 
 export async function buildBackendApp(
   config: BackendConfig,
-  dependencies: RuntimeDependencies = {
-    chatCompletionGateway: withAutoModelSwap({
-      createChatCompletion,
-      streamChatCompletion,
-      probePromptTokens,
-      probePromptTokensDetailed,
-      getLoadedContextLength,
-    }),
-    mcpGateway: {
-      initializeSession: initializeMcpSession,
-      listTools: listMcpTools,
-      callTool: callMcpTool,
-    },
-  },
+  dependencies?: RuntimeDependencies,
 ): Promise<BackendHandle> {
   const app = Fastify({
     logger: true,
@@ -135,8 +127,36 @@ export async function buildBackendApp(
     });
   }
 
+  // Workbench wiring: register the benchmark tables in the engine's
+  // schema-extension registry. MUST run before openBackendDatabase below —
+  // opening the database applies registered DDL and validates the schema.
+  registerBenchmarkSchema();
+  // Workbench wiring: recover orphaned benchmark runs/evaluations as part of
+  // the engine's startup recovery (runs inside recoverInterruptedState below;
+  // the benchmark schema is registered just above so the tables exist).
+  registerBenchmarkRecovery();
+
   const database = openBackendDatabase(config.sqlitePath);
   app.decorate("backendDb", database);
+
+  // Workbench wiring: register the analysis presenter in the engine's
+  // session-presentation registry so generic operations (list/status/
+  // lifecycle/inspect) surface analysis sessions' workflow_kind, workflow
+  // label, terminal error phase, and latest diagnostics without the engine
+  // importing analysis code.
+  registerAnalysisSessionPresenter();
+  // Workbench wiring: register the analysis session executor in the engine's
+  // session-executor registry so the scheduler can dispatch and rehydrate
+  // session_analysis jobs without the engine importing analysis code.
+  registerAnalysisSessionExecutor();
+  // Workbench wiring: register the benchmark-family ID resolver (B-/R-/E-) in
+  // the engine's inspect registry so `inspect` resolves benchmark objects
+  // without the engine importing benchmark code.
+  registerBenchmarkInspectResolver();
+  // Workbench wiring: append the benchmark operation family to the engine's
+  // operation catalog so the MCP/CLI surfaces expose it without the engine
+  // catalog importing benchmark code. Must run before registerMcpTransport.
+  registerBenchmarkOperations();
 
   // On an unclean shutdown (crash, kill, server restart mid-turn) turns and sessions
   // can be left in in-progress states. Recover them before serving any requests so
@@ -155,7 +175,8 @@ export async function buildBackendApp(
   // Control plane for long-running coordinators (benchmark/evaluation runs).
   const runControl = new RunControlRegistry(scheduler);
 
-  // Initialize the JSON-backed config store.
+  // Initialize the JSON-backed config store — owned by this app instance, so
+  // two apps in one process never share config state.
   // Default path: {dataDir}/mcpscope.config.json, override via MCPSCOPE_CONFIG_PATH.
   const configPath =
     process.env.MCPSCOPE_CONFIG_PATH ??
@@ -168,8 +189,9 @@ export async function buildBackendApp(
       "No config file found. Starting with empty configuration. Use the Settings UI to configure LM connections, model configs, and MCP server profiles.",
     );
   }
+  const configStore = new ConfigStore(configPath);
   try {
-    initializeConfigStore(configPath);
+    configStore.load();
   } catch (err) {
     if (err instanceof ConfigFileError) {
       app.log.error({ configPath, err: err.message }, "Failed to load config");
@@ -178,21 +200,47 @@ export async function buildBackendApp(
     throw err;
   }
 
+  // Default runtime gateways. The chat gateway reads the live connection list
+  // from this app's config store (auto-model-swap), so it is built after the
+  // store rather than as a parameter default.
+  const chatCompletionGateway =
+    dependencies?.chatCompletionGateway ??
+    withAutoModelSwap(
+      {
+        createChatCompletion,
+        streamChatCompletion,
+        probePromptTokens,
+        probePromptTokensDetailed,
+        getLoadedContextLength,
+      },
+      { listConnections: () => configStore.listLmConnections() },
+    );
+  const mcpGateway = dependencies?.mcpGateway ?? {
+    initializeSession: initializeMcpSession,
+    listTools: listMcpTools,
+    callTool: callMcpTool,
+  };
+
   const opCtx: OperationContext = {
     db: database,
-    chatCompletionGateway: dependencies.chatCompletionGateway,
-    mcpGateway: dependencies.mcpGateway,
+    configStore,
+    chatCompletionGateway,
+    mcpGateway,
     maxToolRounds: config.maxToolRounds,
     analysisMcpUrl,
     logger: app.log,
     scheduler,
-    runControl,
+    extensions: { runControl },
   };
   registerMcpTransport(app, opCtx);
 
   // Bundled companion MCP servers: mounted in-process at /companions/<name>/mcp
   // and surfaced as read-only built-in profiles selectable with no configuration.
-  registerCompanionServers(app, { host: config.host, port: config.port });
+  registerCompanionServers(app, {
+    host: config.host,
+    port: config.port,
+    configStore,
+  });
 
   type SchedulerExecutionPayload = Extract<
     SchedulerEvent,

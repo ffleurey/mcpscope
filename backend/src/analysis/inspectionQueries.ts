@@ -6,15 +6,15 @@
  * the existing repository functions — no MCP loop.
  */
 
-import type { BackendConnection } from "../persistence/connection.js";
+import type { BackendConnection } from "mcpscope-engine/persistence/connection.js";
 import {
   getSessionRecord,
   listStepRecordsBySession,
   listTurnRecordsBySession,
   listRoundRecordsBySession,
   listPartRecordsBySession,
-} from '../persistence/repositoryRuntime.js'
-import type { StepRecord, TurnRecord, RoundRecord, PartRecord } from '../domain/model.js'
+} from 'mcpscope-engine/persistence/repositoryRuntime.js'
+import type { StepRecord, TurnRecord, RoundRecord, PartRecord } from 'mcpscope-engine/domain/model.js'
 import type {
   SessionInfo,
   SetupInfo,

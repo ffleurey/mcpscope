@@ -13,17 +13,17 @@
  * - No walk cursor, no flattened hook list, no shared mutable state
  */
 
-import type { BackendDatabase } from "../persistence/db.js";
-import type { ChatCompletionGateway } from "../runtime/modelTurns.js";
-import type { McpGateway } from "../runtime/toolTurns.js";
+import type { BackendDatabase } from "mcpscope-engine/persistence/db.js";
+import type { ChatCompletionGateway } from "mcpscope-engine/runtime/modelTurns.js";
+import type { McpGateway } from "mcpscope-engine/runtime/toolTurns.js";
 import {
   getSessionRecord,
   updateSessionAnalysisState,
-} from "../persistence/repository.js";
-import type { AnalysisStreamEventSink } from "../runtime/streamEvents.js";
+} from "mcpscope-engine/persistence/repository.js";
+import type { AnalysisStreamEventSink } from "./analysisStreamEvents.js";
 import type { AnalysisWorkflowInput } from "./analysisWorkflowInput.js";
 import type { StepContext } from "../workflow/stepContext.js";
-import { type StepTypeKey } from "../domain/executionModel.js";
+import { type StepTypeKey } from "mcpscope-engine/domain/executionModel.js";
 import { type AnalysisCommand } from "../workflow/workflowStep.js";
 import {
   insertJsonArtifact,
@@ -41,8 +41,8 @@ import {
   listPartRecordsBySession,
   listRoundRecordsBySession,
   listTurnRecordsBySession,
-} from "../persistence/repository.js";
-import type { PartRecord } from "../domain/model.js";
+} from "mcpscope-engine/persistence/repository.js";
+import type { PartRecord } from "mcpscope-engine/domain/model.js";
 
 import crypto from "node:crypto";
 function uuid(): string {

@@ -1,10 +1,25 @@
 import fs from "node:fs";
 import { describe, it, expect } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { operationCatalog, operationList } from "../operations/index.js";
+import {
+  getOperationCatalog,
+  getOperationList,
+  createOperation,
+  sendOperation,
+  statusOperation,
+  listOperation,
+} from "../operations/index.js";
+import { registerBenchmarkOperations } from "../operations/benchmarkOperations.js";
 import { TOOL_PREFIX, createMcpServer } from "./index.js";
 import type { OperationContext } from "./index.js";
 import { buildBackendApp } from "../app.js";
+
+// The workbench appends the benchmark operations to the catalog at startup
+// (buildBackendApp); these unit tests inspect the full catalog without an app,
+// so register them here (idempotent, mirrors registerBenchmarkInspectResolver).
+registerBenchmarkOperations();
+const operationList = getOperationList();
+const operationCatalog = getOperationCatalog();
 
 const EXPECTED_OPERATION_IDS = [
   "list",
@@ -101,7 +116,7 @@ describe("CLI/MCP parity — backend operation catalog is the source of truth", 
 describe("backend result shape contracts — snake_case throughout", () => {
   it("create result shape has snake_case fields (not camelCase)", () => {
     type CreateResult = Awaited<
-      ReturnType<typeof operationCatalog.create.execute>
+      ReturnType<typeof createOperation.execute>
     >;
     type Session = CreateResult["session"];
     const fields: Array<keyof Session> = [
@@ -122,7 +137,7 @@ describe("backend result shape contracts — snake_case throughout", () => {
   });
 
   it("send result shape has session_id (snake_case)", () => {
-    type SendResult = Awaited<ReturnType<typeof operationCatalog.send.execute>>;
+    type SendResult = Awaited<ReturnType<typeof sendOperation.execute>>;
     const fields: Array<keyof SendResult> = [
       "api_version",
       "session_id",
@@ -134,7 +149,7 @@ describe("backend result shape contracts — snake_case throughout", () => {
 
   it("status result shape has active_turn (snake_case)", () => {
     type StatusResult = Awaited<
-      ReturnType<typeof operationCatalog.status.execute>
+      ReturnType<typeof statusOperation.execute>
     >;
     const fields: Array<keyof StatusResult> = [
       "api_version",
@@ -146,7 +161,7 @@ describe("backend result shape contracts — snake_case throughout", () => {
   });
 
   it("list result has api_version 1, sessions with snake_case fields", () => {
-    type ListResult = Awaited<ReturnType<typeof operationCatalog.list.execute>>;
+    type ListResult = Awaited<ReturnType<typeof listOperation.execute>>;
     type Session = ListResult["sessions"][number];
     const sessionFields: Array<keyof Session> = [
       "id",
@@ -177,23 +192,23 @@ describe("MCP structured output — outputSchema defined for all operations", ()
   });
 
   it("list outputSchema has api_version and sessions fields", () => {
-    expect(operationCatalog.list.outputSchema).toHaveProperty("api_version");
-    expect(operationCatalog.list.outputSchema).toHaveProperty("sessions");
+    expect(listOperation.outputSchema).toHaveProperty("api_version");
+    expect(listOperation.outputSchema).toHaveProperty("sessions");
   });
 
   it("create outputSchema has api_version and session fields", () => {
-    expect(operationCatalog.create.outputSchema).toHaveProperty("api_version");
-    expect(operationCatalog.create.outputSchema).toHaveProperty("session");
+    expect(createOperation.outputSchema).toHaveProperty("api_version");
+    expect(createOperation.outputSchema).toHaveProperty("session");
   });
 
   it("send outputSchema has session_id (snake_case)", () => {
-    expect(operationCatalog.send.outputSchema).toHaveProperty("session_id");
-    expect(operationCatalog.send.outputSchema).not.toHaveProperty("sessionId");
+    expect(sendOperation.outputSchema).toHaveProperty("session_id");
+    expect(sendOperation.outputSchema).not.toHaveProperty("sessionId");
   });
 
   it("status outputSchema has active_turn (snake_case)", () => {
-    expect(operationCatalog.status.outputSchema).toHaveProperty("active_turn");
-    expect(operationCatalog.status.outputSchema).not.toHaveProperty(
+    expect(statusOperation.outputSchema).toHaveProperty("active_turn");
+    expect(statusOperation.outputSchema).not.toHaveProperty(
       "activeTurn",
     );
   });

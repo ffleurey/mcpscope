@@ -9,7 +9,7 @@ import fs from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildBackendApp } from "./app.js";
-import { validateSessionParent } from "./domain/sessionValidation.js";
+import { validateSessionParent } from "mcpscope-engine/domain/sessionValidation.js";
 import {
   createSessionRecord,
   deleteSessionRecord,
@@ -22,16 +22,16 @@ import {
   listSessionSummaries,
   updateSessionAnalysisState,
   updateSessionRecord,
-} from "./persistence/repository.js";
-import { openBackendDatabase } from "./persistence/db.js";
-import { validateSchema } from "./persistence/schema.js";
-import { importTraceBundle } from "./runtime/traceImport.js";
+} from "mcpscope-engine/persistence/repository.js";
+import { openBackendDatabase } from "mcpscope-engine/persistence/db.js";
+import { validateSchema } from "mcpscope-engine/persistence/schema.js";
+import { importTraceBundle } from "mcpscope-engine/runtime/traceImport.js";
 import { insertJsonArtifact } from "./analysis/artifactRepository.js";
 import { SCHEMA_KEY } from "./analysis/schemas.js";
-import { stepTypeKey } from "./domain/executionModel.js";
-import { DEFAULT_MAX_TOOL_ROUNDS } from "./domain/model.js";
-import type { PartRecord } from "./domain/model.js";
-import type { StepPersistenceRecord } from "./domain/persistenceContract.js";
+import { stepTypeKey } from "mcpscope-engine/domain/executionModel.js";
+import { DEFAULT_MAX_TOOL_ROUNDS } from "mcpscope-engine/domain/model.js";
+import type { PartRecord } from "mcpscope-engine/domain/model.js";
+import type { StepPersistenceRecord } from "mcpscope-engine/domain/persistenceContract.js";
 
 const RUNTIME_TABLES = [
   "sessions",

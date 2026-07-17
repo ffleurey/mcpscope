@@ -38,6 +38,20 @@ npm version minor    # 1.0.0 → 1.1.0  (new features)
 npm version major    # 1.0.0 → 2.0.0  (breaking changes)
 ```
 
+**Lockstep with `mcpscope-engine`.** The repo publishes two packages: the root
+`mcpscope` and the `packages/engine` workspace (`mcpscope-engine`), versioned in
+lockstep. After bumping the root, set the engine to the **same** version and
+update the root's exact dependency pin, so the three stay aligned:
+
+```bash
+npm version <patch|minor|major> --workspace mcpscope-engine --no-git-tag-version
+# then set root dependencies["mcpscope-engine"] to the new version and amend the tag commit
+```
+
+The release workflow asserts all three match the tag and publishes the engine
+**before** the root (the root depends on `mcpscope-engine@<same version>`), so a
+mismatch fails the release rather than shipping a broken dependency.
+
 ### 3. Push the tag
 
 ```bash

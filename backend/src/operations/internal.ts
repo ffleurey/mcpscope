@@ -2,15 +2,15 @@ export {
   createExplicitOperation,
   createExplicitInputSchema,
   createExplicitOutputSchema,
-} from './createExplicit.js'
-export type { CreateExplicitInput, CreateExplicitResult } from './createExplicit.js'
+} from 'mcpscope-engine/operations/createExplicit.js'
+export type { CreateExplicitInput, CreateExplicitResult } from 'mcpscope-engine/operations/createExplicit.js'
 
 export {
   launchPrimarySessionOperation,
   launchPrimarySessionInputSchema,
   launchPrimarySessionOutputSchema,
-} from './launchPrimarySession.js'
-export type { LaunchPrimarySessionInput, LaunchPrimarySessionResult } from './launchPrimarySession.js'
+} from 'mcpscope-engine/operations/launchPrimarySession.js'
+export type { LaunchPrimarySessionInput, LaunchPrimarySessionResult } from 'mcpscope-engine/operations/launchPrimarySession.js'
 
 export {
   launchAnalysisSessionOperation,

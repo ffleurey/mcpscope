@@ -4,7 +4,7 @@
 // No DB, no LLM — computed on read from already-persisted session state.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { PartRecord, TurnRecord } from "../domain/model.js";
+import type { PartRecord, TurnRecord } from "mcpscope-engine/domain/model.js";
 
 export interface PerToolCounts {
   calls: number;

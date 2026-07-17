@@ -1,11 +1,11 @@
-import type { BackendDatabase } from '../persistence/db.js'
+import type { BackendDatabase } from 'mcpscope-engine/persistence/db.js'
 import {
   getSessionRecord,
   getTurnRecord,
   listPartRecordsBySession,
   listRoundRecordsBySession,
   listTurnRecordsBySession,
-} from '../persistence/repository.js'
+} from 'mcpscope-engine/persistence/repository.js'
 import {
   type AnalysisSessionState,
   type AnalysisTarget,

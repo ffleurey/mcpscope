@@ -1,9 +1,9 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
-import type { BackendConfig } from '../config.js'
+import type { BackendConfig } from 'mcpscope-engine/config.js'
 import type { OperationContext } from '../operations/index.js'
-import type { ExecutionScheduler } from '../runtime/scheduler.js'
-import type { SchedulerEvent } from '../runtime/schedulerTypes.js'
-import type { openBackendDatabase } from '../persistence/db.js'
+import type { ExecutionScheduler } from 'mcpscope-engine/runtime/scheduler.js'
+import type { SchedulerEvent } from 'mcpscope-engine/runtime/schedulerTypes.js'
+import type { openBackendDatabase } from 'mcpscope-engine/persistence/db.js'
 export type BackendDatabaseHandle = ReturnType<typeof openBackendDatabase>
 
 export interface RouteDeps {

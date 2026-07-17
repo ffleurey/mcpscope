@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { operationList } from "../../../backend/src/operations/index.ts";
+import { getOperationList } from "../../../backend/src/operations/index.ts";
+import { registerBenchmarkOperations } from "../../../backend/src/operations/benchmarkOperations.ts";
+
+// The workbench appends the benchmark operations to the catalog at startup
+// (buildBackendApp); this parity test inspects the full catalog without an
+// app, so register them here (idempotent).
+registerBenchmarkOperations();
+const operationList = getOperationList();
 
 const expectedCommandIds = [
   "list",

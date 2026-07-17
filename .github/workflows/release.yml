@@ -151,14 +151,40 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # RELEASING.md: package.json version MUST match the release tag.
-      - name: Assert package version matches the tag
+      # RELEASING.md: package.json version MUST match the release tag. The
+      # engine is versioned in lockstep, and the root package pins the engine
+      # at the exact same version — assert all three so a botched bump fails
+      # here rather than shipping a mismatched dependency.
+      - name: Assert package versions match the tag (lockstep)
         run: |
           tag="${GITHUB_REF_NAME#v}"
           version="$(node -p "require('./package.json').version")"
+          engineVersion="$(node -p "require('./packages/engine/package.json').version")"
+          enginePin="$(node -p "require('./package.json').dependencies['mcpscope-engine']")"
           if [ "$tag" != "$version" ]; then
             echo "Tag v$tag does not match package.json version $version" >&2
             exit 1
+          fi
+          if [ "$tag" != "$engineVersion" ]; then
+            echo "Tag v$tag does not match mcpscope-engine version $engineVersion" >&2
+            exit 1
+          fi
+          if [ "$enginePin" != "$version" ]; then
+            echo "Root depends on mcpscope-engine@$enginePin but should pin $version (lockstep)" >&2
+            exit 1
+          fi
+
+      # Publish the engine FIRST: the `mcpscope` package depends on
+      # `mcpscope-engine@<same version>` (lockstep), so it must already be on
+      # npm when the root package is published. The engine's `prepublishOnly`
+      # runs its own build. Versions are kept in lockstep (RELEASING.md).
+      - name: Publish engine (skips a version already on npm)
+        run: |
+          version="$(node -p "require('./packages/engine/package.json').version")"
+          if npm view "mcpscope-engine@$version" version >/dev/null 2>&1; then
+            echo "mcpscope-engine@$version is already on npm — skipping publish."
+          else
+            npm publish --workspace mcpscope-engine --access public
           fi
 
       # `prepublishOnly` runs `build:all` (frontend + backend + cli), producing

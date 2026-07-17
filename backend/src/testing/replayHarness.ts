@@ -2,18 +2,18 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { buildBackendApp } from "../app.js";
-import type { RawExchangeRecord, SessionRecord } from "../domain/model.js";
-import type { SessionTraceBundle } from "../domain/trace.js";
-export type { SessionTraceBundle } from "../domain/trace.js";
+import type { RawExchangeRecord, SessionRecord } from "mcpscope-engine/domain/model.js";
+import type { SessionTraceBundle } from "mcpscope-engine/domain/trace.js";
+export type { SessionTraceBundle } from "mcpscope-engine/domain/trace.js";
 import {
   parseChatCompletionStream,
   type AssistantSegment,
   type OaiChatCompletionResponse,
   type PromptProbeResult,
   type OaiStreamedChatCompletionResult,
-} from "../services/openai/client.js";
-import type { McpGateway } from "../runtime/toolTurns.js";
-import type { ChatCompletionGateway } from "../runtime/modelTurns.js";
+} from "mcpscope-engine/services/openai/client.js";
+import type { McpGateway } from "mcpscope-engine/runtime/toolTurns.js";
+import type { ChatCompletionGateway } from "mcpscope-engine/runtime/modelTurns.js";
 
 type RawExchangePair = {
   request: RawExchangeRecord;

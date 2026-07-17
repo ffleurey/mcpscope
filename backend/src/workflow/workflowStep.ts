@@ -1,11 +1,11 @@
-import type { BackendDatabase } from '../persistence/db.js'
-import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
-import type { McpGateway } from '../runtime/toolTurns.js'
-import { insertStepRecord, getNextChildIndex, updateStepRecord } from '../persistence/repository.js'
-import { formatStepId } from '../domain/hierarchicalIds.js'
-import type { StepPersistenceRecord } from '../domain/persistenceContract.js'
+import type { BackendDatabase } from 'mcpscope-engine/persistence/db.js'
+import type { ChatCompletionGateway } from 'mcpscope-engine/runtime/modelTurns.js'
+import type { McpGateway } from 'mcpscope-engine/runtime/toolTurns.js'
+import { insertStepRecord, getNextChildIndex, updateStepRecord } from 'mcpscope-engine/persistence/repository.js'
+import { formatStepId } from 'mcpscope-engine/domain/hierarchicalIds.js'
+import type { StepPersistenceRecord } from 'mcpscope-engine/domain/persistenceContract.js'
 import type { StepContext } from './stepContext.js'
-import type { StepResult, StepTypeKey } from '../domain/executionModel.js'
+import type { StepResult, StepTypeKey } from 'mcpscope-engine/domain/executionModel.js'
 
 function now(): number { return Date.now() }
 

@@ -22,7 +22,7 @@
  * orphaned runs are reconciled to 'stopped' at startup and recovered via resume.
  */
 
-import type { ExecutionScheduler } from './scheduler.js'
+import type { ExecutionScheduler } from 'mcpscope-engine/runtime/scheduler.js'
 
 /** Thrown by checkpoint() when the run was stopped — coordinators catch this to unwind cleanly. */
 export class RunStoppedError extends Error {
@@ -184,5 +184,19 @@ export class RunControlRegistry {
   /** Stop a live run. Returns false if no live controller exists. */
   stop(runId: string): boolean {
     return this.controllers.get(runId)?.requestStop() ?? false
+  }
+}
+
+// The engine's OperationContext knows nothing about run control (a workbench
+// concern); this module contributes the typed `extensions.runControl` slot via
+// declaration merging. Any module importing run control sees the merged type.
+declare module 'mcpscope-engine/operations/context.js' {
+  interface OperationContextExtensions {
+    /**
+     * Control plane for long-running coordinators (benchmark/evaluation runs):
+     * pause/resume/stop keyed by run id. Present when the app is initialized
+     * normally.
+     */
+    runControl?: RunControlRegistry
   }
 }

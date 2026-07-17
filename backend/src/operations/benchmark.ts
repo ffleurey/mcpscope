@@ -6,9 +6,9 @@
 // identically via CLI and MCP.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { BackendDatabase } from "../persistence/db.js";
-import { runInTransaction } from "../persistence/connection.js";
-import { DEFAULT_JUDGE_TEMPERATURE } from "../domain/model.js";
+import type { BackendDatabase } from "mcpscope-engine/persistence/db.js";
+import { runInTransaction } from "mcpscope-engine/persistence/connection.js";
+import { DEFAULT_JUDGE_TEMPERATURE } from "mcpscope-engine/domain/model.js";
 import type {
   BenchmarkRecord,
   BenchmarkCaseRecord,
@@ -16,7 +16,7 @@ import type {
   BenchmarkRunCaseSnapshot,
   BenchmarkEvaluationRecord,
   RubricCriterion,
-} from "../domain/model.js";
+} from "mcpscope-engine/domain/model.js";
 import {
   createBenchmark,
   getBenchmark,
@@ -38,32 +38,34 @@ import {
   listBenchmarkEvaluationsByRun,
   updateBenchmarkEvaluation,
   deleteBenchmarkEvaluation,
+} from "../persistence/benchmarkRepository.js";
+import {
   getSessionRecord,
   deleteSessionRecord,
   listPartRecordsBySession,
   listTurnRecordsBySession,
-} from "../persistence/repository.js";
+} from "mcpscope-engine/persistence/repository.js";
 import {
   generateBenchmarkId,
   generateRunId,
   generateEvaluationId,
   formatBenchmarkCaseId,
-} from "../domain/hierarchicalIds.js";
-import { createSession } from "../runtime/modelTurns.js";
+} from "mcpscope-engine/domain/hierarchicalIds.js";
+import { createSession } from "mcpscope-engine/runtime/modelTurns.js";
 import { executeAnalysisLaunch } from "./launchAnalysis.js";
 import { ANALYSIS_WORKFLOW_KIND } from "../analysis/workflowKinds.js";
 import { getLatestArtifactBySchemaKey } from "../analysis/artifactRepository.js";
-import { getLatestSessionErrorSummary } from "../analysis/analysisSessionPresentation.js";
+import { getLatestSessionErrorSummary } from "mcpscope-engine/operations/sessionPresentation.js";
 import { SCHEMA_KEY as BENCHMARK_EVAL_KEY } from "../analysis/benchmarkEvaluation/schemas.js";
-import type { OperationContext } from "./context.js";
-import type { ExecutionScheduler, TerminalJob } from "../runtime/scheduler.js";
+import type { OperationContext } from "mcpscope-engine/operations/context.js";
+import type { ExecutionScheduler, TerminalJob } from "mcpscope-engine/runtime/scheduler.js";
 import { RunStoppedError, type RunController } from "../runtime/runControl.js";
-import { OperationError } from "./errors.js";
+import { OperationError } from "mcpscope-engine/operations/errors.js";
 import {
   mapSessionIdError,
   resolvePrimarySessionInputs,
   type ResolvedPrimarySessionInputs,
-} from "./sessionCreationShared.js";
+} from "mcpscope-engine/operations/sessionCreationShared.js";
 import {
   deriveSessionMetrics,
   buildCaseReport,
@@ -467,7 +469,7 @@ export function launchBenchmarkRun(
 
   // Resolve the effective model/MCP now: fail fast on bad config and record the
   // concrete selection so the run is self-describing and stable across reps.
-  const resolved = resolvePrimarySessionInputs({
+  const resolved = resolvePrimarySessionInputs(ctx.configStore, {
     modelConfigId: input.modelConfigId,
     mcpProfileIds: input.mcpProfileIds,
   });
@@ -577,7 +579,7 @@ async function runBenchmarkCoordinator(
   mode: ResumeMode = "continue",
 ): Promise<void> {
   const { db } = ctx;
-  const controller = ctx.runControl?.acquire(runId);
+  const controller = ctx.extensions?.runControl?.acquire(runId);
 
   // Sequential: each task is awaited to completion before the next starts. Soft
   // failures (init never reaches ready, tool errors, non-complete turns) are
@@ -614,7 +616,7 @@ async function runBenchmarkCoordinator(
     let resolvedInputs: ResolvedPrimarySessionInputs | null = null;
     if (tasks.length > 0) {
       const resolved = runInTransaction(db.connection, () =>
-        resolvePrimarySessionInputs({
+        resolvePrimarySessionInputs(ctx.configStore, {
           modelConfigId: reconciled.modelConfigId ?? undefined,
           mcpProfileIds: reconciled.mcpProfileIds ?? undefined,
         }),
@@ -736,7 +738,7 @@ async function runBenchmarkCoordinator(
       }
     }
   } finally {
-    ctx.runControl?.release(runId);
+    ctx.extensions?.runControl?.release(runId);
   }
 }
 
@@ -930,7 +932,7 @@ export function pauseBenchmarkRun(
   runId: string,
 ): BenchmarkRunRecord {
   const run = requireRunRecord(ctx, runId);
-  if (!ctx.runControl?.pause(runId)) {
+  if (!ctx.extensions?.runControl?.pause(runId)) {
     throw new OperationError(
       `Benchmark run "${runId}" is not running (status '${run.status}').`,
       "benchmark_run_not_pausable",
@@ -955,7 +957,7 @@ export function stopBenchmarkRun(
   runId: string,
 ): BenchmarkRunRecord {
   const run = requireRunRecord(ctx, runId);
-  const signalled = ctx.runControl?.stop(runId) ?? false;
+  const signalled = ctx.extensions?.runControl?.stop(runId) ?? false;
   if (signalled) {
     // Coordinator will persist 'stopped' shortly; report it optimistically.
     return { ...run, status: "stopped" };
@@ -996,7 +998,7 @@ export function resumeBenchmarkRun(
   }
 
   // Live, paused coordinator → un-pause in place.
-  if (ctx.runControl?.resume(runId)) {
+  if (ctx.extensions?.runControl?.resume(runId)) {
     const updated: BenchmarkRunRecord = {
       ...run,
       status: "running",
@@ -1340,7 +1342,7 @@ export function pauseBenchmarkEvaluation(
   evaluationId: string,
 ): BenchmarkEvaluationRecord {
   const evaluation = requireEvaluationRecord(ctx, evaluationId);
-  if (!ctx.runControl?.pause(evaluationId)) {
+  if (!ctx.extensions?.runControl?.pause(evaluationId)) {
     throw new OperationError(
       `Benchmark evaluation "${evaluationId}" is not running (status '${evaluation.status}').`,
       "benchmark_evaluation_not_pausable",
@@ -1361,7 +1363,7 @@ export function stopBenchmarkEvaluation(
   evaluationId: string,
 ): BenchmarkEvaluationRecord {
   const evaluation = requireEvaluationRecord(ctx, evaluationId);
-  const signalled = ctx.runControl?.stop(evaluationId) ?? false;
+  const signalled = ctx.extensions?.runControl?.stop(evaluationId) ?? false;
   if (signalled) {
     return { ...evaluation, status: "stopped" };
   }
@@ -1401,7 +1403,7 @@ export function resumeBenchmarkEvaluation(
     );
   }
 
-  if (ctx.runControl?.resume(evaluationId)) {
+  if (ctx.extensions?.runControl?.resume(evaluationId)) {
     const updated: BenchmarkEvaluationRecord = {
       ...evaluation,
       status: "running",
@@ -1591,7 +1593,7 @@ async function runEvaluationCoordinator(
   mode: ResumeMode = "continue",
 ): Promise<void> {
   const { db } = ctx;
-  const controller = ctx.runControl?.acquire(evaluationId);
+  const controller = ctx.extensions?.runControl?.acquire(evaluationId);
 
   // Sequential, mirroring the run coordinator: each run-session is judged to
   // completion before the next. A per-session failure (model not loaded, launch /
@@ -1712,7 +1714,7 @@ async function runEvaluationCoordinator(
       }
     }
   } finally {
-    ctx.runControl?.release(evaluationId);
+    ctx.extensions?.runControl?.release(evaluationId);
   }
 }
 

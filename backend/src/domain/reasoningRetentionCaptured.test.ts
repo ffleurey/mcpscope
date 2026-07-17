@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildApiMessages, deriveContextEntries, deriveTranscriptEntries } from './selectors.js'
+import { buildApiMessages, deriveContextEntries, deriveTranscriptEntries } from 'mcpscope-engine/domain/selectors.js'
 import {
   capturedReasoningThreeBatchParts,
   capturedReasoningThreeBatchRounds,

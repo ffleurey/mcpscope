@@ -2,8 +2,8 @@
 
 Contributor- and maintainer-facing docs for mcpscope. User-facing guides
 ([README](../README.md), [TUTORIAL](../TUTORIAL.md), [CLI](../CLI.md),
-[MCP](../MCP.md), [BENCHMARK](../BENCHMARK.md)) stay at the
-repository root; [AGENTS.md](../AGENTS.md) (the coding-agent guide) also stays at the root by
+[MCP](../MCP.md), [BENCHMARK](../BENCHMARK.md), [EMBEDDING](../EMBEDDING.md)) stay
+at the repository root; [AGENTS.md](../AGENTS.md) (the coding-agent guide) also stays at the root by
 convention.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — system design, persistence, streaming, replay, and API surface

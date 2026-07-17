@@ -1,37 +1,24 @@
 import { z } from "zod";
 import { apiError } from "../errors.js";
 import {
-  deleteLmConnection,
-  deleteMcpServerProfile,
-  deleteModelConfig,
-  getSessionCreationDefaults,
-  listLmConnections,
-  listMcpServerProfiles,
-  listModelConfigs,
-  upsertLmConnection,
-  upsertMcpServerProfile,
-  upsertModelConfig,
-  upsertSessionCreationDefaults,
-} from "../persistence/repository.js";
-import {
   lmStudioConnectionSchema,
   mcpServerProfileSchema,
   modelConfigSchema,
-} from "../domain/configuration.js";
+} from "mcpscope-engine/domain/configuration.js";
 import {
   initializeMcpSession,
   listMcpTools,
-} from "../services/mcp/httpClient.js";
+} from "mcpscope-engine/services/mcp/httpClient.js";
 import {
   isModelLoaded,
   listModelsWithStatus,
   loadModel as loadLmModel,
   unloadModel as unloadLmModel,
-} from "../services/lmstudio/client.js";
-import { ensureModelReady } from "../services/provider/index.js";
-import { listModels } from "../services/openai/client.js";
-import { listUserModels } from "../services/openrouter/client.js";
-import { getOllamaModelDetails } from "../services/ollama/client.js";
+} from "mcpscope-engine/services/lmstudio/client.js";
+import { ensureModelReady } from "mcpscope-engine/services/provider/index.js";
+import { listModels } from "mcpscope-engine/services/openai/client.js";
+import { listUserModels } from "mcpscope-engine/services/openrouter/client.js";
+import { getOllamaModelDetails } from "mcpscope-engine/services/ollama/client.js";
 import type { RouteDeps } from "./types.js";
 
 function providerLabel(providerType?: string): string {
@@ -45,9 +32,11 @@ function providerLabel(providerType?: string): string {
   }
 }
 
-export function registerConfigurationRoutes({ app }: RouteDeps): void {
+export function registerConfigurationRoutes({ app, opCtx }: RouteDeps): void {
+  const { configStore } = opCtx;
+
   app.get("/api/lm-connections", async () => ({
-    lmConnections: listLmConnections(),
+    lmConnections: configStore.listLmConnections(),
   }));
 
   app.put("/api/lm-connections/:connectionId", async (request, reply) => {
@@ -59,7 +48,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
       reply.code(400);
       return apiError("validation", "Connection ID mismatch");
     }
-    upsertLmConnection(record);
+    configStore.upsertLmConnection(record);
     return { lmConnection: record };
   });
 
@@ -67,7 +56,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
     const { connectionId } = z
       .object({ connectionId: z.string() })
       .parse(request.params);
-    const referencedByModelConfig = listModelConfigs().some(
+    const referencedByModelConfig = configStore.listModelConfigs().some(
       (modelConfig) => modelConfig.connectionId === connectionId,
     );
     if (referencedByModelConfig) {
@@ -80,7 +69,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
         },
       );
     }
-    const deleted = deleteLmConnection(connectionId);
+    const deleted = configStore.deleteLmConnection(connectionId);
     if (!deleted) {
       reply.code(404);
       return apiError("not_found", "LM connection not found");
@@ -90,8 +79,8 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
   });
 
   app.get("/api/model-configs", async () => {
-    const configs = listModelConfigs();
-    const connections = listLmConnections();
+    const configs = configStore.listModelConfigs();
+    const connections = configStore.listLmConnections();
     return {
       modelConfigs: configs.map((mc) => ({
         ...mc,
@@ -111,7 +100,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
       reply.code(400);
       return apiError("validation", "Model config ID mismatch");
     }
-    upsertModelConfig(record);
+    configStore.upsertModelConfig(record);
     return { modelConfig: record };
   });
 
@@ -119,7 +108,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
     const { modelConfigId } = z
       .object({ modelConfigId: z.string() })
       .parse(request.params);
-    const defaults = getSessionCreationDefaults();
+    const defaults = configStore.getSessionCreationDefaults();
     if (defaults.defaultModelConfigId === modelConfigId) {
       reply.code(409);
       return apiError(
@@ -130,7 +119,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
         },
       );
     }
-    const deleted = deleteModelConfig(modelConfigId);
+    const deleted = configStore.deleteModelConfig(modelConfigId);
     if (!deleted) {
       reply.code(404);
       return apiError("not_found", "Model config not found");
@@ -140,7 +129,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
   });
 
   app.get("/api/mcp-profiles", async () => ({
-    mcpProfiles: listMcpServerProfiles(),
+    mcpProfiles: configStore.listMcpServerProfiles(),
   }));
 
   app.put("/api/mcp-profiles/:mcpProfileId", async (request, reply) => {
@@ -152,7 +141,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
       reply.code(400);
       return apiError("validation", "MCP profile ID mismatch");
     }
-    upsertMcpServerProfile(record);
+    configStore.upsertMcpServerProfile(record);
     return { mcpProfile: record };
   });
 
@@ -160,7 +149,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
     const { mcpProfileId } = z
       .object({ mcpProfileId: z.string() })
       .parse(request.params);
-    const deleted = deleteMcpServerProfile(mcpProfileId);
+    const deleted = configStore.deleteMcpServerProfile(mcpProfileId);
     if (!deleted) {
       reply.code(404);
       return apiError("not_found", "MCP profile not found");
@@ -171,7 +160,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
 
   app.get("/api/session-creation-defaults", async () => {
     return {
-      sessionCreationDefaults: getSessionCreationDefaults(),
+      sessionCreationDefaults: configStore.getSessionCreationDefaults(),
     };
   });
 
@@ -186,7 +175,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
 
     if (
       defaultModelConfigId !== null &&
-      !listModelConfigs().some((c) => c.id === defaultModelConfigId)
+      !configStore.listModelConfigs().some((c) => c.id === defaultModelConfigId)
     ) {
       reply.code(422);
       return apiError(
@@ -197,7 +186,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
     }
 
     const updatedDefaults = { defaultModelConfigId, updatedAt: Date.now() };
-    upsertSessionCreationDefaults(updatedDefaults);
+    configStore.upsertSessionCreationDefaults(updatedDefaults);
     return { sessionCreationDefaults: updatedDefaults };
   });
 
@@ -306,7 +295,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
       // When the connection has auto-swap enabled, unload any other model on
       // this instance first (centralized in ensureModelReady); otherwise just
       // load the requested model.
-      const autoSwap = listLmConnections().some(
+      const autoSwap = configStore.listLmConnections().some(
         (c) => c.baseUrl === baseUrl && c.autoSwapModel === true,
       );
       if (autoSwap) {
@@ -520,7 +509,7 @@ export function registerConfigurationRoutes({ app }: RouteDeps): void {
 
     // Auto-swap connections load the model on the first request, so a
     // not-loaded model is not an error — skip the gate and let the harness swap.
-    const autoSwap = listLmConnections().some(
+    const autoSwap = configStore.listLmConnections().some(
       (c) =>
         c.baseUrl === lmConnectionSnapshot.baseUrl && c.autoSwapModel === true,
     );

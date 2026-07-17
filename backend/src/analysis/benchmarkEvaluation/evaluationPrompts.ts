@@ -1,5 +1,5 @@
 import type { AnalysisTarget } from '../schemas.js'
-import type { RubricCriterion } from '../../domain/model.js'
+import type { RubricCriterion } from 'mcpscope-engine/domain/model.js'
 
 /**
  * The judge turn prompt: name the session to evaluate (by id — never paste its

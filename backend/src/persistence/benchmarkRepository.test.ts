@@ -1,8 +1,8 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
-import type { BackendConnection } from "./connection.js";
+import type { BackendConnection } from "mcpscope-engine/persistence/connection.js";
 import { afterEach, describe, expect, it } from 'vitest'
-import { openBackendDatabase, type BackendDatabase } from './db.js'
+import { openBackendDatabase, type BackendDatabase } from 'mcpscope-engine/persistence/db.js'
 import {
   createBenchmark,
   createBenchmarkCase,
@@ -20,7 +20,13 @@ import type {
   BenchmarkEvaluationRecord,
   BenchmarkRunRecord,
   RubricCriterion,
-} from '../domain/model.js'
+} from 'mcpscope-engine/domain/model.js'
+import { registerBenchmarkSchema } from './benchmarkSchema.js'
+
+// The workbench registers the benchmark schema extension at startup
+// (buildBackendApp); these tests open the database directly, so register it
+// here before any openBackendDatabase call.
+registerBenchmarkSchema()
 
 let dataDir: string | undefined
 let db: BackendDatabase | undefined

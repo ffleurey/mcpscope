@@ -7,12 +7,12 @@ import {
   listRoundRecordsBySession,
   listStepRecordsBySession,
   listTurnRecordsBySession,
-} from '../persistence/repository.js'
-import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from '../domain/trace.js'
-import { deriveContextEntries, deriveTranscriptEntries } from '../domain/selectors.js'
-import { importTraceBundle } from '../runtime/traceImport.js'
+} from 'mcpscope-engine/persistence/repository.js'
+import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from 'mcpscope-engine/domain/trace.js'
+import { deriveContextEntries, deriveTranscriptEntries } from 'mcpscope-engine/domain/selectors.js'
+import { importTraceBundle } from 'mcpscope-engine/runtime/traceImport.js'
 import { listArtifactsBySession } from '../analysis/artifactRepository.js'
-import { createTurnInputSchema } from '../domain/apiSchemas.js'
+import { createTurnInputSchema } from 'mcpscope-engine/domain/apiSchemas.js'
 import { OperationError } from '../operations/index.js'
 import type { RouteDeps } from './types.js'
 

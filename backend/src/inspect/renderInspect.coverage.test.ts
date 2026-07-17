@@ -3,10 +3,10 @@ import fs, { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { InspectResult } from "../operations/inspect.js";
-import { renderInspect } from "./renderInspect.js";
-import { isOmittable } from "./omissionAllowList.js";
-import { openBackendDatabase, type BackendDatabase } from "../persistence/db.js";
+import type { InspectResult } from "mcpscope-engine/operations/inspect.js";
+import { renderInspect } from "mcpscope-engine/inspect/renderInspect.js";
+import { isOmittable } from "mcpscope-engine/inspect/omissionAllowList.js";
+import { openBackendDatabase, type BackendDatabase } from "mcpscope-engine/persistence/db.js";
 import {
   createBenchmark,
   createBenchmarkCase,
@@ -14,8 +14,14 @@ import {
   createBenchmarkEvaluation,
 } from "../persistence/benchmarkRepository.js";
 import { resolveBenchmarkInspect } from "../operations/benchmarkOperations.js";
-import { inspectOperation } from "../operations/inspect.js";
-import type { OperationContext } from "../operations/context.js";
+import { inspectOperation } from "mcpscope-engine/operations/inspect.js";
+import type { OperationContext } from "mcpscope-engine/operations/context.js";
+import { registerBenchmarkSchema } from "../persistence/benchmarkSchema.js";
+
+// The workbench registers the benchmark schema extension at startup
+// (buildBackendApp); these tests open the database directly, so register it
+// here before any openBackendDatabase call.
+registerBenchmarkSchema();
 
 // The directional guarantee (serialization-architecture.md, Rule 2):
 //   - text ⊆ json is by construction (the renderer's only input is the payload);

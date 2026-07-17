@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
-import { openBackendDatabase, type BackendDatabase } from '../persistence/db.js'
+import { openBackendDatabase, type BackendDatabase } from 'mcpscope-engine/persistence/db.js'
 import {
   createBenchmark,
   createBenchmarkCase,
@@ -13,10 +13,17 @@ import type {
   BenchmarkRunRecord,
   BenchmarkEvaluationRecord,
   RubricCriterion,
-} from '../domain/model.js'
-import type { OperationContext } from './context.js'
-import { inspectOperation } from './inspect.js'
-import { resolveBenchmarkInspect } from './benchmarkOperations.js'
+} from 'mcpscope-engine/domain/model.js'
+import type { OperationContext } from 'mcpscope-engine/operations/context.js'
+import { inspectOperation } from 'mcpscope-engine/operations/inspect.js'
+import { registerBenchmarkInspectResolver, resolveBenchmarkInspect } from './benchmarkOperations.js'
+import { registerBenchmarkSchema } from '../persistence/benchmarkSchema.js'
+
+// The workbench registers the benchmark resolver and schema extension at
+// startup (buildBackendApp); these tests exercise inspect without an app, so
+// register them here (schema before any openBackendDatabase call).
+registerBenchmarkInspectResolver()
+registerBenchmarkSchema()
 
 // inspect is the single operation shared by the UI id-pill lookup (/api/lookup),
 // the CLI, and the MCP tool — so resolving these IDs here proves all three surfaces

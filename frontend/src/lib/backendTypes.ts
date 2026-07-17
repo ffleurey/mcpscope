@@ -99,7 +99,7 @@ export const tokenSourceSchema = z.enum([
   'unknown',
 ])
 export const tokenConfidenceSchema = z.enum(['exact', 'corrected', 'estimated', 'unknown'])
-// Mirrors the backend's exchangeKindValues (backend/src/domain/model.ts). The
+// Mirrors the backend's exchangeKindValues (packages/engine/src/domain/model.ts). The
 // legacy `lmstudio-*` kinds were dropped there (fresh-DB, no migration), so they
 // are gone here too.
 export const exchangeKindSchema = z.enum([

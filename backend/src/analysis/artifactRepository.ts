@@ -6,7 +6,7 @@
  * artifact_type_key = 'json'.
  */
 
-import type { BackendConnection } from "../persistence/connection.js";
+import type { BackendConnection } from "mcpscope-engine/persistence/connection.js";
 
 export interface ArtifactRecord {
   readonly id: string

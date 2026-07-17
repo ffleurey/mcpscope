@@ -7,31 +7,28 @@
  * limited to the published catalog in catalog.ts.
  */
 import { z } from "zod";
-import { runInTransaction } from "../persistence/connection.js";
-import { OperationError } from "./errors.js";
+import { runInTransaction } from "mcpscope-engine/persistence/connection.js";
+import { OperationError } from "mcpscope-engine/operations/errors.js";
 import {
-  getSessionCreationDefaults,
   getSessionRecord,
   getTurnRecord,
-  listLmConnections,
-  listModelConfigs,
   updateSessionAnalysisState,
-} from "../persistence/repository.js";
-import { createSession } from "../runtime/modelTurns.js";
-import { mapSessionIdError } from "./sessionCreationShared.js";
+} from "mcpscope-engine/persistence/repository.js";
+import { createSession } from "mcpscope-engine/runtime/modelTurns.js";
+import { mapSessionIdError } from "mcpscope-engine/operations/sessionCreationShared.js";
 import {
   rubricCriterionSchema,
   sessionRecordSchema,
   type McpProfileSnapshot,
   type ModelProfileSnapshot,
   type SessionRecord,
-} from "../domain/model.js";
-import type { OperationContext } from "./context.js";
+} from "mcpscope-engine/domain/model.js";
+import type { OperationContext } from "mcpscope-engine/operations/context.js";
 import {
   buildAnalysisSystemPrompt,
   normalizeAnalysisGoal,
 } from "../analysis/systemPrompt.js";
-import { runSessionInitialization } from "../runtime/sessionInit.js";
+import { runSessionInitialization } from "mcpscope-engine/runtime/sessionInit.js";
 import { ANALYSIS_WORKFLOW_KIND } from "../analysis/workflowKinds.js";
 import { isKnownWorkflowKind } from "../analysis/analysisWorkflowFactory.js";
 import { getAnalysisTitlePrefix } from "../analysis/analysisSessionPresentation.js";
@@ -196,10 +193,10 @@ export async function executeAnalysisLaunch(
     if (!targetTurnOk) return { kind: "target_turn_not_complete" };
 
     // Resolve model config and LM connection
-    const modelConfigs = listModelConfigs();
+    const modelConfigs = ctx.configStore.listModelConfigs();
     let resolvedModelConfigId = requestedModelConfigId;
     if (!resolvedModelConfigId) {
-      const defaults = getSessionCreationDefaults();
+      const defaults = ctx.configStore.getSessionCreationDefaults();
       if (!defaults.defaultModelConfigId) {
         return { kind: "default_model_not_configured" };
       }
@@ -222,7 +219,7 @@ export async function executeAnalysisLaunch(
       };
     }
 
-    const lmConnections = listLmConnections();
+    const lmConnections = ctx.configStore.listLmConnections();
     const lmConnection = lmConnections.find(
       (c) => c.id === modelConfig.connectionId,
     );

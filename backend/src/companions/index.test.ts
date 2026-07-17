@@ -1,14 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { initializeConfigStore } from "../config/configStore.js";
+import { ConfigStore } from "mcpscope-engine/config/configStore.js";
 import { companionProfiles } from "./index.js";
 
-// companionProfiles() reads the module-level config store, so each test points it
-// at a fresh temp config file and inspects the synthesized built-in profiles.
+// companionProfiles() reads the given config store, so each test builds one
+// from a fresh temp config file and inspects the synthesized built-in profiles.
 let tempDir: string | undefined;
 
-function initStoreWith(companions: unknown): void {
+function initStoreWith(companions: unknown): ConfigStore {
   tempDir = `.tmp-test-data/${crypto.randomUUID()}`;
   fs.mkdirSync(tempDir, { recursive: true });
   const filePath = path.join(tempDir, "mcpscope.config.json");
@@ -20,7 +20,9 @@ function initStoreWith(companions: unknown): void {
   };
   if (companions !== undefined) data.companions = companions;
   fs.writeFileSync(filePath, JSON.stringify(data), "utf-8");
-  initializeConfigStore(filePath);
+  const store = new ConfigStore(filePath);
+  store.load();
+  return store;
 }
 
 afterEach(() => {
@@ -32,9 +34,9 @@ afterEach(() => {
 
 describe("companion built-in profile synthesis", () => {
   it("gates key-requiring companions and leaves keyless ones enabled", () => {
-    initStoreWith(undefined); // no companions section at all
+    const store = initStoreWith(undefined); // no companions section at all
     const byId = Object.fromEntries(
-      companionProfiles("127.0.0.1", 3066).map((p) => [p.id, p]),
+      companionProfiles(store, "127.0.0.1", 3066).map((p) => [p.id, p]),
     );
 
     // Keyless companions are always enabled.
@@ -57,20 +59,20 @@ describe("companion built-in profile synthesis", () => {
   });
 
   it("brackets an IPv6 host in the synthesized profile URL", () => {
-    initStoreWith(undefined);
-    const profile = companionProfiles("::1", 3066).find(
+    const store = initStoreWith(undefined);
+    const profile = companionProfiles(store, "::1", 3066).find(
       (p) => p.id === "builtin-open-meteo",
     );
     expect(profile?.url).toBe("http://[::1]:3066/companions/open-meteo/mcp");
   });
 
   it("enables a key-gated companion once its key is configured", () => {
-    initStoreWith({
+    const store = initStoreWith({
       guardian: { api_key: null },
       brave: { api_key: "brave-key" },
     });
     const byId = Object.fromEntries(
-      companionProfiles("127.0.0.1", 3066).map((p) => [p.id, p]),
+      companionProfiles(store, "127.0.0.1", 3066).map((p) => [p.id, p]),
     );
     expect(byId["builtin-websearch"]?.disabledReason).toBeNull(); // key present
     expect(byId["builtin-guardian"]?.disabledReason).not.toBeNull(); // still unset
