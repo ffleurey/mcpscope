@@ -6,16 +6,16 @@ import {
   listStepRecordsBySession,
   listTurnRecordsBySession,
   updateSessionRecord,
-} from '../persistence/repository.js'
-import { buildSessionTraceBundle } from '../domain/trace.js'
-import { deriveContextEntries, deriveTranscriptEntries } from '../domain/selectors.js'
+} from 'mcpscope-engine/persistence/repository.js'
+import { buildSessionTraceBundle } from 'mcpscope-engine/domain/trace.js'
+import { deriveContextEntries, deriveTranscriptEntries } from 'mcpscope-engine/domain/selectors.js'
 import { listArtifactsBySession } from './artifactRepository.js'
 import { rehydrateAnalysisWorkflow } from './analysisWorkflowFactory.js'
 import {
   registerSessionExecutor,
   type SessionExecutionOptions,
-} from '../runtime/schedulerDispatch.js'
-import type { ActiveExecutionJob, SchedulerContext } from '../runtime/schedulerTypes.js'
+} from 'mcpscope-engine/runtime/schedulerDispatch.js'
+import type { ActiveExecutionJob, SchedulerContext } from 'mcpscope-engine/runtime/schedulerTypes.js'
 
 /**
  * Register the analysis session executor in the engine's session-executor

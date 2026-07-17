@@ -28,8 +28,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildBackendApp } from "../app.js";
-import type { PartRecord, StepRecord, TurnRecord } from "../domain/model.js";
-import type { SessionTraceBundle } from "../domain/trace.js";
+import type { PartRecord, StepRecord, TurnRecord } from "mcpscope-engine/domain/model.js";
+import type { SessionTraceBundle } from "mcpscope-engine/domain/trace.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -1,0 +1,59 @@
+{
+  "name": "mcpscope-engine",
+  "version": "0.1.1",
+  "description": "Embeddable chat/session engine for MCP: agent loop, MCP tool calling, local-first LM providers, durable node:sqlite sessions, and fine-grained transparency events. Zero runtime dependencies beyond zod.",
+  "license": "Apache-2.0",
+  "author": "Franck Fleurey <756491+ffleurey@users.noreply.github.com>",
+  "homepage": "https://github.com/ffleurey/mcpscope#readme",
+  "bugs": {
+    "url": "https://github.com/ffleurey/mcpscope/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ffleurey/mcpscope.git",
+    "directory": "packages/engine"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "agent",
+    "agent-runtime",
+    "embeddable",
+    "local-first",
+    "lm-studio",
+    "ollama",
+    "openrouter",
+    "sqlite",
+    "tool-use"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./*.js": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --ext .ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

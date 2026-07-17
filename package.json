@@ -30,6 +30,9 @@
   ],
   "desktopName": "mcpscope.desktop",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "engines": {
     "node": ">=24"
   },
@@ -46,13 +49,14 @@
   "scripts": {
     "dev": "concurrently -k \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:frontend": "vite --config frontend/vite.config.ts",
-    "dev:backend": "tsx watch backend/src/server.ts",
+    "dev:backend": "npm run build:engine && tsx watch backend/src/server.ts",
     "dev:cli": "tsx cli/src/index.ts",
-    "seed:dev-config": "tsx backend/src/dev/seedDevConfig.ts",
-    "seed:dev-sessions": "tsx backend/src/dev/seedCapturedSessions.ts",
+    "seed:dev-config": "npm run build:engine && tsx backend/src/dev/seedDevConfig.ts",
+    "seed:dev-sessions": "npm run build:engine && tsx backend/src/dev/seedCapturedSessions.ts",
     "seed:dev-data": "npm run seed:dev-config && npm run seed:dev-sessions",
     "build": "vite build --config frontend/vite.config.ts",
-    "build:backend": "tsc -p backend/tsconfig.build.json",
+    "build:engine": "npm run build --workspace mcpscope-engine",
+    "build:backend": "npm run build:engine && tsc -p backend/tsconfig.build.json",
     "build:cli": "tsc -p cli/tsconfig.json",
     "build:all": "npm run build && npm run build:backend && npm run build:cli",
     "build:electron": "tsc -p electron/tsconfig.json",
@@ -63,17 +67,19 @@
     "start:backend": "node backend/dist/server.js",
     "preview": "vite preview --config frontend/vite.config.ts",
     "check": "svelte-check --tsconfig ./frontend/tsconfig.json && tsc -p frontend/tsconfig.node.json",
-    "check:backend": "tsc -p backend/tsconfig.json --noEmit",
+    "check:engine": "tsc -p packages/engine/tsconfig.json --noEmit",
+    "check:backend": "tsc -p backend/tsconfig.check.json --noEmit",
     "check:cli": "tsc -p cli/tsconfig.json --noEmit",
     "check:electron": "tsc -p electron/tsconfig.json --noEmit",
     "lint": "eslint frontend/src",
+    "lint:engine": "eslint packages/engine/src --ext .ts",
     "lint:backend": "eslint backend/src --ext .ts",
     "lint:cli": "eslint cli/src",
     "lint:electron": "eslint electron/src",
     "lint:fix": "eslint frontend/src --fix",
     "format": "prettier --write \"frontend/src/**/*.{ts,svelte,css}\"",
     "format:check": "prettier --check \"frontend/src/**/*.{ts,svelte,css}\"",
-    "verify": "npm run format:check && npm run lint && npm run lint:backend && npm run lint:cli && npm run lint:electron && npm run check && npm run check:backend && npm run check:cli && npm run check:electron && npm test",
+    "verify": "npm run format:check && npm run lint && npm run lint:engine && npm run lint:backend && npm run lint:cli && npm run lint:electron && npm run check && npm run check:engine && npm run check:backend && npm run check:cli && npm run check:electron && npm test",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest"
@@ -110,6 +116,7 @@
     "@fastify/static": "^9.1.3",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "fastify": "^5.6.1",
+    "mcpscope-engine": "0.1.1",
     "zod": "^4.4.3"
   }
 }

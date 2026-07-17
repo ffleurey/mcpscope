@@ -27,6 +27,8 @@ jobs:
       # "Module has no exported member"; the others cover backend and CLI.
       - name: Type-check frontend
         run: npm run check
+      - name: Type-check engine
+        run: npm run check:engine
       - name: Type-check backend
         run: npm run check:backend
       - name: Type-check CLI
@@ -37,6 +39,8 @@ jobs:
       # Lint and format
       - name: Lint frontend
         run: npm run lint
+      - name: Lint engine
+        run: npm run lint:engine
       - name: Lint backend
         run: npm run lint:backend
       - name: Lint CLI

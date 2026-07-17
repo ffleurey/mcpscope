@@ -5,15 +5,15 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildBackendApp } from "./app.js";
-import type { SessionTraceBundle } from "./domain/trace.js";
+import type { SessionTraceBundle } from "mcpscope-engine/domain/trace.js";
 import {
   getSessionRecord,
   insertTurnRecord,
   insertRoundRecord,
   insertPartRecord,
   updateSessionRecord,
-} from "./persistence/repository.js";
-import { listStepRecordsBySession } from "./persistence/repository.js";
+} from "mcpscope-engine/persistence/repository.js";
+import { listStepRecordsBySession } from "mcpscope-engine/persistence/repository.js";
 import {
   capturedReasoningThreeBatchParts,
   capturedReasoningThreeBatchRounds,

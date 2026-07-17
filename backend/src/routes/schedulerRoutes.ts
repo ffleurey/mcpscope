@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { apiError } from '../errors.js'
-import { getSessionRecord } from '../persistence/repository.js'
-import type { SchedulerEvent } from '../runtime/schedulerTypes.js'
+import { getSessionRecord } from 'mcpscope-engine/persistence/repository.js'
+import type { SchedulerEvent } from 'mcpscope-engine/runtime/schedulerTypes.js'
 import type { RouteDeps } from './types.js'
 
 /** Interval between SSE keepalive comments on the scheduler stream. */

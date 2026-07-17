@@ -7,14 +7,16 @@ WORKDIR /app
 
 # Install all dependencies (dev + prod) so we can build. The BuildKit cache
 # mount keeps the npm download cache across builds so a rebuild doesn't
-# re-fetch every package.
+# re-fetch every package. The engine workspace manifest must be present for
+# `npm ci` to resolve the `mcpscope-engine` workspace and create its symlink.
 COPY package*.json ./
+COPY packages/engine/package.json ./packages/engine/package.json
 RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Copy source and build everything
 COPY . .
 RUN npm run build          # Vite → frontend/dist/
-RUN npm run build:backend  # tsc  → backend/dist/
+RUN npm run build:backend  # tsc  → packages/engine/dist/ then backend/dist/
 RUN npm run build:cli      # tsc  → cli/dist/
 
 # Drop dev dependencies (vite, typescript, vitest, electron, …) so the
@@ -55,6 +57,12 @@ WORKDIR /app
 # Copy only the package manifests and the pruned (pure-JS) production deps
 COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
+
+# The engine ships as a workspace: node_modules/mcpscope-engine is a symlink to
+# /app/packages/engine, so its manifest + built dist must be present at that
+# path for the symlink to resolve at runtime (backend/dist imports it).
+COPY --from=builder /app/packages/engine/package.json ./packages/engine/package.json
+COPY --from=builder /app/packages/engine/dist ./packages/engine/dist
 
 # Copy compiled artefacts
 COPY --from=builder /app/backend/dist  ./backend/dist

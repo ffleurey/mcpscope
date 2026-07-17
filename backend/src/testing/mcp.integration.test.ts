@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { initializeMcpSession, listMcpTools } from '../services/mcp/httpClient.js'
+import { initializeMcpSession, listMcpTools } from 'mcpscope-engine/services/mcp/httpClient.js'
 import { writeIntegrationArtifact } from './artifacts.js'
 import { getIntegrationEnv } from './integrationEnv.js'
 

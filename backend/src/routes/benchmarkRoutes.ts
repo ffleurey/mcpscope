@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { RouteDeps } from "./types.js";
-import { rubricCriterionSchema } from "../domain/model.js";
+import { rubricCriterionSchema } from "mcpscope-engine/domain/model.js";
 import {
   createBenchmarkEntry,
   listBenchmarkEntries,
@@ -44,7 +44,7 @@ import {
   benchmarkEvaluationControlOperation,
   benchmarkDeleteEvaluationOperation,
 } from "../operations/index.js";
-import { OperationError } from "../operations/errors.js";
+import { OperationError } from "mcpscope-engine/operations/errors.js";
 import type { OperationContext } from "../operations/index.js";
 
 /**

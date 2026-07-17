@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { PartRecord } from '../domain/model.js'
+import type { PartRecord } from 'mcpscope-engine/domain/model.js'
 import { selectFinalRoundContent } from './boundedTurn.js'
 
 function makePart(overrides: Partial<PartRecord>): PartRecord {

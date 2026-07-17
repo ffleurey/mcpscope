@@ -1,19 +1,18 @@
 /**
- * engine.ts — curated public surface of the embeddable chat/session engine.
- *
- * This barrel is the boundary for a future standalone engine package: the
- * chat-path runtime (sessions, turns, scheduler, operations, config,
- * persistence) with no benchmark/analysis surface. Consumers and tests should
- * import from here instead of deep-importing backend internals.
+ * mcpscope-engine — curated public surface of the embeddable chat/session
+ * engine: the chat-path runtime (sessions, turns, scheduler, operations,
+ * config, persistence) with no benchmark/analysis surface. External embedders
+ * import from this package root; the workbench also deep-imports engine
+ * internals via `mcpscope-engine/<path>.js` subpaths.
  *
  * Re-exports only — no logic, no side effects beyond module evaluation.
+ *
+ * Note: the in-process app factory (`buildBackendApp`/`BackendHandle`) still
+ * lives in the workbench (it wires HTTP/benchmark/analysis). A standalone
+ * `createEngine()` factory is the next step; until then embedders obtain a
+ * handle through the workbench app.
  */
 
-// ── App factory / handle ─────────────────────────────────────────────────────
-// Interim: the engine handle is obtained via the app factory until a
-// standalone engine factory exists.
-export { buildBackendApp } from "./app.js";
-export type { BackendHandle } from "./app.js";
 export type { BackendConfig } from "./config.js";
 
 // ── Scheduler ────────────────────────────────────────────────────────────────

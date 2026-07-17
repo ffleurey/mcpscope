@@ -4,26 +4,26 @@ import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import type { BackendConfig } from "./config.js";
-import { openBackendDatabase } from "./persistence/db.js";
+import type { BackendConfig } from "mcpscope-engine/config.js";
+import { openBackendDatabase } from "mcpscope-engine/persistence/db.js";
 import { registerBenchmarkSchema } from "./persistence/benchmarkSchema.js";
-import { recoverInterruptedState } from "./persistence/repository.js";
-import { getLoadedContextLength } from "./services/lmstudio/client.js";
+import { recoverInterruptedState } from "mcpscope-engine/persistence/repository.js";
+import { getLoadedContextLength } from "mcpscope-engine/services/lmstudio/client.js";
 import {
   createChatCompletion,
   probePromptTokens,
   probePromptTokensDetailed,
   streamChatCompletion,
-} from "./services/openai/client.js";
+} from "mcpscope-engine/services/openai/client.js";
 import {
   callMcpTool,
   initializeMcpSession,
   listMcpTools,
-} from "./services/mcp/httpClient.js";
+} from "mcpscope-engine/services/mcp/httpClient.js";
 import { apiError } from "./errors.js";
-import type { ChatCompletionGateway } from "./runtime/modelTurns.js";
-import { withAutoModelSwap } from "./runtime/autoModelSwapGateway.js";
-import type { McpGateway } from "./runtime/toolTurns.js";
+import type { ChatCompletionGateway } from "mcpscope-engine/runtime/modelTurns.js";
+import { withAutoModelSwap } from "mcpscope-engine/runtime/autoModelSwapGateway.js";
+import type { McpGateway } from "mcpscope-engine/runtime/toolTurns.js";
 import { registerMcpTransport } from "./mcp/index.js";
 import { registerAnalysisSessionPresenter } from "./analysis/analysisSessionPresentation.js";
 import { registerAnalysisSessionExecutor } from "./analysis/analysisSessionExecutor.js";
@@ -38,17 +38,17 @@ import {
   operationErrorToHttpStatus,
   type OperationContext,
 } from "./operations/index.js";
-import { ExecutionScheduler } from "./runtime/scheduler.js";
+import { ExecutionScheduler } from "mcpscope-engine/runtime/scheduler.js";
 import { RunControlRegistry } from "./runtime/runControl.js";
-import type { SchedulerEvent } from "./runtime/schedulerTypes.js";
+import type { SchedulerEvent } from "mcpscope-engine/runtime/schedulerTypes.js";
 import { registerConfigurationRoutes } from "./routes/configurationRoutes.js";
 import { registerBenchmarkRoutes } from "./routes/benchmarkRoutes.js";
 import { registerSchedulerRoutes } from "./routes/schedulerRoutes.js";
 import { registerSessionRoutes } from "./routes/sessionRoutes.js";
 import { registerSystemRoutes } from "./routes/systemRoutes.js";
 import { registerTraceRoutes } from "./routes/traceRoutes.js";
-import { computeLifecycleState } from "./operations/lifecycleState.js";
-import { ConfigStore, ConfigFileError } from "./config/configStore.js";
+import { computeLifecycleState } from "mcpscope-engine/operations/lifecycleState.js";
+import { ConfigStore, ConfigFileError } from "mcpscope-engine/config/configStore.js";
 
 interface RuntimeDependencies {
   chatCompletionGateway: ChatCompletionGateway;

@@ -7,28 +7,28 @@
  * limited to the published catalog in catalog.ts.
  */
 import { z } from "zod";
-import { runInTransaction } from "../persistence/connection.js";
-import { OperationError } from "./errors.js";
+import { runInTransaction } from "mcpscope-engine/persistence/connection.js";
+import { OperationError } from "mcpscope-engine/operations/errors.js";
 import {
   getSessionRecord,
   getTurnRecord,
   updateSessionAnalysisState,
-} from "../persistence/repository.js";
-import { createSession } from "../runtime/modelTurns.js";
-import { mapSessionIdError } from "./sessionCreationShared.js";
+} from "mcpscope-engine/persistence/repository.js";
+import { createSession } from "mcpscope-engine/runtime/modelTurns.js";
+import { mapSessionIdError } from "mcpscope-engine/operations/sessionCreationShared.js";
 import {
   rubricCriterionSchema,
   sessionRecordSchema,
   type McpProfileSnapshot,
   type ModelProfileSnapshot,
   type SessionRecord,
-} from "../domain/model.js";
-import type { OperationContext } from "./context.js";
+} from "mcpscope-engine/domain/model.js";
+import type { OperationContext } from "mcpscope-engine/operations/context.js";
 import {
   buildAnalysisSystemPrompt,
   normalizeAnalysisGoal,
 } from "../analysis/systemPrompt.js";
-import { runSessionInitialization } from "../runtime/sessionInit.js";
+import { runSessionInitialization } from "mcpscope-engine/runtime/sessionInit.js";
 import { ANALYSIS_WORKFLOW_KIND } from "../analysis/workflowKinds.js";
 import { isKnownWorkflowKind } from "../analysis/analysisWorkflowFactory.js";
 import { getAnalysisTitlePrefix } from "../analysis/analysisSessionPresentation.js";

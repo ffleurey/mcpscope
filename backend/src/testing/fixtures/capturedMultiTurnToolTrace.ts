@@ -1,4 +1,4 @@
-import type { SessionTraceBundle } from '../../domain/trace.js'
+import type { SessionTraceBundle } from 'mcpscope-engine/domain/trace.js'
 
 export const capturedMultiTurnToolTrace: SessionTraceBundle = {
   session: {

@@ -11,17 +11,17 @@
  */
 
 import crypto from 'node:crypto'
-import type { BackendDatabase } from '../../persistence/db.js'
-import { runInTransaction } from '../../persistence/connection.js'
-import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
-import type { McpGateway } from '../../runtime/toolTurns.js'
+import type { BackendDatabase } from 'mcpscope-engine/persistence/db.js'
+import { runInTransaction } from 'mcpscope-engine/persistence/connection.js'
+import type { ChatCompletionGateway } from 'mcpscope-engine/runtime/modelTurns.js'
+import type { McpGateway } from 'mcpscope-engine/runtime/toolTurns.js'
 import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
-import type { StepResult, StepTypeKey } from '../../domain/executionModel.js'
-import { STEP_TYPE } from '../../domain/executionModel.js'
-import { getSessionRecord } from '../../persistence/repository.js'
+import type { StepResult, StepTypeKey } from 'mcpscope-engine/domain/executionModel.js'
+import { STEP_TYPE } from 'mcpscope-engine/domain/executionModel.js'
+import { getSessionRecord } from 'mcpscope-engine/persistence/repository.js'
 import { insertJsonArtifact, getLatestArtifactBySchemaKey } from '../artifactRepository.js'
-import { runDeterministicMcpToolCallsInSingleTurn } from '../../runtime/toolTurns.js'
+import { runDeterministicMcpToolCallsInSingleTurn } from 'mcpscope-engine/runtime/toolTurns.js'
 import {
   SCHEMA_KEY,
   type EvidencePacketIndex,

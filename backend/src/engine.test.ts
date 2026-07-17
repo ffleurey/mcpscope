@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  buildBackendApp,
   buildSessionTraceBundle,
   computeLifecycleState,
   ConfigStore,
@@ -19,8 +18,12 @@ import {
   OperationError,
   sendOperation,
   statusOperation,
-  type BackendHandle,
-} from "./engine.js";
+} from "mcpscope-engine";
+// buildBackendApp/BackendHandle still live in the workbench (they wire HTTP +
+// benchmark/analysis); the engine barrel intentionally no longer re-exports
+// them. This test exercises both: the engine surface via `mcpscope-engine`,
+// the app factory via the workbench.
+import { buildBackendApp, type BackendHandle } from "./app.js";
 
 function makeTestConfig() {
   const dataDir = `.tmp-test-data/${crypto.randomUUID()}`;

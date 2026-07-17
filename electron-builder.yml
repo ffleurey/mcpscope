@@ -28,6 +28,14 @@ files:
   - backend/dist/**/*
   - "!backend/dist/**/*.test.*"
   - frontend/dist/**/*
+  # The engine ships as a workspace: node_modules/mcpscope-engine symlinks to
+  # ../packages/engine, so backend/dist's `import "mcpscope-engine"` resolves
+  # there at runtime. Include the engine's manifest + built dist so the link
+  # target is present in the packaged app (asar is disabled, so this is a real
+  # on-disk path). NOTE: verify with `npm run dist:electron:dir` on a machine
+  # that can download Electron before trusting a release build.
+  - packages/engine/dist/**/*
+  - packages/engine/package.json
   - build/icon.png # runtime window icon (X11); set in electron/src/main.ts
   - package.json
 

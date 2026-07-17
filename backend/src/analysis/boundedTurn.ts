@@ -9,14 +9,14 @@
  * that need responseText, turnId, and assistantReasoningPartIds.
  */
 
-import type { PartRecord } from '../domain/model.js'
-import { DEFAULT_MAX_TOOL_ROUNDS } from '../domain/model.js'
-import { getSessionRecord } from '../persistence/repository.js'
-import type { BackendDatabase } from '../persistence/db.js'
-import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
-import type { McpGateway } from '../runtime/toolTurns.js'
-import { createToolEnabledTurn } from '../runtime/toolTurns.js'
-import type { TurnStreamEventSink } from '../runtime/streamEvents.js'
+import type { PartRecord } from 'mcpscope-engine/domain/model.js'
+import { DEFAULT_MAX_TOOL_ROUNDS } from 'mcpscope-engine/domain/model.js'
+import { getSessionRecord } from 'mcpscope-engine/persistence/repository.js'
+import type { BackendDatabase } from 'mcpscope-engine/persistence/db.js'
+import type { ChatCompletionGateway } from 'mcpscope-engine/runtime/modelTurns.js'
+import type { McpGateway } from 'mcpscope-engine/runtime/toolTurns.js'
+import { createToolEnabledTurn } from 'mcpscope-engine/runtime/toolTurns.js'
+import type { TurnStreamEventSink } from 'mcpscope-engine/runtime/streamEvents.js'
 
 export interface AnalysisTurnResult {
   turnId: string

@@ -10,9 +10,9 @@
  * `registerBenchmarkInspectResolver()` in `benchmarkOperations.ts`).
  */
 
-import type { BackendConnection } from "./connection.js";
-import { registerSchemaExtension, sqlEnum } from "./schema.js";
-import { benchmarkRunStatusValues } from "../domain/model.js";
+import type { BackendConnection } from "mcpscope-engine/persistence/connection.js";
+import { registerSchemaExtension, sqlEnum } from "mcpscope-engine/persistence/schema.js";
+import { benchmarkRunStatusValues } from "mcpscope-engine/domain/model.js";
 
 function applyBenchmarkDdl(connection: BackendConnection): void {
   connection.exec(`

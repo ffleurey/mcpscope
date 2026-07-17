@@ -1,6 +1,6 @@
-import type { StepRecord } from '../domain/model.js'
-import type { SessionTraceBundle } from '../domain/trace.js'
-import type { TurnStreamEvent } from '../runtime/streamEvents.js'
+import type { StepRecord } from 'mcpscope-engine/domain/model.js'
+import type { SessionTraceBundle } from 'mcpscope-engine/domain/trace.js'
+import type { TurnStreamEvent } from 'mcpscope-engine/runtime/streamEvents.js'
 
 // ── Analysis execution stream events ────────────────────────────────────────
 // The analysis workflow's execution events. They extend the engine's

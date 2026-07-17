@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { RubricCriterion } from '../../domain/model.js'
+import type { RubricCriterion } from 'mcpscope-engine/domain/model.js'
 import { benchmarkVerdictSchema, clampVerdictToRubric } from './schemas.js'
 
 const rubric: RubricCriterion[] = [

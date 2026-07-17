@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { openBackendDatabase } from '../persistence/db.js'
-import { createSessionRecord } from '../persistence/repository.js'
+import { openBackendDatabase } from 'mcpscope-engine/persistence/db.js'
+import { createSessionRecord } from 'mcpscope-engine/persistence/repository.js'
 import { WorkflowStep } from './workflowStep.js'
-import { stepTypeKey, type StepResult, type StepTypeKey } from '../domain/executionModel.js'
-import type { BackendDatabase } from '../persistence/db.js'
-import type { ChatCompletionGateway } from '../runtime/modelTurns.js'
-import type { McpGateway } from '../runtime/toolTurns.js'
+import { stepTypeKey, type StepResult, type StepTypeKey } from 'mcpscope-engine/domain/executionModel.js'
+import type { BackendDatabase } from 'mcpscope-engine/persistence/db.js'
+import type { ChatCompletionGateway } from 'mcpscope-engine/runtime/modelTurns.js'
+import type { McpGateway } from 'mcpscope-engine/runtime/toolTurns.js'
 
 // ── Inline helpers ──────────────────────────────────────────────────────────
 

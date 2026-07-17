@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { registerStreamableHttpMcp } from "../mcp/streamableHttp.js";
-import type { CompanionsConfig, ConfigStore } from "../config/configStore.js";
-import type { ListedMcpServerProfile } from "../domain/configuration.js";
+import type { CompanionsConfig, ConfigStore } from "mcpscope-engine/config/configStore.js";
+import type { ListedMcpServerProfile } from "mcpscope-engine/domain/configuration.js";
 import { COMPANIONS, type CompanionDefinition } from "./registry.js";
 
 /** Resolve a companion's upstream API key from config (null when keyless or unset). */

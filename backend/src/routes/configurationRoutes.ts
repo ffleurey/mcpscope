@@ -4,21 +4,21 @@ import {
   lmStudioConnectionSchema,
   mcpServerProfileSchema,
   modelConfigSchema,
-} from "../domain/configuration.js";
+} from "mcpscope-engine/domain/configuration.js";
 import {
   initializeMcpSession,
   listMcpTools,
-} from "../services/mcp/httpClient.js";
+} from "mcpscope-engine/services/mcp/httpClient.js";
 import {
   isModelLoaded,
   listModelsWithStatus,
   loadModel as loadLmModel,
   unloadModel as unloadLmModel,
-} from "../services/lmstudio/client.js";
-import { ensureModelReady } from "../services/provider/index.js";
-import { listModels } from "../services/openai/client.js";
-import { listUserModels } from "../services/openrouter/client.js";
-import { getOllamaModelDetails } from "../services/ollama/client.js";
+} from "mcpscope-engine/services/lmstudio/client.js";
+import { ensureModelReady } from "mcpscope-engine/services/provider/index.js";
+import { listModels } from "mcpscope-engine/services/openai/client.js";
+import { listUserModels } from "mcpscope-engine/services/openrouter/client.js";
+import { getOllamaModelDetails } from "mcpscope-engine/services/ollama/client.js";
 import type { RouteDeps } from "./types.js";
 
 function providerLabel(providerType?: string): string {

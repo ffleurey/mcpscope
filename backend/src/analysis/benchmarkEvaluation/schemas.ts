@@ -8,7 +8,7 @@
  */
 
 import { z } from 'zod'
-import type { RubricCriterion } from '../../domain/model.js'
+import type { RubricCriterion } from 'mcpscope-engine/domain/model.js'
 
 export const SCHEMA_KEY = {
   /** The rubric verdict produced by the judge step. */

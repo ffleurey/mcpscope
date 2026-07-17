@@ -1,5 +1,5 @@
-import { healthResponseSchema } from '../domain/apiSchemas.js'
-import { getDomainModelSummary } from '../domain/model.js'
+import { healthResponseSchema } from 'mcpscope-engine/domain/apiSchemas.js'
+import { getDomainModelSummary } from 'mcpscope-engine/domain/model.js'
 import type { RouteDeps } from './types.js'
 
 /**

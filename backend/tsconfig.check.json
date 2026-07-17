@@ -1,0 +1,17 @@
+{
+  // Type-check config for the workbench. Unlike the base tsconfig (which
+  // resolves `mcpscope-engine` via its built dist), this maps the package to
+  // its TypeScript source so `check:backend` needs no engine build. Non-
+  // relative path mappings resolve relative to this file's directory (no
+  // baseUrl — deprecated in TS 6.0). `rootDir` is widened to the repo root so
+  // the pulled-in engine source files satisfy the rootDir constraint; nothing
+  // is emitted (check runs with --noEmit).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "paths": {
+      "mcpscope-engine": ["../packages/engine/src/index.ts"],
+      "mcpscope-engine/*.js": ["../packages/engine/src/*.ts"]
+    }
+  }
+}

@@ -1,13 +1,13 @@
-import type { BackendConnection } from "../persistence/connection.js";
-import { getSessionRecord } from '../persistence/repository.js'
+import type { BackendConnection } from "mcpscope-engine/persistence/connection.js";
+import { getSessionRecord } from 'mcpscope-engine/persistence/repository.js'
 import { listArtifactsBySession, type ArtifactRecord } from './artifactRepository.js'
 import { SCHEMA_KEY, type AnalysisPhase, type AnalysisSessionState } from './schemas.js'
-import type { StepRecord } from '../domain/model.js'
+import type { StepRecord } from 'mcpscope-engine/domain/model.js'
 import { getWorkflowLabel } from './analysisWorkflowFactory.js'
 import {
   registerSessionPresenter,
   type SessionErrorSummary,
-} from '../operations/sessionPresentation.js'
+} from 'mcpscope-engine/operations/sessionPresentation.js'
 
 /** Analysis diagnostics use the engine's shared latest_error shape. */
 export type AnalysisDiagnosticSummary = SessionErrorSummary

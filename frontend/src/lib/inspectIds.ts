@@ -1,6 +1,6 @@
 // Detection of inspectable IDs for the payload navigator.
 //
-// Grammar mirrors backend/src/domain/hierarchicalIds.ts (the source of truth):
+// Grammar mirrors packages/engine/src/domain/hierarchicalIds.ts (the source of truth):
 //   - session id = 4 uppercase Crockford base32 chars (no I/O/0/1)
 //   - hierarchical suffixes: .S (setup), .<n>T/.<n>W/.<n>C (turn/step), .<n> (round/part),
 //     and a trailing -<TYPE> part suffix (SP/MI/TD/U/R/A/T/TR/DN)

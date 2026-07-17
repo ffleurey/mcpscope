@@ -34,6 +34,31 @@ export default [
     },
   },
 
+  // Engine package TypeScript files (embeddable mcpscope-engine)
+  {
+    files: ["packages/engine/**/*.ts"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { project: "./packages/engine/tsconfig.json" },
+      globals: { ...globals.node },
+    },
+    plugins: { "@typescript-eslint": ts },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+      "@typescript-eslint/consistent-type-imports": [
+        "error",
+        { prefer: "type-imports" },
+      ],
+      "no-console": "warn",
+      "no-empty": ["error", { allowEmptyCatch: true }],
+      "no-unused-vars": "off",
+    },
+  },
+
   // Frontend TypeScript files
   {
     files: ["frontend/src/**/*.ts"],
@@ -206,6 +231,7 @@ export default [
       "backend/dist/**",
       "cli/dist/**",
       "frontend/dist/**",
+      "packages/engine/dist/**",
       "dist/**",
       "node_modules/**",
       "frontend/vite.config.ts",

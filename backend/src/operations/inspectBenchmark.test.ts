@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { afterEach, describe, expect, it } from 'vitest'
-import { openBackendDatabase, type BackendDatabase } from '../persistence/db.js'
+import { openBackendDatabase, type BackendDatabase } from 'mcpscope-engine/persistence/db.js'
 import {
   createBenchmark,
   createBenchmarkCase,
@@ -13,9 +13,9 @@ import type {
   BenchmarkRunRecord,
   BenchmarkEvaluationRecord,
   RubricCriterion,
-} from '../domain/model.js'
-import type { OperationContext } from './context.js'
-import { inspectOperation } from './inspect.js'
+} from 'mcpscope-engine/domain/model.js'
+import type { OperationContext } from 'mcpscope-engine/operations/context.js'
+import { inspectOperation } from 'mcpscope-engine/operations/inspect.js'
 import { registerBenchmarkInspectResolver, resolveBenchmarkInspect } from './benchmarkOperations.js'
 import { registerBenchmarkSchema } from '../persistence/benchmarkSchema.js'
 

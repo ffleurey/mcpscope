@@ -6,9 +6,9 @@
 // identically via CLI and MCP.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { BackendDatabase } from "../persistence/db.js";
-import { runInTransaction } from "../persistence/connection.js";
-import { DEFAULT_JUDGE_TEMPERATURE } from "../domain/model.js";
+import type { BackendDatabase } from "mcpscope-engine/persistence/db.js";
+import { runInTransaction } from "mcpscope-engine/persistence/connection.js";
+import { DEFAULT_JUDGE_TEMPERATURE } from "mcpscope-engine/domain/model.js";
 import type {
   BenchmarkRecord,
   BenchmarkCaseRecord,
@@ -16,7 +16,7 @@ import type {
   BenchmarkRunCaseSnapshot,
   BenchmarkEvaluationRecord,
   RubricCriterion,
-} from "../domain/model.js";
+} from "mcpscope-engine/domain/model.js";
 import {
   createBenchmark,
   getBenchmark,
@@ -44,28 +44,28 @@ import {
   deleteSessionRecord,
   listPartRecordsBySession,
   listTurnRecordsBySession,
-} from "../persistence/repository.js";
+} from "mcpscope-engine/persistence/repository.js";
 import {
   generateBenchmarkId,
   generateRunId,
   generateEvaluationId,
   formatBenchmarkCaseId,
-} from "../domain/hierarchicalIds.js";
-import { createSession } from "../runtime/modelTurns.js";
+} from "mcpscope-engine/domain/hierarchicalIds.js";
+import { createSession } from "mcpscope-engine/runtime/modelTurns.js";
 import { executeAnalysisLaunch } from "./launchAnalysis.js";
 import { ANALYSIS_WORKFLOW_KIND } from "../analysis/workflowKinds.js";
 import { getLatestArtifactBySchemaKey } from "../analysis/artifactRepository.js";
-import { getLatestSessionErrorSummary } from "./sessionPresentation.js";
+import { getLatestSessionErrorSummary } from "mcpscope-engine/operations/sessionPresentation.js";
 import { SCHEMA_KEY as BENCHMARK_EVAL_KEY } from "../analysis/benchmarkEvaluation/schemas.js";
-import type { OperationContext } from "./context.js";
-import type { ExecutionScheduler, TerminalJob } from "../runtime/scheduler.js";
+import type { OperationContext } from "mcpscope-engine/operations/context.js";
+import type { ExecutionScheduler, TerminalJob } from "mcpscope-engine/runtime/scheduler.js";
 import { RunStoppedError, type RunController } from "../runtime/runControl.js";
-import { OperationError } from "./errors.js";
+import { OperationError } from "mcpscope-engine/operations/errors.js";
 import {
   mapSessionIdError,
   resolvePrimarySessionInputs,
   type ResolvedPrimarySessionInputs,
-} from "./sessionCreationShared.js";
+} from "mcpscope-engine/operations/sessionCreationShared.js";
 import {
   deriveSessionMetrics,
   buildCaseReport,

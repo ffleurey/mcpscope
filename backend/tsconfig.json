@@ -5,6 +5,11 @@
     "moduleResolution": "NodeNext",
     "outDir": "./dist",
     "rootDir": "./src",
+    // This base config resolves `mcpscope-engine` as an external package via
+    // node_modules → its built dist/*.d.ts (so `build:backend` compiles against
+    // the engine's published surface and leaves the bare import in the output).
+    // `check:backend` uses tsconfig.check.json, which overrides resolution to
+    // the engine's TypeScript source so no pre-build is needed to type-check.
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

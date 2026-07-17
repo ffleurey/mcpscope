@@ -1,4 +1,4 @@
-import type { PartRecord, RoundRecord, SessionRecord } from '../../domain/model.js'
+import type { PartRecord, RoundRecord, SessionRecord } from 'mcpscope-engine/domain/model.js'
 
 const sessionId = 'captured-reasoning-session'
 const turnId = 'captured-reasoning-turn'

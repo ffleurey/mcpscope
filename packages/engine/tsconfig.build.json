@@ -1,0 +1,13 @@
+{
+  // Build config for the published package: emits JS + declarations to dist/,
+  // excluding tests. Type-checking of everything (incl. tests) happens via
+  // `npm run check` (which uses ./tsconfig.json --noEmit).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "types": ["node"]
+  },
+  "exclude": ["src/**/*.test.ts"]
+}

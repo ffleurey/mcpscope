@@ -7,10 +7,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { z } from "zod";
-import type { OperationContext } from "./context.js";
-import { OperationError } from "./errors.js";
-import { registerInspectIdResolver } from "./inspect.js";
-import { registerOperationExtension } from "./catalog.js";
+import type { OperationContext } from "mcpscope-engine/operations/context.js";
+import { OperationError } from "mcpscope-engine/operations/errors.js";
+import { registerInspectIdResolver } from "mcpscope-engine/operations/inspect.js";
+import { registerOperationExtension } from "mcpscope-engine/operations/catalog.js";
 import {
   createBenchmarkEntry,
   listBenchmarkEntries,
@@ -43,14 +43,14 @@ import {
   getBenchmarkEvaluation,
   listBenchmarkEvaluationsByRun,
 } from "../persistence/benchmarkRepository.js";
-import { getSessionRecord } from "../persistence/repository.js";
+import { getSessionRecord } from "mcpscope-engine/persistence/repository.js";
 import {
   rubricCriterionSchema,
   type BenchmarkRecord,
   type BenchmarkCaseRecord,
   type BenchmarkRunRecord,
   type BenchmarkEvaluationRecord,
-} from "../domain/model.js";
+} from "mcpscope-engine/domain/model.js";
 import type {
   RunReport,
   CaseReport,

@@ -1,11 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getBackendConfig } from '../config.js'
-import { deriveContextEntries, deriveTranscriptEntries } from '../domain/selectors.js'
-import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from '../domain/trace.js'
-import { openBackendDatabase } from '../persistence/db.js'
-import { deleteSessionRecord, listSessionRecords } from '../persistence/repository.js'
-import { importTraceBundle } from '../runtime/traceImport.js'
+import { getBackendConfig } from 'mcpscope-engine/config.js'
+import { deriveContextEntries, deriveTranscriptEntries } from 'mcpscope-engine/domain/selectors.js'
+import { buildSessionTraceBundle, sessionTraceBundleSchema, type SessionTraceBundle } from 'mcpscope-engine/domain/trace.js'
+import { openBackendDatabase } from 'mcpscope-engine/persistence/db.js'
+import { deleteSessionRecord, listSessionRecords } from 'mcpscope-engine/persistence/repository.js'
+import { importTraceBundle } from 'mcpscope-engine/runtime/traceImport.js'
 import {
   capturedReasoningThreeBatchParts,
   capturedReasoningThreeBatchRounds,

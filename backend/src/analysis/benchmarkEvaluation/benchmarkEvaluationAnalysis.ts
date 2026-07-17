@@ -7,9 +7,9 @@
  * step. Launched per benchmark run-session with a separate judge model.
  */
 
-import type { BackendDatabase } from '../../persistence/db.js'
-import type { ChatCompletionGateway } from '../../runtime/modelTurns.js'
-import type { McpGateway } from '../../runtime/toolTurns.js'
+import type { BackendDatabase } from 'mcpscope-engine/persistence/db.js'
+import type { ChatCompletionGateway } from 'mcpscope-engine/runtime/modelTurns.js'
+import type { McpGateway } from 'mcpscope-engine/runtime/toolTurns.js'
 import { AnalysisSessionBase } from '../analysisSessionBase.js'
 import type { AnalysisWorkflowInput } from '../analysisWorkflowInput.js'
 import { SCHEMA_KEY as CORE_KEY } from '../schemas.js'

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { ConfigStore } from "../config/configStore.js";
+import { ConfigStore } from "mcpscope-engine/config/configStore.js";
 import { companionProfiles } from "./index.js";
 
 // companionProfiles() reads the given config store, so each test builds one
