@@ -232,7 +232,7 @@ export async function buildBackendApp(
     scheduler,
     extensions: { runControl },
   };
-  registerMcpTransport(app, opCtx);
+  registerMcpTransport(app, opCtx, config.appVersion ?? "dev");
 
   // Bundled companion MCP servers: mounted in-process at /companions/<name>/mcp
   // and surfaced as read-only built-in profiles selectable with no configuration.
