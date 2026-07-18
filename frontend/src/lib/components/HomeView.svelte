@@ -1,6 +1,8 @@
 <script lang="ts">
   import { currentView } from '../navStore'
-  import { modelConfigs } from '../connectionStore'
+  import { modelConfigs, appVersion } from '../connectionStore'
+
+  const REPO_URL = 'https://github.com/ffleurey/mcpscope'
   import { openPrimaryLaunchDialog } from '../sessionStore'
   import { benchmarks, selectBenchmark } from '../benchmarkStore'
   import { getBenchmark } from '../api/backendClient'
@@ -57,6 +59,23 @@
         how models reason, choose tools, and consume context — then benchmark a server across
         repeated runs.
       </p>
+      <div class="hero-meta">
+        <span class="hero-version">v{$appVersion}</span>
+        <span class="hero-sep">·</span>
+        <a
+          class="hero-link"
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer">GitHub</a
+        >
+        <span class="hero-sep">·</span>
+        <a
+          class="hero-link"
+          href="{REPO_URL}/releases"
+          target="_blank"
+          rel="noopener noreferrer">Releases</a
+        >
+      </div>
     </section>
 
     <!-- ── Sessions ───────────────────────────────────────────────────── -->
@@ -196,6 +215,29 @@
     font-size: 0.85rem;
     color: var(--text-dim);
     line-height: 1.5;
+  }
+  .hero-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+  .hero-version {
+    color: var(--text-bright);
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-sep {
+    opacity: 0.5;
+  }
+  .hero-link {
+    color: var(--amber-bright);
+    text-decoration: none;
+  }
+  .hero-link:hover {
+    color: var(--amber-glow);
+    text-decoration: underline;
   }
 
   .card {

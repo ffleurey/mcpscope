@@ -12,6 +12,6 @@ const ANALYSIS_OPS = [inspectOperation, statusOperation] as const
  * Exposes only inspect + status so the analysis agent can read trace data
  * but cannot create sessions, list all sessions, or send arbitrary prompts.
  */
-export function createAnalysisMcpServer(ctx: OperationContext): McpServer {
-  return buildMcpServer(ctx, ANALYSIS_OPS, 'mcpscope-analysis')
+export function createAnalysisMcpServer(ctx: OperationContext, version = 'dev'): McpServer {
+  return buildMcpServer(ctx, ANALYSIS_OPS, 'mcpscope-analysis', version)
 }

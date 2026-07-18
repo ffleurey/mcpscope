@@ -24,9 +24,10 @@ export function buildMcpServer(
   ctx: OperationContext,
   ops: readonly Operation[],
   serverName = 'mcpscope',
+  version = 'dev',
 ): McpServer {
   const server = new McpServer(
-    { name: serverName, version: '1.0.0' },
+    { name: serverName, version },
     { capabilities: { tools: {} } },
   )
 
@@ -103,8 +104,8 @@ export function buildMcpServer(
  * operations plus any workbench extensions registered by startup wiring
  * (buildBackendApp registers the benchmark set before serving requests).
  */
-export function createMcpServer(ctx: OperationContext): McpServer {
-  return buildMcpServer(ctx, getOperationList())
+export function createMcpServer(ctx: OperationContext, version = 'dev'): McpServer {
+  return buildMcpServer(ctx, getOperationList(), 'mcpscope', version)
 }
 
 export { TOOL_PREFIX }

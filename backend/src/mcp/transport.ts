@@ -15,13 +15,17 @@ import { registerStreamableHttpMcp } from './streamableHttp.js'
  * Each request gets a fresh transport in stateless mode (see registerStreamableHttpMcp).
  * Operations execute directly against the backend (no loopback HTTP).
  */
-export function registerMcpTransport(app: FastifyInstance, ctx: OperationContext): void {
-  registerStreamableHttpMcp(app, '/mcp', () => createMcpServer(ctx))
+export function registerMcpTransport(
+  app: FastifyInstance,
+  ctx: OperationContext,
+  version = 'dev',
+): void {
+  registerStreamableHttpMcp(app, '/mcp', () => createMcpServer(ctx, version))
 
   // ─── Restricted analysis MCP endpoint ────────────────────────────────────────
   // Only exposes inspect + status so analysis agents can read trace data but
   // cannot create sessions, list all sessions, or send arbitrary prompts.
-  registerStreamableHttpMcp(app, '/mcp/analysis', () => createAnalysisMcpServer(ctx))
+  registerStreamableHttpMcp(app, '/mcp/analysis', () => createAnalysisMcpServer(ctx, version))
 }
 
 export type { OperationContext }
