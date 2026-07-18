@@ -16,16 +16,22 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
+    "mcp-client",
     "llm",
+    "ai-agents",
     "agent",
     "agent-runtime",
     "embeddable",
+    "tool-calling",
+    "tool-use",
     "local-first",
+    "local-llm",
     "lm-studio",
     "ollama",
     "openrouter",
     "sqlite",
-    "tool-use"
+    "typescript",
+    "nodejs"
   ],
   "type": "module",
   "engines": {

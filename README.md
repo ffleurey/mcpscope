@@ -6,6 +6,10 @@
 (LM Studio, Ollama) or remote (OpenRouter) models — one shared workspace with a Web UI for you and
 a CLI + MCP interface for your coding agent.**
 
+**Its runtime ships separately as [`mcpscope-engine`](EMBEDDING.md) — an embeddable,
+zero-dependency TypeScript chat/agent engine (MCP tool calling, local-first LLM providers, durable
+`node:sqlite` sessions, streaming transparency events) for building your own MCP-powered app.**
+
 Building a good MCP server is empirical work, and you rarely do it alone anymore: a coding agent
 can run every benchmark and read every trace, but the numbers only get *good* when the developer
 stays in the loop — looking at the one run that failed, tightening a tool description or a rubric,
