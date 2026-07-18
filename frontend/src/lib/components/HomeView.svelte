@@ -15,6 +15,7 @@
   import type { BenchmarkCase } from '../backendTypes'
 
   const REPO_URL = 'https://github.com/ffleurey/mcpscope'
+  const REPO_DISPLAY = 'github.com/ffleurey/mcpscope'
 
   // The session-creation modal is mounted in the Sidebar and driven by a store,
   // so we just trigger it here.
@@ -62,7 +63,9 @@
       <div class="hero-meta">
         <span class="hero-version">v{$appVersion}</span>
         <span class="hero-sep">·</span>
-        <a class="hero-link" href={REPO_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a class="hero-link" href={REPO_URL} target="_blank" rel="noopener noreferrer"
+          >{REPO_DISPLAY}</a
+        >
         <span class="hero-sep">·</span>
         <a class="hero-link" href="{REPO_URL}/releases" target="_blank" rel="noopener noreferrer"
           >Releases</a
