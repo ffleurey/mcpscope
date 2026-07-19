@@ -315,10 +315,13 @@ describe('model-only turn runtime', () => {
     }
 
     const session = createSession(db, { modelProfileSnapshot: modelProfile })
-    const result = await createModelOnlyTurn(db, gateway, {
-      sessionId: session.id,
-      userContent: 'Say something long.',
-    })
+    const emittedTypes: string[] = []
+    const result = await createModelOnlyTurn(
+      db,
+      gateway,
+      { sessionId: session.id, userContent: 'Say something long.' },
+      (event) => emittedTypes.push(event.type),
+    )
 
     expect(result.turn.status).toBe('error')
     expect(result.turn.outcome).toBe(
@@ -338,6 +341,12 @@ describe('model-only turn runtime', () => {
     expect(diagnostic?.display.state).toBe('transcript')
     expect(diagnostic?.payload.text).toMatch(/partial response above was preserved/)
     expect(diagnostic?.payload.text).toMatch(/received 42 bytes/)
+
+    // turn-failed, not turn-committed: the backend's SSE relay closes the
+    // stream on the first event matching either type, so emitting both would
+    // silently drop whichever came second for a live subscriber.
+    expect(emittedTypes).toContain('turn-failed')
+    expect(emittedTypes).not.toContain('turn-committed')
 
     db.connection.close()
   })

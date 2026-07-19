@@ -1317,10 +1317,18 @@ function finalizeToolTurnStreamFailure(
     transcript: deriveTranscriptEntries(persistedPartsOnError),
     context: deriveContextEntries(persistedPartsOnError),
   })
+  // turn-failed, not turn-committed: relaySchedulerJobStream (backend/src/app.ts)
+  // closes the SSE stream on the first event matching either type, so only one
+  // of the two would ever reach a live subscriber. turn-failed is the existing
+  // contract streaming clients key off of for the session-level error banner;
+  // the part-committed/round-committed events already emitted above carry the
+  // recovered content live, and the full trace (including this turn's 'error'
+  // status) is available on the next fetch regardless.
   emitEvent?.({
-    type: 'turn-committed',
-    turn: { ...turn },
-    trace: traceOnError,
+    type: 'turn-failed',
+    turnId,
+    errorType: 'internal',
+    message: info.message,
   })
 
   return {

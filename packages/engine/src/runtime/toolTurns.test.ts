@@ -1525,11 +1525,14 @@ describe('tool-enabled turn runtime', () => {
       ],
     })
 
-    const result = await createToolEnabledTurn(db, chatCompletionGateway, minimalMcpGateway, {
-      sessionId: session.id,
-      userContent: 'Tell me the current time.',
-      maxToolRounds: 5,
-    })
+    const emittedTypes: string[] = []
+    const result = await createToolEnabledTurn(
+      db,
+      chatCompletionGateway,
+      minimalMcpGateway,
+      { sessionId: session.id, userContent: 'Tell me the current time.', maxToolRounds: 5 },
+      (event) => emittedTypes.push(event.type),
+    )
 
     expect(result.turn.status).toBe('error')
     expect(result.turn.outcome).toBe(
@@ -1548,6 +1551,12 @@ describe('tool-enabled turn runtime', () => {
     expect(diagnostic?.display.state).toBe('transcript')
     expect(diagnostic?.payload.text).toMatch(/partial response above was preserved/)
     expect(diagnostic?.payload.text).toMatch(/received 17 bytes/)
+
+    // turn-failed, not turn-committed: the backend's SSE relay closes the
+    // stream on the first event matching either type, so emitting both would
+    // silently drop whichever came second for a live subscriber.
+    expect(emittedTypes).toContain('turn-failed')
+    expect(emittedTypes).not.toContain('turn-committed')
 
     db.connection.close()
   })
