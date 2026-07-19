@@ -138,8 +138,17 @@ export async function probeRequestPromptTokens(
     return null
   }
 
-  const body = buildProbeBody(session, messages, tools)
   const provider = session.modelProfileSnapshot.providerType ?? 'lmstudio'
+
+  // OpenRouter reasoning models: skip the `max_tokens: 1` non-streaming probe
+  // entirely. It's unreliable for these models — some upstream providers ignore
+  // the token budget and charge for a full generation instead of truncating —
+  // so go straight to the cheap text-length heuristic.
+  if (provider === 'openrouter' && session.modelProfileSnapshot.reasoning === 'on') {
+    return estimatePromptTokensForOpenRouter(session, messages, tools)
+  }
+
+  const body = buildProbeBody(session, messages, tools)
 
   if (chatCompletionGateway.probePromptTokensDetailed) {
     let result

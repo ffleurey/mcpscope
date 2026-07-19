@@ -45,7 +45,10 @@ import {
   normalizeStreamUsage,
 } from '../services/provider/index.js'
 import {
+  buildDiagnosticNotePart,
+  buildStreamFailureRecovery,
   commitSegmentsToParts,
+  describeStreamFailure,
   deriveAssistantContentTokenMetadata,
   extractContentSegmentTexts,
 } from './turnAssembly.js'
@@ -56,6 +59,11 @@ import {
   type RuntimeTurnResult,
 } from './modelTurns.js'
 import type { ApiMessage } from '../domain/selectors.js'
+import type {
+  AssistantSegment,
+  OaiChatCompletionResponse,
+  OaiStreamedChatCompletionResult,
+} from '../services/openai/client.js'
 import type {
   McpAuth,
   McpRawExchange,
@@ -1219,6 +1227,113 @@ export async function runDeterministicMcpToolCallsInSingleTurn(
   }
 }
 
+interface ToolTurnFailureInfo {
+  message: string
+  receivedBytes: number | null
+  segments: AssistantSegment[]
+  completion: OaiChatCompletionResponse | null
+}
+
+/**
+ * Closes out a tool-enabled turn whose current round couldn't reach a clean
+ * completion — a mid-stream read failure — without discarding whatever the
+ * model already streamed or any prior rounds already committed this turn.
+ * Same shape as the existing tool-loop-limit graceful-close below: persist
+ * everything recoverable, mark the round/turn 'error', and return a normal
+ * RuntimeTurnResult instead of throwing.
+ */
+function finalizeToolTurnStreamFailure(
+  database: BackendDatabase,
+  session: SessionRecord,
+  turn: TurnRecord,
+  currentRound: RoundRecord,
+  rounds: RoundRecord[],
+  turnId: string,
+  turnNumber: number,
+  ownerStepId: string | null,
+  info: ToolTurnFailureInfo,
+  emitEvent: TurnStreamEventSink | undefined,
+): RuntimeTurnResult {
+  const completedAt = now()
+
+  const recovery = buildStreamFailureRecovery({
+    session,
+    turnId,
+    turnNumber,
+    roundNumber: currentRound.roundIndex + 1,
+    roundId: currentRound.id,
+    ownerStepId,
+    segments: info.segments,
+    message: info.message,
+    receivedBytes: info.receivedBytes,
+    initialOrdinal: getNextPartOrdinal(database.connection, session.id),
+    initialPartNumber: getNextRoundPartSequence(database.connection, currentRound.id),
+    createdAt: completedAt,
+  })
+
+  currentRound.status = 'error'
+  currentRound.finishReason = 'error'
+  currentRound.completedAt = completedAt
+  currentRound.responseTraceJson = {
+    completion: info.completion,
+    assistantSegments: info.segments,
+    error: info.message,
+  }
+
+  turn.status = 'error'
+  turn.completedAt = completedAt
+  turn.outcome = `step-error: ${info.message}`
+
+  const errorTx = () =>
+    runInTransaction(database.connection, () => {
+      updateRoundRecord(database.connection, currentRound)
+      for (const part of recovery.parts) {
+        insertPartRecord(database.connection, part)
+      }
+      updateTurnRecord(database.connection, turn)
+      updateSessionRecord(database.connection, session)
+    })
+  errorTx()
+
+  recovery.parts.forEach((part) =>
+    emitEvent?.({
+      type: 'part-committed',
+      part: { ...part },
+    }),
+  )
+  emitEvent?.({
+    type: 'round-committed',
+    round: { ...currentRound },
+  })
+
+  const persistedPartsOnError = listPartRecordsBySession(database.connection, session.id)
+  const traceOnError = buildSessionTraceBundle({
+    session,
+    steps: listStepRecordsBySession(database.connection, session.id),
+    turns: listTurnRecordsBySession(database.connection, session.id),
+    rounds: listRoundRecordsBySession(database.connection, session.id),
+    parts: persistedPartsOnError,
+    rawExchanges: listRawExchangeRecordsBySession(database.connection, session.id),
+    transcript: deriveTranscriptEntries(persistedPartsOnError),
+    context: deriveContextEntries(persistedPartsOnError),
+  })
+  emitEvent?.({
+    type: 'turn-committed',
+    turn: { ...turn },
+    trace: traceOnError,
+  })
+
+  return {
+    session,
+    turn,
+    round: currentRound,
+    rounds,
+    parts: persistedPartsOnError.filter((part) => part.turnId === turnId),
+    transcript: traceOnError.transcript,
+    context: traceOnError.context,
+  }
+}
+
 export async function createToolEnabledTurn(
   database: BackendDatabase,
   chatCompletionGateway: ChatCompletionGateway,
@@ -1365,22 +1480,38 @@ export async function createToolEnabledTurn(
     currentRound.requestPayloadJson = requestBody
     updateRoundRecord(database.connection, currentRound)
 
-    const streamedCompletion = await executeChatCompletion(
-      chatCompletionGateway,
-      session.modelProfileSnapshot.connectionBaseUrl,
-      session.modelProfileSnapshot.apiKey ?? undefined,
-      requestBody,
-      {
-        onDelta(delta) {
-          emitEvent?.({
-            type: 'part-delta',
-            turnId,
-            roundId: currentRound.id,
-            delta,
-          })
+    let streamedCompletion: OaiStreamedChatCompletionResult
+    try {
+      streamedCompletion = await executeChatCompletion(
+        chatCompletionGateway,
+        session.modelProfileSnapshot.connectionBaseUrl,
+        session.modelProfileSnapshot.apiKey ?? undefined,
+        requestBody,
+        {
+          onDelta(delta) {
+            emitEvent?.({
+              type: 'part-delta',
+              turnId,
+              roundId: currentRound.id,
+              delta,
+            })
+          },
         },
-      },
-    )
+      )
+    } catch (err) {
+      return finalizeToolTurnStreamFailure(
+        database,
+        session,
+        turn,
+        currentRound,
+        rounds,
+        turnId,
+        turnNumber,
+        input.ownerStepId ?? null,
+        describeStreamFailure(err),
+        emitEvent,
+      )
+    }
     const completion = streamedCompletion.completion
 
     const completedAt = now()
@@ -1389,12 +1520,9 @@ export async function createToolEnabledTurn(
     const usage = normalizeStreamUsage(streamedCompletion.rawResponseBody, provider)
 
     currentRound.status = 'complete'
-    // SHORTCUT: any non-tool_calls finish reason is coerced to "stop", so a
-    // length-truncated round is recorded as a clean stop — the trace lies about
-    // truncation. The model-only pipeline (modelTurns.ts) instead throws on
-    // non-"stop". Paying this back = persist the real finish_reason in both
-    // pipelines (schema allows text) and surface "length" in inspect/UI.
-    currentRound.finishReason = finishReason === 'tool_calls' ? 'tool_calls' : 'stop'
+    const roundTruncated = finishReason === 'length'
+    currentRound.finishReason =
+      finishReason === 'tool_calls' ? 'tool_calls' : roundTruncated ? 'length' : 'stop'
     currentRound.completedAt = completedAt
     currentRound.usage = {
       promptTokens: usage.promptTokens,
@@ -1685,7 +1813,11 @@ export async function createToolEnabledTurn(
 
     const assistantContentSegments = extractContentSegmentTexts(streamedCompletion.segments)
 
-    const { parts: assistantParts } = commitSegmentsToParts({
+    const {
+      parts: streamedParts,
+      nextOrdinal,
+      nextPartNumber,
+    } = commitSegmentsToParts({
       session,
       turnId,
       turnNumber,
@@ -1704,9 +1836,33 @@ export async function createToolEnabledTurn(
       createdAt: completedAt,
     })
 
+    // Truncation isn't an error — the response is complete-but-capped — but
+    // it's still an anomaly worth surfacing in the transcript rather than
+    // leaving buried in round.finishReason.
+    const assistantParts = roundTruncated
+      ? [
+          ...streamedParts,
+          buildDiagnosticNotePart({
+            session,
+            turnId,
+            turnNumber,
+            roundNumber: currentRound.roundIndex + 1,
+            roundId: currentRound.id,
+            ownerStepId: input.ownerStepId ?? null,
+            partNumber: nextPartNumber,
+            ordinal: nextOrdinal,
+            text: 'Response was truncated: the model reached the max output token limit (finish_reason: length) before finishing. Retry or raise the output token limit for a complete answer.',
+            summary: 'Response truncated (max output tokens reached)',
+            createdAt: completedAt,
+          }),
+        ]
+      : streamedParts
+
     turn.status = 'complete'
     turn.completedAt = completedAt
-    turn.outcome = currentRound.roundIndex > 0 ? 'tool-assisted-response' : 'model-response'
+    turn.outcome =
+      (currentRound.roundIndex > 0 ? 'tool-assisted-response' : 'model-response') +
+      (roundTruncated ? '-truncated' : '')
     turn.usage = { ...currentRound.usage }
 
     session.status = 'active'

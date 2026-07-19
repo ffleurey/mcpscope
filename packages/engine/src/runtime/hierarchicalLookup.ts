@@ -506,6 +506,8 @@ function getTrailingDiagnosticError(
   return { step_id: null, error_kind: null, message: diagnostic.payload.text }
 }
 
+const STEP_ERROR_PREFIX = 'step-error: '
+
 /**
  * Last-resort failure summary: the errored turn itself. A turn can fail mid-stream
  * (a provider/tool error) with no diagnostic part and no rich persisted message —
@@ -521,10 +523,19 @@ function getTerminalTurnError(
     .sort((a, b) => a.turnNumber - b.turnNumber)
     .at(-1)
   if (!errored) return null
+
+  // `outcome` is a short, stable classifier (e.g. 'step-error') — never the
+  // dynamic message itself, or the CLI/GUI would render it twice (once as
+  // error_kind, once as message; see chatSession.ts's `step-error: <message>`
+  // outcome format).
+  const outcome = errored.outcome ?? 'error'
+  const message = outcome.startsWith(STEP_ERROR_PREFIX)
+    ? outcome.slice(STEP_ERROR_PREFIX.length)
+    : `Turn ${errored.turnNumber} ended in error.`
   return {
     step_id: errored.id,
-    error_kind: errored.outcome ?? 'error',
-    message: `Turn ${errored.turnNumber} ended in error.`,
+    error_kind: outcome.startsWith(STEP_ERROR_PREFIX) ? 'step-error' : outcome,
+    message,
   }
 }
 

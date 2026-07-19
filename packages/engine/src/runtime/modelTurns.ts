@@ -45,6 +45,7 @@ import {
   buildModelMessages,
 } from '../domain/selectors.js'
 import type {
+  AssistantSegment,
   OaiChatCompletionResponse,
   PromptProbeResult,
   StreamCallbacks,
@@ -60,7 +61,10 @@ import { applyContextCompaction } from '../domain/compaction.js'
 import { DEFAULT_SESSION_TITLE, maybeApplyAutomaticSessionTitle } from './sessionTitles.js'
 import { buildReasoningParams, normalizeStreamUsage } from '../services/provider/index.js'
 import {
+  buildDiagnosticNotePart,
+  buildStreamFailureRecovery,
   commitSegmentsToParts,
+  describeStreamFailure,
   deriveAssistantContentTokenMetadata,
   extractContentSegmentTexts,
 } from './turnAssembly.js'
@@ -221,6 +225,115 @@ export function createSession(database: BackendDatabase, input: CreateSessionInp
   return session
 }
 
+interface ModelTurnFailureInfo {
+  message: string
+  receivedBytes: number | null
+  segments: AssistantSegment[]
+  completion: OaiChatCompletionResponse | null
+}
+
+/**
+ * Closes out a model-only turn that couldn't reach a clean 'stop' — a
+ * mid-stream read failure, or a finish_reason the pipeline doesn't otherwise
+ * understand — without discarding whatever the model already streamed.
+ * Mirrors the tool-loop-limit graceful-close block in toolTurns.ts: persist
+ * everything recoverable, mark the round/turn 'error', and return a normal
+ * RuntimeTurnResult instead of throwing, so the failure is visible in the
+ * transcript rather than swallowed.
+ */
+function finalizeModelTurnStreamFailure(
+  database: BackendDatabase,
+  session: SessionRecord,
+  turn: TurnRecord,
+  round: RoundRecord,
+  turnId: string,
+  turnNumber: number,
+  ownerStepId: string | null,
+  requestBody: Record<string, unknown>,
+  info: ModelTurnFailureInfo,
+  emitEvent: TurnStreamEventSink | undefined,
+): RuntimeTurnResult {
+  const completedAt = now()
+
+  const recovery = buildStreamFailureRecovery({
+    session,
+    turnId,
+    turnNumber,
+    roundNumber: 1,
+    roundId: round.id,
+    ownerStepId,
+    segments: info.segments,
+    message: info.message,
+    receivedBytes: info.receivedBytes,
+    initialOrdinal: getNextPartOrdinal(database.connection, session.id),
+    initialPartNumber: getNextRoundPartSequence(database.connection, round.id),
+    createdAt: completedAt,
+  })
+
+  round.status = 'error'
+  round.finishReason = 'error'
+  round.completedAt = completedAt
+  round.requestPayloadJson = requestBody
+  round.responseTraceJson = {
+    completion: info.completion,
+    assistantSegments: info.segments,
+    error: info.message,
+  }
+
+  turn.status = 'error'
+  turn.completedAt = completedAt
+  turn.outcome = `step-error: ${info.message}`
+
+  const errorTx = () =>
+    runInTransaction(database.connection, () => {
+      updateRoundRecord(database.connection, round)
+      for (const part of recovery.parts) {
+        insertPartRecord(database.connection, part)
+      }
+      updateTurnRecord(database.connection, turn)
+      updateSessionRecord(database.connection, session)
+    })
+  errorTx()
+
+  recovery.parts.forEach((part) =>
+    emitEvent?.({
+      type: 'part-committed',
+      part: { ...part },
+    }),
+  )
+  emitEvent?.({
+    type: 'round-committed',
+    round: { ...round },
+  })
+
+  const persistedPartsOnError = listPartRecordsBySession(database.connection, session.id)
+  const traceOnError = buildSessionTraceBundle({
+    session,
+    steps: listStepRecordsBySession(database.connection, session.id),
+    turns: listTurnRecordsBySession(database.connection, session.id),
+    rounds: listRoundRecordsBySession(database.connection, session.id),
+    parts: persistedPartsOnError,
+    rawExchanges: listRawExchangeRecordsBySession(database.connection, session.id),
+    transcript: deriveTranscriptEntries(persistedPartsOnError),
+    context: deriveContextEntries(persistedPartsOnError),
+  })
+  emitEvent?.({
+    type: 'turn-committed',
+    turn: { ...turn },
+    trace: traceOnError,
+  })
+
+  return {
+    session,
+    turn,
+    round,
+    rounds: [round],
+    parts: persistedPartsOnError.filter((part) => part.turnId === turnId),
+    transcript: traceOnError.transcript,
+    context: traceOnError.context,
+  }
+}
+
 export async function createModelOnlyTurn(
   database: BackendDatabase,
   chatCompletionGateway: ChatCompletionGateway,
@@ -364,44 +477,73 @@ export async function createModelOnlyTurn(
     round: { ...round },
   })
 
-  const streamedCompletion = await executeChatCompletion(
-    chatCompletionGateway,
-    session.modelProfileSnapshot.connectionBaseUrl,
-    session.modelProfileSnapshot.apiKey ?? undefined,
-    requestBody,
-    {
-      onDelta(delta) {
-        emitEvent?.({
-          type: 'part-delta',
-          turnId,
-          roundId,
-          delta,
-        })
+  let streamedCompletion: OaiStreamedChatCompletionResult
+  try {
+    streamedCompletion = await executeChatCompletion(
+      chatCompletionGateway,
+      session.modelProfileSnapshot.connectionBaseUrl,
+      session.modelProfileSnapshot.apiKey ?? undefined,
+      requestBody,
+      {
+        onDelta(delta) {
+          emitEvent?.({
+            type: 'part-delta',
+            turnId,
+            roundId,
+            delta,
+          })
+        },
       },
-    },
-  )
+    )
+  } catch (err) {
+    return finalizeModelTurnStreamFailure(
+      database,
+      session,
+      turn,
+      round,
+      turnId,
+      turnNumber,
+      input.ownerStepId ?? null,
+      requestBody,
+      describeStreamFailure(err),
+      emitEvent,
+    )
+  }
   const completion = streamedCompletion.completion
 
   const completedAt = now()
   const finishReason = completion.choices[0]?.finish_reason
-  // SHORTCUT: throwing here discards everything the model streamed and leaves
-  // the round record 'streaming' (the tool pipeline in toolTurns.ts handles the
-  // same event by silently coercing to "stop" — the two pipelines contradict
-  // each other; see its matching shortcut). Paying this back = persist the
-  // round with the real finish_reason (e.g. "length") and a
-  // completed-but-truncated turn outcome.
-  if (finishReason !== 'stop') {
-    throw new Error(
-      `Unsupported finish reason for model-only pipeline: ${finishReason ?? 'unknown'}`,
+  // A finish_reason other than "stop" or "length" means the pipeline doesn't
+  // recognize how the model ended the turn (e.g. a content filter, or a
+  // provider-specific reason). Treat it like a stream failure — the model did
+  // stream something, so recover it instead of discarding it.
+  if (finishReason !== 'stop' && finishReason !== 'length') {
+    return finalizeModelTurnStreamFailure(
+      database,
+      session,
+      turn,
+      round,
+      turnId,
+      turnNumber,
+      input.ownerStepId ?? null,
+      requestBody,
+      {
+        message: `Unsupported finish reason for model-only pipeline: ${finishReason ?? 'unknown'}`,
+        receivedBytes: null,
+        segments: streamedCompletion.segments,
+        completion,
+      },
+      emitEvent,
     )
   }
+  const truncated = finishReason === 'length'
 
   const provider = session.modelProfileSnapshot.providerType ?? 'lmstudio'
   const usage = normalizeStreamUsage(streamedCompletion.rawResponseBody, provider)
 
   turn.status = 'complete'
   turn.completedAt = completedAt
-  turn.outcome = 'model-response'
+  turn.outcome = truncated ? 'model-response-truncated' : 'model-response'
   turn.usage = {
     promptTokens: usage.promptTokens,
     completionTokens: usage.completionTokens,
@@ -410,7 +552,7 @@ export async function createModelOnlyTurn(
   }
 
   round.status = 'complete'
-  round.finishReason = 'stop'
+  round.finishReason = truncated ? 'length' : 'stop'
   round.completedAt = completedAt
   round.usage = { ...turn.usage }
   round.requestPayloadJson = requestBody
@@ -421,7 +563,11 @@ export async function createModelOnlyTurn(
 
   const contentSegments = extractContentSegmentTexts(streamedCompletion.segments)
 
-  const { parts: assistantParts } = commitSegmentsToParts({
+  const {
+    parts: streamedParts,
+    nextOrdinal,
+    nextPartNumber,
+  } = commitSegmentsToParts({
     session,
     turnId,
     turnNumber,
@@ -439,6 +585,28 @@ export async function createModelOnlyTurn(
     initialPartNumber: initialPartNumber + 1,
     createdAt: completedAt,
   })
+
+  // Truncation isn't an error — the response is complete-but-capped — but it's
+  // still an anomaly worth surfacing in the transcript rather than leaving
+  // buried in round.finishReason.
+  const assistantParts = truncated
+    ? [
+        ...streamedParts,
+        buildDiagnosticNotePart({
+          session,
+          turnId,
+          turnNumber,
+          roundNumber: 1,
+          roundId,
+          ownerStepId: input.ownerStepId ?? null,
+          partNumber: nextPartNumber,
+          ordinal: nextOrdinal,
+          text: 'Response was truncated: the model reached the max output token limit (finish_reason: length) before finishing. Retry or raise the output token limit for a complete answer.',
+          summary: 'Response truncated (max output tokens reached)',
+          createdAt: completedAt,
+        }),
+      ]
+    : streamedParts
 
   const rawRequestExchange = {
     id: createUuid(),
