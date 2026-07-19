@@ -6,6 +6,21 @@ import { openBackendDatabase } from '../persistence/db.js'
 import { insertStepRecord } from '../persistence/repository.js'
 import { stepTypeKey } from '../domain/executionModel.js'
 import type { ChatCompletionGateway } from './modelTurns.js'
+import { StreamReadError } from '../services/openai/client.js'
+
+const modelProfile = {
+  id: 'model-1',
+  name: 'Model',
+  connectionBaseUrl: 'https://example.com/v1',
+  apiKey: 'secret',
+  modelKey: 'model-key',
+  modelDisplayName: 'Model Key',
+  systemPrompt: 'Reply exactly.',
+  temperature: 0,
+  reasoning: 'on' as const,
+  createdAt: 1,
+  updatedAt: 1,
+}
 
 describe('model-only turn runtime', () => {
   const cleanupDirs = new Set<string>()
@@ -17,7 +32,7 @@ describe('model-only turn runtime', () => {
   }
 
   afterEach(() => {
-    cleanupDirs.forEach(dir => fs.rmSync(dir, { recursive: true, force: true }))
+    cleanupDirs.forEach((dir) => fs.rmSync(dir, { recursive: true, force: true }))
     cleanupDirs.clear()
   })
 
@@ -32,10 +47,10 @@ describe('model-only turn runtime', () => {
           return 4
         }
         if (
-          messages.length === 3
-          && messages[0]?.role === 'system'
-          && messages[1]?.role === 'user'
-          && messages[2]?.role === 'assistant'
+          messages.length === 3 &&
+          messages[0]?.role === 'system' &&
+          messages[1]?.role === 'user' &&
+          messages[2]?.role === 'assistant'
         ) {
           return 9
         }
@@ -141,7 +156,7 @@ describe('model-only turn runtime', () => {
       totalTokens: 19,
     })
 
-    expect(result.parts.map(part => part.partType)).toEqual([
+    expect(result.parts.map((part) => part.partType)).toEqual([
       'user-message',
       'assistant-reasoning',
       'assistant-content',
@@ -154,12 +169,12 @@ describe('model-only turn runtime', () => {
     expect(result.parts[1]?.tokens.count).toBe(5)
     expect(result.parts[2]?.tokens.count).toBe(2)
     expect(result.session.systemPromptTokens).toBe(4)
-    expect(result.transcript.map(entry => entry.type)).toEqual([
+    expect(result.transcript.map((entry) => entry.type)).toEqual([
       'user-message',
       'assistant-reasoning',
       'assistant-content',
     ])
-    expect(result.context.map(entry => entry.type).sort()).toEqual([
+    expect(result.context.map((entry) => entry.type).sort()).toEqual([
       'assistant-content',
       'system-prompt',
       'user-message',
@@ -177,7 +192,7 @@ describe('model-only turn runtime', () => {
       reasoningTokens: 2,
       totalTokens: 21,
     })
-    expect(secondTurn.parts.map(part => part.partType)).toEqual([
+    expect(secondTurn.parts.map((part) => part.partType)).toEqual([
       'user-message',
       'assistant-reasoning',
       'assistant-content',
@@ -267,6 +282,109 @@ describe('model-only turn runtime', () => {
     expect(result.turn.id).toBe(`${session.id}.4W.1T`)
     expect(result.round.id).toBe(`${session.id}.4W.1T.1`)
     expect(result.parts[0]?.id).toBe(`${session.id}.4W.1T.1.1-U`)
+
+    db.connection.close()
+  })
+
+  it('recovers partial content and a diagnostic instead of losing the turn on a mid-stream failure', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+
+    const gateway: ChatCompletionGateway = {
+      async probePromptTokens() {
+        return 4
+      },
+      async createChatCompletion() {
+        throw new Error('should not be called — streamChatCompletion takes priority')
+      },
+      async streamChatCompletion() {
+        throw new StreamReadError('Stream reading failed after 42 bytes: socket hang up', 42, {
+          completion: {
+            id: 'c1',
+            model: 'model-key',
+            created: 1,
+            choices: [{ index: 0, finish_reason: null, message: { role: 'assistant' } }],
+          },
+          segments: [
+            { kind: 'reasoning', text: 'Thinking it through...' },
+            { kind: 'content', text: 'Here is what I have so far' },
+          ],
+          rawResponseBody: 'data: {}\n\n',
+          chunks: [],
+        })
+      },
+    }
+
+    const session = createSession(db, { modelProfileSnapshot: modelProfile })
+    const result = await createModelOnlyTurn(db, gateway, {
+      sessionId: session.id,
+      userContent: 'Say something long.',
+    })
+
+    expect(result.turn.status).toBe('error')
+    expect(result.turn.outcome).toBe(
+      'step-error: Stream reading failed after 42 bytes: socket hang up',
+    )
+    expect(result.round.status).toBe('error')
+    expect(result.round.finishReason).toBe('error')
+    expect(result.parts.map((part) => part.partType)).toEqual([
+      'user-message',
+      'assistant-reasoning',
+      'assistant-content',
+      'diagnostic-note',
+    ])
+    expect(result.parts[2]?.payload.text).toBe('Here is what I have so far')
+    const diagnostic = result.parts[3]
+    expect(diagnostic?.context.state).toBe('excluded')
+    expect(diagnostic?.display.state).toBe('transcript')
+    expect(diagnostic?.payload.text).toMatch(/partial response above was preserved/)
+    expect(diagnostic?.payload.text).toMatch(/received 42 bytes/)
+
+    db.connection.close()
+  })
+
+  it('persists a length-truncated response as complete-but-truncated instead of discarding it', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+
+    const gateway: ChatCompletionGateway = {
+      async probePromptTokens() {
+        return 4
+      },
+      async createChatCompletion() {
+        return {
+          id: 'c1',
+          model: 'model-key',
+          created: 1,
+          choices: [
+            {
+              index: 0,
+              finish_reason: 'length',
+              message: { role: 'assistant', content: 'This is as far as I got before' },
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }
+      },
+    }
+
+    const session = createSession(db, { modelProfileSnapshot: modelProfile })
+    const result = await createModelOnlyTurn(db, gateway, {
+      sessionId: session.id,
+      userContent: 'Say something long.',
+    })
+
+    expect(result.turn.status).toBe('complete')
+    expect(result.turn.outcome).toBe('model-response-truncated')
+    expect(result.round.status).toBe('complete')
+    expect(result.round.finishReason).toBe('length')
+    expect(result.parts.map((part) => part.partType)).toEqual([
+      'user-message',
+      'assistant-content',
+      'diagnostic-note',
+    ])
+    expect(result.parts[1]?.payload.text).toBe('This is as far as I got before')
+    const diagnostic = result.parts[2]
+    expect(diagnostic?.payload.text).toMatch(/truncated/i)
+    expect(diagnostic?.context.state).toBe('excluded')
 
     db.connection.close()
   })

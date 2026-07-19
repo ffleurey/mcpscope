@@ -515,7 +515,7 @@ const STEP_ERROR_PREFIX = 'step-error: '
  * located reason (which turn, and its outcome) so an errored session is never
  * shown with a bare `status:error` and nothing to drill.
  */
-function getTerminalTurnError(
+export function getTerminalTurnError(
   turns: TurnRecord[],
 ): { step_id: string; error_kind: string; message: string } | null {
   const errored = turns
