@@ -1,5 +1,6 @@
 import type { PartRecord, SessionRecord } from '../domain/model.js'
-import type { AssistantSegment } from '../services/openai/client.js'
+import type { AssistantSegment, OaiChatCompletionResponse } from '../services/openai/client.js'
+import { StreamReadError } from '../services/openai/client.js'
 import { formatPartId } from '../domain/hierarchicalIds.js'
 import { allocateProportionalTokenCounts } from '../domain/tokenAccounting.js'
 import { estimateTokensFromText } from '../services/provider/index.js'
@@ -407,4 +408,189 @@ export function commitSegmentsToParts(
   }
 
   return { parts, nextOrdinal: ordinal, nextPartNumber: partNumber }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stream-failure recovery
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BuildDiagnosticNotePartInput {
+  session: SessionRecord
+  turnId: string
+  turnNumber: number
+  roundNumber: number
+  roundId: string
+  ownerStepId: string | null
+  partNumber: number
+  ordinal: number
+  text: string
+  summary: string
+  createdAt: number
+  provenanceJson?: unknown
+}
+
+/**
+ * Builds a `diagnostic-note` part: a system-authored note that renders in the
+ * transcript (so operators see it without drilling into raw traces) but is
+ * excluded from model context (so it never leaks into subsequent prompts).
+ * Mirrors the tool-loop-limit diagnostic in toolTurns.ts — the one existing
+ * precedent for surfacing a turn-level failure this way.
+ */
+export function buildDiagnosticNotePart(input: BuildDiagnosticNotePartInput): PartRecord {
+  return {
+    id: formatPartId(
+      input.session.id,
+      input.turnNumber,
+      input.roundNumber,
+      input.partNumber,
+      'diagnostic-note',
+      input.ownerStepId,
+    ),
+    sessionId: input.session.id,
+    turnId: input.turnId,
+    roundId: input.roundId,
+    parentPartId: null,
+    ordinal: input.ordinal,
+    partType: 'diagnostic-note',
+    roleLabel: 'system',
+    payload: {
+      text: input.text,
+      json: null,
+      mimeType: 'text/plain',
+      summary: input.summary,
+    },
+    display: {
+      state: 'transcript',
+      collapsedByDefault: false,
+    },
+    context: {
+      state: 'excluded',
+      note: 'Error diagnostic — not included in model context',
+      strippedByCompactionAtTurnId: null,
+    },
+    tokens: {
+      count: null,
+      source: 'unknown',
+      confidence: 'unknown',
+      note: null,
+    },
+    provenanceJson: input.provenanceJson ?? null,
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+  }
+}
+
+/**
+ * Normalizes a caught exception into the shape stream-failure recovery needs:
+ * a human-readable message, the byte count received before failure (when
+ * known), whatever assistant segments were already streamed, and the
+ * best-effort completion reconstructed from those bytes (for the round's
+ * trace). A `StreamReadError` (thrown by client.ts on a mid-stream read
+ * failure) carries all of these; any other error degrades to message-only
+ * with no recoverable content.
+ */
+export function describeStreamFailure(err: unknown): {
+  message: string
+  receivedBytes: number | null
+  segments: AssistantSegment[]
+  completion: OaiChatCompletionResponse | null
+} {
+  if (err instanceof StreamReadError) {
+    return {
+      message: err.message,
+      receivedBytes: err.receivedBytes,
+      segments: err.partial.segments,
+      completion: err.partial.completion,
+    }
+  }
+  return {
+    message: err instanceof Error ? err.message : String(err),
+    receivedBytes: null,
+    segments: [],
+    completion: null,
+  }
+}
+
+export interface StreamFailureRecoveryInput {
+  session: SessionRecord
+  turnId: string
+  turnNumber: number
+  roundNumber: number
+  roundId: string
+  ownerStepId: string | null
+  /** Whatever assistant segments were captured before the failure (possibly empty). */
+  segments: AssistantSegment[]
+  message: string
+  receivedBytes: number | null
+  initialOrdinal: number
+  initialPartNumber: number
+  createdAt: number
+}
+
+/**
+ * Turns a failed round into whatever can be salvaged from it: PartRecords for
+ * any reasoning/content the model already streamed (same builder the success
+ * path uses, so a recovered part is indistinguishable from a normal one other
+ * than its token-metadata note), plus a trailing diagnostic-note part
+ * explaining what happened and whether a retry is needed. Token metadata is
+ * always "unknown" here — a partial response has no usage figures from the
+ * provider to attribute.
+ */
+export function buildStreamFailureRecovery(input: StreamFailureRecoveryInput): {
+  parts: PartRecord[]
+} {
+  const contentSegments = extractContentSegmentTexts(input.segments)
+
+  const {
+    parts: partialParts,
+    nextOrdinal,
+    nextPartNumber,
+  } = commitSegmentsToParts({
+    session: input.session,
+    turnId: input.turnId,
+    turnNumber: input.turnNumber,
+    roundNumber: input.roundNumber,
+    roundId: input.roundId,
+    ownerStepId: input.ownerStepId,
+    segments: input.segments,
+    reasoningTokens: null,
+    contentTokenMetadata: contentSegments.map(() => ({
+      count: null,
+      source: 'unknown' as const,
+      confidence: 'unknown' as const,
+      note: 'Turn failed mid-stream; token accounting is unavailable for partial content',
+      provenanceJson: null,
+    })),
+    contentContextNote:
+      'Assistant answer recovered from a failed stream; remains part of later model-visible history',
+    initialOrdinal: input.initialOrdinal,
+    initialPartNumber: input.initialPartNumber,
+    createdAt: input.createdAt,
+  })
+
+  const byteNote =
+    input.receivedBytes != null
+      ? ` (received ${input.receivedBytes} bytes before the connection failed)`
+      : ''
+  const diagnosticText =
+    partialParts.length > 0
+      ? `Turn failed mid-stream${byteNote}: ${input.message}. The partial response above was preserved — retry the turn for a complete answer.`
+      : `Turn failed${byteNote}: ${input.message}.`
+
+  const diagnosticNote = buildDiagnosticNotePart({
+    session: input.session,
+    turnId: input.turnId,
+    turnNumber: input.turnNumber,
+    roundNumber: input.roundNumber,
+    roundId: input.roundId,
+    ownerStepId: input.ownerStepId,
+    partNumber: nextPartNumber,
+    ordinal: nextOrdinal,
+    text: diagnosticText,
+    summary: partialParts.length > 0 ? 'Turn failed (partial response preserved)' : 'Turn failed',
+    createdAt: input.createdAt,
+    provenanceJson: input.receivedBytes != null ? { receivedBytes: input.receivedBytes } : null,
+  })
+
+  return { parts: [...partialParts, diagnosticNote] }
 }

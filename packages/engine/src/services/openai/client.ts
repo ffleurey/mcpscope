@@ -498,6 +498,26 @@ function emitChunkDeltas(
 // Streaming chat completion
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Thrown when the SSE reader fails mid-stream (network drop, upstream reset,
+ * abort). Unlike a bare fetch error, this carries whatever the model already
+ * streamed — `partial` is the best-effort parse of the bytes received before
+ * the failure — so callers can persist the partial answer instead of losing
+ * it, and `receivedBytes` distinguishes a zero-byte failure from one that
+ * happened deep into a response.
+ */
+export class StreamReadError extends Error {
+  constructor(
+    message: string,
+    readonly receivedBytes: number,
+    readonly partial: OaiStreamedChatCompletionResult,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options)
+    this.name = 'StreamReadError'
+  }
+}
+
 export async function streamChatCompletion(
   baseUrl: string,
   apiKey: string | undefined,
@@ -541,6 +561,7 @@ export async function streamChatCompletion(
   let rawText = ''
   let buffered = ''
   let currentDataLines: string[] = []
+  let receivedBytes = 0
 
   const processBufferedLines = () => {
     while (true) {
@@ -579,6 +600,7 @@ export async function streamChatCompletion(
         break
       }
 
+      receivedBytes += value.byteLength
       const text = decoder.decode(value, { stream: true })
       rawText += text
       buffered += text
@@ -586,9 +608,18 @@ export async function streamChatCompletion(
     }
   } catch (err) {
     // Release the response body on a mid-stream failure (abort, network drop)
-    // so the connection isn't left dangling.
+    // so the connection isn't left dangling. Reparse whatever text made it
+    // through before the failure: the model may already have streamed a full
+    // reasoning/content answer, and the caller should be able to recover it
+    // instead of discarding it along with the error.
     void reader.cancel().catch(() => {})
-    throw err
+    const causeMessage = err instanceof Error ? err.message : String(err)
+    throw new StreamReadError(
+      `Stream reading failed after ${receivedBytes} byte${receivedBytes === 1 ? '' : 's'}: ${causeMessage}`,
+      receivedBytes,
+      parseChatCompletionStream(rawText),
+      { cause: err },
+    )
   }
 
   const finalChunk = decoder.decode()
