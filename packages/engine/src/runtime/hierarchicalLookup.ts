@@ -1,15 +1,7 @@
-import type { BackendConnection } from "../persistence/connection.js";
-import type {
-  PartRecord,
-  RoundRecord,
-  StepRecord,
-  TurnRecord,
-} from "../domain/model.js";
-import { DEFAULT_MAX_TOOL_ROUNDS } from "../domain/model.js";
-import {
-  formatSetupId,
-  parseHierarchicalId,
-} from "../domain/hierarchicalIds.js";
+import type { BackendConnection } from '../persistence/connection.js'
+import type { PartRecord, RoundRecord, StepRecord, TurnRecord } from '../domain/model.js'
+import { DEFAULT_MAX_TOOL_ROUNDS } from '../domain/model.js'
+import { formatSetupId, parseHierarchicalId } from '../domain/hierarchicalIds.js'
 import {
   getPartRecord,
   getRoundRecord,
@@ -20,7 +12,7 @@ import {
   listRoundRecordsBySession,
   listStepRecordsBySession,
   listTurnRecordsBySession,
-} from "../persistence/repository.js";
+} from '../persistence/repository.js'
 // Session-type-specific presentation (workflow labels, step diagnostics)
 // comes from the session-presenter registry: the engine resolves the plain
 // runtime tree and registered presenters (e.g. the analysis presenter) supply
@@ -30,74 +22,69 @@ import {
   getSessionStepErrorSummary,
   getSessionWorkflowLabel,
   type SessionErrorSummary,
-} from "../operations/sessionPresentation.js";
+} from '../operations/sessionPresentation.js'
 
-type LookupMode = "summary" | "full";
+type LookupMode = 'summary' | 'full'
 
 type LookupSuccess = {
-  status: "ok";
+  status: 'ok'
   payload: {
-    id: string;
-    type: "session" | "setup" | "step" | "turn" | "round" | "part";
-    mode: LookupMode;
-    data: unknown;
-  };
-};
+    id: string
+    type: 'session' | 'setup' | 'step' | 'turn' | 'round' | 'part'
+    mode: LookupMode
+    data: unknown
+  }
+}
 
 type LookupFailure =
-  | { status: "invalid"; message: string }
-  | { status: "not_found"; message: string };
+  | { status: 'invalid'; message: string }
+  | { status: 'not_found'; message: string }
 
 // ─── Canonical type mapping ───────────────────────────────────────────────────
 
 const CANONICAL_PART_TYPE: Record<string, string> = {
-  "system-prompt": "system_prompt",
-  "mcp-instructions": "mcp_instructions",
-  "tool-definitions": "tool_definitions",
-  "user-message": "user_prompt",
-  "assistant-reasoning": "reasoning",
-  "assistant-content": "assistant_answer",
-  "tool-call": "tool_call",
-  "diagnostic-note": "diagnostic",
-};
+  'system-prompt': 'system_prompt',
+  'mcp-instructions': 'mcp_instructions',
+  'tool-definitions': 'tool_definitions',
+  'user-message': 'user_prompt',
+  'assistant-reasoning': 'reasoning',
+  'assistant-content': 'assistant_answer',
+  'tool-call': 'tool_call',
+  'diagnostic-note': 'diagnostic',
+}
 
 const CANONICAL_CONTEXT_STATE: Record<string, string> = {
-  included: "included",
-  excluded: "excluded",
-  stripped: "stripped",
-  "historical-only": "historical_only",
-  "round-only": "round_only",
-};
+  included: 'included',
+  excluded: 'excluded',
+  stripped: 'stripped',
+  'historical-only': 'historical_only',
+  'round-only': 'round_only',
+}
 
 function canonicalPartType(partType: string): string | null {
-  return CANONICAL_PART_TYPE[partType] ?? null;
+  return CANONICAL_PART_TYPE[partType] ?? null
 }
 
 function canonicalContextState(state: string): string {
-  return CANONICAL_CONTEXT_STATE[state] ?? state;
+  return CANONICAL_CONTEXT_STATE[state] ?? state
 }
 
 // ─── Part helpers ─────────────────────────────────────────────────────────────
 
 function isPublicPartType(partType: string): boolean {
-  return partType !== "tool-result";
+  return partType !== 'tool-result'
 }
 
 function extractToolName(part: PartRecord): string | null {
-  if (part.partType !== "tool-call") return null;
-  const json = part.payload.json as { name?: string; toolName?: string } | null;
-  return String(
-    json?.name ?? json?.toolName ?? part.payload.summary ?? "unknown",
-  );
+  if (part.partType !== 'tool-call') return null
+  const json = part.payload.json as { name?: string; toolName?: string } | null
+  return String(json?.name ?? json?.toolName ?? part.payload.summary ?? 'unknown')
 }
 
-function mergedToolCallTokens(
-  callPart: PartRecord,
-  resultParts: PartRecord[],
-): number | null {
-  const all = [callPart, ...resultParts];
-  if (all.every((p) => p.tokens.count == null)) return null;
-  return all.reduce((sum, p) => sum + (p.tokens.count ?? 0), 0);
+function mergedToolCallTokens(callPart: PartRecord, resultParts: PartRecord[]): number | null {
+  const all = [callPart, ...resultParts]
+  if (all.every((p) => p.tokens.count == null)) return null
+  return all.reduce((sum, p) => sum + (p.tokens.count ?? 0), 0)
 }
 
 /**
@@ -107,14 +94,14 @@ function mergedToolCallTokens(
  * criteria stay checkable from the overview. A direct part inspect returns the
  * full, untruncated arguments.
  */
-export const TOOL_ARG_VALUE_MAX_CHARS = 80;
+export const TOOL_ARG_VALUE_MAX_CHARS = 80
 
 function capArgValue(value: unknown): unknown {
-  const serialized = typeof value === "string" ? value : JSON.stringify(value);
+  const serialized = typeof value === 'string' ? value : JSON.stringify(value)
   if (serialized != null && serialized.length > TOOL_ARG_VALUE_MAX_CHARS) {
-    return `${serialized.slice(0, TOOL_ARG_VALUE_MAX_CHARS)}… [${serialized.length} chars]`;
+    return `${serialized.slice(0, TOOL_ARG_VALUE_MAX_CHARS)}… [${serialized.length} chars]`
   }
-  return value;
+  return value
 }
 
 /**
@@ -123,20 +110,20 @@ function capArgValue(value: unknown): unknown {
  * raw string when the arguments aren't a JSON object.
  */
 export function summarizeToolArguments(argsString: string | undefined): unknown {
-  let parsed: unknown;
+  let parsed: unknown
   try {
-    parsed = JSON.parse(argsString ?? "{}");
+    parsed = JSON.parse(argsString ?? '{}')
   } catch {
-    return capArgValue(argsString ?? "");
+    return capArgValue(argsString ?? '')
   }
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    const out: Record<string, unknown> = {};
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const out: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      out[key] = capArgValue(value);
+      out[key] = capArgValue(value)
     }
-    return out;
+    return out
   }
-  return capArgValue(parsed);
+  return capArgValue(parsed)
 }
 
 function buildPartNode(
@@ -146,79 +133,76 @@ function buildPartNode(
   isDirectPartLookup: boolean,
   isPartLevelLookup: boolean = false,
 ): object | null {
-  const publicType = canonicalPartType(part.partType);
-  if (!publicType) return null;
+  const publicType = canonicalPartType(part.partType)
+  if (!publicType) return null
 
-  const isToolCall = part.partType === "tool-call";
-  const isToolDefinitions = part.partType === "tool-definitions";
+  const isToolCall = part.partType === 'tool-call'
+  const isToolDefinitions = part.partType === 'tool-definitions'
   const tokenCount = isToolCall
     ? mergedToolCallTokens(part, resultParts)
-    : (part.tokens.count ?? null);
-  const contextState = canonicalContextState(part.context.state);
+    : (part.tokens.count ?? null)
+  const contextState = canonicalContextState(part.context.state)
 
   const base: Record<string, unknown> = {
     id: part.id,
     type: publicType,
     token_count: tokenCount,
     context_state: contextState,
-  };
+  }
 
   if (isToolCall) {
-    base.tool_name = extractToolName(part);
+    base.tool_name = extractToolName(part)
   }
 
   // tool_definitions: full content only on direct part-level lookup; tool names in all other contexts
   if (isToolDefinitions) {
     if (isPartLevelLookup && part.payload.json != null) {
-      base.content = { json: part.payload.json };
+      base.content = { json: part.payload.json }
     } else {
-      const toolsJson = part.payload.json as Array<{ name: string }> | null;
+      const toolsJson = part.payload.json as Array<{ name: string }> | null
       if (toolsJson) {
-        base.tools = toolsJson.map((t) => t.name);
+        base.tools = toolsJson.map((t) => t.name)
       }
     }
-    return base;
+    return base
   }
 
-  if (mode === "full") {
+  if (mode === 'full') {
     if (isToolCall && isDirectPartLookup) {
-      const callJson = part.payload.json as { arguments?: string } | null;
-      let parsedArgs: Record<string, unknown> = {};
+      const callJson = part.payload.json as { arguments?: string } | null
+      let parsedArgs: Record<string, unknown> = {}
       try {
-        parsedArgs = JSON.parse(callJson?.arguments ?? "{}") as Record<
-          string,
-          unknown
-        >;
+        parsedArgs = JSON.parse(callJson?.arguments ?? '{}') as Record<string, unknown>
       } catch {
         /* empty */
       }
-      const result = resultParts[0];
+      const result = resultParts[0]
       const toolResult: Record<string, unknown> = result
         ? result.payload.text != null
           ? { text: result.payload.text }
           : result.payload.json != null
             ? { json: result.payload.json }
             : {}
-        : {};
-      base.tool_payload = { call: parsedArgs, result: toolResult };
+        : {}
+      base.tool_payload = { call: parsedArgs, result: toolResult }
     } else if (isToolCall) {
       // Nested overview (session/turn/round): include the call parameters with
       // per-value size caps so tool-use criteria are checkable without drilling
       // into each call. Drill into the part directly for full args + result.
-      const callJson = part.payload.json as { arguments?: string } | null;
-      base.tool_arguments = summarizeToolArguments(callJson?.arguments);
+      const callJson = part.payload.json as { arguments?: string } | null
+      base.tool_arguments = summarizeToolArguments(callJson?.arguments)
     } else {
       const includeContent =
         isDirectPartLookup ||
-        part.partType === "user-message" ||
-        part.partType === "assistant-content";
+        part.partType === 'user-message' ||
+        part.partType === 'assistant-content'
       if (includeContent && part.payload.text != null) {
-        base.content = { text: part.payload.text };
+        base.content = { text: part.payload.text }
       }
     }
   }
 
-  return base;
+  return base
 }
 
 // ─── Setup node builder ───────────────────────────────────────────────────────
@@ -232,23 +216,21 @@ function buildSetupNode(
   const parts = setupParts
     .filter((p) => isPublicPartType(p.partType))
     .map((p) => buildPartNode(p, [], mode, isDirectLookup))
-    .filter((n): n is object => n !== null);
+    .filter((n): n is object => n !== null)
 
-  return { id: formatSetupId(sessionId), parts };
+  return { id: formatSetupId(sessionId), parts }
 }
 
 // ─── Turn/round builders ──────────────────────────────────────────────────────
 
-function buildToolResultIndex(
-  allParts: PartRecord[],
-): Map<string, PartRecord[]> {
-  const map = new Map<string, PartRecord[]>();
+function buildToolResultIndex(allParts: PartRecord[]): Map<string, PartRecord[]> {
+  const map = new Map<string, PartRecord[]>()
   for (const p of allParts) {
-    if (p.partType === "tool-result" && p.parentPartId) {
-      map.set(p.parentPartId, [...(map.get(p.parentPartId) ?? []), p]);
+    if (p.partType === 'tool-result' && p.parentPartId) {
+      map.set(p.parentPartId, [...(map.get(p.parentPartId) ?? []), p])
     }
   }
-  return map;
+  return map
 }
 
 function buildRoundPartNodes(
@@ -257,17 +239,15 @@ function buildRoundPartNodes(
   mode: LookupMode,
   isDirectPartLookup: boolean,
 ): object[] {
-  const nodes: object[] = [];
+  const nodes: object[] = []
   for (const part of parts) {
-    if (part.partType === "tool-result") continue;
+    if (part.partType === 'tool-result') continue
     const resultParts =
-      part.partType === "tool-call"
-        ? (toolResultsByParent.get(part.id) ?? [])
-        : [];
-    const node = buildPartNode(part, resultParts, mode, isDirectPartLookup);
-    if (node) nodes.push(node);
+      part.partType === 'tool-call' ? (toolResultsByParent.get(part.id) ?? []) : []
+    const node = buildPartNode(part, resultParts, mode, isDirectPartLookup)
+    if (node) nodes.push(node)
   }
-  return nodes;
+  return nodes
 }
 
 function buildRoundNode(
@@ -277,17 +257,12 @@ function buildRoundNode(
   mode: LookupMode,
   isDirectLookup: boolean,
 ): object {
-  const parts = buildRoundPartNodes(
-    roundParts,
-    toolResultsByParent,
-    mode,
-    isDirectLookup,
-  );
+  const parts = buildRoundPartNodes(roundParts, toolResultsByParent, mode, isDirectLookup)
   return {
     id: round.id,
     ...(round.status ? { status: round.status } : {}),
     parts,
-  };
+  }
 }
 
 function buildTurnNode(
@@ -297,31 +272,23 @@ function buildTurnNode(
   mode: LookupMode,
   isDirectLookup: boolean,
 ): object {
-  const toolResultsByParent = buildToolResultIndex(allParts);
+  const toolResultsByParent = buildToolResultIndex(allParts)
   const roundNodes = rounds.map((round) => {
     const roundParts = allParts
       .filter((p) => p.roundId === round.id && isPublicPartType(p.partType))
-      .sort((a, b) => a.ordinal - b.ordinal);
-    return buildRoundNode(
-      round,
-      roundParts,
-      toolResultsByParent,
-      mode,
-      isDirectLookup,
-    );
-  });
-  const usage = turn.usage;
+      .sort((a, b) => a.ordinal - b.ordinal)
+    return buildRoundNode(round, roundParts, toolResultsByParent, mode, isDirectLookup)
+  })
+  const usage = turn.usage
   return {
     id: turn.id,
-    type: "turn",
+    type: 'turn',
     ...(turn.status ? { status: turn.status } : {}),
     // The turn's end-reason, surfaced only when it did NOT complete cleanly — for
     // an errored/aborted turn it's the one persisted clue (e.g. "step-error"),
     // since a mid-stream provider failure leaves no diagnostic part. A clean turn
     // needs no outcome beyond status:complete.
-    ...(turn.status !== "complete" && turn.outcome
-      ? { outcome: turn.outcome }
-      : {}),
+    ...(turn.status !== 'complete' && turn.outcome ? { outcome: turn.outcome } : {}),
     // Turn-level token cost (from the turn's own usage) so "how costly was this
     // turn?" and the per-turn comparison are answerable from the overview without
     // summing parts. Same shape as the run report's per-session tokens.
@@ -336,23 +303,20 @@ function buildTurnNode(
         }
       : {}),
     rounds: roundNodes,
-  };
+  }
 }
 
-function getCompactionRemovalReason(
-  strategy: string | null,
-  part: PartRecord | null,
-): string {
-  if (strategy === "strip-reasoning") {
-    if (part?.partType === "assistant-reasoning") {
-      return "Removed from future context because strip-reasoning compaction excludes assistant reasoning parts.";
+function getCompactionRemovalReason(strategy: string | null, part: PartRecord | null): string {
+  if (strategy === 'strip-reasoning') {
+    if (part?.partType === 'assistant-reasoning') {
+      return 'Removed from future context because strip-reasoning compaction excludes assistant reasoning parts.'
     }
-    return "Removed from future context by strip-reasoning compaction.";
+    return 'Removed from future context by strip-reasoning compaction.'
   }
 
   return strategy
     ? `Removed from future context by ${strategy} compaction.`
-    : "Removed from future context by compaction.";
+    : 'Removed from future context by compaction.'
 }
 
 function buildCompactionStepEvidence(
@@ -361,22 +325,20 @@ function buildCompactionStepEvidence(
   mode: LookupMode,
 ): Record<string, unknown> {
   const strippedPartIds = Array.isArray(step.state.strippedPartIds)
-    ? step.state.strippedPartIds.filter(
-        (value): value is string => typeof value === "string",
-      )
-    : [];
+    ? step.state.strippedPartIds.filter((value): value is string => typeof value === 'string')
+    : []
 
   const evidence: Record<string, unknown> = {
     stripped_part_ids: strippedPartIds,
-  };
-
-  if (mode !== "full") {
-    return evidence;
   }
 
-  const partsById = new Map(allParts.map((part) => [part.id, part]));
+  if (mode !== 'full') {
+    return evidence
+  }
+
+  const partsById = new Map(allParts.map((part) => [part.id, part]))
   evidence.stripped_parts = strippedPartIds.map((partId) => {
-    const part = partsById.get(partId) ?? null;
+    const part = partsById.get(partId) ?? null
     return {
       id: partId,
       ...(part
@@ -387,13 +349,13 @@ function buildCompactionStepEvidence(
           }
         : {}),
       reason: getCompactionRemovalReason(
-        typeof step.params.strategy === "string" ? step.params.strategy : null,
+        typeof step.params.strategy === 'string' ? step.params.strategy : null,
         part,
       ),
-    };
-  });
+    }
+  })
 
-  return evidence;
+  return evidence
 }
 
 function buildStepNode(
@@ -406,63 +368,57 @@ function buildStepNode(
   mode: LookupMode,
   isDirectLookup: boolean,
 ): object {
-  if (step.stepTypeKey === "turn") {
-    const turn = turns.find((candidate) => candidate.id === step.id);
+  if (step.stepTypeKey === 'turn') {
+    const turn = turns.find((candidate) => candidate.id === step.id)
     if (!turn) {
       return {
         id: step.id,
-        type: "turn",
+        type: 'turn',
         status: step.status,
         rounds: [],
-      };
+      }
     }
 
     const turnRounds = rounds
       .filter((round) => round.turnId === turn.id)
-      .sort((left, right) => left.roundIndex - right.roundIndex);
-    return buildTurnNode(turn, turnRounds, allParts, mode, isDirectLookup);
+      .sort((left, right) => left.roundIndex - right.roundIndex)
+    return buildTurnNode(turn, turnRounds, allParts, mode, isDirectLookup)
   }
 
   const ownedTurns = turns
     .filter((candidate) => candidate.ownerStepId === step.id)
-    .sort((left, right) => left.turnNumber - right.turnNumber);
+    .sort((left, right) => left.turnNumber - right.turnNumber)
   const ownedTurnNodes = ownedTurns.map((turn) => {
     const turnRounds = rounds
       .filter((round) => round.turnId === turn.id)
-      .sort((left, right) => left.roundIndex - right.roundIndex);
-    return buildTurnNode(turn, turnRounds, allParts, mode, isDirectLookup);
-  });
+      .sort((left, right) => left.roundIndex - right.roundIndex)
+    return buildTurnNode(turn, turnRounds, allParts, mode, isDirectLookup)
+  })
 
   const stepParts = allParts
     .filter(
-      (part) =>
-        part.turnId === step.id &&
-        part.roundId === null &&
-        isPublicPartType(part.partType),
+      (part) => part.turnId === step.id && part.roundId === null && isPublicPartType(part.partType),
     )
     .sort((left, right) => left.ordinal - right.ordinal)
     .map((part) => buildPartNode(part, [], mode, true))
-    .filter((node): node is object => node !== null);
+    .filter((node): node is object => node !== null)
 
-  const ownedTurnIds = ownedTurns.map((candidate) => candidate.id);
+  const ownedTurnIds = ownedTurns.map((candidate) => candidate.id)
   const postambleStepIds = ownedTurnIds.flatMap((turnId) =>
     steps
       .filter(
         (candidate) =>
-          candidate.stepTypeKey === "compaction" &&
-          candidate.params.sourceTurnId === turnId,
+          candidate.stepTypeKey === 'compaction' && candidate.params.sourceTurnId === turnId,
       )
       .sort((left, right) => left.childIndex - right.childIndex)
       .map((candidate) => candidate.id),
-  );
+  )
 
   const compactionEvidence =
-    step.stepTypeKey === "compaction"
-      ? buildCompactionStepEvidence(step, allParts, mode)
-      : {};
-  const diagnostic = getStepError(step.id);
+    step.stepTypeKey === 'compaction' ? buildCompactionStepEvidence(step, allParts, mode) : {}
+  const diagnostic = getStepError(step.id)
 
-  const isCompaction = step.stepTypeKey === "compaction";
+  const isCompaction = step.stepTypeKey === 'compaction'
 
   return {
     id: step.id,
@@ -473,32 +429,25 @@ function buildStepNode(
     // row of null compaction fields (and vice-versa for the turn-owning fields).
     ...(isCompaction
       ? {
-          strategy:
-            typeof step.params.strategy === "string"
-              ? step.params.strategy
-              : null,
+          strategy: typeof step.params.strategy === 'string' ? step.params.strategy : null,
           source_turn_id:
-            typeof step.params.sourceTurnId === "string"
-              ? step.params.sourceTurnId
-              : null,
+            typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null,
           source_turn_number:
-            typeof step.params.sourceTurnSequenceNumber === "number"
+            typeof step.params.sourceTurnSequenceNumber === 'number'
               ? step.params.sourceTurnSequenceNumber
               : null,
           stripped_part_count:
-            typeof step.state.strippedPartCount === "number"
-              ? step.state.strippedPartCount
-              : null,
+            typeof step.state.strippedPartCount === 'number' ? step.state.strippedPartCount : null,
           context_tokens_before:
-            typeof step.state.contextTokensAtTurnEnd === "number"
+            typeof step.state.contextTokensAtTurnEnd === 'number'
               ? step.state.contextTokensAtTurnEnd
               : null,
           context_tokens_after:
-            typeof step.state.contextTokensAfterCompaction === "number"
+            typeof step.state.contextTokensAfterCompaction === 'number'
               ? step.state.contextTokensAfterCompaction
               : null,
           tokens_removed:
-            typeof step.state.compactionTokensRemoved === "number"
+            typeof step.state.compactionTokensRemoved === 'number'
               ? step.state.compactionTokensRemoved
               : null,
           ...compactionEvidence,
@@ -506,23 +455,19 @@ function buildStepNode(
       : {}),
     // Turn-owning fields (analysis steps) — omitted when empty so a compaction
     // step isn't padded with the analysis-step concepts it never uses.
-    ...(ownedTurnIds.length > 0
-      ? { owned_turn_ids: ownedTurnIds, turns: ownedTurnNodes }
-      : {}),
-    ...(postambleStepIds.length > 0
-      ? { postamble_step_ids: postambleStepIds }
-      : {}),
+    ...(ownedTurnIds.length > 0 ? { owned_turn_ids: ownedTurnIds, turns: ownedTurnNodes } : {}),
+    ...(postambleStepIds.length > 0 ? { postamble_step_ids: postambleStepIds } : {}),
     // `parts` is the step's own direct content — always present (possibly empty),
     // the step-level parallel to a turn's `rounds`.
     parts: stepParts,
-  };
+  }
 }
 
 function deriveContextWindowUsed(turns: TurnRecord[]): number | null {
   const completed = turns
-    .filter((t) => t.status === "complete")
-    .sort((a, b) => a.turnNumber - b.turnNumber);
-  return completed.at(-1)?.contextTokensAtTurnEnd ?? null;
+    .filter((t) => t.status === 'complete')
+    .sort((a, b) => a.turnNumber - b.turnNumber)
+  return completed.at(-1)?.contextTokensAtTurnEnd ?? null
 }
 
 /**
@@ -538,10 +483,10 @@ export function deriveSessionTerminalStatus(
   turns: { turnNumber: number; status: string }[],
   analysisPhase: string | null,
 ): string {
-  if (session.initStatus === "error" || session.initError) return "error";
-  if (analysisPhase === "error") return "error";
-  const last = [...turns].sort((a, b) => a.turnNumber - b.turnNumber).at(-1);
-  return last?.status ?? session.status;
+  if (session.initStatus === 'error' || session.initError) return 'error'
+  if (analysisPhase === 'error') return 'error'
+  const last = [...turns].sort((a, b) => a.turnNumber - b.turnNumber).at(-1)
+  return last?.status ?? session.status
 }
 
 /**
@@ -554,12 +499,14 @@ function getTrailingDiagnosticError(
   allParts: PartRecord[],
 ): { step_id: null; error_kind: null; message: string } | null {
   const diagnostic = allParts
-    .filter((p) => p.partType === "diagnostic-note" && p.payload.text != null)
+    .filter((p) => p.partType === 'diagnostic-note' && p.payload.text != null)
     .sort((a, b) => a.ordinal - b.ordinal)
-    .at(-1);
-  if (!diagnostic?.payload.text) return null;
-  return { step_id: null, error_kind: null, message: diagnostic.payload.text };
+    .at(-1)
+  if (!diagnostic?.payload.text) return null
+  return { step_id: null, error_kind: null, message: diagnostic.payload.text }
 }
+
+const STEP_ERROR_PREFIX = 'step-error: '
 
 /**
  * Last-resort failure summary: the errored turn itself. A turn can fail mid-stream
@@ -568,19 +515,28 @@ function getTrailingDiagnosticError(
  * located reason (which turn, and its outcome) so an errored session is never
  * shown with a bare `status:error` and nothing to drill.
  */
-function getTerminalTurnError(
+export function getTerminalTurnError(
   turns: TurnRecord[],
 ): { step_id: string; error_kind: string; message: string } | null {
   const errored = turns
-    .filter((t) => t.status === "error")
+    .filter((t) => t.status === 'error')
     .sort((a, b) => a.turnNumber - b.turnNumber)
-    .at(-1);
-  if (!errored) return null;
+    .at(-1)
+  if (!errored) return null
+
+  // `outcome` is a short, stable classifier (e.g. 'step-error') — never the
+  // dynamic message itself, or the CLI/GUI would render it twice (once as
+  // error_kind, once as message; see chatSession.ts's `step-error: <message>`
+  // outcome format).
+  const outcome = errored.outcome ?? 'error'
+  const message = outcome.startsWith(STEP_ERROR_PREFIX)
+    ? outcome.slice(STEP_ERROR_PREFIX.length)
+    : `Turn ${errored.turnNumber} ended in error.`
   return {
     step_id: errored.id,
-    error_kind: errored.outcome ?? "error",
-    message: `Turn ${errored.turnNumber} ended in error.`,
-  };
+    error_kind: outcome.startsWith(STEP_ERROR_PREFIX) ? 'step-error' : outcome,
+    message,
+  }
 }
 
 // ─── Main resolver ────────────────────────────────────────────────────────────
@@ -590,56 +546,47 @@ export function resolveHierarchicalId(
   rawId: string,
   mode: LookupMode,
 ): LookupSuccess | LookupFailure {
-  const parsed = parseHierarchicalId(rawId);
+  const parsed = parseHierarchicalId(rawId)
   if (!parsed) {
-    return { status: "invalid", message: `Invalid hierarchical ID: ${rawId}` };
+    return { status: 'invalid', message: `Invalid hierarchical ID: ${rawId}` }
   }
 
   // ─── Session ───────────────────────────────────────────────────────────────
-  if (parsed.type === "session") {
-    const session = getSessionRecord(connection, parsed.sessionId);
+  if (parsed.type === 'session') {
+    const session = getSessionRecord(connection, parsed.sessionId)
     if (!session)
       return {
-        status: "not_found",
+        status: 'not_found',
         message: `Session not found: ${parsed.sessionId}`,
-      };
+      }
 
     const turns = listTurnRecordsBySession(connection, session.id).sort(
       (a, b) => a.turnNumber - b.turnNumber,
-    );
-    const directTurns = turns.filter((t) => !t.ownerStepId);
-    const allSteps = listStepRecordsBySession(connection, session.id);
-    const steps = allSteps.filter((step) => step.stepTypeKey !== "turn");
-    const allParts = listPartRecordsBySession(connection, session.id);
+    )
+    const directTurns = turns.filter((t) => !t.ownerStepId)
+    const allSteps = listStepRecordsBySession(connection, session.id)
+    const steps = allSteps.filter((step) => step.stepTypeKey !== 'turn')
+    const allParts = listPartRecordsBySession(connection, session.id)
     const setupParts = allParts
       .filter((p) => p.turnId === null)
-      .sort((a, b) => a.ordinal - b.ordinal);
-    const allRounds = listRoundRecordsBySession(connection, session.id);
+      .sort((a, b) => a.ordinal - b.ordinal)
+    const allRounds = listRoundRecordsBySession(connection, session.id)
     const analysisState = session.analysisState as {
-      workflow_kind?: string;
-      phase?: string;
-    } | null;
-    const workflowKind = analysisState?.workflow_kind ?? null;
-    const workflowLabel = getSessionWorkflowLabel(connection, session);
-    const getStepError = (stepId: string) =>
-      getSessionStepErrorSummary(connection, session, stepId);
-    const terminalStatus = deriveSessionTerminalStatus(
-      session,
-      turns,
-      analysisState?.phase ?? null,
-    );
+      workflow_kind?: string
+      phase?: string
+    } | null
+    const workflowKind = analysisState?.workflow_kind ?? null
+    const workflowLabel = getSessionWorkflowLabel(connection, session)
+    const getStepError = (stepId: string) => getSessionStepErrorSummary(connection, session, stepId)
+    const terminalStatus = deriveSessionTerminalStatus(session, turns, analysisState?.phase ?? null)
     // One uniform "how did this end and why" across session kinds (F9/F10):
     // prefer a presenter-provided summary (e.g. the latest analysis diagnostic),
     // then a persisted init failure, then — for any session that errored — the
     // trailing `diagnostic` part's stop reason, and finally the errored turn
     // itself (a mid-stream failure leaves no diagnostic).
-    let latestError: SessionErrorSummary | null = getLatestSessionErrorSummary(
-      connection,
-      session,
-    );
-    if (!latestError && terminalStatus === "error") {
-      latestError =
-        getTrailingDiagnosticError(allParts) ?? getTerminalTurnError(turns);
+    let latestError: SessionErrorSummary | null = getLatestSessionErrorSummary(connection, session)
+    if (!latestError && terminalStatus === 'error') {
+      latestError = getTrailingDiagnosticError(allParts) ?? getTerminalTurnError(turns)
     }
 
     // Children (turns + deterministic steps) ordered by actual creation time, so a
@@ -649,35 +596,24 @@ export function resolveHierarchicalId(
       ...directTurns.map((turn) => {
         const turnRounds = allRounds
           .filter((r) => r.turnId === turn.id)
-          .sort((a, b) => a.roundIndex - b.roundIndex);
+          .sort((a, b) => a.roundIndex - b.roundIndex)
         return {
           createdAt: turn.createdAt,
           node: buildTurnNode(turn, turnRounds, allParts, mode, false),
-        };
+        }
       }),
       ...steps.map((step) => ({
         createdAt: step.createdAt,
-        node: buildStepNode(
-          step,
-          steps,
-          turns,
-          allRounds,
-          allParts,
-          getStepError,
-          mode,
-          false,
-        ),
+        node: buildStepNode(step, steps, turns, allRounds, allParts, getStepError, mode, false),
       })),
-    ];
-    const allChildNodes = childEntries
-      .sort((a, b) => a.createdAt - b.createdAt)
-      .map((e) => e.node);
+    ]
+    const allChildNodes = childEntries.sort((a, b) => a.createdAt - b.createdAt).map((e) => e.node)
 
     const parentRef =
       session.parentKind !== null && session.parentId !== null
         ? { kind: session.parentKind, id: session.parentId }
-        : null;
-    const mcpData = session.mcpProfileSnapshots.map((s) => ({ name: s.name }));
+        : null
+    const mcpData = session.mcpProfileSnapshots.map((s) => ({ name: s.name }))
 
     // All header/identity metadata is grouped up top (model, mcp, parent, status,
     // failure) before the body (setup + steps), so the JSON reads like the text
@@ -707,139 +643,115 @@ export function resolveHierarchicalId(
       ...(latestError ? { latest_error: latestError } : {}),
       setup: buildSetupNode(session.id, setupParts, mode, false),
       steps: allChildNodes,
-    };
+    }
 
     return {
-      status: "ok",
-      payload: { id: session.id, type: "session", mode, data },
-    };
+      status: 'ok',
+      payload: { id: session.id, type: 'session', mode, data },
+    }
   }
 
   // ─── Setup ─────────────────────────────────────────────────────────────────
-  if (parsed.type === "setup") {
-    const session = getSessionRecord(connection, parsed.sessionId);
+  if (parsed.type === 'setup') {
+    const session = getSessionRecord(connection, parsed.sessionId)
     if (!session)
       return {
-        status: "not_found",
+        status: 'not_found',
         message: `Session not found for setup: ${rawId}`,
-      };
+      }
 
-    const allParts = listPartRecordsBySession(connection, session.id);
+    const allParts = listPartRecordsBySession(connection, session.id)
     const setupParts = allParts
       .filter((p) => p.turnId === null)
-      .sort((a, b) => a.ordinal - b.ordinal);
-    const setupId = formatSetupId(session.id);
-    const data = buildSetupNode(session.id, setupParts, mode, true);
+      .sort((a, b) => a.ordinal - b.ordinal)
+    const setupId = formatSetupId(session.id)
+    const data = buildSetupNode(session.id, setupParts, mode, true)
 
     return {
-      status: "ok",
-      payload: { id: setupId, type: "setup", mode, data },
-    };
+      status: 'ok',
+      payload: { id: setupId, type: 'setup', mode, data },
+    }
   }
 
   // ─── Turn ──────────────────────────────────────────────────────────────────
-  if (parsed.type === "turn") {
-    const turn = getTurnRecord(connection, parsed.raw);
-    if (!turn)
-      return { status: "not_found", message: `Turn not found: ${parsed.raw}` };
+  if (parsed.type === 'turn') {
+    const turn = getTurnRecord(connection, parsed.raw)
+    if (!turn) return { status: 'not_found', message: `Turn not found: ${parsed.raw}` }
 
-    const allParts = listPartRecordsBySession(connection, turn.sessionId);
+    const allParts = listPartRecordsBySession(connection, turn.sessionId)
     const allRounds = listRoundRecordsBySession(connection, turn.sessionId)
       .filter((r) => r.turnId === turn.id)
-      .sort((a, b) => a.roundIndex - b.roundIndex);
+      .sort((a, b) => a.roundIndex - b.roundIndex)
 
-    const data = buildTurnNode(turn, allRounds, allParts, mode, false);
+    const data = buildTurnNode(turn, allRounds, allParts, mode, false)
 
-    return { status: "ok", payload: { id: turn.id, type: "turn", mode, data } };
+    return { status: 'ok', payload: { id: turn.id, type: 'turn', mode, data } }
   }
 
   // ─── Step ──────────────────────────────────────────────────────────────────
-  if (parsed.type === "step") {
-    const step = getStepRecord(connection, parsed.raw);
-    if (!step)
-      return { status: "not_found", message: `Step not found: ${parsed.raw}` };
+  if (parsed.type === 'step') {
+    const step = getStepRecord(connection, parsed.raw)
+    if (!step) return { status: 'not_found', message: `Step not found: ${parsed.raw}` }
 
-    const turns = listTurnRecordsBySession(connection, step.sessionId);
-    const rounds = listRoundRecordsBySession(connection, step.sessionId);
-    const parts = listPartRecordsBySession(connection, step.sessionId);
-    const steps = listStepRecordsBySession(connection, step.sessionId);
-    const stepSession = getSessionRecord(connection, step.sessionId);
+    const turns = listTurnRecordsBySession(connection, step.sessionId)
+    const rounds = listRoundRecordsBySession(connection, step.sessionId)
+    const parts = listPartRecordsBySession(connection, step.sessionId)
+    const steps = listStepRecordsBySession(connection, step.sessionId)
+    const stepSession = getSessionRecord(connection, step.sessionId)
     const getStepError = (stepId: string) =>
-      stepSession
-        ? getSessionStepErrorSummary(connection, stepSession, stepId)
-        : null;
-    const data = buildStepNode(
-      step,
-      steps,
-      turns,
-      rounds,
-      parts,
-      getStepError,
-      mode,
-      true,
-    );
+      stepSession ? getSessionStepErrorSummary(connection, stepSession, stepId) : null
+    const data = buildStepNode(step, steps, turns, rounds, parts, getStepError, mode, true)
 
-    return { status: "ok", payload: { id: step.id, type: "step", mode, data } };
+    return { status: 'ok', payload: { id: step.id, type: 'step', mode, data } }
   }
 
   // ─── Round ─────────────────────────────────────────────────────────────────
-  if (parsed.type === "round") {
-    const round = getRoundRecord(connection, parsed.raw);
-    if (!round)
-      return { status: "not_found", message: `Round not found: ${parsed.raw}` };
+  if (parsed.type === 'round') {
+    const round = getRoundRecord(connection, parsed.raw)
+    if (!round) return { status: 'not_found', message: `Round not found: ${parsed.raw}` }
 
-    const turn = getTurnRecord(connection, round.turnId);
+    const turn = getTurnRecord(connection, round.turnId)
     if (!turn)
       return {
-        status: "not_found",
+        status: 'not_found',
         message: `Turn not found for round: ${parsed.raw}`,
-      };
+      }
 
-    const sessionParts = listPartRecordsBySession(connection, turn.sessionId);
+    const sessionParts = listPartRecordsBySession(connection, turn.sessionId)
     const roundParts = sessionParts
       .filter((p) => p.roundId === round.id && isPublicPartType(p.partType))
-      .sort((a, b) => a.ordinal - b.ordinal);
+      .sort((a, b) => a.ordinal - b.ordinal)
 
-    const toolResultsByParent = buildToolResultIndex(sessionParts);
-    const data = buildRoundNode(
-      round,
-      roundParts,
-      toolResultsByParent,
-      mode,
-      true,
-    );
+    const toolResultsByParent = buildToolResultIndex(sessionParts)
+    const data = buildRoundNode(round, roundParts, toolResultsByParent, mode, true)
 
     return {
-      status: "ok",
-      payload: { id: round.id, type: "round", mode, data },
-    };
+      status: 'ok',
+      payload: { id: round.id, type: 'round', mode, data },
+    }
   }
 
   // ─── Part ──────────────────────────────────────────────────────────────────
-  const part = getPartRecord(connection, parsed.raw);
-  if (!part)
-    return { status: "not_found", message: `Part not found: ${parsed.raw}` };
+  const part = getPartRecord(connection, parsed.raw)
+  if (!part) return { status: 'not_found', message: `Part not found: ${parsed.raw}` }
 
-  const sessionParts = listPartRecordsBySession(connection, part.sessionId);
-  const toolResultsByParent = buildToolResultIndex(sessionParts);
+  const sessionParts = listPartRecordsBySession(connection, part.sessionId)
+  const toolResultsByParent = buildToolResultIndex(sessionParts)
 
   // If this is a tool-result, redirect to its parent tool-call
   const effectivePart =
-    part.partType === "tool-result" && part.parentPartId
+    part.partType === 'tool-result' && part.parentPartId
       ? (getPartRecord(connection, part.parentPartId) ?? part)
-      : part;
+      : part
 
   const resultParts =
-    effectivePart.partType === "tool-call"
-      ? (toolResultsByParent.get(effectivePart.id) ?? [])
-      : [];
+    effectivePart.partType === 'tool-call' ? (toolResultsByParent.get(effectivePart.id) ?? []) : []
 
-  const node = buildPartNode(effectivePart, resultParts, "full", true, true);
-  if (!node)
-    return { status: "not_found", message: `Part not found: ${parsed.raw}` };
+  const node = buildPartNode(effectivePart, resultParts, 'full', true, true)
+  if (!node) return { status: 'not_found', message: `Part not found: ${parsed.raw}` }
 
   return {
-    status: "ok",
-    payload: { id: effectivePart.id, type: "part", mode: "full", data: node },
-  };
+    status: 'ok',
+    payload: { id: effectivePart.id, type: 'part', mode: 'full', data: node },
+  }
 }

@@ -8,6 +8,45 @@ import { createSession } from './modelTurns.js'
 import { createToolEnabledTurn } from './toolTurns.js'
 import type { ChatCompletionGateway } from './modelTurns.js'
 import type { McpGateway } from './toolTurns.js'
+import { StreamReadError } from '../services/openai/client.js'
+
+const minimalMcpGateway: McpGateway = {
+  async initializeSession() {
+    return {
+      sessionId: 'mcp-session-1',
+      instructions: 'Use the time tool.',
+      rawExchange: {
+        requestUrl: 'http://localhost:3001/mcp',
+        requestMethod: 'POST',
+        requestBodyText: '{}',
+        responseStatus: 200,
+        responseBody: {},
+      },
+    }
+  },
+  async listTools() {
+    return {
+      tools: [
+        {
+          name: 'ha_history_get_current_time',
+          description: 'Current time',
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ],
+      rawResult: {},
+      rawExchange: {
+        requestUrl: 'http://localhost:3001/mcp',
+        requestMethod: 'POST',
+        requestBodyText: '{}',
+        responseStatus: 200,
+        responseBody: {},
+      },
+    }
+  },
+  async callTool() {
+    throw new Error('should not be called — the stream fails before any tool call')
+  },
+}
 
 describe('tool-enabled turn runtime', () => {
   const cleanupDirs = new Set<string>()
@@ -19,7 +58,7 @@ describe('tool-enabled turn runtime', () => {
   }
 
   afterEach(() => {
-    cleanupDirs.forEach(dir => fs.rmSync(dir, { recursive: true, force: true }))
+    cleanupDirs.forEach((dir) => fs.rmSync(dir, { recursive: true, force: true }))
     cleanupDirs.clear()
   })
 
@@ -32,7 +71,7 @@ describe('tool-enabled turn runtime', () => {
       },
       async createChatCompletion(_baseUrl, _apiKey, body) {
         const messages = body.messages as Array<{ role: string }>
-        const hasToolResult = messages.some(message => message.role === 'tool')
+        const hasToolResult = messages.some((message) => message.role === 'tool')
 
         if (!hasToolResult) {
           return {
@@ -96,16 +135,26 @@ describe('tool-enabled turn runtime', () => {
     chatCompletionGateway.probePromptTokens = async (_baseUrl, _apiKey, body) => {
       const messages = body.messages as Array<{ role: string; content?: string | null }>
       const hasTools = Array.isArray(body.tools) && body.tools.length > 0
-      const hasToolMessage = messages.some(message => message.role === 'assistant' && message.content == null)
-      const toolResultCount = messages.filter(message => message.role === 'tool').length
+      const hasToolMessage = messages.some(
+        (message) => message.role === 'assistant' && message.content == null,
+      )
+      const toolResultCount = messages.filter((message) => message.role === 'tool').length
 
       if (messages.length === 1 && messages[0]?.role === 'system' && !hasTools) {
         return 4
       }
-      if (messages.length === 2 && messages.every(message => message.role === 'system') && !hasTools) {
+      if (
+        messages.length === 2 &&
+        messages.every((message) => message.role === 'system') &&
+        !hasTools
+      ) {
         return 9
       }
-      if (messages.length === 2 && messages.every(message => message.role === 'system') && hasTools) {
+      if (
+        messages.length === 2 &&
+        messages.every((message) => message.role === 'system') &&
+        hasTools
+      ) {
         return 16
       }
       if (messages.length === 3 && hasTools && !hasToolMessage) {
@@ -185,16 +234,18 @@ describe('tool-enabled turn runtime', () => {
         createdAt: 1,
         updatedAt: 1,
       },
-      mcpProfileSnapshots: [{
-        id: 'mcp-1',
-        name: 'Local MCP',
-        url: 'http://localhost:3001/mcp',
-        transport: 'streamable-http',
-        authType: null,
-        authValue: null,
-        createdAt: 1,
-        updatedAt: 1,
-      }],
+      mcpProfileSnapshots: [
+        {
+          id: 'mcp-1',
+          name: 'Local MCP',
+          url: 'http://localhost:3001/mcp',
+          transport: 'streamable-http',
+          authType: null,
+          authValue: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
     })
 
     insertStepRecord(db.connection, {
@@ -219,7 +270,7 @@ describe('tool-enabled turn runtime', () => {
     expect(result.turn.status).toBe('complete')
     expect(result.turn.outcome).toBe('tool-assisted-response')
     expect(result.rounds).toHaveLength(2)
-    expect(result.parts.map(part => part.partType)).toEqual([
+    expect(result.parts.map((part) => part.partType)).toEqual([
       'user-message',
       'assistant-reasoning',
       'tool-call',
@@ -241,18 +292,28 @@ describe('tool-enabled turn runtime', () => {
       source: 'estimated',
       confidence: 'estimated',
     })
-    expect(result.context.map(entry => entry.type)).toContain('tool-call')
-    expect(result.context.map(entry => entry.type)).toContain('tool-result')
+    expect(result.context.map((entry) => entry.type)).toContain('tool-call')
+    expect(result.context.map((entry) => entry.type)).toContain('tool-result')
 
-    const sessionPrelude = result.context.filter(entry => (
-      entry.type === 'system-prompt'
-      || entry.type === 'mcp-instructions'
-      || entry.type === 'tool-definitions'
-    ))
+    const sessionPrelude = result.context.filter(
+      (entry) =>
+        entry.type === 'system-prompt' ||
+        entry.type === 'mcp-instructions' ||
+        entry.type === 'tool-definitions',
+    )
     expect(sessionPrelude).toEqual([
-      expect.objectContaining({ type: 'system-prompt', tokens: expect.objectContaining({ count: 4 }) }),
-      expect.objectContaining({ type: 'mcp-instructions', tokens: expect.objectContaining({ count: 5 }) }),
-      expect.objectContaining({ type: 'tool-definitions', tokens: expect.objectContaining({ count: 7 }) }),
+      expect.objectContaining({
+        type: 'system-prompt',
+        tokens: expect.objectContaining({ count: 4 }),
+      }),
+      expect.objectContaining({
+        type: 'mcp-instructions',
+        tokens: expect.objectContaining({ count: 5 }),
+      }),
+      expect.objectContaining({
+        type: 'tool-definitions',
+        tokens: expect.objectContaining({ count: 7 }),
+      }),
     ])
 
     db.connection.close()
@@ -267,7 +328,7 @@ describe('tool-enabled turn runtime', () => {
       },
       async createChatCompletion(_baseUrl, _apiKey, body) {
         const messages = body.messages as Array<{ role: string }>
-        const hasToolResult = messages.some(message => message.role === 'tool')
+        const hasToolResult = messages.some((message) => message.role === 'tool')
 
         if (!hasToolResult) {
           return {
@@ -392,16 +453,18 @@ describe('tool-enabled turn runtime', () => {
         createdAt: 1,
         updatedAt: 1,
       },
-      mcpProfileSnapshots: [{
-        id: 'mcp-1',
-        name: 'Local MCP',
-        url: 'http://localhost:3001/mcp',
-        transport: 'streamable-http',
-        authType: null,
-        authValue: null,
-        createdAt: 1,
-        updatedAt: 1,
-      }],
+      mcpProfileSnapshots: [
+        {
+          id: 'mcp-1',
+          name: 'Local MCP',
+          url: 'http://localhost:3001/mcp',
+          transport: 'streamable-http',
+          authType: null,
+          authValue: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
     })
 
     insertStepRecord(db.connection, {
@@ -438,16 +501,26 @@ describe('tool-enabled turn runtime', () => {
       async probePromptTokens(_baseUrl, _apiKey, body) {
         const messages = body.messages as Array<{ role: string; content?: string | null }>
         const hasTools = Array.isArray(body.tools) && body.tools.length > 0
-        const hasToolMessage = messages.some(message => message.role === 'assistant' && message.content == null)
-        const toolResultCount = messages.filter(message => message.role === 'tool').length
+        const hasToolMessage = messages.some(
+          (message) => message.role === 'assistant' && message.content == null,
+        )
+        const toolResultCount = messages.filter((message) => message.role === 'tool').length
 
         if (messages.length === 1 && messages[0]?.role === 'system' && !hasTools) {
           return 4
         }
-        if (messages.length === 2 && messages.every(message => message.role === 'system') && !hasTools) {
+        if (
+          messages.length === 2 &&
+          messages.every((message) => message.role === 'system') &&
+          !hasTools
+        ) {
           return 9
         }
-        if (messages.length === 2 && messages.every(message => message.role === 'system') && hasTools) {
+        if (
+          messages.length === 2 &&
+          messages.every((message) => message.role === 'system') &&
+          hasTools
+        ) {
           return 16
         }
         if (messages.length === 3 && hasTools && !hasToolMessage) {
@@ -467,7 +540,7 @@ describe('tool-enabled turn runtime', () => {
       },
       async createChatCompletion(_baseUrl, _apiKey, body) {
         const messages = body.messages as Array<{ role: string }>
-        const hasToolResult = messages.some(message => message.role === 'tool')
+        const hasToolResult = messages.some((message) => message.role === 'tool')
 
         if (!hasToolResult) {
           return {
@@ -613,16 +686,18 @@ describe('tool-enabled turn runtime', () => {
         createdAt: 1,
         updatedAt: 1,
       },
-      mcpProfileSnapshots: [{
-        id: 'mcp-2',
-        name: 'Local MCP',
-        url: 'http://localhost:3001/mcp',
-        transport: 'streamable-http',
-        authType: null,
-        authValue: null,
-        createdAt: 1,
-        updatedAt: 1,
-      }],
+      mcpProfileSnapshots: [
+        {
+          id: 'mcp-2',
+          name: 'Local MCP',
+          url: 'http://localhost:3001/mcp',
+          transport: 'streamable-http',
+          authType: null,
+          authValue: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
     })
 
     const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
@@ -631,17 +706,17 @@ describe('tool-enabled turn runtime', () => {
       maxToolRounds: 5,
     })
 
-    const toolCallParts = result.parts.filter(part => part.partType === 'tool-call')
-    const toolResultParts = result.parts.filter(part => part.partType === 'tool-result')
+    const toolCallParts = result.parts.filter((part) => part.partType === 'tool-call')
+    const toolResultParts = result.parts.filter((part) => part.partType === 'tool-result')
 
     expect(toolCallParts).toHaveLength(2)
-    expect(toolCallParts.every(part => part.tokens.source === 'estimated')).toBe(true)
+    expect(toolCallParts.every((part) => part.tokens.source === 'estimated')).toBe(true)
     expect(toolCallParts.reduce((sum, part) => sum + (part.tokens.count ?? 0), 0)).toBe(9)
     expect(toolCallParts[1]!.tokens.count).toBeGreaterThan(toolCallParts[0]!.tokens.count ?? 0)
 
     expect(toolResultParts).toHaveLength(2)
-    expect(toolResultParts.map(part => part.tokens.count)).toEqual([8, 3])
-    expect(toolResultParts.every(part => part.tokens.source === 'estimated')).toBe(true)
+    expect(toolResultParts.map((part) => part.tokens.count)).toEqual([8, 3])
+    expect(toolResultParts.every((part) => part.tokens.source === 'estimated')).toBe(true)
 
     db.connection.close()
   })
@@ -653,29 +728,48 @@ describe('tool-enabled turn runtime', () => {
       async probePromptTokens(_baseUrl, _apiKey, body) {
         const messages = body.messages as Array<{ role: string; content?: string | null }>
         const hasTools = Array.isArray(body.tools) && body.tools.length > 0
-        const toolResultCount = messages.filter(message => message.role === 'tool').length
-        const assistantWithContentAndTools = messages.some(message => (
-          message.role === 'assistant'
-          && typeof message.content === 'string'
-          && message.content.length > 0
-        ))
+        const toolResultCount = messages.filter((message) => message.role === 'tool').length
+        const assistantWithContentAndTools = messages.some(
+          (message) =>
+            message.role === 'assistant' &&
+            typeof message.content === 'string' &&
+            message.content.length > 0,
+        )
 
         if (messages.length === 1 && messages[0]?.role === 'system' && !hasTools) {
           return 4
         }
-        if (messages.length === 2 && messages.every(message => message.role === 'system') && !hasTools) {
+        if (
+          messages.length === 2 &&
+          messages.every((message) => message.role === 'system') &&
+          !hasTools
+        ) {
           return 9
         }
-        if (messages.length === 2 && messages.every(message => message.role === 'system') && hasTools) {
+        if (
+          messages.length === 2 &&
+          messages.every((message) => message.role === 'system') &&
+          hasTools
+        ) {
           return 16
         }
         if (messages.length === 3 && hasTools) {
           return 20
         }
-        if (messages.length === 4 && hasTools && assistantWithContentAndTools && toolResultCount === 0) {
+        if (
+          messages.length === 4 &&
+          hasTools &&
+          assistantWithContentAndTools &&
+          toolResultCount === 0
+        ) {
           return 26
         }
-        if (messages.length === 5 && hasTools && assistantWithContentAndTools && toolResultCount === 1) {
+        if (
+          messages.length === 5 &&
+          hasTools &&
+          assistantWithContentAndTools &&
+          toolResultCount === 1
+        ) {
           return 31
         }
 
@@ -683,7 +777,7 @@ describe('tool-enabled turn runtime', () => {
       },
       async createChatCompletion(_baseUrl, _apiKey, body) {
         const messages = body.messages as Array<{ role: string }>
-        const hasToolResult = messages.some(message => message.role === 'tool')
+        const hasToolResult = messages.some((message) => message.role === 'tool')
 
         if (!hasToolResult) {
           return {
@@ -697,7 +791,8 @@ describe('tool-enabled turn runtime', () => {
                 message: {
                   role: 'assistant',
                   content: 'I will check the time.',
-                  reasoning_content: 'I should call the current time tool after acknowledging the plan.',
+                  reasoning_content:
+                    'I should call the current time tool after acknowledging the plan.',
                   tool_calls: [
                     {
                       id: 'call-1',
@@ -808,16 +903,18 @@ describe('tool-enabled turn runtime', () => {
         createdAt: 1,
         updatedAt: 1,
       },
-      mcpProfileSnapshots: [{
-        id: 'mcp-3',
-        name: 'Local MCP',
-        url: 'http://localhost:3001/mcp',
-        transport: 'streamable-http',
-        authType: null,
-        authValue: null,
-        createdAt: 1,
-        updatedAt: 1,
-      }],
+      mcpProfileSnapshots: [
+        {
+          id: 'mcp-3',
+          name: 'Local MCP',
+          url: 'http://localhost:3001/mcp',
+          transport: 'streamable-http',
+          authType: null,
+          authValue: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
     })
 
     const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
@@ -826,7 +923,7 @@ describe('tool-enabled turn runtime', () => {
       maxToolRounds: 5,
     })
 
-    expect(result.parts.map(part => part.partType)).toEqual([
+    expect(result.parts.map((part) => part.partType)).toEqual([
       'user-message',
       'assistant-reasoning',
       'assistant-content',
@@ -856,9 +953,9 @@ describe('tool-enabled turn runtime', () => {
       confidence: 'estimated',
     })
 
-    const assistantMessages = result.context.filter(entry => entry.type === 'assistant-content')
-    expect(assistantMessages.map(entry => entry.text)).toContain('I will check the time.')
-    expect(assistantMessages.map(entry => entry.text)).toContain('It is 12:34.')
+    const assistantMessages = result.context.filter((entry) => entry.type === 'assistant-content')
+    expect(assistantMessages.map((entry) => entry.text)).toContain('I will check the time.')
+    expect(assistantMessages.map((entry) => entry.text)).toContain('It is 12:34.')
 
     db.connection.close()
   })
@@ -867,23 +964,36 @@ describe('tool-enabled turn runtime', () => {
     const db = openBackendDatabase(makeSqlitePath())
     const observedRequests: Array<Array<Record<string, unknown>>> = []
 
-    function estimatePromptTokens(body: { messages: Array<Record<string, unknown>>; tools?: unknown[] }): number {
+    function estimatePromptTokens(body: {
+      messages: Array<Record<string, unknown>>
+      tools?: unknown[]
+    }): number {
       const toolCount = Array.isArray(body.tools) ? body.tools.length : 0
-      return body.messages.reduce((sum, message) => {
-        const contentLength = typeof message.content === 'string' ? message.content.length : 0
-        const toolCallsLength = Array.isArray(message.tool_calls)
-          ? message.tool_calls.reduce((innerSum, toolCall) => {
-              const record = toolCall as { function?: { name?: string; arguments?: string } }
-              return innerSum + (record.function?.name?.length ?? 0) + (record.function?.arguments?.length ?? 0) + 12
-            }, 0)
-          : 0
-        return sum + 20 + contentLength + toolCallsLength
-      }, 40 + (toolCount * 10))
+      return body.messages.reduce(
+        (sum, message) => {
+          const contentLength = typeof message.content === 'string' ? message.content.length : 0
+          const toolCallsLength = Array.isArray(message.tool_calls)
+            ? message.tool_calls.reduce((innerSum, toolCall) => {
+                const record = toolCall as { function?: { name?: string; arguments?: string } }
+                return (
+                  innerSum +
+                  (record.function?.name?.length ?? 0) +
+                  (record.function?.arguments?.length ?? 0) +
+                  12
+                )
+              }, 0)
+            : 0
+          return sum + 20 + contentLength + toolCallsLength
+        },
+        40 + toolCount * 10,
+      )
     }
 
     const chatCompletionGateway: ChatCompletionGateway = {
       async probePromptTokens(_baseUrl, _apiKey, body) {
-        return estimatePromptTokens(body as { messages: Array<Record<string, unknown>>; tools?: unknown[] })
+        return estimatePromptTokens(
+          body as { messages: Array<Record<string, unknown>>; tools?: unknown[] },
+        )
       },
       async createChatCompletion() {
         throw new Error('streaming gateway should be used')
@@ -912,7 +1022,8 @@ describe('tool-enabled turn runtime', () => {
                         type: 'function',
                         function: {
                           name: 'ha_history_get_sensor_stats',
-                          arguments: '{"entity":"sensor.sensor_ab12_temperature","start_time":"2026-01-01","end_time":"2026-02-01"}',
+                          arguments:
+                            '{"entity":"sensor.sensor_ab12_temperature","start_time":"2026-01-01","end_time":"2026-02-01"}',
                         },
                       },
                       {
@@ -920,7 +1031,8 @@ describe('tool-enabled turn runtime', () => {
                         type: 'function',
                         function: {
                           name: 'ha_history_get_sensor_stats',
-                          arguments: '{"entity":"sensor.sensor_ab12_temperature","start_time":"2026-02-01","end_time":"2026-03-01"}',
+                          arguments:
+                            '{"entity":"sensor.sensor_ab12_temperature","start_time":"2026-02-01","end_time":"2026-03-01"}',
                         },
                       },
                     ],
@@ -963,7 +1075,8 @@ describe('tool-enabled turn runtime', () => {
                         type: 'function',
                         function: {
                           name: 'ha_history_get_sensor_stats',
-                          arguments: '{"entity":"sensor.sensor_ab12_temperature","start_time":"2026-03-01","end_time":"2026-04-01"}',
+                          arguments:
+                            '{"entity":"sensor.sensor_ab12_temperature","start_time":"2026-03-01","end_time":"2026-04-01"}',
                         },
                       },
                     ],
@@ -1004,7 +1117,8 @@ describe('tool-enabled turn runtime', () => {
                         type: 'function',
                         function: {
                           name: 'ha_history_get_sensor_stats',
-                          arguments: '{"entity":"sensor.sensor_ab12_temperature","start_time":"2026-04-01","end_time":"2026-05-01"}',
+                          arguments:
+                            '{"entity":"sensor.sensor_ab12_temperature","start_time":"2026-04-01","end_time":"2026-05-01"}',
                         },
                       },
                       {
@@ -1012,7 +1126,8 @@ describe('tool-enabled turn runtime', () => {
                         type: 'function',
                         function: {
                           name: 'ha_history_get_sensor_stats',
-                          arguments: '{"entity":"sensor.sensor_ab12_temperature","start_time":"2026-05-01","end_time":"2026-06-01"}',
+                          arguments:
+                            '{"entity":"sensor.sensor_ab12_temperature","start_time":"2026-05-01","end_time":"2026-06-01"}',
                         },
                       },
                     ],
@@ -1146,16 +1261,18 @@ describe('tool-enabled turn runtime', () => {
         createdAt: 1,
         updatedAt: 1,
       },
-      mcpProfileSnapshots: [{
-        id: 'mcp-4',
-        name: 'Local MCP',
-        url: 'http://localhost:3001/mcp',
-        transport: 'streamable-http',
-        authType: null,
-        authValue: null,
-        createdAt: 1,
-        updatedAt: 1,
-      }],
+      mcpProfileSnapshots: [
+        {
+          id: 'mcp-4',
+          name: 'Local MCP',
+          url: 'http://localhost:3001/mcp',
+          transport: 'streamable-http',
+          authType: null,
+          authValue: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
     })
 
     const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
@@ -1166,14 +1283,18 @@ describe('tool-enabled turn runtime', () => {
 
     expect(observedRequests).toHaveLength(4)
     expect(
-      observedRequests.slice(1).every(messages => messages.every(message => !('reasoning_content' in message))),
+      observedRequests
+        .slice(1)
+        .every((messages) => messages.every((message) => !('reasoning_content' in message))),
     ).toBe(true)
 
-    const reasoningParts = result.parts.filter(part => part.partType === 'assistant-reasoning')
+    const reasoningParts = result.parts.filter((part) => part.partType === 'assistant-reasoning')
     expect(reasoningParts).toHaveLength(6)
-    expect(reasoningParts.every(part => part.context.state === 'stripped')).toBe(true)
-    expect(result.transcript.filter(entry => entry.type === 'assistant-reasoning')).toHaveLength(6)
-    expect(result.context.filter(entry => entry.type === 'assistant-reasoning')).toHaveLength(0)
+    expect(reasoningParts.every((part) => part.context.state === 'stripped')).toBe(true)
+    expect(result.transcript.filter((entry) => entry.type === 'assistant-reasoning')).toHaveLength(
+      6,
+    )
+    expect(result.context.filter((entry) => entry.type === 'assistant-reasoning')).toHaveLength(0)
 
     const toolCallCounts = new Map<string, number>()
     for (const part of result.parts) {
@@ -1182,8 +1303,8 @@ describe('tool-enabled turn runtime', () => {
     }
     expect(
       result.rounds
-        .filter(round => round.finishReason === 'tool_calls')
-        .map(round => toolCallCounts.get(round.id) ?? 0),
+        .filter((round) => round.finishReason === 'tool_calls')
+        .map((round) => toolCallCounts.get(round.id) ?? 0),
     ).toEqual([2, 1, 2])
 
     db.connection.close()
@@ -1199,7 +1320,7 @@ describe('tool-enabled turn runtime', () => {
       },
       async createChatCompletion(_baseUrl, _apiKey, body) {
         const messages = body.messages as Array<{ role: string }>
-        const toolResultCount = messages.filter(message => message.role === 'tool').length
+        const toolResultCount = messages.filter((message) => message.role === 'tool').length
 
         if (toolResultCount === 0) {
           return {
@@ -1234,7 +1355,12 @@ describe('tool-enabled turn runtime', () => {
                 },
               },
             ],
-            usage: { prompt_tokens: 20, completion_tokens: 10, reasoning_tokens: 0, total_tokens: 30 },
+            usage: {
+              prompt_tokens: 20,
+              completion_tokens: 10,
+              reasoning_tokens: 0,
+              total_tokens: 30,
+            },
           }
         }
 
@@ -1280,7 +1406,13 @@ describe('tool-enabled turn runtime', () => {
       },
       async callTool(_serverUrl, _sessionId, toolName) {
         calledTools.push(toolName)
-        return { content: 'ok', structuredContent: null, isError: false, rawResult: {}, rawExchange }
+        return {
+          content: 'ok',
+          structuredContent: null,
+          isError: false,
+          rawResult: {},
+          rawExchange,
+        }
       },
     }
 
@@ -1298,16 +1430,18 @@ describe('tool-enabled turn runtime', () => {
         createdAt: 1,
         updatedAt: 1,
       },
-      mcpProfileSnapshots: [{
-        id: 'mcp-1',
-        name: 'Local MCP',
-        url: 'http://localhost:3001/mcp',
-        transport: 'streamable-http',
-        authType: null,
-        authValue: null,
-        createdAt: 1,
-        updatedAt: 1,
-      }],
+      mcpProfileSnapshots: [
+        {
+          id: 'mcp-1',
+          name: 'Local MCP',
+          url: 'http://localhost:3001/mcp',
+          transport: 'streamable-http',
+          authType: null,
+          authValue: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
     })
 
     const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
@@ -1321,11 +1455,11 @@ describe('tool-enabled turn runtime', () => {
     expect(result.turn.status).toBe('complete')
     expect(calledTools).toEqual([])
 
-    const toolResults = result.parts.filter(part => part.partType === 'tool-result')
+    const toolResults = result.parts.filter((part) => part.partType === 'tool-result')
     expect(toolResults).toHaveLength(2)
-    const texts = toolResults.map(part => part.payload.text ?? '')
-    expect(texts.some(text => text.includes('not valid JSON'))).toBe(true)
-    expect(texts.some(text => text.includes('hallucinated_tool'))).toBe(true)
+    const texts = toolResults.map((part) => part.payload.text ?? '')
+    expect(texts.some((text) => text.includes('not valid JSON'))).toBe(true)
+    expect(texts.some((text) => text.includes('hallucinated_tool'))).toBe(true)
 
     // Token attribution must not wipe the creation-time provenance that
     // benchmark metrics (per-tool error counting) and analysis evidence read.
@@ -1334,6 +1468,169 @@ describe('tool-enabled turn runtime', () => {
       expect(prov.isError).toBe(true)
       expect(typeof prov.toolName).toBe('string')
     }
+
+    db.connection.close()
+  })
+
+  it('recovers partial content and a diagnostic instead of losing the turn on a mid-stream failure', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+
+    const chatCompletionGateway: ChatCompletionGateway = {
+      async probePromptTokens() {
+        return 4
+      },
+      async createChatCompletion() {
+        throw new Error('should not be called — streamChatCompletion takes priority')
+      },
+      async streamChatCompletion() {
+        throw new StreamReadError('Stream reading failed after 17 bytes: socket hang up', 17, {
+          completion: {
+            id: 'c1',
+            model: 'model-key',
+            created: 1,
+            choices: [{ index: 0, finish_reason: null, message: { role: 'assistant' } }],
+          },
+          segments: [{ kind: 'content', text: 'Here is what I have' }],
+          rawResponseBody: 'data: {}\n\n',
+          chunks: [],
+        })
+      },
+    }
+
+    const session = createSession(db, {
+      modelProfileSnapshot: {
+        id: 'model-1',
+        name: 'Model',
+        connectionBaseUrl: 'https://example.com/v1',
+        apiKey: null,
+        modelKey: 'model-key',
+        modelDisplayName: 'Model Key',
+        systemPrompt: 'Use tools when required.',
+        temperature: 0,
+        reasoning: 'on',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      mcpProfileSnapshots: [
+        {
+          id: 'mcp-1',
+          name: 'Local MCP',
+          url: 'http://localhost:3001/mcp',
+          transport: 'streamable-http',
+          authType: null,
+          authValue: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    })
+
+    const emittedTypes: string[] = []
+    const result = await createToolEnabledTurn(
+      db,
+      chatCompletionGateway,
+      minimalMcpGateway,
+      { sessionId: session.id, userContent: 'Tell me the current time.', maxToolRounds: 5 },
+      (event) => emittedTypes.push(event.type),
+    )
+
+    expect(result.turn.status).toBe('error')
+    expect(result.turn.outcome).toBe(
+      'step-error: Stream reading failed after 17 bytes: socket hang up',
+    )
+    expect(result.round.status).toBe('error')
+    expect(result.round.finishReason).toBe('error')
+    expect(result.parts.map((part) => part.partType)).toEqual([
+      'user-message',
+      'assistant-content',
+      'diagnostic-note',
+    ])
+    expect(result.parts[1]?.payload.text).toBe('Here is what I have')
+    const diagnostic = result.parts[2]
+    expect(diagnostic?.context.state).toBe('excluded')
+    expect(diagnostic?.display.state).toBe('transcript')
+    expect(diagnostic?.payload.text).toMatch(/partial response above was preserved/)
+    expect(diagnostic?.payload.text).toMatch(/received 17 bytes/)
+
+    // turn-failed, not turn-committed: the backend's SSE relay closes the
+    // stream on the first event matching either type, so emitting both would
+    // silently drop whichever came second for a live subscriber.
+    expect(emittedTypes).toContain('turn-failed')
+    expect(emittedTypes).not.toContain('turn-committed')
+
+    db.connection.close()
+  })
+
+  it('persists a length-truncated final response as complete-but-truncated instead of lying about the finish reason', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+
+    const chatCompletionGateway: ChatCompletionGateway = {
+      async probePromptTokens() {
+        return 4
+      },
+      async createChatCompletion() {
+        return {
+          id: 'c1',
+          model: 'model-key',
+          created: 1,
+          choices: [
+            {
+              index: 0,
+              finish_reason: 'length',
+              message: { role: 'assistant', content: 'This is as far as I got before' },
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }
+      },
+    }
+
+    const session = createSession(db, {
+      modelProfileSnapshot: {
+        id: 'model-1',
+        name: 'Model',
+        connectionBaseUrl: 'https://example.com/v1',
+        apiKey: null,
+        modelKey: 'model-key',
+        modelDisplayName: 'Model Key',
+        systemPrompt: 'Use tools when required.',
+        temperature: 0,
+        reasoning: 'on',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      mcpProfileSnapshots: [
+        {
+          id: 'mcp-1',
+          name: 'Local MCP',
+          url: 'http://localhost:3001/mcp',
+          transport: 'streamable-http',
+          authType: null,
+          authValue: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    })
+
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, minimalMcpGateway, {
+      sessionId: session.id,
+      userContent: 'Tell me the current time.',
+      maxToolRounds: 5,
+    })
+
+    expect(result.turn.status).toBe('complete')
+    expect(result.turn.outcome).toBe('model-response-truncated')
+    expect(result.round.status).toBe('complete')
+    expect(result.round.finishReason).toBe('length')
+    expect(result.parts.map((part) => part.partType)).toEqual([
+      'user-message',
+      'assistant-content',
+      'diagnostic-note',
+    ])
+    const diagnostic = result.parts[2]
+    expect(diagnostic?.payload.text).toMatch(/truncated/i)
+    expect(diagnostic?.context.state).toBe('excluded')
 
     db.connection.close()
   })

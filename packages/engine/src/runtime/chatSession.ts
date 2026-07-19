@@ -11,9 +11,18 @@
  */
 
 import type { BackendDatabase } from '../persistence/db.js'
-import { listTurnRecordsBySession, updateTurnRecord } from '../persistence/repository.js'
+import {
+  getNextPartOrdinal,
+  getNextRoundPartSequence,
+  insertPartRecord,
+  listRoundRecordsBySession,
+  listTurnRecordsBySession,
+  updateRoundRecord,
+  updateTurnRecord,
+} from '../persistence/repository.js'
 import { createModelOnlyTurn, type ChatCompletionGateway } from './modelTurns.js'
 import { createToolEnabledTurn, type McpGateway } from './toolTurns.js'
+import { buildDiagnosticNotePart } from './turnAssembly.js'
 import type { SessionRecord, TurnRecord } from '../domain/model.js'
 import { DEFAULT_MAX_TOOL_ROUNDS } from '../domain/model.js'
 import type { TurnStreamEventSink } from './streamEvents.js'
@@ -58,36 +67,59 @@ export class ChatTurnStep implements Step {
     private readonly emitEvent?: TurnStreamEventSink,
   ) {}
 
-  get stepId(): string { return this.record.id }
-  get stepTypeKey() { return STEP_TYPE.TURN }
-  get params(): GenericParams { return { userMessage: this.userContent } }
-  get state(): GenericState { return {} }
+  get stepId(): string {
+    return this.record.id
+  }
+  get stepTypeKey() {
+    return STEP_TYPE.TURN
+  }
+  get params(): GenericParams {
+    return { userMessage: this.userContent }
+  }
+  get state(): GenericState {
+    return {}
+  }
 
   get status(): StepStatus {
     switch (this.record.status) {
-      case 'complete': return 'complete'
-      case 'error': return 'error'
+      case 'complete':
+        return 'complete'
+      case 'error':
+        return 'error'
       case 'draft':
       case 'streaming':
-      case 'awaiting-tools': return 'running'
-      default: return 'pending'
+      case 'awaiting-tools':
+        return 'running'
+      default:
+        return 'pending'
     }
   }
 
   async execute(context: StepExecutionContext): Promise<StepResult> {
     try {
       const result = this.mcpGateway
-        ? await createToolEnabledTurn(this.db, this.lmGateway, this.mcpGateway, {
-            sessionId: context.sessionId,
-            userContent: this.userContent,
-            maxToolRounds: this.maxToolRounds,
-            reservedTurn: this.record,
-          }, this.emitEvent)
-        : await createModelOnlyTurn(this.db, this.lmGateway, {
-            sessionId: context.sessionId,
-            userContent: this.userContent,
-            reservedTurn: this.record,
-          }, this.emitEvent)
+        ? await createToolEnabledTurn(
+            this.db,
+            this.lmGateway,
+            this.mcpGateway,
+            {
+              sessionId: context.sessionId,
+              userContent: this.userContent,
+              maxToolRounds: this.maxToolRounds,
+              reservedTurn: this.record,
+            },
+            this.emitEvent,
+          )
+        : await createModelOnlyTurn(
+            this.db,
+            this.lmGateway,
+            {
+              sessionId: context.sessionId,
+              userContent: this.userContent,
+              reservedTurn: this.record,
+            },
+            this.emitEvent,
+          )
 
       return {
         status: result.turn.status === 'complete' ? 'complete' : 'error',
@@ -147,28 +179,48 @@ export class ChatSession implements Session {
 
   // ── SessionContainer / Session identity ──────────────────────────────────
 
-  get containerId(): string { return this.sessionRecord.id }
-  get containerTypeKey(): ContainerTypeKey { return CONTAINER_TYPE.SESSION }
-  get sessionId(): string { return this.sessionRecord.id }
-  get sessionTypeKey(): SessionTypeKey { return SESSION_TYPE.PRIMARY }
+  get containerId(): string {
+    return this.sessionRecord.id
+  }
+  get containerTypeKey(): ContainerTypeKey {
+    return CONTAINER_TYPE.SESSION
+  }
+  get sessionId(): string {
+    return this.sessionRecord.id
+  }
+  get sessionTypeKey(): SessionTypeKey {
+    return SESSION_TYPE.PRIMARY
+  }
 
   get status(): SessionLifecycleStatus {
     switch (this.sessionRecord.status) {
-      case 'active': return 'active'
-      case 'error': return 'error'
-      case 'archived': return 'archived'
-      default: return 'ready'
+      case 'active':
+        return 'active'
+      case 'error':
+        return 'error'
+      case 'archived':
+        return 'archived'
+      default:
+        return 'ready'
     }
   }
 
   /** Primary sessions have no parent in this increment. */
-  get parent(): SessionContainer | null { return null }
+  get parent(): SessionContainer | null {
+    return null
+  }
 
   /** Steps lazily from DB — returns completed turns only. */
-  get steps(): ReadonlyArray<Step> { return [] }
+  get steps(): ReadonlyArray<Step> {
+    return []
+  }
 
-  get params(): GenericParams { return {} }
-  get state(): GenericState { return {} }
+  get params(): GenericParams {
+    return {}
+  }
+  get state(): GenericState {
+    return {}
+  }
 
   // ── Execution loop ────────────────────────────────────────────────────────
 
@@ -215,19 +267,56 @@ export class ChatSession implements Session {
 
     const result = await step.execute(context)
 
-    // Surface error: mark turn as error if step.execute absorbed an exception.
-    // SHORTCUT: only the turn is flipped to 'error' — an in-flight round record
-    // stays 'streaming' forever (contrast the tool-loop-limit path in
-    // toolTurns.ts, which closes its round). Paying this back = also close any
-    // non-terminal round of the failed turn here (status 'error'/'aborted',
-    // completedAt stamped), so traces never carry dangling rounds.
+    // Last-resort safety net: mark the turn as error if step.execute absorbed
+    // an exception that createModelOnlyTurn/createToolEnabledTurn didn't
+    // already close out gracefully themselves (they catch stream failures
+    // internally and return a normal result — see finalizeModelTurnStreamFailure
+    // / finalizeToolTurnStreamFailure). This only fires for failures those
+    // pipelines can't anticipate, e.g. a thrown error before any round exists.
     if (result.status === 'error' && result.error) {
-      const failedTurn = listTurnRecordsBySession(this.db.connection, this.sessionRecord.id)
-        .find(t => t.id === turn.id)
-      if (failedTurn && (failedTurn.status === 'draft' || failedTurn.status === 'streaming' || failedTurn.status === 'awaiting-tools')) {
+      const failedTurn = listTurnRecordsBySession(this.db.connection, this.sessionRecord.id).find(
+        (t) => t.id === turn.id,
+      )
+      if (
+        failedTurn &&
+        (failedTurn.status === 'draft' ||
+          failedTurn.status === 'streaming' ||
+          failedTurn.status === 'awaiting-tools')
+      ) {
+        const completedAt = Date.now()
         failedTurn.status = 'error'
-        failedTurn.completedAt = Date.now()
-        failedTurn.outcome = failedTurn.outcome ?? 'step-error'
+        failedTurn.completedAt = completedAt
+        failedTurn.outcome = `step-error: ${result.error}`
+
+        // Reconcile any streaming round so the trace is whole, and attach a
+        // diagnostic-note part so the failure renders in the transcript —
+        // the same visibility mechanism the pipelines' own stream-failure
+        // recovery uses.
+        const streamingRound = listRoundRecordsBySession(this.db.connection, this.sessionRecord.id)
+          .filter((r) => r.turnId === turn.id)
+          .find((r) => r.status === 'streaming')
+        if (streamingRound) {
+          streamingRound.status = 'error'
+          streamingRound.finishReason = 'error'
+          streamingRound.completedAt = completedAt
+          updateRoundRecord(this.db.connection, streamingRound)
+
+          const diagnosticNote = buildDiagnosticNotePart({
+            session: this.sessionRecord,
+            turnId: turn.id,
+            turnNumber: failedTurn.turnNumber,
+            roundNumber: streamingRound.roundIndex + 1,
+            roundId: streamingRound.id,
+            ownerStepId: failedTurn.ownerStepId,
+            partNumber: getNextRoundPartSequence(this.db.connection, streamingRound.id),
+            ordinal: getNextPartOrdinal(this.db.connection, this.sessionRecord.id),
+            text: `Turn failed: ${result.error}.`,
+            summary: 'Turn failed',
+            createdAt: completedAt,
+          })
+          insertPartRecord(this.db.connection, diagnosticNote)
+        }
+
         updateTurnRecord(this.db.connection, failedTurn)
       }
     }

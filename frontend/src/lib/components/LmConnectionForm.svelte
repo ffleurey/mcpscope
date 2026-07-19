@@ -8,10 +8,16 @@
     onCancel: () => void
   }
 
+  const DEFAULT_BASE_URL_BY_PROVIDER: Record<ProviderType, string> = {
+    lmstudio: 'http://localhost:1234/v1',
+    ollama: 'http://localhost:11434/v1',
+    openrouter: 'https://openrouter.ai/api/v1',
+  }
+
   let { connection = null, onSave, onCancel }: Props = $props()
 
   let name = $state('')
-  let baseUrl = $state('http://localhost:1234/v1')
+  let baseUrl = $state(DEFAULT_BASE_URL_BY_PROVIDER.lmstudio)
   let apiKey = $state('')
   let providerType = $state<ProviderType>('lmstudio')
   let autoSwapModel = $state(false)
@@ -22,11 +28,23 @@
     if (connection === seededConnection) return
     seededConnection = connection
     name = connection?.name ?? ''
-    baseUrl = connection?.baseUrl ?? 'http://localhost:1234/v1'
     apiKey = connection?.apiKey ?? ''
     providerType = (connection as { providerType?: ProviderType })?.providerType ?? 'lmstudio'
+    baseUrl = connection?.baseUrl ?? DEFAULT_BASE_URL_BY_PROVIDER[providerType]
     autoSwapModel = (connection as { autoSwapModel?: boolean })?.autoSwapModel ?? false
   })
+
+  // Auto-fill the base URL with the new provider's default when the field is
+  // still at the previous provider's default (or empty) — so picking
+  // OpenRouter/Ollama doesn't leave the URL stuck on LM Studio's default, but
+  // a URL the user already customized is never overwritten.
+  function handleProviderTypeChange(newType: ProviderType) {
+    const previousDefault = DEFAULT_BASE_URL_BY_PROVIDER[providerType]
+    if (baseUrl.trim() === '' || baseUrl.trim() === previousDefault) {
+      baseUrl = DEFAULT_BASE_URL_BY_PROVIDER[newType]
+    }
+    providerType = newType
+  }
 
   let errors = $state<Record<string, string>>({})
 
@@ -83,18 +101,23 @@
 
   <div class="field">
     <label class="field-label" for="lc-provider">Provider Type</label>
-    <select id="lc-provider" class="field-input" bind:value={providerType}>
+    <select
+      id="lc-provider"
+      class="field-input"
+      value={providerType}
+      onchange={(e) => handleProviderTypeChange(e.currentTarget.value as ProviderType)}
+    >
       <option value="lmstudio">LM Studio (local)</option>
       <option value="openrouter">OpenRouter (hosted)</option>
       <option value="ollama">Ollama (local)</option>
     </select>
     <span class="field-hinttext">
       {#if providerType === 'openrouter'}
-        Uses OpenAI-compatible API. Set Base URL to https://openrouter.ai/api/v1
+        Uses OpenAI-compatible API.
       {:else if providerType === 'ollama'}
-        Connects to locally running Ollama instance. Default: http://localhost:11434
+        Connects to a locally running Ollama instance.
       {:else}
-        Connects to locally running LM Studio instance.
+        Connects to a locally running LM Studio instance.
       {/if}
     </span>
   </div>
@@ -106,7 +129,7 @@
       class="field-input"
       type="text"
       bind:value={baseUrl}
-      placeholder="http://localhost:1234/v1"
+      placeholder={DEFAULT_BASE_URL_BY_PROVIDER[providerType]}
     />
     {#if errors.baseUrl}<span class="field-errortext">{errors.baseUrl}</span>{/if}
   </div>

@@ -1,34 +1,31 @@
-import type { BackendDatabase } from "../persistence/db.js";
-import { runInTransaction } from "../persistence/connection.js";
-import { insertRawExchangeRecord } from "../persistence/repository.js";
-import type { ApiMessage } from "../domain/selectors.js";
-import type { RawExchangeRecord, SessionRecord } from "../domain/model.js";
+import type { BackendDatabase } from '../persistence/db.js'
+import { runInTransaction } from '../persistence/connection.js'
+import { insertRawExchangeRecord } from '../persistence/repository.js'
+import type { ApiMessage } from '../domain/selectors.js'
+import type { RawExchangeRecord, SessionRecord } from '../domain/model.js'
 import {
   probePromptTokens,
   ProviderResponseError,
   type PromptProbeResult,
-} from "../services/openai/client.js";
-import {
-  buildReasoningParams,
-  estimateTokensFromText,
-} from "../services/provider/index.js";
-import type { ChatCompletionGateway } from "./modelTurns.js";
-import { sessionContextBody, sessionTemperatureBody } from "./modelTurns.js";
+} from '../services/openai/client.js'
+import { buildReasoningParams, estimateTokensFromText } from '../services/provider/index.js'
+import type { ChatCompletionGateway } from './modelTurns.js'
+import { sessionContextBody, sessionTemperatureBody } from './modelTurns.js'
 
 export type LmToolDefinition = {
-  type: "function";
+  type: 'function'
   function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
-};
+    name: string
+    description: string
+    parameters: Record<string, unknown>
+  }
+}
 
 interface ProbeTraceContext {
-  database: BackendDatabase;
-  sessionId: string;
-  turnId: string | null;
-  roundId: string | null;
+  database: BackendDatabase
+  sessionId: string
+  turnId: string | null
+  roundId: string | null
 }
 
 function buildProbeBody(
@@ -51,29 +48,29 @@ function buildProbeBody(
       session.modelProfileSnapshot.connectionBaseUrl,
       session.modelProfileSnapshot.providerType,
     ),
-  };
+  }
 }
 
 function createUuid(): string {
-  return crypto.randomUUID();
+  return crypto.randomUUID()
 }
 
 function now(): number {
-  return Date.now();
+  return Date.now()
 }
 
 function makeProbeRawExchangeRecords(
   trace: ProbeTraceContext,
   result: PromptProbeResult,
 ): RawExchangeRecord[] {
-  const createdAt = now();
+  const createdAt = now()
   return [
     {
       id: createUuid(),
       sessionId: trace.sessionId,
       turnId: trace.turnId,
       roundId: trace.roundId,
-      kind: "llm-probe-request",
+      kind: 'llm-probe-request',
       requestUrl: result.rawExchange.requestUrl,
       requestMethod: result.rawExchange.requestMethod,
       requestHeadersJson: result.rawExchange.requestHeadersJson,
@@ -88,7 +85,7 @@ function makeProbeRawExchangeRecords(
       sessionId: trace.sessionId,
       turnId: trace.turnId,
       roundId: trace.roundId,
-      kind: "llm-probe-response",
+      kind: 'llm-probe-response',
       requestUrl: result.rawExchange.requestUrl,
       requestMethod: result.rawExchange.requestMethod,
       requestHeadersJson: null,
@@ -98,7 +95,7 @@ function makeProbeRawExchangeRecords(
       responseBody: result.rawExchange.responseBody,
       createdAt,
     },
-  ];
+  ]
 }
 
 /**
@@ -112,18 +109,13 @@ function estimatePromptTokensForOpenRouter(
   messages: ApiMessage[],
   tools?: LmToolDefinition[],
 ): number | null {
-  const provider = session.modelProfileSnapshot.providerType ?? "lmstudio";
-  if (provider !== "openrouter") {
-    return null;
+  const provider = session.modelProfileSnapshot.providerType ?? 'lmstudio'
+  if (provider !== 'openrouter') {
+    return null
   }
-  const messageText = messages
-    .map((m) => (typeof m.content === "string" ? m.content : ""))
-    .join("");
-  const toolsText =
-    tools && tools.length > 0
-      ? JSON.stringify(tools.map((t) => t.function))
-      : "";
-  return estimateTokensFromText(messageText + toolsText);
+  const messageText = messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join('')
+  const toolsText = tools && tools.length > 0 ? JSON.stringify(tools.map((t) => t.function)) : ''
+  return estimateTokensFromText(messageText + toolsText)
 }
 
 /**
@@ -132,7 +124,7 @@ function estimatePromptTokensForOpenRouter(
  * errors return false so they keep propagating.
  */
 function isProbeRejection(err: unknown): boolean {
-  return err instanceof ProviderResponseError && err.status === 400;
+  return err instanceof ProviderResponseError && err.status === 400
 }
 
 export async function probeRequestPromptTokens(
@@ -143,20 +135,29 @@ export async function probeRequestPromptTokens(
   trace?: ProbeTraceContext,
 ): Promise<number | null> {
   if (messages.length === 0) {
-    return null;
+    return null
   }
 
-  const body = buildProbeBody(session, messages, tools);
-  const provider = session.modelProfileSnapshot.providerType ?? "lmstudio";
+  const provider = session.modelProfileSnapshot.providerType ?? 'lmstudio'
+
+  // OpenRouter reasoning models: skip the `max_tokens: 1` non-streaming probe
+  // entirely. It's unreliable for these models — some upstream providers ignore
+  // the token budget and charge for a full generation instead of truncating —
+  // so go straight to the cheap text-length heuristic.
+  if (provider === 'openrouter' && session.modelProfileSnapshot.reasoning === 'on') {
+    return estimatePromptTokensForOpenRouter(session, messages, tools)
+  }
+
+  const body = buildProbeBody(session, messages, tools)
 
   if (chatCompletionGateway.probePromptTokensDetailed) {
-    let result;
+    let result
     try {
       result = await chatCompletionGateway.probePromptTokensDetailed(
         session.modelProfileSnapshot.connectionBaseUrl,
         session.modelProfileSnapshot.apiKey ?? undefined,
         body,
-      );
+      )
     } catch (err) {
       // OpenRouter/OpenAI reject the `max_tokens: 1` probe with a 400 ("max_tokens
       // ... reached") when the prompt would trigger a tool call, so any tool-using
@@ -164,29 +165,28 @@ export async function probeRequestPromptTokens(
       // Degrade to an estimate ONLY for that semantic 400 — transport/auth/5xx
       // errors (and all non-OpenRouter providers) still fail fast so real
       // connection problems surface at init.
-      if (provider === "openrouter" && isProbeRejection(err)) {
-        return estimatePromptTokensForOpenRouter(session, messages, tools);
+      if (provider === 'openrouter' && isProbeRejection(err)) {
+        return estimatePromptTokensForOpenRouter(session, messages, tools)
       }
-      throw err;
+      throw err
     }
 
     if (trace) {
-      const records = makeProbeRawExchangeRecords(trace, result);
-      const tx = () => runInTransaction(trace.database.connection, () => {
-        records.forEach((record) =>
-          insertRawExchangeRecord(trace.database.connection, record),
-        );
-      });
-      tx();
+      const records = makeProbeRawExchangeRecords(trace, result)
+      const tx = () =>
+        runInTransaction(trace.database.connection, () => {
+          records.forEach((record) => insertRawExchangeRecord(trace.database.connection, record))
+        })
+      tx()
     }
 
     if (result.promptTokens != null) {
-      return result.promptTokens;
+      return result.promptTokens
     }
 
     // Fallback for providers like OpenRouter whose non-streaming responses
     // don't include usage.
-    return estimatePromptTokensForOpenRouter(session, messages, tools);
+    return estimatePromptTokensForOpenRouter(session, messages, tools)
   }
 
   const runFallbackProbe = chatCompletionGateway.probePromptTokens
@@ -201,13 +201,13 @@ export async function probeRequestPromptTokens(
           session.modelProfileSnapshot.connectionBaseUrl,
           session.modelProfileSnapshot.apiKey ?? undefined,
           body,
-        );
+        )
   try {
-    return await runFallbackProbe();
+    return await runFallbackProbe()
   } catch (err) {
-    if (provider === "openrouter" && isProbeRejection(err)) {
-      return estimatePromptTokensForOpenRouter(session, messages, tools);
+    if (provider === 'openrouter' && isProbeRejection(err)) {
+      return estimatePromptTokensForOpenRouter(session, messages, tools)
     }
-    throw err;
+    throw err
   }
 }
