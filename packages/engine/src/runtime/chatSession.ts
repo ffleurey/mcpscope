@@ -58,36 +58,59 @@ export class ChatTurnStep implements Step {
     private readonly emitEvent?: TurnStreamEventSink,
   ) {}
 
-  get stepId(): string { return this.record.id }
-  get stepTypeKey() { return STEP_TYPE.TURN }
-  get params(): GenericParams { return { userMessage: this.userContent } }
-  get state(): GenericState { return {} }
+  get stepId(): string {
+    return this.record.id
+  }
+  get stepTypeKey() {
+    return STEP_TYPE.TURN
+  }
+  get params(): GenericParams {
+    return { userMessage: this.userContent }
+  }
+  get state(): GenericState {
+    return {}
+  }
 
   get status(): StepStatus {
     switch (this.record.status) {
-      case 'complete': return 'complete'
-      case 'error': return 'error'
+      case 'complete':
+        return 'complete'
+      case 'error':
+        return 'error'
       case 'draft':
       case 'streaming':
-      case 'awaiting-tools': return 'running'
-      default: return 'pending'
+      case 'awaiting-tools':
+        return 'running'
+      default:
+        return 'pending'
     }
   }
 
   async execute(context: StepExecutionContext): Promise<StepResult> {
     try {
       const result = this.mcpGateway
-        ? await createToolEnabledTurn(this.db, this.lmGateway, this.mcpGateway, {
-            sessionId: context.sessionId,
-            userContent: this.userContent,
-            maxToolRounds: this.maxToolRounds,
-            reservedTurn: this.record,
-          }, this.emitEvent)
-        : await createModelOnlyTurn(this.db, this.lmGateway, {
-            sessionId: context.sessionId,
-            userContent: this.userContent,
-            reservedTurn: this.record,
-          }, this.emitEvent)
+        ? await createToolEnabledTurn(
+            this.db,
+            this.lmGateway,
+            this.mcpGateway,
+            {
+              sessionId: context.sessionId,
+              userContent: this.userContent,
+              maxToolRounds: this.maxToolRounds,
+              reservedTurn: this.record,
+            },
+            this.emitEvent,
+          )
+        : await createModelOnlyTurn(
+            this.db,
+            this.lmGateway,
+            {
+              sessionId: context.sessionId,
+              userContent: this.userContent,
+              reservedTurn: this.record,
+            },
+            this.emitEvent,
+          )
 
       return {
         status: result.turn.status === 'complete' ? 'complete' : 'error',
@@ -147,28 +170,48 @@ export class ChatSession implements Session {
 
   // ── SessionContainer / Session identity ──────────────────────────────────
 
-  get containerId(): string { return this.sessionRecord.id }
-  get containerTypeKey(): ContainerTypeKey { return CONTAINER_TYPE.SESSION }
-  get sessionId(): string { return this.sessionRecord.id }
-  get sessionTypeKey(): SessionTypeKey { return SESSION_TYPE.PRIMARY }
+  get containerId(): string {
+    return this.sessionRecord.id
+  }
+  get containerTypeKey(): ContainerTypeKey {
+    return CONTAINER_TYPE.SESSION
+  }
+  get sessionId(): string {
+    return this.sessionRecord.id
+  }
+  get sessionTypeKey(): SessionTypeKey {
+    return SESSION_TYPE.PRIMARY
+  }
 
   get status(): SessionLifecycleStatus {
     switch (this.sessionRecord.status) {
-      case 'active': return 'active'
-      case 'error': return 'error'
-      case 'archived': return 'archived'
-      default: return 'ready'
+      case 'active':
+        return 'active'
+      case 'error':
+        return 'error'
+      case 'archived':
+        return 'archived'
+      default:
+        return 'ready'
     }
   }
 
   /** Primary sessions have no parent in this increment. */
-  get parent(): SessionContainer | null { return null }
+  get parent(): SessionContainer | null {
+    return null
+  }
 
   /** Steps lazily from DB — returns completed turns only. */
-  get steps(): ReadonlyArray<Step> { return [] }
+  get steps(): ReadonlyArray<Step> {
+    return []
+  }
 
-  get params(): GenericParams { return {} }
-  get state(): GenericState { return {} }
+  get params(): GenericParams {
+    return {}
+  }
+  get state(): GenericState {
+    return {}
+  }
 
   // ── Execution loop ────────────────────────────────────────────────────────
 
@@ -222,9 +265,15 @@ export class ChatSession implements Session {
     // non-terminal round of the failed turn here (status 'error'/'aborted',
     // completedAt stamped), so traces never carry dangling rounds.
     if (result.status === 'error' && result.error) {
-      const failedTurn = listTurnRecordsBySession(this.db.connection, this.sessionRecord.id)
-        .find(t => t.id === turn.id)
-      if (failedTurn && (failedTurn.status === 'draft' || failedTurn.status === 'streaming' || failedTurn.status === 'awaiting-tools')) {
+      const failedTurn = listTurnRecordsBySession(this.db.connection, this.sessionRecord.id).find(
+        (t) => t.id === turn.id,
+      )
+      if (
+        failedTurn &&
+        (failedTurn.status === 'draft' ||
+          failedTurn.status === 'streaming' ||
+          failedTurn.status === 'awaiting-tools')
+      ) {
         failedTurn.status = 'error'
         failedTurn.completedAt = Date.now()
         failedTurn.outcome = failedTurn.outcome ?? 'step-error'
