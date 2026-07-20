@@ -18,8 +18,9 @@ import type { ZodError } from 'zod'
 function uuid(): string { return crypto.randomUUID() }
 function now(): number { return Date.now() }
 
-/** Single-step rubric judge: push (bootstrap already loaded the trace) + pull
- *  (the turn is tool-enabled) → structured verdict artifact. */
+/** Single-step rubric judge: pull-only (bootstrap does NOT inject the trace —
+ *  the tool-enabled turn inspects the target session itself) → structured
+ *  verdict artifact. */
 export class RubricJudgeStep extends WorkflowStep {
   readonly stepLabel = 'Rubric Judge'
   readonly kind = 'assess'
