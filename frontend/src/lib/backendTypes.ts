@@ -207,8 +207,10 @@ export const sessionRecordSchema = z.object({
   initError: z.object({ errorKind: z.string(), message: z.string() }).nullable().optional(),
 })
 
-// Slim summary returned by GET /api/sessions.
-// Only includes fields needed for session listing and the sidebar UI.
+// Per-session summary returned by GET /api/sessions?include_children=true — the
+// full-tree payload the frontend needs for the sidebar (primary chats, benchmark
+// runs, and analysis children). NOT the default GET /api/sessions shape, which is
+// the lean, top-level-only MCP/CLI `list` contract (id/title/status/model/updated_at).
 // Field names are snake_case matching the canonical backend operation contract.
 export const sessionSummarySchema = z.object({
   id: z.string(),
@@ -841,7 +843,10 @@ export type BenchmarkEvaluationReport = z.infer<typeof benchmarkEvaluationReport
 export type EvaluationScore = z.infer<typeof evaluationScoreSchema>
 export type EvaluationCaseScore = z.infer<typeof evaluationCaseScoreSchema>
 
-export const listSessionsResponseSchema = z.object({
+// Response of GET /api/sessions?include_children=true (the only session-list call
+// the frontend makes). The default GET /api/sessions returns the lean, paginated
+// MCP/CLI `list` shape instead — deliberately not modeled here.
+export const listSessionsWithChildrenResponseSchema = z.object({
   api_version: z.literal(1),
   sessions: z.array(sessionSummarySchema),
 })

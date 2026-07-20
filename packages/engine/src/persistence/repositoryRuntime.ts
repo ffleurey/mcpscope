@@ -485,6 +485,8 @@ export function listTopLevelSessionSummaries(
   connection: BackendConnection,
   options: { limit: number; offset: number },
 ): { rows: SessionSummary[]; total: number } {
+  // Hardcoded constant predicate (no user input) shared by the count and page
+  // queries so they can never drift out of sync.
   const where = `session_type_key = 'primary' AND parent_container_id IS NULL`
   const total = (connection.prepare(
     `SELECT COUNT(*) AS n FROM sessions WHERE ${where}`,

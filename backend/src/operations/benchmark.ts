@@ -204,7 +204,9 @@ export function deleteBenchmarkEntry(db: BackendDatabase, id: string): void {
   // at a benchmark that no longer exists, and their sessions leak into `list`.
   // (Cases cascade via FK; runs do not, hence the explicit sweep.) Atomic: if
   // any run is active, deleteBenchmarkRunEntry throws and the whole delete rolls
-  // back rather than leaving the benchmark half-stripped of its runs.
+  // back rather than leaving the benchmark half-stripped of its runs. The runs
+  // are deleted sequentially inside the transaction; a benchmark holds a handful
+  // of runs in practice, so the held-transaction cost is negligible.
   runInTransaction(db.connection, () => {
     for (const run of listBenchmarkRuns(db.connection, id)) {
       deleteBenchmarkRunEntry(db, run.id);
