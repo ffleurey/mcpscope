@@ -297,6 +297,81 @@ describe("backend foundation", () => {
     ).toEqual([secondSessionId]);
   });
 
+  it("renames and aborts sessions through the operation-backed routes", async () => {
+    const config = makeTestConfig();
+    dataDir = config.dataDir;
+    app = (await buildBackendApp(config)).app;
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/sessions",
+      payload: {
+        title: "Original title",
+        modelProfileSnapshot: {
+          id: "model-1",
+          name: "Model",
+          connectionBaseUrl: "https://example.com/v1",
+          apiKey: null,
+          modelKey: "model-key",
+          modelDisplayName: "Model Key",
+          systemPrompt: "Reply exactly.",
+          temperature: 0,
+          reasoning: "on",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    });
+    expect(createResponse.statusCode).toBe(201);
+    const sessionId = createResponse.json().session.id as string;
+
+    // PATCH returns the canonical rename_session result (snake_case, trimmed).
+    const renameResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/sessions/${sessionId}`,
+      payload: { title: "  Renamed title  " },
+    });
+    expect(renameResponse.statusCode).toBe(200);
+    expect(renameResponse.json()).toEqual({
+      api_version: 1,
+      session_id: sessionId,
+      title: "Renamed title",
+    });
+    const renamed = getSessionRecord(app.backendDb.connection, sessionId)!;
+    expect(renamed.title).toBe("Renamed title");
+
+    const renameMissing = await app.inject({
+      method: "PATCH",
+      url: "/api/sessions/ZZZZ",
+      payload: { title: "New title" },
+    });
+    expect(renameMissing.statusCode).toBe(404);
+
+    // Abort with no active or queued job reports not-running.
+    const abortResponse = await app.inject({
+      method: "POST",
+      url: `/api/sessions/${sessionId}/abort`,
+    });
+    expect(abortResponse.statusCode).toBe(200);
+    expect(abortResponse.json()).toEqual({
+      api_version: 1,
+      session_id: sessionId,
+      outcome: "not-running",
+    });
+
+    const abortMissing = await app.inject({
+      method: "POST",
+      url: "/api/sessions/ZZZZ/abort",
+    });
+    expect(abortMissing.statusCode).toBe(404);
+
+    const deleteMissing = await app.inject({
+      method: "DELETE",
+      url: "/api/sessions/ZZZZ",
+    });
+    expect(deleteMissing.statusCode).toBe(404);
+  });
+
   it("returns compact top-level session rows and paginates with limit/offset", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;

@@ -181,4 +181,92 @@ describe('createEngine', () => {
 
     unsubscribe()
   })
+
+  it('manages sessions through the facade: rename, abort, delete', async () => {
+    engine = await makeConfiguredEngine()
+
+    // Untitled sessions start with the default title.
+    const created = await engine.createSession({ model_config_id: 'm-1', wait: true })
+    expect(created.session.title).toBe('New session')
+
+    // Rename trims and returns the canonical result.
+    const renamed = await engine.renameSession({
+      session_id: created.session.id,
+      title: '  Renamed  ',
+    })
+    expect(renamed).toEqual({
+      api_version: 1,
+      session_id: created.session.id,
+      title: 'Renamed',
+    })
+    const listed = await engine.listSessions()
+    expect(listed.sessions.map((s) => s.title)).toEqual(['Renamed'])
+
+    // Abort with nothing active or queued reports not-running.
+    const aborted = await engine.abortSession({ session_id: created.session.id })
+    expect(aborted.outcome).toBe('not-running')
+
+    // Delete removes the session; a second delete reports not-found.
+    const deleted = await engine.deleteSession({ session_id: created.session.id })
+    expect(deleted).toEqual({
+      api_version: 1,
+      deleted: true,
+      session_id: created.session.id,
+    })
+    expect(engine.getTrace(created.session.id)).toBeNull()
+    await expect(engine.deleteSession({ session_id: created.session.id })).rejects.toThrow(
+      'Session not found',
+    )
+  })
+
+  it('auto-titles an untitled session from the first prompt and emits session-title-changed', async () => {
+    engine = await makeConfiguredEngine()
+
+    const events: SchedulerEvent[] = []
+    const unsubscribe = engine.onEvent((e) => events.push(e))
+
+    const created = await engine.createSession({ model_config_id: 'm-1', wait: true })
+    await engine.send({ session_id: created.session.id, prompt: 'ping', wait: true })
+
+    const titleEvent = events.find(
+      (e) => e.type === 'scheduler-execution-event' && e.event.type === 'session-title-changed',
+    )
+    expect(titleEvent).toBeDefined()
+    if (titleEvent?.type === 'scheduler-execution-event' && titleEvent.event.type === 'session-title-changed') {
+      expect(titleEvent.event.sessionId).toBe(created.session.id)
+      expect(titleEvent.event.title).toBe('ping')
+    }
+
+    const listed = await engine.listSessions()
+    expect(listed.sessions.map((s) => s.title)).toEqual(['ping'])
+
+    unsubscribe()
+  })
 })
+
+/** An engine wired to the scripted gateway with one connection + model config. */
+async function makeConfiguredEngine(): Promise<Engine> {
+  const connection = providerConnectionSchema.parse({
+    id: 'lm-1',
+    name: 'Scripted',
+    baseUrl: 'http://127.0.0.1:1234/v1',
+    providerType: 'lmstudio',
+  })
+  const modelConfig = modelConfigSchema.parse({
+    id: 'm-1',
+    name: 'Scripted model',
+    connectionId: 'lm-1',
+    modelKey: 'model-key',
+    systemPrompt: 'You are a test.',
+  })
+
+  return createEngine({
+    storage: { memory: true },
+    config: {
+      lmConnections: [connection],
+      modelConfigs: [modelConfig],
+      sessionCreationDefaults: { defaultModelConfigId: 'm-1', updatedAt: 1 },
+    },
+    dependencies: { chatCompletionGateway: makeScriptedGateway() },
+  })
+}
