@@ -6,21 +6,21 @@
  * fetching only the models available to the current API key.
  */
 
-import { rootUrl, authHeaders } from "../openai/client.js";
-import type { LmStudioModelStatus } from "../lmstudio/client.js";
+import { rootUrl, authHeaders } from '../openai/client.js'
+import type { LmStudioModelStatus } from '../lmstudio/client.js'
 
 /** OpenRouter's native model listing shape. */
 interface OpenRouterModelEntry {
-  id: string;
-  object?: string;
-  created?: number;
-  owned_by?: string;
-  context_length?: number;
-  supported_parameters?: string[];
+  id: string
+  object?: string
+  created?: number
+  owned_by?: string
+  context_length?: number
+  supported_parameters?: string[]
 }
 
 interface OpenRouterModelsResponse {
-  data: OpenRouterModelEntry[];
+  data: OpenRouterModelEntry[]
 }
 
 /**
@@ -37,28 +37,27 @@ export async function listUserModels(
 ): Promise<LmStudioModelStatus[]> {
   // For OpenRouter, the user-specific endpoint is always at
   // /api/v1/models/user relative to the root (not the OAI compat base).
-  const root = rootUrl(baseUrl);
-  const url = `${root}/api/v1/models/user`;
+  const root = rootUrl(baseUrl)
+  const url = `${root}/api/v1/models/user`
 
   const response = await fetch(url, {
     headers: {
-      Accept: "application/json",
+      Accept: 'application/json',
       ...authHeaders(apiKey),
     },
-  });
+  })
 
   if (!response.ok) {
     throw new Error(
       `OpenRouter user models request failed: ${response.status} ${response.statusText}`,
-    );
+    )
   }
 
-  const json = (await response.json()) as OpenRouterModelsResponse;
+  const json = (await response.json()) as OpenRouterModelsResponse
 
   return (json.data ?? []).map((entry) => {
-    const id = entry.id ?? "";
-    const supportsReasoning =
-      entry.supported_parameters?.includes("reasoning") ?? false;
+    const id = entry.id ?? ''
+    const supportsReasoning = entry.supported_parameters?.includes('reasoning') ?? false
     return {
       uid: id,
       key: id,
@@ -69,14 +68,14 @@ export async function listUserModels(
       supportsReasoning,
       defaultReasoningOn: supportsReasoning,
       raw: {
-        type: "llm",
+        type: 'llm',
         key: id,
         display_name: id,
         context_length: entry.context_length,
         supported_parameters: entry.supported_parameters,
         object: entry.object,
         owned_by: entry.owned_by,
-      } as LmStudioModelStatus["raw"],
-    };
-  });
+      } as LmStudioModelStatus['raw'],
+    }
+  })
 }

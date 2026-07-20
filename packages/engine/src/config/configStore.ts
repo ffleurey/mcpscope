@@ -1,6 +1,6 @@
-import fs from "node:fs";
-import path from "node:path";
-import { z } from "zod";
+import fs from 'node:fs'
+import path from 'node:path'
+import { z } from 'zod'
 import {
   lmStudioConnectionSchema,
   modelConfigSchema,
@@ -9,13 +9,13 @@ import {
   type ModelConfig,
   type McpServerProfile,
   type ListedMcpServerProfile,
-} from "../domain/configuration.js";
+} from '../domain/configuration.js'
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export interface SessionCreationDefaults {
-  defaultModelConfigId: string | null;
-  updatedAt: number;
+  defaultModelConfigId: string | null
+  updatedAt: number
 }
 
 /**
@@ -24,14 +24,14 @@ export interface SessionCreationDefaults {
  * profile's mcpscope→server auth. Each is null until the user sets it.
  */
 export interface CompanionsConfig {
-  guardian: { api_key: string | null };
-  brave: { api_key: string | null };
+  guardian: { api_key: string | null }
+  brave: { api_key: string | null }
 }
 
 export class ConfigFileError extends Error {
   constructor(message: string) {
-    super(message);
-    this.name = "ConfigFileError";
+    super(message)
+    this.name = 'ConfigFileError'
   }
 }
 
@@ -39,18 +39,18 @@ export class ConfigFileError extends Error {
 
 const sessionDefaultsSchema = z.object({
   default_model_config_id: z.string().nullable(),
-});
+})
 
 const companionKeySchema = z.object({
   api_key: z.string().nullable().default(null),
-});
+})
 
 const companionsConfigSchema = z
   .object({
     guardian: companionKeySchema.default({ api_key: null }),
     brave: companionKeySchema.default({ api_key: null }),
   })
-  .default({ guardian: { api_key: null }, brave: { api_key: null } });
+  .default({ guardian: { api_key: null }, brave: { api_key: null } })
 
 const configFileSchema = z.object({
   lm_connections: z.array(lmStudioConnectionSchema).default([]),
@@ -58,9 +58,9 @@ const configFileSchema = z.object({
   mcp_server_profiles: z.array(mcpServerProfileSchema).default([]),
   session_creation_defaults: sessionDefaultsSchema.nullable().default(null),
   companions: companionsConfigSchema,
-});
+})
 
-type ConfigFile = z.infer<typeof configFileSchema>;
+type ConfigFile = z.infer<typeof configFileSchema>
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 // One instance per backend app, created and owned by `buildBackendApp` and
@@ -75,104 +75,97 @@ type ConfigFile = z.infer<typeof configFileSchema>;
  * own profiles so they appear in every listing consumer (UI/CLI/MCP) and
  * resolve by id at session creation.
  */
-const BUILTIN_PROFILE_PREFIX = "builtin-";
+const BUILTIN_PROFILE_PREFIX = 'builtin-'
 
 export class ConfigStore {
-  private lmConnections = new Map<string, LmStudioConnection>();
-  private modelConfigs = new Map<string, ModelConfig>();
-  private mcpServerProfiles = new Map<string, McpServerProfile>();
+  private lmConnections = new Map<string, LmStudioConnection>()
+  private modelConfigs = new Map<string, ModelConfig>()
+  private mcpServerProfiles = new Map<string, McpServerProfile>()
   private sessionCreationDefaults: SessionCreationDefaults = {
     defaultModelConfigId: null,
     updatedAt: 0,
-  };
+  }
   private companions: CompanionsConfig = {
     guardian: { api_key: null },
     brave: { api_key: null },
-  };
-  private companionProfileProvider: () => ListedMcpServerProfile[] = () => [];
-  private filePath: string;
+  }
+  private companionProfileProvider: () => ListedMcpServerProfile[] = () => []
+  private filePath: string
 
   constructor(filePath: string) {
-    this.filePath = filePath;
+    this.filePath = filePath
   }
 
   /** Load config from the JSON file. If the file doesn't exist, start empty. */
   load(): void {
     if (!fs.existsSync(this.filePath)) {
-      this.clearAll();
-      return;
+      this.clearAll()
+      return
     }
 
-    let raw: unknown;
+    let raw: unknown
     try {
-      const text = fs.readFileSync(this.filePath, "utf-8");
-      raw = JSON.parse(text);
+      const text = fs.readFileSync(this.filePath, 'utf-8')
+      raw = JSON.parse(text)
     } catch (err) {
-      const detail = err instanceof SyntaxError ? err.message : String(err);
-      throw new ConfigFileError(
-        `Failed to parse config file at ${this.filePath}: ${detail}`,
-      );
+      const detail = err instanceof SyntaxError ? err.message : String(err)
+      throw new ConfigFileError(`Failed to parse config file at ${this.filePath}: ${detail}`)
     }
 
-    const parseResult = configFileSchema.safeParse(raw);
+    const parseResult = configFileSchema.safeParse(raw)
     if (!parseResult.success) {
       const issues = parseResult.error.issues
-        .map((i) => `  ${i.path.join(".")}: ${i.message}`)
-        .join("\n");
-      throw new ConfigFileError(
-        `Config validation failed in file ${this.filePath}:\n${issues}`,
-      );
+        .map((i) => `  ${i.path.join('.')}: ${i.message}`)
+        .join('\n')
+      throw new ConfigFileError(`Config validation failed in file ${this.filePath}:\n${issues}`)
     }
 
-    const config = parseResult.data;
+    const config = parseResult.data
 
     // Validate cross-references: each model_config.connectionId must exist
-    const connectionIds = new Set(config.lm_connections.map((c) => c.id));
+    const connectionIds = new Set(config.lm_connections.map((c) => c.id))
     for (const mc of config.model_configs) {
       if (!connectionIds.has(mc.connectionId)) {
-        const ids = Array.from(connectionIds).join(", ");
+        const ids = Array.from(connectionIds).join(', ')
         throw new ConfigFileError(
           `Config validation failed in file ${this.filePath}:\n` +
             `  model_configs["${mc.id}"].connectionId: "${mc.connectionId}" does not match any existing LM connection ID\n` +
             `  Existing LM connection IDs: [${ids}]`,
-        );
+        )
       }
     }
 
-    this.loadFromParsed(config);
+    this.loadFromParsed(config)
   }
 
   // ── Internal helpers ──────────────────────────────────────────────────────
 
   private clearAll(): void {
-    this.lmConnections.clear();
-    this.modelConfigs.clear();
-    this.mcpServerProfiles.clear();
-    this.sessionCreationDefaults = { defaultModelConfigId: null, updatedAt: 0 };
-    this.companions = { guardian: { api_key: null }, brave: { api_key: null } };
+    this.lmConnections.clear()
+    this.modelConfigs.clear()
+    this.mcpServerProfiles.clear()
+    this.sessionCreationDefaults = { defaultModelConfigId: null, updatedAt: 0 }
+    this.companions = { guardian: { api_key: null }, brave: { api_key: null } }
   }
 
   private loadFromParsed(config: ConfigFile): void {
-    this.lmConnections = new Map(config.lm_connections.map((c) => [c.id, c]));
-    this.modelConfigs = new Map(config.model_configs.map((m) => [m.id, m]));
-    this.mcpServerProfiles = new Map(
-      config.mcp_server_profiles.map((p) => [p.id, p]),
-    );
+    this.lmConnections = new Map(config.lm_connections.map((c) => [c.id, c]))
+    this.modelConfigs = new Map(config.model_configs.map((m) => [m.id, m]))
+    this.mcpServerProfiles = new Map(config.mcp_server_profiles.map((p) => [p.id, p]))
     this.sessionCreationDefaults = {
-      defaultModelConfigId:
-        config.session_creation_defaults?.default_model_config_id ?? null,
+      defaultModelConfigId: config.session_creation_defaults?.default_model_config_id ?? null,
       updatedAt: Date.now(),
-    };
+    }
     this.companions = {
       guardian: { api_key: config.companions.guardian.api_key },
       brave: { api_key: config.companions.brave.api_key },
-    };
+    }
   }
 
   private flush(): void {
     // In-memory mode (":memory:", mirroring node:sqlite): never touch disk, so
     // an embedder can run a fully programmatic, file-less engine.
-    if (this.filePath === ":memory:") return;
+    if (this.filePath === ':memory:') return
     const data: ConfigFile = {
       lm_connections: Array.from(this.lmConnections.values()),
       model_configs: Array.from(this.modelConfigs.values()),
@@ -180,104 +173,99 @@ export class ConfigStore {
       session_creation_defaults:
         this.sessionCreationDefaults.defaultModelConfigId != null
           ? {
-              default_model_config_id:
-                this.sessionCreationDefaults.defaultModelConfigId,
+              default_model_config_id: this.sessionCreationDefaults.defaultModelConfigId,
             }
           : null,
       companions: this.companions,
-    };
-    const dir = path.dirname(this.filePath);
-    if (dir !== "" && dir !== ".") {
-      fs.mkdirSync(dir, { recursive: true });
+    }
+    const dir = path.dirname(this.filePath)
+    if (dir !== '' && dir !== '.') {
+      fs.mkdirSync(dir, { recursive: true })
     }
     // Write atomically: a crash mid-write must not corrupt the config file.
-    const tmpPath = `${this.filePath}.${process.pid}.tmp`;
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-    fs.renameSync(tmpPath, this.filePath);
+    const tmpPath = `${this.filePath}.${process.pid}.tmp`
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8')
+    fs.renameSync(tmpPath, this.filePath)
   }
 
   // ── LM Connections ────────────────────────────────────────────────────────
 
   listLmConnections(): LmStudioConnection[] {
-    return Array.from(this.lmConnections.values());
+    return Array.from(this.lmConnections.values())
   }
 
   upsertLmConnection(record: LmStudioConnection): void {
-    this.lmConnections.set(record.id, record);
-    this.flush();
+    this.lmConnections.set(record.id, record)
+    this.flush()
   }
 
   deleteLmConnection(id: string): boolean {
-    const existed = this.lmConnections.has(id);
-    this.lmConnections.delete(id);
-    if (existed) this.flush();
-    return existed;
+    const existed = this.lmConnections.has(id)
+    this.lmConnections.delete(id)
+    if (existed) this.flush()
+    return existed
   }
 
   // ── Model Configs ─────────────────────────────────────────────────────────
 
   listModelConfigs(): ModelConfig[] {
-    return Array.from(this.modelConfigs.values());
+    return Array.from(this.modelConfigs.values())
   }
 
   upsertModelConfig(record: ModelConfig): void {
-    this.modelConfigs.set(record.id, record);
-    this.flush();
+    this.modelConfigs.set(record.id, record)
+    this.flush()
   }
 
   deleteModelConfig(id: string): boolean {
-    const existed = this.modelConfigs.has(id);
-    this.modelConfigs.delete(id);
-    if (existed) this.flush();
-    return existed;
+    const existed = this.modelConfigs.has(id)
+    this.modelConfigs.delete(id)
+    if (existed) this.flush()
+    return existed
   }
 
   // ── MCP Server Profiles ───────────────────────────────────────────────────
 
   /** Register the provider of read-only built-in companion profiles (see BUILTIN_PROFILE_PREFIX doc). */
   setCompanionProfileProvider(provider: () => ListedMcpServerProfile[]): void {
-    this.companionProfileProvider = provider;
+    this.companionProfileProvider = provider
   }
 
   /** Built-in companion profiles (if a provider is registered) ahead of the user's own profiles. */
   listMcpServerProfiles(): ListedMcpServerProfile[] {
-    const userProfiles: ListedMcpServerProfile[] = Array.from(
-      this.mcpServerProfiles.values(),
-    ).map((p) => ({ ...p, source: "user", disabledReason: null }));
-    return [...this.companionProfileProvider(), ...userProfiles];
+    const userProfiles: ListedMcpServerProfile[] = Array.from(this.mcpServerProfiles.values()).map(
+      (p) => ({ ...p, source: 'user', disabledReason: null }),
+    )
+    return [...this.companionProfileProvider(), ...userProfiles]
   }
 
   upsertMcpServerProfile(record: McpServerProfile): void {
     if (record.id.startsWith(BUILTIN_PROFILE_PREFIX)) {
-      throw new ConfigFileError(
-        `Cannot modify built-in companion profile "${record.id}"`,
-      );
+      throw new ConfigFileError(`Cannot modify built-in companion profile "${record.id}"`)
     }
-    this.mcpServerProfiles.set(record.id, record);
-    this.flush();
+    this.mcpServerProfiles.set(record.id, record)
+    this.flush()
   }
 
   deleteMcpServerProfile(id: string): boolean {
     if (id.startsWith(BUILTIN_PROFILE_PREFIX)) {
-      throw new ConfigFileError(
-        `Cannot delete built-in companion profile "${id}"`,
-      );
+      throw new ConfigFileError(`Cannot delete built-in companion profile "${id}"`)
     }
-    const existed = this.mcpServerProfiles.has(id);
-    this.mcpServerProfiles.delete(id);
-    if (existed) this.flush();
-    return existed;
+    const existed = this.mcpServerProfiles.has(id)
+    this.mcpServerProfiles.delete(id)
+    if (existed) this.flush()
+    return existed
   }
 
   // ── Session Creation Defaults ─────────────────────────────────────────────
 
   getSessionCreationDefaults(): SessionCreationDefaults {
-    return { ...this.sessionCreationDefaults };
+    return { ...this.sessionCreationDefaults }
   }
 
   upsertSessionCreationDefaults(defaults: SessionCreationDefaults): void {
-    this.sessionCreationDefaults = { ...defaults, updatedAt: Date.now() };
-    this.flush();
+    this.sessionCreationDefaults = { ...defaults, updatedAt: Date.now() }
+    this.flush()
   }
 
   // ── Companion API keys ────────────────────────────────────────────────────
@@ -287,7 +275,6 @@ export class ConfigStore {
     return {
       guardian: { api_key: this.companions.guardian.api_key },
       brave: { api_key: this.companions.brave.api_key },
-    };
+    }
   }
 }
-

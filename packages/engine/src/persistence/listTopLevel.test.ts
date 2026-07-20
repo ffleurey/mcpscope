@@ -46,17 +46,29 @@ describe('listTopLevelSessionSummaries', () => {
       createSessionRecord(db.connection, makeSession({ id: 'TOP1', updatedAt: 100 }))
       createSessionRecord(db.connection, makeSession({ id: 'TOP2', updatedAt: 200 }))
       // A benchmark-run child (primary under a run) — must be excluded.
-      createSessionRecord(db.connection, makeSession({
-        id: 'BENC', updatedAt: 300, parentKind: 'benchmark', parentId: 'R-XXXX',
-      }))
+      createSessionRecord(
+        db.connection,
+        makeSession({
+          id: 'BENC',
+          updatedAt: 300,
+          parentKind: 'benchmark',
+          parentId: 'R-XXXX',
+        }),
+      )
       // A judge/analysis session — must be excluded.
-      createSessionRecord(db.connection, makeSession({
-        id: 'JUDG', updatedAt: 400, sessionType: 'session_analysis',
-        parentKind: 'session', parentId: 'TOP1',
-      }))
+      createSessionRecord(
+        db.connection,
+        makeSession({
+          id: 'JUDG',
+          updatedAt: 400,
+          sessionType: 'session_analysis',
+          parentKind: 'session',
+          parentId: 'TOP1',
+        }),
+      )
 
       const { rows, total } = listTopLevelSessionSummaries(db.connection, { limit: 50, offset: 0 })
-      expect(rows.map(r => r.id)).toEqual(['TOP2', 'TOP1'])
+      expect(rows.map((r) => r.id)).toEqual(['TOP2', 'TOP1'])
       expect(total).toBe(2)
     } finally {
       db.connection.close()
@@ -71,11 +83,11 @@ describe('listTopLevelSessionSummaries', () => {
       createSessionRecord(db.connection, makeSession({ id: 'S3', updatedAt: 30 }))
 
       const page1 = listTopLevelSessionSummaries(db.connection, { limit: 2, offset: 0 })
-      expect(page1.rows.map(r => r.id)).toEqual(['S3', 'S2'])
+      expect(page1.rows.map((r) => r.id)).toEqual(['S3', 'S2'])
       expect(page1.total).toBe(3)
 
       const page2 = listTopLevelSessionSummaries(db.connection, { limit: 2, offset: 2 })
-      expect(page2.rows.map(r => r.id)).toEqual(['S1'])
+      expect(page2.rows.map((r) => r.id)).toEqual(['S1'])
       expect(page2.total).toBe(3)
     } finally {
       db.connection.close()

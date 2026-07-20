@@ -1299,6 +1299,7 @@ interface ToolTurnFailureInfo {
   receivedBytes: number | null
   segments: AssistantSegment[]
   completion: OaiChatCompletionResponse | null
+  errorType: 'internal' | 'aborted' | 'provider_unreachable'
 }
 
 /**
@@ -1343,7 +1344,7 @@ function finalizeToolTurnStreamFailure(
   })
 
   currentRound.status = 'error'
-  currentRound.finishReason = 'error'
+  currentRound.finishReason = info.errorType === 'aborted' ? 'cancelled' : 'error'
   currentRound.completedAt = completedAt
   currentRound.responseTraceJson = {
     completion: info.completion,
@@ -1351,7 +1352,7 @@ function finalizeToolTurnStreamFailure(
     error: info.message,
   }
 
-  turn.status = 'error'
+  turn.status = info.errorType === 'aborted' ? 'aborted' : 'error'
   turn.completedAt = completedAt
   turn.outcome = `step-error: ${info.message}`
 
@@ -1401,7 +1402,7 @@ function finalizeToolTurnStreamFailure(
   emitEvent?.({
     type: 'turn-failed',
     turnId,
-    errorType: 'internal',
+    errorType: info.errorType,
     message: info.message,
   })
 
@@ -1633,6 +1634,7 @@ export async function createToolEnabledTurn(
           receivedBytes: null,
           segments: [],
           completion,
+          errorType: 'provider_unreachable',
         },
         emitEvent,
         createProviderRawExchange(
@@ -2033,7 +2035,7 @@ export async function createToolEnabledTurn(
 
     session.status = 'active'
     session.updatedAt = completedAt
-    maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent)
+    maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent, emitEvent)
 
     const finalizeTx = () =>
       runInTransaction(database.connection, () => {
@@ -2233,11 +2235,13 @@ export async function createToolEnabledTurn(
     turn.usage = { ...currentRound.usage }
     session.status = 'active'
     session.updatedAt = finalCompletedAt
-    maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent)
+    maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent, emitEvent)
 
     runInTransaction(database.connection, () => {
       updateRoundRecord(database.connection, currentRound)
-      finalRawExchanges.forEach((exchange) => insertRawExchangeRecord(database.connection, exchange))
+      finalRawExchanges.forEach((exchange) =>
+        insertRawExchangeRecord(database.connection, exchange),
+      )
       assistantParts.forEach((part) => insertPartRecord(database.connection, part))
       updateTurnRecord(database.connection, turn)
       updateSessionRecord(database.connection, session)

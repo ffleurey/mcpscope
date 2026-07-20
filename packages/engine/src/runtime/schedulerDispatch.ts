@@ -89,7 +89,13 @@ async function executeInitJob(
   opCtx: SchedulerContext,
   emitExecutionEvent: (event: SchedulerExecutionEvent) => void,
 ): Promise<void> {
-  await runSessionInitialization(opCtx.db, opCtx.chatCompletionGateway, opCtx.mcpGateway, job.target.sessionId, emitExecutionEvent)
+  await runSessionInitialization(
+    opCtx.db,
+    opCtx.chatCompletionGateway,
+    opCtx.mcpGateway,
+    job.target.sessionId,
+    emitExecutionEvent,
+  )
 }
 
 async function executePrimaryJob(
@@ -106,7 +112,7 @@ async function executePrimaryJob(
   if (!session) throw new Error(`Session ${job.target.sessionId} not found`)
 
   const turns = listTurnRecordsBySession(opCtx.db.connection, job.target.sessionId)
-  const draftTurn = turns.find(t => t.status === 'draft')
+  const draftTurn = turns.find((t) => t.status === 'draft')
   if (!draftTurn) {
     throw new Error(`No draft turn found for session ${job.target.sessionId}`)
   }

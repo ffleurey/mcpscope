@@ -24,7 +24,10 @@ export function assertInitJobAllowed(
     throw new OperationError('Init jobs are only supported for primary sessions.', 'validation')
   }
   if (session.initStatus === 'ready') {
-    throw new OperationError('Session is already initialized.', 'session_already_initialized' as const)
+    throw new OperationError(
+      'Session is already initialized.',
+      'session_already_initialized' as const,
+    )
   }
   if (hasJobForSession(sessionId)) {
     throw new OperationError(
@@ -47,7 +50,10 @@ export function getSessionExecutionKind(
 
   if (session.sessionType === 'primary') {
     if (!prompt || prompt.trim() === '') {
-      throw new OperationError('A prompt is required to enqueue a primary session turn.', 'validation')
+      throw new OperationError(
+        'A prompt is required to enqueue a primary session turn.',
+        'validation',
+      )
     }
     if (session.initStatus !== 'ready') {
       throw new OperationError(
@@ -80,17 +86,19 @@ export function getSessionExecutionKind(
     return 'analysis'
   }
 
-  throw new OperationError(`Session type '${session.sessionType}' is not supported by the scheduler.`, 'validation')
+  throw new OperationError(
+    `Session type '${session.sessionType}' is not supported by the scheduler.`,
+    'validation',
+  )
 }
 
 export function reservePrimaryTurn(opCtx: SchedulerContext, sessionId: string): TurnRecord {
-  type ReservationResult =
-    | { kind: 'turn_in_progress' }
-    | { kind: 'reserved'; turn: TurnRecord }
+  type ReservationResult = { kind: 'turn_in_progress' } | { kind: 'reserved'; turn: TurnRecord }
 
   const reservation = runInTransaction(opCtx.db.connection, (): ReservationResult => {
-    const hasPendingTurn = listTurnRecordsBySession(opCtx.db.connection, sessionId)
-      .some(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools')
+    const hasPendingTurn = listTurnRecordsBySession(opCtx.db.connection, sessionId).some(
+      (t) => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools',
+    )
     if (hasPendingTurn) return { kind: 'turn_in_progress' }
 
     const createdAt = Date.now()
@@ -139,7 +147,10 @@ export function assertStepJobAllowed(
     throw new OperationError('Session not found', SCHEDULER_ERROR.SESSION_NOT_FOUND)
   }
   if (session.sessionType !== 'session_analysis') {
-    throw new OperationError('Step execution is only supported for analysis sessions.', SCHEDULER_ERROR.STEP_NOT_READY)
+    throw new OperationError(
+      'Step execution is only supported for analysis sessions.',
+      SCHEDULER_ERROR.STEP_NOT_READY,
+    )
   }
   if (session.initStatus !== 'ready') {
     throw new OperationError(
@@ -151,7 +162,10 @@ export function assertStepJobAllowed(
   const analysisState = session.analysisState as { phase?: string } | null
   const phase = analysisState?.phase
   if (phase === 'complete' || phase === 'error') {
-    throw new OperationError(`Analysis workflow is already in terminal phase '${phase}'.`, SCHEDULER_ERROR.STEP_NOT_READY)
+    throw new OperationError(
+      `Analysis workflow is already in terminal phase '${phase}'.`,
+      SCHEDULER_ERROR.STEP_NOT_READY,
+    )
   }
   if (hasJobForSession(sessionId)) {
     throw new OperationError(

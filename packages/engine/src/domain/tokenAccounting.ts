@@ -1,5 +1,8 @@
 import type { PartRecord, TokenMetadata } from './model.js'
-import type { OaiChatCompletionResponse, OaiChatCompletionUsage } from '../services/openai/client.js'
+import type {
+  OaiChatCompletionResponse,
+  OaiChatCompletionUsage,
+} from '../services/openai/client.js'
 
 export interface NormalizedUsage {
   promptTokens: number | null
@@ -37,7 +40,7 @@ export function allocateProportionalTokenCounts(totalTokens: number, weights: nu
     return []
   }
 
-  const normalizedWeights = weights.map(weight => Math.max(0, weight))
+  const normalizedWeights = weights.map((weight) => Math.max(0, weight))
   const totalWeight = normalizedWeights.reduce((sum, weight) => sum + weight, 0)
 
   if (totalWeight === 0) {
@@ -46,8 +49,8 @@ export function allocateProportionalTokenCounts(totalTokens: number, weights: nu
     return weights.map((_, index) => baseShare + (index < remainder ? 1 : 0))
   }
 
-  const rawShares = normalizedWeights.map(weight => (totalTokens * weight) / totalWeight)
-  const flooredShares = rawShares.map(share => Math.floor(share))
+  const rawShares = normalizedWeights.map((weight) => (totalTokens * weight) / totalWeight)
+  const flooredShares = rawShares.map((share) => Math.floor(share))
   let remainder = totalTokens - flooredShares.reduce((sum, share) => sum + share, 0)
 
   const rankedRemainders = rawShares
@@ -69,24 +72,20 @@ export function allocateProportionalTokenCounts(totalTokens: number, weights: nu
   return flooredShares
 }
 
-export function normalizeUsage(
-  usage: OaiChatCompletionUsage | undefined,
-): NormalizedUsage {
+export function normalizeUsage(usage: OaiChatCompletionUsage | undefined): NormalizedUsage {
   const promptTokens = usage?.prompt_tokens ?? null
   const completionTokens = usage?.completion_tokens ?? null
   const totalTokens = usage?.total_tokens ?? null
-  const reasoningTokens = usage?.reasoning_tokens
-    ?? usage?.completion_tokens_details?.reasoning_tokens
-    ?? null
+  const reasoningTokens =
+    usage?.reasoning_tokens ?? usage?.completion_tokens_details?.reasoning_tokens ?? null
 
   return {
     promptTokens,
     completionTokens,
     reasoningTokens,
     totalTokens,
-    assistantContentTokens: completionTokens == null
-      ? null
-      : Math.max(0, completionTokens - (reasoningTokens ?? 0)),
+    assistantContentTokens:
+      completionTokens == null ? null : Math.max(0, completionTokens - (reasoningTokens ?? 0)),
   }
 }
 
@@ -109,8 +108,8 @@ export function deriveExactUserTokenMetadata(
     }
   }
 
-  const preludeTokenCounts = includedPreludeParts.map(part => part.tokens.count)
-  if (preludeTokenCounts.some(count => count == null)) {
+  const preludeTokenCounts = includedPreludeParts.map((part) => part.tokens.count)
+  if (preludeTokenCounts.some((count) => count == null)) {
     return {
       count: null,
       source: 'unknown',

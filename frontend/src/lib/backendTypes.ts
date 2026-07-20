@@ -871,6 +871,13 @@ export const createSessionResponseSchema = z.object({
   initJobId: z.string().optional(),
 })
 
+/** Canonical rename_session operation result, returned by PATCH /api/sessions/:id. */
+export const renameSessionResponseSchema = z.object({
+  api_version: z.literal(1),
+  session_id: z.string(),
+  title: z.string(),
+})
+
 // Every `type` the backend `inspect` operation can return. Must stay in sync with
 // the runtime resolver (hierarchicalLookup) + resolveBenchmarkInspect. The
 // id-pill, CLI, and MCP all consume this; a missing value rejects the response

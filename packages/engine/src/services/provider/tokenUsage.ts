@@ -17,9 +17,9 @@
  * `tokenAccounting.ts` with a provider-aware entry point.
  */
 
-import type { ProviderType } from "./index.js";
-import type { NormalizedUsage } from "../../domain/tokenAccounting.js";
-import { parseServerSentEventPayloads as parseSsePayloads } from "../openai/client.js";
+import type { ProviderType } from './index.js'
+import type { NormalizedUsage } from '../../domain/tokenAccounting.js'
+import { parseServerSentEventPayloads as parseSsePayloads } from '../openai/client.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared: extract NormalizedUsage from a usage-like object
@@ -31,31 +31,21 @@ import { parseServerSentEventPayloads as parseSsePayloads } from "../openai/clie
  * Handles both top-level `reasoning_tokens` and nested
  * `completion_tokens_details.reasoning_tokens`.
  */
-function usageFromObject(
-  obj: Record<string, unknown> | undefined | null,
-): NormalizedUsage | null {
-  if (!obj) return null;
+function usageFromObject(obj: Record<string, unknown> | undefined | null): NormalizedUsage | null {
+  if (!obj) return null
 
-  const promptTokens =
-    typeof obj.prompt_tokens === "number"
-      ? (obj.prompt_tokens as number)
-      : null;
+  const promptTokens = typeof obj.prompt_tokens === 'number' ? (obj.prompt_tokens as number) : null
   const completionTokens =
-    typeof obj.completion_tokens === "number"
-      ? (obj.completion_tokens as number)
-      : null;
-  const totalTokens =
-    typeof obj.total_tokens === "number" ? (obj.total_tokens as number) : null;
+    typeof obj.completion_tokens === 'number' ? (obj.completion_tokens as number) : null
+  const totalTokens = typeof obj.total_tokens === 'number' ? (obj.total_tokens as number) : null
 
-  const details = obj.completion_tokens_details as
-    | Record<string, unknown>
-    | undefined;
+  const details = obj.completion_tokens_details as Record<string, unknown> | undefined
   const reasoningTokens =
-    typeof obj.reasoning_tokens === "number"
+    typeof obj.reasoning_tokens === 'number'
       ? (obj.reasoning_tokens as number)
-      : details && typeof details.reasoning_tokens === "number"
+      : details && typeof details.reasoning_tokens === 'number'
         ? (details.reasoning_tokens as number)
-        : null;
+        : null
 
   return {
     promptTokens,
@@ -63,10 +53,8 @@ function usageFromObject(
     reasoningTokens,
     totalTokens,
     assistantContentTokens:
-      completionTokens != null
-        ? Math.max(0, completionTokens - (reasoningTokens ?? 0))
-        : null,
-  };
+      completionTokens != null ? Math.max(0, completionTokens - (reasoningTokens ?? 0)) : null,
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,45 +66,40 @@ function normalizeOaiUsage(rawResponseBody: string): NormalizedUsage {
   // (non-streaming fallback). SSE detection checks for `data:` lines rather
   // than checking if the body starts with `data:`, because some providers
   // prefix SSE with comment lines (e.g. OpenRouter sends `: OPENROUTER PROCESSING`).
-  const isSse =
-    rawResponseBody.includes("\ndata:") || rawResponseBody.startsWith("data:");
+  const isSse = rawResponseBody.includes('\ndata:') || rawResponseBody.startsWith('data:')
 
   if (!isSse) {
     // Plain JSON (non-streaming fallback) — one-shot completion response
     try {
-      const parsed = JSON.parse(rawResponseBody) as Record<string, unknown>;
-      const result = usageFromObject(
-        parsed.usage as Record<string, unknown> | undefined,
-      );
-      if (result) return result;
+      const parsed = JSON.parse(rawResponseBody) as Record<string, unknown>
+      const result = usageFromObject(parsed.usage as Record<string, unknown> | undefined)
+      if (result) return result
     } catch {
       // ignore
     }
-    return nullUsage();
+    return nullUsage()
   }
 
   // SSE format — iterate over chunks, last usage wins
-  const payloads = parseSsePayloads(rawResponseBody);
-  let result: NormalizedUsage | null = null;
+  const payloads = parseSsePayloads(rawResponseBody)
+  let result: NormalizedUsage | null = null
 
   for (const payload of payloads) {
-    if (payload === "[DONE]") continue;
+    if (payload === '[DONE]') continue
     try {
-      const chunk = JSON.parse(payload) as Record<string, unknown>;
-      const parsed = usageFromObject(
-        chunk.usage as Record<string, unknown> | undefined,
-      );
+      const chunk = JSON.parse(payload) as Record<string, unknown>
+      const parsed = usageFromObject(chunk.usage as Record<string, unknown> | undefined)
       if (parsed) {
-        result = parsed;
+        result = parsed
         // Keep iterating — the last chunk with usage wins (final usage
         // summary appears at the end of the stream).
       }
     } catch {
-      continue;
+      continue
     }
   }
 
-  return result ?? nullUsage();
+  return result ?? nullUsage()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,12 +107,12 @@ function normalizeOaiUsage(rawResponseBody: string): NormalizedUsage {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function normalizeOllamaUsage(rawResponseBody: string): NormalizedUsage {
-  const result = tryOllamaNativeUsage(rawResponseBody);
-  if (result) return result;
+  const result = tryOllamaNativeUsage(rawResponseBody)
+  if (result) return result
 
   // Fallback: Ollama's OAI-compat API may return standard OpenAI-format
   // usage chunks (without "done": true / prompt_eval_count fields).
-  const oaiResult = normalizeOaiUsage(rawResponseBody);
+  const oaiResult = normalizeOaiUsage(rawResponseBody)
   if (oaiResult.completionTokens != null) {
     // Ollama does not report reasoning tokens separately.  The
     // text-length estimation heuristic (4 chars/token) is unreliable
@@ -143,10 +126,10 @@ function normalizeOllamaUsage(rawResponseBody: string): NormalizedUsage {
       ...oaiResult,
       reasoningTokens: null,
       assistantContentTokens: oaiResult.completionTokens,
-    };
+    }
   }
 
-  return nullUsage();
+  return nullUsage()
 }
 
 /**
@@ -155,24 +138,19 @@ function normalizeOllamaUsage(rawResponseBody: string): NormalizedUsage {
  * Handles both SSE-streaming and plain JSON response bodies.
  */
 function tryOllamaNativeUsage(rawResponseBody: string): NormalizedUsage | null {
-  const payloads = rawResponseBody.startsWith("data:")
+  const payloads = rawResponseBody.startsWith('data:')
     ? parseSsePayloads(rawResponseBody)
-    : [rawResponseBody];
+    : [rawResponseBody]
 
   for (const raw of payloads) {
-    if (raw === "[DONE]") continue;
+    if (raw === '[DONE]') continue
     try {
-      const chunk = JSON.parse(raw) as Record<string, unknown>;
-      if (chunk.done !== true) continue;
+      const chunk = JSON.parse(raw) as Record<string, unknown>
+      if (chunk.done !== true) continue
 
       const promptEvalCount =
-        typeof chunk.prompt_eval_count === "number"
-          ? (chunk.prompt_eval_count as number)
-          : null;
-      const evalCount =
-        typeof chunk.eval_count === "number"
-          ? (chunk.eval_count as number)
-          : null;
+        typeof chunk.prompt_eval_count === 'number' ? (chunk.prompt_eval_count as number) : null
+      const evalCount = typeof chunk.eval_count === 'number' ? (chunk.eval_count as number) : null
 
       // Ollama does not report reasoning tokens separately.
       // Leave as null — the text-length heuristic is unreliable and
@@ -183,17 +161,15 @@ function tryOllamaNativeUsage(rawResponseBody: string): NormalizedUsage | null {
         completionTokens: evalCount,
         reasoningTokens: null,
         totalTokens:
-          promptEvalCount != null && evalCount != null
-            ? promptEvalCount + evalCount
-            : null,
+          promptEvalCount != null && evalCount != null ? promptEvalCount + evalCount : null,
         assistantContentTokens: evalCount,
-      };
+      }
     } catch {
-      continue;
+      continue
     }
   }
 
-  return null;
+  return null
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -207,7 +183,7 @@ function nullUsage(): NormalizedUsage {
     reasoningTokens: null,
     totalTokens: null,
     assistantContentTokens: null,
-  };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,7 +195,7 @@ function normalizeOpenRouterUsage(rawResponseBody: string): NormalizedUsage {
   // prefixed with a comment line (`: OPENROUTER PROCESSING`), so the
   // SSE detection in normalizeOaiUsage checks for `\ndata:` rather than
   // requiring the body to start with `data:`.
-  return normalizeOaiUsage(rawResponseBody);
+  return normalizeOaiUsage(rawResponseBody)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -239,12 +215,12 @@ export function normalizeStreamUsage(
   provider: ProviderType,
 ): NormalizedUsage {
   switch (provider) {
-    case "ollama":
-      return normalizeOllamaUsage(rawResponseBody);
-    case "openrouter":
-      return normalizeOpenRouterUsage(rawResponseBody);
-    case "lmstudio":
+    case 'ollama':
+      return normalizeOllamaUsage(rawResponseBody)
+    case 'openrouter':
+      return normalizeOpenRouterUsage(rawResponseBody)
+    case 'lmstudio':
     default:
-      return normalizeOaiUsage(rawResponseBody);
+      return normalizeOaiUsage(rawResponseBody)
   }
 }

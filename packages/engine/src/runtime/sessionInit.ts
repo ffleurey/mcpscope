@@ -42,7 +42,7 @@ export async function runSessionInitialization(
   // If already initialized, just emit the existing parts and trace
   if (session.initStatus === 'ready') {
     const parts = listPartRecordsBySession(database.connection, sessionId)
-    for (const part of parts.filter(p => p.turnId === null)) {
+    for (const part of parts.filter((p) => p.turnId === null)) {
       emitEvent({ type: 'part-committed', part })
     }
     const trace = buildSessionTraceBundle({
@@ -71,7 +71,7 @@ export async function runSessionInitialization(
   try {
     // Emit existing parts (system prompt was created during createSession)
     let parts = listPartRecordsBySession(database.connection, sessionId)
-    for (const part of parts.filter(p => p.turnId === null)) {
+    for (const part of parts.filter((p) => p.turnId === null)) {
       emitEvent({ type: 'part-committed', part })
     }
 
@@ -79,16 +79,21 @@ export async function runSessionInitialization(
     if (session.mcpProfileSnapshots.length > 0) {
       await ensureMcpContext(database, session, mcpGateway)
       parts = listPartRecordsBySession(database.connection, sessionId)
-      for (const part of parts.filter(p => p.turnId === null)) {
+      for (const part of parts.filter((p) => p.turnId === null)) {
         emitEvent({ type: 'part-committed', part })
       }
     }
 
     // Token probing: context length + system prompt tokens + MCP/tool-definition tokens
     phase = 'tokens'
-    const probedParts = await ensureSessionPreludeTokenMetadata(database, chatCompletionGateway, session, parts)
+    const probedParts = await ensureSessionPreludeTokenMetadata(
+      database,
+      chatCompletionGateway,
+      session,
+      parts,
+    )
     // Emit updated parts (now have token counts filled in)
-    for (const part of probedParts.filter(p => p.turnId === null)) {
+    for (const part of probedParts.filter((p) => p.turnId === null)) {
       emitEvent({ type: 'part-committed', part })
     }
 
@@ -115,10 +120,13 @@ export async function runSessionInitialization(
     // Attribute the failure to its phase and name the server, so a bare
     // transport error like "fetch failed" is actionable.
     const errorKind = phase === 'mcp' ? 'mcp_init_error' : 'token_probe_error'
-    const target = phase === 'mcp'
-      ? session.mcpProfileSnapshots.map(m => `'${m.name}' (${m.url})`).join(', ')
-      : `model '${session.modelProfileSnapshot.name}' (${session.modelProfileSnapshot.connectionBaseUrl})`
-    const message = target ? `${raw} — initializing ${phase === 'mcp' ? 'MCP server' : 'LM connection'} ${target}` : raw
+    const target =
+      phase === 'mcp'
+        ? session.mcpProfileSnapshots.map((m) => `'${m.name}' (${m.url})`).join(', ')
+        : `model '${session.modelProfileSnapshot.name}' (${session.modelProfileSnapshot.connectionBaseUrl})`
+    const message = target
+      ? `${raw} — initializing ${phase === 'mcp' ? 'MCP server' : 'LM connection'} ${target}`
+      : raw
     session.initStatus = 'error'
     // Persist the failure reason so it is diagnosable after the fact via
     // list/status/inspect (otherwise only emitted on the live event stream).

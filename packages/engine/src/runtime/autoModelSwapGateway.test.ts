@@ -17,9 +17,7 @@ function conn(overrides: Partial<ProviderConnection>): ProviderConnection {
 
 function makeInner() {
   return {
-    createChatCompletion: vi
-      .fn()
-      .mockResolvedValue({ id: 'x' } as never),
+    createChatCompletion: vi.fn().mockResolvedValue({ id: 'x' } as never),
     streamChatCompletion: vi.fn().mockResolvedValue({} as never),
     probePromptTokens: vi.fn().mockResolvedValue(7),
   } satisfies ChatCompletionGateway
@@ -78,9 +76,7 @@ describe('withAutoModelSwap', () => {
     const ensureReady = vi.fn()
     const inner = makeInner()
     const gw = withAutoModelSwap(inner, {
-      listConnections: () => [
-        conn({ baseUrl: 'http://other:9999', autoSwapModel: true }),
-      ],
+      listConnections: () => [conn({ baseUrl: 'http://other:9999', autoSwapModel: true })],
       ensureReady,
     })
 

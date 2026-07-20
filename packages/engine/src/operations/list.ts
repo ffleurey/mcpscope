@@ -9,9 +9,18 @@ const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 200
 
 export const listInputSchema = z.object({
-  limit: z.number().int().min(1).max(MAX_LIMIT).optional()
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_LIMIT)
+    .optional()
     .describe(`Max sessions to return (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT}).`),
-  offset: z.number().int().min(0).optional()
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
     .describe('Number of sessions to skip, for paging through results.'),
 })
 
@@ -43,13 +52,15 @@ export interface ListResult {
 /** Zod output shape for MCP structured output. Mirrors ListResult. */
 export const listOutputSchema = {
   api_version: z.literal(1),
-  sessions: z.array(z.object({
-    id: z.string(),
-    title: z.string(),
-    status: z.enum(['initializing', 'ready', 'running', 'error']),
-    model: z.string(),
-    updated_at: z.number(),
-  })),
+  sessions: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      status: z.enum(['initializing', 'ready', 'running', 'error']),
+      model: z.string(),
+      updated_at: z.number(),
+    }),
+  ),
   total: z.number(),
   limit: z.number(),
   offset: z.number(),
@@ -71,7 +82,7 @@ export const listOperation = {
 
     return {
       api_version: 1,
-      sessions: rows.map(s => ({
+      sessions: rows.map((s) => ({
         id: s.id,
         title: s.title,
         status: computeLifecycleState(ctx.db.connection, s),

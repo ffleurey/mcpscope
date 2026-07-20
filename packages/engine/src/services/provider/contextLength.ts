@@ -12,8 +12,8 @@
  *   (native `/api/v1/models`); this module serves as the fallback.
  */
 
-import type { ProviderType } from "./index.js";
-import { rootUrl, listModels } from "../openai/client.js";
+import type { ProviderType } from './index.js'
+import { rootUrl, listModels } from '../openai/client.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public API
@@ -43,16 +43,16 @@ export async function getProviderContextLength(
   configuredContextSize?: number | null,
 ): Promise<number | null> {
   // User-configured contextSize is authoritative — it's sent as num_ctx.
-  if (configuredContextSize != null) return configuredContextSize;
+  if (configuredContextSize != null) return configuredContextSize
 
   // No explicit config: try native provider API for the model's default.
-  if (provider === "ollama") {
-    const native = await getOllamaNativeContextLength(baseUrl, modelKey);
-    if (native != null) return native;
+  if (provider === 'ollama') {
+    const native = await getOllamaNativeContextLength(baseUrl, modelKey)
+    if (native != null) return native
   }
 
   // Fall back to OAI /v1/models endpoint.
-  return getOaiContextLengthFromModels(baseUrl, apiKey, modelKey);
+  return getOaiContextLengthFromModels(baseUrl, apiKey, modelKey)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,40 +75,39 @@ async function getOllamaNativeContextLength(
   baseUrl: string,
   modelKey: string,
 ): Promise<number | null> {
-  const apiUrl = `${rootUrl(baseUrl)}/api/show`;
-  const modelKeyVariants = buildOllamaModelKeyVariants(modelKey);
+  const apiUrl = `${rootUrl(baseUrl)}/api/show`
+  const modelKeyVariants = buildOllamaModelKeyVariants(modelKey)
 
   for (const variant of modelKeyVariants) {
     try {
       const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: variant }),
-      });
-      if (!response.ok) continue;
+      })
+      if (!response.ok) continue
 
-      const rawText = await response.text();
-      let data: Record<string, unknown>;
+      const rawText = await response.text()
+      let data: Record<string, unknown>
       try {
-        data = JSON.parse(rawText) as Record<string, unknown>;
+        data = JSON.parse(rawText) as Record<string, unknown>
       } catch {
-        continue;
+        continue
       }
 
       // Check model_info sub-object first, then top-level fields.
-      const modelInfo = data.model_info as Record<string, unknown> | undefined;
-      let length =
-        modelInfo != null ? extractContextLengthFromModelInfo(modelInfo) : null;
+      const modelInfo = data.model_info as Record<string, unknown> | undefined
+      let length = modelInfo != null ? extractContextLengthFromModelInfo(modelInfo) : null
       if (length == null) {
-        length = extractContextLengthFromModelInfo(data);
+        length = extractContextLengthFromModelInfo(data)
       }
-      if (length != null) return length;
+      if (length != null) return length
     } catch {
-      continue;
+      continue
     }
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -120,21 +119,19 @@ async function getOllamaNativeContextLength(
  *
  * Accepts both number and string values (parses numeric strings).
  */
-function extractContextLengthFromModelInfo(
-  modelInfo: Record<string, unknown>,
-): number | null {
+function extractContextLengthFromModelInfo(modelInfo: Record<string, unknown>): number | null {
   for (const [key, value] of Object.entries(modelInfo)) {
-    if (!key.endsWith("context_length")) continue;
+    if (!key.endsWith('context_length')) continue
 
-    if (typeof value === "number") {
-      return value;
+    if (typeof value === 'number') {
+      return value
     }
-    if (typeof value === "string") {
-      const parsed = parseInt(value, 10);
-      if (!isNaN(parsed) && parsed > 0) return parsed;
+    if (typeof value === 'string') {
+      const parsed = parseInt(value, 10)
+      if (!isNaN(parsed) && parsed > 0) return parsed
     }
   }
-  return null;
+  return null
 }
 
 /**
@@ -142,17 +139,17 @@ function extractContextLengthFromModelInfo(
  * Ollama can be sensitive to tag suffixes, so we try multiple formats.
  */
 function buildOllamaModelKeyVariants(modelKey: string): string[] {
-  const variants: string[] = [];
+  const variants: string[] = []
 
   // 1. Exact key as provided
-  variants.push(modelKey);
+  variants.push(modelKey)
 
   // 2. If the key has a tag (e.g. "qwen3.5:9b"), try without it
-  if (modelKey.includes(":")) {
-    const name = modelKey.split(":")[0];
+  if (modelKey.includes(':')) {
+    const name = modelKey.split(':')[0]
     if (name && name.length > 0) {
-      variants.push(name);
-      variants.push(`${name}:latest`);
+      variants.push(name)
+      variants.push(`${name}:latest`)
     }
   }
 
@@ -160,7 +157,7 @@ function buildOllamaModelKeyVariants(modelKey: string): string[] {
   // asks about a key unrelated to the requested model and could silently
   // attribute another model's context_length to it.
 
-  return variants;
+  return variants
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -173,10 +170,10 @@ async function getOaiContextLengthFromModels(
   modelKey: string,
 ): Promise<number | null> {
   try {
-    const modelList = await listModels(baseUrl, apiKey);
-    const match = modelList.data?.find((m) => m.id === modelKey);
-    return match?.context_length ?? null;
+    const modelList = await listModels(baseUrl, apiKey)
+    const match = modelList.data?.find((m) => m.id === modelKey)
+    return match?.context_length ?? null
   } catch {
-    return null;
+    return null
   }
 }

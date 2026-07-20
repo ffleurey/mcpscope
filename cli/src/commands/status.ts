@@ -21,6 +21,10 @@ export async function runStatus(opts: StatusOptions): Promise<void> {
     process.stdout.write(`  turn  ${result.active_turn.id}  ${result.active_turn.status}\n`)
   }
 
+  if (result.queue_position !== undefined) {
+    process.stdout.write(`  queued  position ${result.queue_position}\n`)
+  }
+
   if (state === 'ready') {
     process.stdout.write(`\nRun 'mcpscope send ${result.session.id} <prompt>' to start a turn.\n`)
   } else if (state === 'running') {

@@ -29,11 +29,11 @@ Text output is a columnar table (ID, title, status, model, updated) followed by 
 `--json` → `{ api_version: 1, sessions: [{ id, title, status, model, updated_at }], total, limit, offset, has_more }`.
 Rows are deliberately compact; richer per-session detail comes from `inspect`.
 
-### `mcpscope create <title> [--id <session-id>] [--compaction <strategy>] [--model-config <id>] [--mcp-profile <id>...] [--max-tool-rounds <n>] [--wait] [--json]`
+### `mcpscope create [title] [--id <session-id>] [--compaction <strategy>] [--model-config <id>] [--mcp-profile <id>...] [--max-tool-rounds <n>] [--wait] [--json]`
 
 Creates a session using backend-owned defaults (set via the UI) or explicit model/MCP selection.
 
-- `<title>` — session title (required, positional)
+- `[title]` — session title (optional, positional). When omitted, the session starts as `New session` and is auto-titled from the first prompt.
 - `--id <session-id>` — optional 4-char explicit session ID (A-Z 2-9, no O/I/0/1)
 - `--compaction <strategy>` — `strip-reasoning` (default) or `none`
 - `--model-config <id>` — optional model config ID; uses the configured default if omitted
@@ -92,8 +92,10 @@ Returns the current lifecycle state of a session.
 | `running` | a turn is currently executing |
 | `error` | session is in a failed state |
 
-**Text output** — always shows session ID and state; when `running`, also shows the active turn ID; when `ready`, suggests the next `send` command.  
+**Text output** — always shows session ID and state; when `running`, also shows the active turn ID; when the session's turn is still queued behind other work, shows its 1-based queue position; when `ready`, suggests the next `send` command.  
 **JSON output** — `{ api_version: 1, session: { id, state }, active_turn: { id, status } | null }`.
+When the session has a pending job that has not started executing yet, adds `queue_position`
+(1-based position in the scheduler queue).
 Analysis sessions may add `workflow_kind` and `latest_error`.
 
 **Error codes in JSON**:
@@ -178,6 +180,49 @@ builtin-guardian     The Guardian News (built-in)   http://localhost:3066/compan
 `--json` returns the full list: `{ mcp_profiles: [...] }`, each entry with `id`, `name`, `url`,
 `default_enabled`, `source` (`"builtin"` | `"user"`), and `disabled_reason` (`null` or the config
 requirement).
+
+### `mcpscope delete_session <session-id> [--json]`
+
+Deletes a session and all its child sessions, turns, rounds, parts, and raw exchanges.
+Rejects if the session has an active or queued job — abort it first (`abort_session`).
+
+**Text output** — `Deleted session <id>`.  
+**JSON output** — `{ api_version: 1, deleted: true, session_id }`.
+
+**Error codes in JSON**:
+| code | meaning |
+|------|---------|
+| `session_not_found` | session ID does not exist |
+| `session_already_queued` | the session has an active or queued job |
+
+### `mcpscope rename_session <session-id> <title> [--json]`
+
+Renames a session (updates its title). The title is trimmed; 1-200 characters.
+
+**Text output** — `Renamed session <id> to "<title>"`.  
+**JSON output** — `{ api_version: 1, session_id, title }`.
+
+**Error codes in JSON**:
+| code | meaning |
+|------|---------|
+| `session_not_found` | session ID does not exist |
+| `invalid_title` | title is empty after trimming |
+
+### `mcpscope abort_session <session-id> [--json]`
+
+Aborts the session's active turn (signalling the in-flight model request) or dequeues its
+pending job. Unlike the scheduler-wide abort, this only touches the given session.
+
+**Text output** — states which of the three outcomes happened.  
+**JSON output** — `{ api_version: 1, session_id, outcome }` with `outcome` one of
+`aborted` (active turn signalled), `dequeued` (pending job removed before it started), or
+`not-running` (no job matched the session).
+
+**Error codes in JSON**:
+| code | meaning |
+|------|---------|
+| `session_not_found` | session ID does not exist |
+| `scheduler_unavailable` | no execution scheduler is available |
 
 ## Benchmark commands
 

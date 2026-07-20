@@ -8,19 +8,17 @@
  * copy-pasted MCP snapshot builder, and the repeated SessionId* -> OperationError
  * mapping that previously lived independently in each operation.
  */
-import type { ConfigStore } from "../config/configStore.js";
-import { type McpServerProfile } from "../domain/configuration.js";
-import type { McpProfileSnapshot, ModelProfileSnapshot } from "../domain/model.js";
-import { OperationError } from "./errors.js";
+import type { ConfigStore } from '../config/configStore.js'
+import { type McpServerProfile } from '../domain/configuration.js'
+import type { McpProfileSnapshot, ModelProfileSnapshot } from '../domain/model.js'
+import { OperationError } from './errors.js'
 import {
   SessionIdConflictError,
   SessionIdGenerationError,
   SessionIdInputError,
-} from "../runtime/modelTurns.js";
+} from '../runtime/modelTurns.js'
 
-export function buildMcpSnapshot(
-  mcpProfile: McpServerProfile,
-): McpProfileSnapshot {
+export function buildMcpSnapshot(mcpProfile: McpServerProfile): McpProfileSnapshot {
   return {
     id: mcpProfile.id,
     name: mcpProfile.name,
@@ -30,7 +28,7 @@ export function buildMcpSnapshot(
     authValue: mcpProfile.authValue ?? null,
     createdAt: mcpProfile.createdAt,
     updatedAt: mcpProfile.updatedAt,
-  };
+  }
 }
 
 /**
@@ -39,37 +37,37 @@ export function buildMcpSnapshot(
  */
 export function mapSessionIdError(error: unknown): OperationError | null {
   if (error instanceof SessionIdInputError) {
-    return new OperationError(error.message, "invalid_session_id");
+    return new OperationError(error.message, 'invalid_session_id')
   }
   if (error instanceof SessionIdConflictError) {
-    return new OperationError(error.message, "duplicate_session_id");
+    return new OperationError(error.message, 'duplicate_session_id')
   }
   if (error instanceof SessionIdGenerationError) {
-    return new OperationError(error.message, "session_id_generation_failed");
+    return new OperationError(error.message, 'session_id_generation_failed')
   }
-  return null;
+  return null
 }
 
 export interface ResolvePrimarySessionInputsParams {
   /** Explicit model config ID, or undefined to fall back to the configured default. */
-  modelConfigId?: string | undefined;
+  modelConfigId?: string | undefined
   /** Explicit MCP profile IDs, or undefined to use the default-enabled selection. */
-  mcpProfileIds?: string[] | undefined;
+  mcpProfileIds?: string[] | undefined
 }
 
 /** Successful resolution: a fully-built model snapshot plus the resolved MCP snapshots. */
 export interface ResolvedPrimarySessionInputs {
-  ok: true;
-  modelConfigId: string;
-  modelConfigName: string;
-  modelProfileSnapshot: ModelProfileSnapshot;
-  mcpProfileSnapshots: McpProfileSnapshot[];
+  ok: true
+  modelConfigId: string
+  modelConfigName: string
+  modelProfileSnapshot: ModelProfileSnapshot
+  mcpProfileSnapshots: McpProfileSnapshot[]
 }
 
 /** Resolution failure, expressed as a ready-to-throw OperationError. */
 export interface FailedPrimarySessionInputs {
-  ok: false;
-  error: OperationError;
+  ok: false
+  error: OperationError
 }
 
 /**
@@ -81,87 +79,83 @@ export function resolvePrimarySessionInputs(
   configStore: ConfigStore,
   params: ResolvePrimarySessionInputsParams,
 ): ResolvedPrimarySessionInputs | FailedPrimarySessionInputs {
-  const defaults = configStore.getSessionCreationDefaults();
-  const resolvedModelConfigId =
-    params.modelConfigId ?? defaults.defaultModelConfigId;
+  const defaults = configStore.getSessionCreationDefaults()
+  const resolvedModelConfigId = params.modelConfigId ?? defaults.defaultModelConfigId
 
   if (!resolvedModelConfigId) {
     return {
       ok: false,
       error: new OperationError(
-        "No default model config is configured for new sessions. Pass a model "
-          + "explicitly (--model-config <id> / model_config_id — discover ids with "
-          + "list_model_configs), or set a default in the Web UI Configuration "
-          + "screen or in mcpscope.config.json (see CONFIG.md).",
-        "default_model_not_configured",
+        'No default model config is configured for new sessions. Pass a model ' +
+          'explicitly (--model-config <id> / model_config_id — discover ids with ' +
+          'list_model_configs), or set a default in the Web UI Configuration ' +
+          'screen or in mcpscope.config.json (see CONFIG.md).',
+        'default_model_not_configured',
       ),
-    };
+    }
   }
 
-  const modelConfig = configStore.listModelConfigs().find(
-    (c) => c.id === resolvedModelConfigId,
-  );
+  const modelConfig = configStore.listModelConfigs().find((c) => c.id === resolvedModelConfigId)
   if (!modelConfig) {
     return {
       ok: false,
       error: new OperationError(
         `Model config "${resolvedModelConfigId}" not found.`,
-        "model_config_not_found",
+        'model_config_not_found',
       ),
-    };
+    }
   }
 
-  const lmConnection = configStore.listLmConnections().find(
-    (c) => c.id === modelConfig.connectionId,
-  );
+  const lmConnection = configStore
+    .listLmConnections()
+    .find((c) => c.id === modelConfig.connectionId)
   if (!lmConnection) {
     return {
       ok: false,
       error: new OperationError(
         `LM connection "${modelConfig.connectionId}" referenced by the selected model config no longer exists.`,
-        "lm_connection_not_found",
+        'lm_connection_not_found',
       ),
-    };
+    }
   }
 
-  const allProfiles = configStore.listMcpServerProfiles();
+  const allProfiles = configStore.listMcpServerProfiles()
   const resolvedMcpIds =
-    params.mcpProfileIds ??
-    allProfiles.filter((p) => p.defaultEnabled).map((p) => p.id);
+    params.mcpProfileIds ?? allProfiles.filter((p) => p.defaultEnabled).map((p) => p.id)
 
-  const mcpProfileSnapshots: McpProfileSnapshot[] = [];
-  const notFoundIds: string[] = [];
-  const disabled: string[] = [];
+  const mcpProfileSnapshots: McpProfileSnapshot[] = []
+  const notFoundIds: string[] = []
+  const disabled: string[] = []
   for (const profileId of resolvedMcpIds) {
-    const mcpProfile = allProfiles.find((p) => p.id === profileId);
+    const mcpProfile = allProfiles.find((p) => p.id === profileId)
     if (!mcpProfile) {
-      notFoundIds.push(profileId);
+      notFoundIds.push(profileId)
     } else if (mcpProfile.disabledReason) {
       // Key-gated companion whose upstream key is not configured: refuse rather
       // than create a session whose tools would all fail in-band. The message
       // names the config key to set. (The GUI also greys these out.)
-      disabled.push(`${profileId} (${mcpProfile.disabledReason})`);
+      disabled.push(`${profileId} (${mcpProfile.disabledReason})`)
     } else {
-      mcpProfileSnapshots.push(buildMcpSnapshot(mcpProfile));
+      mcpProfileSnapshots.push(buildMcpSnapshot(mcpProfile))
     }
   }
   if (notFoundIds.length > 0) {
     return {
       ok: false,
       error: new OperationError(
-        `MCP profile(s) not found: ${notFoundIds.join(", ")}`,
-        "mcp_profile_not_found",
+        `MCP profile(s) not found: ${notFoundIds.join(', ')}`,
+        'mcp_profile_not_found',
       ),
-    };
+    }
   }
   if (disabled.length > 0) {
     return {
       ok: false,
       error: new OperationError(
-        `MCP profile(s) unavailable: ${disabled.join(", ")}`,
-        "mcp_profile_disabled",
+        `MCP profile(s) unavailable: ${disabled.join(', ')}`,
+        'mcp_profile_disabled',
       ),
-    };
+    }
   }
 
   const modelProfileSnapshot: ModelProfileSnapshot = {
@@ -178,7 +172,7 @@ export function resolvePrimarySessionInputs(
     providerType: lmConnection.providerType ?? null,
     createdAt: modelConfig.createdAt,
     updatedAt: modelConfig.updatedAt,
-  };
+  }
 
   return {
     ok: true,
@@ -186,5 +180,5 @@ export function resolvePrimarySessionInputs(
     modelConfigName: modelConfig.name,
     modelProfileSnapshot,
     mcpProfileSnapshots,
-  };
+  }
 }

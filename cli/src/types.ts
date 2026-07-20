@@ -24,7 +24,7 @@ export interface ListResult {
 }
 
 export interface CreateInput {
-  title: string;
+  title?: string;
   id?: string;
   compaction?: "none" | "strip-reasoning";
   model_config_id?: string;
@@ -72,6 +72,20 @@ export interface StatusResult {
     state: "initializing" | "ready" | "running" | "error";
   };
   active_turn: { id: string; status: string } | null;
+  /** Present when the session has a pending job in the scheduler queue (1-based). */
+  queue_position?: number;
+}
+
+export interface RenameSessionResult {
+  api_version: 1;
+  session_id: string;
+  title: string;
+}
+
+export interface AbortSessionResult {
+  api_version: 1;
+  session_id: string;
+  outcome: "aborted" | "dequeued" | "not-running";
 }
 
 export interface InspectInput {

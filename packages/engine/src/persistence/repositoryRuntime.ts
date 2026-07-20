@@ -27,7 +27,7 @@
  *   raw_exchanges.turn_id          → raw_exchanges.turn_id
  */
 
-import { runInTransaction, type BackendConnection } from "./connection.js";
+import { runInTransaction, type BackendConnection } from './connection.js'
 import type {
   ModelProfileSnapshot,
   McpProfileSnapshot,
@@ -55,7 +55,9 @@ function stringifyJson(value: unknown): string | null {
   return value == null ? null : JSON.stringify(value)
 }
 
-function assertValidSessionParent(session: Pick<SessionRecord, 'sessionType' | 'parentKind' | 'parentId'>): void {
+function assertValidSessionParent(
+  session: Pick<SessionRecord, 'sessionType' | 'parentKind' | 'parentId'>,
+): void {
   const error = validateSessionParent(session.sessionType, session.parentKind, session.parentId)
   if (error) {
     throw new Error(`Invalid session metadata: ${error}`)
@@ -172,7 +174,9 @@ function mapV2SessionRow(row: V2SessionRow): SessionRecord {
     // Old sessions predate the per-session budget — fall back to the default.
     maxToolRounds: params.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS,
     initError: state.initError ?? null,
-    analysisState: row.analysis_state_json ? (JSON.parse(row.analysis_state_json) as Record<string, unknown>) : undefined,
+    analysisState: row.analysis_state_json
+      ? (JSON.parse(row.analysis_state_json) as Record<string, unknown>)
+      : undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -213,7 +217,9 @@ export function insertStepRecord(
   connection: BackendConnection,
   record: StepPersistenceRecord,
 ): void {
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     INSERT INTO steps (
       id, session_id, step_type_key, parent_step_id, child_index, status,
       params_json, state_json, created_at, completed_at
@@ -221,67 +227,88 @@ export function insertStepRecord(
       @id, @sessionId, @stepTypeKey, @parentStepId, @childIndex, @status,
       @paramsJson, @stateJson, @createdAt, @completedAt
     )
-  `).run({
-    id: record.id,
-    sessionId: record.sessionId,
-    stepTypeKey: record.stepTypeKey,
-    parentStepId: record.parentStepId,
-    childIndex: record.childIndex,
-    status: record.status,
-    paramsJson: JSON.stringify(record.params ?? {}),
-    stateJson: JSON.stringify(record.state ?? {}),
-    createdAt: record.createdAt,
-    completedAt: record.completedAt,
-  })
+  `,
+    )
+    .run({
+      id: record.id,
+      sessionId: record.sessionId,
+      stepTypeKey: record.stepTypeKey,
+      parentStepId: record.parentStepId,
+      childIndex: record.childIndex,
+      status: record.status,
+      paramsJson: JSON.stringify(record.params ?? {}),
+      stateJson: JSON.stringify(record.state ?? {}),
+      createdAt: record.createdAt,
+      completedAt: record.completedAt,
+    })
 }
 
 export function updateStepRecord(
   connection: BackendConnection,
   record: StepPersistenceRecord,
 ): void {
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     UPDATE steps
     SET status = @status,
         params_json = @paramsJson,
         state_json = @stateJson,
         completed_at = @completedAt
     WHERE id = @id
-  `).run({
-    id: record.id,
-    status: record.status,
-    paramsJson: JSON.stringify(record.params ?? {}),
-    stateJson: JSON.stringify(record.state ?? {}),
-    completedAt: record.completedAt,
-  })
+  `,
+    )
+    .run({
+      id: record.id,
+      status: record.status,
+      paramsJson: JSON.stringify(record.params ?? {}),
+      stateJson: JSON.stringify(record.state ?? {}),
+      completedAt: record.completedAt,
+    })
 }
 
 export function getStepRecord(connection: BackendConnection, stepId: string): StepRecord | null {
-  const row = connection.prepare(`
+  const row = connection
+    .prepare(
+      `
     SELECT *
     FROM steps
     WHERE id = ?
-  `).get(stepId) as V2StepRow | undefined
+  `,
+    )
+    .get(stepId) as V2StepRow | undefined
 
   return row ? mapV2StepRow(row) : null
 }
 
-export function listStepRecordsBySession(connection: BackendConnection, sessionId: string): StepRecord[] {
-  const rows = connection.prepare(`
+export function listStepRecordsBySession(
+  connection: BackendConnection,
+  sessionId: string,
+): StepRecord[] {
+  const rows = connection
+    .prepare(
+      `
     SELECT *
     FROM steps
     WHERE session_id = ?
     ORDER BY child_index ASC
-  `).all(sessionId) as V2StepRow[]
+  `,
+    )
+    .all(sessionId) as V2StepRow[]
 
   return rows.map(mapV2StepRow)
 }
 
 export function getNextChildIndex(connection: BackendConnection, sessionId: string): number {
-  const row = connection.prepare(`
+  const row = connection
+    .prepare(
+      `
     SELECT COALESCE(MAX(child_index), 0) AS max_child_index
     FROM steps
     WHERE session_id = ? AND parent_step_id IS NULL
-  `).get(sessionId) as { max_child_index: number }
+  `,
+    )
+    .get(sessionId) as { max_child_index: number }
 
   return row.max_child_index + 1
 }
@@ -290,12 +317,11 @@ export function getNextChildIndex(connection: BackendConnection, sessionId: stri
 // Session CRUD
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function createSessionRecord(
-  connection: BackendConnection,
-  session: SessionRecord,
-): void {
+export function createSessionRecord(connection: BackendConnection, session: SessionRecord): void {
   assertValidSessionParent(session)
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     INSERT INTO sessions (
       id, title, session_type_key, parent_container_type_key, parent_container_id,
       status, init_status, params_json, state_json,
@@ -305,43 +331,53 @@ export function createSessionRecord(
       @status, @initStatus, @paramsJson, @stateJson,
       @createdAt, @updatedAt
     )
-  `).run({
-    id: session.id,
-    title: session.title,
-    sessionTypeKey: session.sessionType,
-    parentContainerTypeKey: session.parentKind,
-    parentContainerId: session.parentId,
-    status: session.status,
-    initStatus: session.initStatus,
-    paramsJson: buildSessionParams(session),
-    stateJson: buildSessionState(session),
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-  })
+  `,
+    )
+    .run({
+      id: session.id,
+      title: session.title,
+      sessionTypeKey: session.sessionType,
+      parentContainerTypeKey: session.parentKind,
+      parentContainerId: session.parentId,
+      status: session.status,
+      initStatus: session.initStatus,
+      paramsJson: buildSessionParams(session),
+      stateJson: buildSessionState(session),
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    })
 
   // Also keep model_profiles and mcp_profiles tables up to date
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     INSERT OR REPLACE INTO model_profiles (id, name, snapshot_json, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?)
-  `).run(
-    session.modelProfileSnapshot.id,
-    session.modelProfileSnapshot.name,
-    JSON.stringify(session.modelProfileSnapshot),
-    session.modelProfileSnapshot.createdAt,
-    session.modelProfileSnapshot.updatedAt,
-  )
+  `,
+    )
+    .run(
+      session.modelProfileSnapshot.id,
+      session.modelProfileSnapshot.name,
+      JSON.stringify(session.modelProfileSnapshot),
+      session.modelProfileSnapshot.createdAt,
+      session.modelProfileSnapshot.updatedAt,
+    )
 
   for (const mcpSnapshot of session.mcpProfileSnapshots) {
-    connection.prepare(`
+    connection
+      .prepare(
+        `
       INSERT OR REPLACE INTO mcp_profiles (id, name, snapshot_json, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?)
-    `).run(
-      mcpSnapshot.id,
-      mcpSnapshot.name,
-      JSON.stringify(mcpSnapshot),
-      mcpSnapshot.createdAt,
-      mcpSnapshot.updatedAt,
-    )
+    `,
+      )
+      .run(
+        mcpSnapshot.id,
+        mcpSnapshot.name,
+        JSON.stringify(mcpSnapshot),
+        mcpSnapshot.createdAt,
+        mcpSnapshot.updatedAt,
+      )
   }
 }
 
@@ -349,11 +385,15 @@ export function getSessionRecord(
   connection: BackendConnection,
   sessionId: string,
 ): SessionRecord | null {
-  const row = connection.prepare(`
+  const row = connection
+    .prepare(
+      `
     SELECT *
     FROM sessions
     WHERE id = ?
-  `).get(sessionId) as V2SessionRow | undefined
+  `,
+    )
+    .get(sessionId) as V2SessionRow | undefined
 
   if (!row) return null
   return mapV2SessionRow(row)
@@ -361,7 +401,9 @@ export function getSessionRecord(
 
 export function updateSessionRecord(connection: BackendConnection, session: SessionRecord): void {
   assertValidSessionParent(session)
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     UPDATE sessions
     SET title = @title,
         status = @status,
@@ -373,18 +415,20 @@ export function updateSessionRecord(connection: BackendConnection, session: Sess
         params_json = json_patch(params_json, @paramsPatch),
         updated_at = @updatedAt
     WHERE id = @id
-  `).run({
-    id: session.id,
-    title: session.title,
-    status: session.status,
-    initStatus: session.initStatus,
-    sessionTypeKey: session.sessionType,
-    parentContainerTypeKey: session.parentKind,
-    parentContainerId: session.parentId,
-    stateJson: buildSessionState(session),
-    paramsPatch: JSON.stringify({ compactionStrategy: session.compactionStrategy }),
-    updatedAt: session.updatedAt,
-  })
+  `,
+    )
+    .run({
+      id: session.id,
+      title: session.title,
+      status: session.status,
+      initStatus: session.initStatus,
+      sessionTypeKey: session.sessionType,
+      parentContainerTypeKey: session.parentKind,
+      parentContainerId: session.parentId,
+      stateJson: buildSessionState(session),
+      paramsPatch: JSON.stringify({ compactionStrategy: session.compactionStrategy }),
+      updatedAt: session.updatedAt,
+    })
 }
 
 export function updateSessionAnalysisState(
@@ -392,20 +436,26 @@ export function updateSessionAnalysisState(
   sessionId: string,
   analysisState: Record<string, unknown> | null,
 ): void {
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     UPDATE sessions
     SET analysis_state_json = @analysisStateJson,
         updated_at = @updatedAt
     WHERE id = @id
-  `).run({
-    id: sessionId,
-    analysisStateJson: analysisState ? JSON.stringify(analysisState) : null,
-    updatedAt: Date.now(),
-  })
+  `,
+    )
+    .run({
+      id: sessionId,
+      analysisStateJson: analysisState ? JSON.stringify(analysisState) : null,
+      updatedAt: Date.now(),
+    })
 }
 
 export function deleteSessionRecord(connection: BackendConnection, sessionId: string): boolean {
-  const result = connection.prepare(`
+  const result = connection
+    .prepare(
+      `
     WITH RECURSIVE session_tree(id) AS (
       SELECT id
       FROM sessions
@@ -419,29 +469,39 @@ export function deleteSessionRecord(connection: BackendConnection, sessionId: st
     )
     DELETE FROM sessions
     WHERE id IN (SELECT id FROM session_tree)
-  `).run(sessionId)
+  `,
+    )
+    .run(sessionId)
 
   return result.changes > 0
 }
 
 export function listSessionRecords(connection: BackendConnection): SessionRecord[] {
-  const rows = connection.prepare(`
+  const rows = connection
+    .prepare(
+      `
     SELECT *
     FROM sessions
     ORDER BY updated_at DESC, created_at DESC
-  `).all() as V2SessionRow[]
+  `,
+    )
+    .all() as V2SessionRow[]
 
   return rows.map(mapV2SessionRow)
 }
 
 /** Returns only primary sessions (session_type_key = 'primary'). Used by GET /api/sessions. */
 export function listSessionSummaries(connection: BackendConnection): SessionSummary[] {
-  const rows = connection.prepare(`
+  const rows = connection
+    .prepare(
+      `
     SELECT *
     FROM sessions
     WHERE session_type_key = 'primary'
     ORDER BY updated_at DESC, created_at DESC
-  `).all() as V2SessionRow[]
+  `,
+    )
+    .all() as V2SessionRow[]
 
   return rows.map(mapV2SessionSummaryRow)
 }
@@ -452,23 +512,31 @@ export function listChildSessionSummaries(
   parentKind: string,
   parentId: string,
 ): SessionSummary[] {
-  const rows = connection.prepare(`
+  const rows = connection
+    .prepare(
+      `
     SELECT *
     FROM sessions
     WHERE parent_container_type_key = ? AND parent_container_id = ?
     ORDER BY created_at ASC
-  `).all(parentKind, parentId) as V2SessionRow[]
+  `,
+    )
+    .all(parentKind, parentId) as V2SessionRow[]
 
   return rows.map(mapV2SessionSummaryRow)
 }
 
 /** Returns all sessions regardless of type. */
 export function listAllSessionSummaries(connection: BackendConnection): SessionSummary[] {
-  const rows = connection.prepare(`
+  const rows = connection
+    .prepare(
+      `
     SELECT *
     FROM sessions
     ORDER BY updated_at DESC, created_at DESC
-  `).all() as V2SessionRow[]
+  `,
+    )
+    .all() as V2SessionRow[]
 
   return rows.map(mapV2SessionSummaryRow)
 }
@@ -488,16 +556,20 @@ export function listTopLevelSessionSummaries(
   // Hardcoded constant predicate (no user input) shared by the count and page
   // queries so they can never drift out of sync.
   const where = `session_type_key = 'primary' AND parent_container_id IS NULL`
-  const total = (connection.prepare(
-    `SELECT COUNT(*) AS n FROM sessions WHERE ${where}`,
-  ).get() as { n: number }).n
-  const rows = connection.prepare(`
+  const total = (
+    connection.prepare(`SELECT COUNT(*) AS n FROM sessions WHERE ${where}`).get() as { n: number }
+  ).n
+  const rows = connection
+    .prepare(
+      `
     SELECT *
     FROM sessions
     WHERE ${where}
     ORDER BY updated_at DESC, created_at DESC
     LIMIT @limit OFFSET @offset
-  `).all({ limit: options.limit, offset: options.offset }) as V2SessionRow[]
+  `,
+    )
+    .all({ limit: options.limit, offset: options.offset }) as V2SessionRow[]
 
   return { rows: rows.map(mapV2SessionSummaryRow), total }
 }
@@ -510,7 +582,9 @@ export function findActiveSession(
   const whereRun = excludeSessionId ? 'AND sessions.id != @excludeId' : ''
   const params: Record<string, string> = excludeSessionId ? { excludeId: excludeSessionId } : {}
 
-  const row = connection.prepare(`
+  const row = connection
+    .prepare(
+      `
     SELECT id, state FROM (
       SELECT id, 'initializing' AS state
       FROM sessions
@@ -524,7 +598,9 @@ export function findActiveSession(
       ${whereRun}
     )
     LIMIT 1
-  `).get(params) as { id: string; state: 'initializing' | 'running' } | undefined
+  `,
+    )
+    .get(params) as { id: string; state: 'initializing' | 'running' } | undefined
 
   return row ?? null
 }
@@ -555,23 +631,35 @@ export function recoverInterruptedState(connection: BackendConnection): void {
 
     // 'running' covers workflow steps (analysis steps persist as 'running'
     // while executing); the turn-mirror statuses cover interrupted turns.
-    connection.prepare(`
+    connection
+      .prepare(
+        `
       UPDATE steps
       SET status = 'aborted', completed_at = ?
       WHERE status IN ('draft', 'streaming', 'awaiting-tools', 'running')
-    `).run(now)
+    `,
+      )
+      .run(now)
 
-    connection.prepare(`
+    connection
+      .prepare(
+        `
       UPDATE turns
       SET status = 'aborted', completed_at = ?
       WHERE status IN ('draft', 'streaming', 'awaiting-tools')
-    `).run(now)
+    `,
+      )
+      .run(now)
 
-    connection.prepare(`
+    connection
+      .prepare(
+        `
       UPDATE sessions
       SET init_status = 'error', updated_at = ?
       WHERE init_status = 'initializing'
-    `).run(now)
+    `,
+      )
+      .run(now)
 
     // Workbench-registered recovery (e.g. orphaned benchmark runs/evaluations).
     for (const step of recoverySteps.values()) step(connection, now)
@@ -582,15 +670,14 @@ export function recoverInterruptedState(connection: BackendConnection): void {
 // Turn CRUD  (steps for top-level + turns for all)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function insertTurnRecord(
-  connection: BackendConnection,
-  turn: TurnRecord,
-): void {
+export function insertTurnRecord(connection: BackendConnection, turn: TurnRecord): void {
   const ownerStepId = turn.ownerStepId
   if (!ownerStepId) {
     const childIndex = getNextChildIndex(connection, turn.sessionId)
 
-    connection.prepare(`
+    connection
+      .prepare(
+        `
       INSERT INTO steps (
         id, session_id, step_type_key, parent_step_id, child_index, status,
         params_json, state_json, created_at, completed_at
@@ -598,18 +685,22 @@ export function insertTurnRecord(
         @id, @sessionId, 'turn', @parentStepId, @childIndex, @status,
         '{}', '{}', @createdAt, @completedAt
       )
-    `).run({
-      id: turn.id,
-      sessionId: turn.sessionId,
-      parentStepId: null,
-      childIndex,
-      status: turn.status,
-      createdAt: turn.createdAt,
-      completedAt: turn.completedAt,
-    })
+    `,
+      )
+      .run({
+        id: turn.id,
+        sessionId: turn.sessionId,
+        parentStepId: null,
+        childIndex,
+        status: turn.status,
+        createdAt: turn.createdAt,
+        completedAt: turn.completedAt,
+      })
   }
 
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     INSERT INTO turns (
       id, session_id, owner_step_id, turn_number, status, outcome,
       prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
@@ -623,41 +714,49 @@ export function insertTurnRecord(
       @compactionApplied, @compactionTokensRemoved,
       @createdAt, @completedAt
     )
-  `).run({
-    id: turn.id,
-    sessionId: turn.sessionId,
-    ownerStepId: ownerStepId ?? null,
-    turnNumber: turn.turnNumber,
-    status: turn.status,
-    outcome: turn.outcome,
-    promptTokens: turn.usage.promptTokens,
-    completionTokens: turn.usage.completionTokens,
-    reasoningTokens: turn.usage.reasoningTokens,
-    totalTokens: turn.usage.totalTokens,
-    contextTokensAtTurnEnd: turn.contextTokensAtTurnEnd,
-    contextTokensAfterCompaction: turn.contextTokensAfterCompaction,
-    compactionApplied: turn.compactionApplied,
-    compactionTokensRemoved: turn.compactionTokensRemoved,
-    createdAt: turn.createdAt,
-    completedAt: turn.completedAt,
-  })
+  `,
+    )
+    .run({
+      id: turn.id,
+      sessionId: turn.sessionId,
+      ownerStepId: ownerStepId ?? null,
+      turnNumber: turn.turnNumber,
+      status: turn.status,
+      outcome: turn.outcome,
+      promptTokens: turn.usage.promptTokens,
+      completionTokens: turn.usage.completionTokens,
+      reasoningTokens: turn.usage.reasoningTokens,
+      totalTokens: turn.usage.totalTokens,
+      contextTokensAtTurnEnd: turn.contextTokensAtTurnEnd,
+      contextTokensAfterCompaction: turn.contextTokensAfterCompaction,
+      compactionApplied: turn.compactionApplied,
+      compactionTokensRemoved: turn.compactionTokensRemoved,
+      createdAt: turn.createdAt,
+      completedAt: turn.completedAt,
+    })
 }
 
 export function updateTurnRecord(connection: BackendConnection, turn: TurnRecord): void {
   if (!turn.ownerStepId) {
-    connection.prepare(`
+    connection
+      .prepare(
+        `
       UPDATE steps
       SET status = @status,
           completed_at = @completedAt
       WHERE id = @id
-    `).run({
-      id: turn.id,
-      status: turn.status,
-      completedAt: turn.completedAt,
-    })
+    `,
+      )
+      .run({
+        id: turn.id,
+        status: turn.status,
+        completedAt: turn.completedAt,
+      })
   }
 
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     UPDATE turns
     SET owner_step_id = @ownerStepId,
       status = @status,
@@ -672,25 +771,29 @@ export function updateTurnRecord(connection: BackendConnection, turn: TurnRecord
         compaction_tokens_removed = @compactionTokensRemoved,
         completed_at = @completedAt
     WHERE id = @id
-  `).run({
-    id: turn.id,
-    ownerStepId: turn.ownerStepId,
-    status: turn.status,
-    outcome: turn.outcome,
-    promptTokens: turn.usage.promptTokens,
-    completionTokens: turn.usage.completionTokens,
-    reasoningTokens: turn.usage.reasoningTokens,
-    totalTokens: turn.usage.totalTokens,
-    contextTokensAtTurnEnd: turn.contextTokensAtTurnEnd,
-    contextTokensAfterCompaction: turn.contextTokensAfterCompaction,
-    compactionApplied: turn.compactionApplied,
-    compactionTokensRemoved: turn.compactionTokensRemoved,
-    completedAt: turn.completedAt,
-  })
+  `,
+    )
+    .run({
+      id: turn.id,
+      ownerStepId: turn.ownerStepId,
+      status: turn.status,
+      outcome: turn.outcome,
+      promptTokens: turn.usage.promptTokens,
+      completionTokens: turn.usage.completionTokens,
+      reasoningTokens: turn.usage.reasoningTokens,
+      totalTokens: turn.usage.totalTokens,
+      contextTokensAtTurnEnd: turn.contextTokensAtTurnEnd,
+      contextTokensAfterCompaction: turn.contextTokensAfterCompaction,
+      compactionApplied: turn.compactionApplied,
+      compactionTokensRemoved: turn.compactionTokensRemoved,
+      completedAt: turn.completedAt,
+    })
 }
 
 export function getTurnRecord(connection: BackendConnection, turnId: string): TurnRecord | null {
-  const row = connection.prepare(`
+  const row = connection
+    .prepare(
+      `
     SELECT
       turns.id,
       turns.session_id,
@@ -711,7 +814,9 @@ export function getTurnRecord(connection: BackendConnection, turnId: string): Tu
     FROM turns
     LEFT JOIN steps ON steps.id = turns.id
     WHERE turns.id = ?
-  `).get(turnId) as
+  `,
+    )
+    .get(turnId) as
     | {
         id: string
         session_id: string
@@ -760,7 +865,9 @@ export function listTurnRecordsBySession(
   connection: BackendConnection,
   sessionId: string,
 ): TurnRecord[] {
-  const rows = connection.prepare(`
+  const rows = connection
+    .prepare(
+      `
     SELECT
       turns.id,
       turns.session_id,
@@ -782,7 +889,9 @@ export function listTurnRecordsBySession(
     LEFT JOIN steps ON steps.id = turns.id
     WHERE turns.session_id = ?
     ORDER BY turns.turn_number ASC
-  `).all(sessionId) as Array<{
+  `,
+    )
+    .all(sessionId) as Array<{
     id: string
     session_id: string
     owner_step_id: string | null
@@ -801,7 +910,7 @@ export function listTurnRecordsBySession(
     completed_at: number | null
   }>
 
-  return rows.map(row => ({
+  return rows.map((row) => ({
     id: row.id,
     sessionId: row.session_id,
     ownerStepId: row.owner_step_id,
@@ -828,7 +937,9 @@ export function listTurnRecordsBySession(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function insertRoundRecord(connection: BackendConnection, round: RoundRecord): void {
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     INSERT INTO rounds (
       id, turn_id, session_id, round_index, status, finish_reason,
       prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
@@ -839,25 +950,29 @@ export function insertRoundRecord(connection: BackendConnection, round: RoundRec
       @promptTokens, @completionTokens, @reasoningTokens, @totalTokens,
       @requestPayloadJson, @responseTraceJson, @startedAt, @completedAt
     )
-  `).run({
-    id: round.id,
-    turnId: round.turnId,
-    roundIndex: round.roundIndex,
-    status: round.status,
-    finishReason: round.finishReason,
-    promptTokens: round.usage.promptTokens,
-    completionTokens: round.usage.completionTokens,
-    reasoningTokens: round.usage.reasoningTokens,
-    totalTokens: round.usage.totalTokens,
-    requestPayloadJson: stringifyJson(round.requestPayloadJson),
-    responseTraceJson: stringifyJson(round.responseTraceJson),
-    startedAt: round.startedAt,
-    completedAt: round.completedAt,
-  })
+  `,
+    )
+    .run({
+      id: round.id,
+      turnId: round.turnId,
+      roundIndex: round.roundIndex,
+      status: round.status,
+      finishReason: round.finishReason,
+      promptTokens: round.usage.promptTokens,
+      completionTokens: round.usage.completionTokens,
+      reasoningTokens: round.usage.reasoningTokens,
+      totalTokens: round.usage.totalTokens,
+      requestPayloadJson: stringifyJson(round.requestPayloadJson),
+      responseTraceJson: stringifyJson(round.responseTraceJson),
+      startedAt: round.startedAt,
+      completedAt: round.completedAt,
+    })
 }
 
 export function updateRoundRecord(connection: BackendConnection, round: RoundRecord): void {
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     UPDATE rounds
     SET status = @status,
         finish_reason = @finishReason,
@@ -869,26 +984,32 @@ export function updateRoundRecord(connection: BackendConnection, round: RoundRec
         response_trace_json = @responseTraceJson,
         completed_at = @completedAt
     WHERE id = @id
-  `).run({
-    id: round.id,
-    status: round.status,
-    finishReason: round.finishReason,
-    promptTokens: round.usage.promptTokens,
-    completionTokens: round.usage.completionTokens,
-    reasoningTokens: round.usage.reasoningTokens,
-    totalTokens: round.usage.totalTokens,
-    requestPayloadJson: stringifyJson(round.requestPayloadJson),
-    responseTraceJson: stringifyJson(round.responseTraceJson),
-    completedAt: round.completedAt,
-  })
+  `,
+    )
+    .run({
+      id: round.id,
+      status: round.status,
+      finishReason: round.finishReason,
+      promptTokens: round.usage.promptTokens,
+      completionTokens: round.usage.completionTokens,
+      reasoningTokens: round.usage.reasoningTokens,
+      totalTokens: round.usage.totalTokens,
+      requestPayloadJson: stringifyJson(round.requestPayloadJson),
+      responseTraceJson: stringifyJson(round.responseTraceJson),
+      completedAt: round.completedAt,
+    })
 }
 
 export function getRoundRecord(connection: BackendConnection, roundId: string): RoundRecord | null {
-  const row = connection.prepare(`
+  const row = connection
+    .prepare(
+      `
     SELECT *
     FROM rounds
     WHERE id = ?
-  `).get(roundId) as
+  `,
+    )
+    .get(roundId) as
     | {
         id: string
         turn_id: string
@@ -931,13 +1052,17 @@ export function listRoundRecordsBySession(
   connection: BackendConnection,
   sessionId: string,
 ): RoundRecord[] {
-  const rows = connection.prepare(`
+  const rows = connection
+    .prepare(
+      `
     SELECT rounds.*
     FROM rounds
     JOIN turns ON turns.id = rounds.turn_id
     WHERE rounds.session_id = ?
     ORDER BY turns.turn_number ASC, rounds.round_index ASC
-  `).all(sessionId) as Array<{
+  `,
+    )
+    .all(sessionId) as Array<{
     id: string
     turn_id: string
     round_index: number
@@ -953,7 +1078,7 @@ export function listRoundRecordsBySession(
     completed_at: number | null
   }>
 
-  return rows.map(row => ({
+  return rows.map((row) => ({
     id: row.id,
     turnId: row.turn_id,
     roundIndex: row.round_index,
@@ -977,7 +1102,9 @@ export function listRoundRecordsBySession(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function insertPartRecord(connection: BackendConnection, part: PartRecord): void {
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     INSERT INTO parts (
       id, session_id, turn_id, round_id, parent_part_id, ordinal, part_type, role_label,
       payload_text, payload_json, payload_mime_type, payload_summary,
@@ -993,36 +1120,40 @@ export function insertPartRecord(connection: BackendConnection, part: PartRecord
       @tokenCount, @tokenSource, @tokenConfidence, @tokenNote,
       @provenanceJson, @createdAt, @updatedAt
     )
-  `).run({
-    id: part.id,
-    sessionId: part.sessionId,
-    turnId: part.turnId,
-    roundId: part.roundId,
-    parentPartId: part.parentPartId,
-    ordinal: part.ordinal,
-    partType: part.partType,
-    roleLabel: part.roleLabel,
-    payloadText: part.payload.text,
-    payloadJson: stringifyJson(part.payload.json),
-    payloadMimeType: part.payload.mimeType,
-    payloadSummary: part.payload.summary,
-    displayState: part.display.state,
-    collapsedByDefault: part.display.collapsedByDefault ? 1 : 0,
-    contextState: part.context.state,
-    contextNote: part.context.note,
-    strippedByCompactionAtStepId: part.context.strippedByCompactionAtTurnId,
-    tokenCount: part.tokens.count,
-    tokenSource: part.tokens.source,
-    tokenConfidence: part.tokens.confidence,
-    tokenNote: part.tokens.note,
-    provenanceJson: stringifyJson(part.provenanceJson),
-    createdAt: part.createdAt,
-    updatedAt: part.updatedAt,
-  })
+  `,
+    )
+    .run({
+      id: part.id,
+      sessionId: part.sessionId,
+      turnId: part.turnId,
+      roundId: part.roundId,
+      parentPartId: part.parentPartId,
+      ordinal: part.ordinal,
+      partType: part.partType,
+      roleLabel: part.roleLabel,
+      payloadText: part.payload.text,
+      payloadJson: stringifyJson(part.payload.json),
+      payloadMimeType: part.payload.mimeType,
+      payloadSummary: part.payload.summary,
+      displayState: part.display.state,
+      collapsedByDefault: part.display.collapsedByDefault ? 1 : 0,
+      contextState: part.context.state,
+      contextNote: part.context.note,
+      strippedByCompactionAtStepId: part.context.strippedByCompactionAtTurnId,
+      tokenCount: part.tokens.count,
+      tokenSource: part.tokens.source,
+      tokenConfidence: part.tokens.confidence,
+      tokenNote: part.tokens.note,
+      provenanceJson: stringifyJson(part.provenanceJson),
+      createdAt: part.createdAt,
+      updatedAt: part.updatedAt,
+    })
 }
 
 export function updatePartRecord(connection: BackendConnection, part: PartRecord): void {
-  connection.prepare(`
+  connection
+    .prepare(
+      `
     UPDATE parts
     SET parent_part_id = @parentPartId,
         ordinal = @ordinal,
@@ -1044,36 +1175,42 @@ export function updatePartRecord(connection: BackendConnection, part: PartRecord
         provenance_json = @provenanceJson,
         updated_at = @updatedAt
     WHERE id = @id
-  `).run({
-    id: part.id,
-    parentPartId: part.parentPartId,
-    ordinal: part.ordinal,
-    partType: part.partType,
-    roleLabel: part.roleLabel,
-    payloadText: part.payload.text,
-    payloadJson: stringifyJson(part.payload.json),
-    payloadMimeType: part.payload.mimeType,
-    payloadSummary: part.payload.summary,
-    displayState: part.display.state,
-    collapsedByDefault: part.display.collapsedByDefault ? 1 : 0,
-    contextState: part.context.state,
-    contextNote: part.context.note,
-    strippedByCompactionAtStepId: part.context.strippedByCompactionAtTurnId,
-    tokenCount: part.tokens.count,
-    tokenSource: part.tokens.source,
-    tokenConfidence: part.tokens.confidence,
-    tokenNote: part.tokens.note,
-    provenanceJson: stringifyJson(part.provenanceJson),
-    updatedAt: part.updatedAt,
-  })
+  `,
+    )
+    .run({
+      id: part.id,
+      parentPartId: part.parentPartId,
+      ordinal: part.ordinal,
+      partType: part.partType,
+      roleLabel: part.roleLabel,
+      payloadText: part.payload.text,
+      payloadJson: stringifyJson(part.payload.json),
+      payloadMimeType: part.payload.mimeType,
+      payloadSummary: part.payload.summary,
+      displayState: part.display.state,
+      collapsedByDefault: part.display.collapsedByDefault ? 1 : 0,
+      contextState: part.context.state,
+      contextNote: part.context.note,
+      strippedByCompactionAtStepId: part.context.strippedByCompactionAtTurnId,
+      tokenCount: part.tokens.count,
+      tokenSource: part.tokens.source,
+      tokenConfidence: part.tokens.confidence,
+      tokenNote: part.tokens.note,
+      provenanceJson: stringifyJson(part.provenanceJson),
+      updatedAt: part.updatedAt,
+    })
 }
 
 export function getPartRecord(connection: BackendConnection, partId: string): PartRecord | null {
-  const row = connection.prepare(`
+  const row = connection
+    .prepare(
+      `
     SELECT *
     FROM parts
     WHERE id = ?
-  `).get(partId) as
+  `,
+    )
+    .get(partId) as
     | {
         id: string
         session_id: string
@@ -1144,12 +1281,16 @@ export function listPartRecordsBySession(
   connection: BackendConnection,
   sessionId: string,
 ): PartRecord[] {
-  const rows = connection.prepare(`
+  const rows = connection
+    .prepare(
+      `
     SELECT *
     FROM parts
     WHERE session_id = ?
     ORDER BY ordinal ASC
-  `).all(sessionId) as Array<{
+  `,
+    )
+    .all(sessionId) as Array<{
     id: string
     session_id: string
     turn_id: string | null
@@ -1176,7 +1317,7 @@ export function listPartRecordsBySession(
     updated_at: number
   }>
 
-  return rows.map(row => ({
+  return rows.map((row) => ({
     id: row.id,
     sessionId: row.session_id,
     turnId: row.turn_id,
@@ -1216,8 +1357,13 @@ export function listPartRecordsBySession(
 // Raw exchange CRUD  (raw_exchanges)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function insertRawExchangeRecord(connection: BackendConnection, exchange: RawExchangeRecord): void {
-  connection.prepare(`
+export function insertRawExchangeRecord(
+  connection: BackendConnection,
+  exchange: RawExchangeRecord,
+): void {
+  connection
+    .prepare(
+      `
     INSERT INTO raw_exchanges (
       id, session_id, turn_id, round_id, kind, request_url, request_method,
       request_headers_json, request_body, response_status, response_headers_json, response_body, created_at
@@ -1225,33 +1371,39 @@ export function insertRawExchangeRecord(connection: BackendConnection, exchange:
       @id, @sessionId, @turnId, @roundId, @kind, @requestUrl, @requestMethod,
       @requestHeadersJson, @requestBody, @responseStatus, @responseHeadersJson, @responseBody, @createdAt
     )
-  `).run({
-    id: exchange.id,
-    sessionId: exchange.sessionId,
-    turnId: exchange.turnId,
-    roundId: exchange.roundId,
-    kind: exchange.kind,
-    requestUrl: exchange.requestUrl,
-    requestMethod: exchange.requestMethod,
-    requestHeadersJson: stringifyJson(exchange.requestHeadersJson),
-    requestBody: exchange.requestBody,
-    responseStatus: exchange.responseStatus,
-    responseHeadersJson: stringifyJson(exchange.responseHeadersJson),
-    responseBody: exchange.responseBody,
-    createdAt: exchange.createdAt,
-  })
+  `,
+    )
+    .run({
+      id: exchange.id,
+      sessionId: exchange.sessionId,
+      turnId: exchange.turnId,
+      roundId: exchange.roundId,
+      kind: exchange.kind,
+      requestUrl: exchange.requestUrl,
+      requestMethod: exchange.requestMethod,
+      requestHeadersJson: stringifyJson(exchange.requestHeadersJson),
+      requestBody: exchange.requestBody,
+      responseStatus: exchange.responseStatus,
+      responseHeadersJson: stringifyJson(exchange.responseHeadersJson),
+      responseBody: exchange.responseBody,
+      createdAt: exchange.createdAt,
+    })
 }
 
 export function listRawExchangeRecordsBySession(
   connection: BackendConnection,
   sessionId: string,
 ): RawExchangeRecord[] {
-  const rows = connection.prepare(`
+  const rows = connection
+    .prepare(
+      `
     SELECT *
     FROM raw_exchanges
     WHERE session_id = ?
     ORDER BY created_at ASC, rowid ASC
-  `).all(sessionId) as Array<{
+  `,
+    )
+    .all(sessionId) as Array<{
     id: string
     session_id: string
     turn_id: string | null
@@ -1267,7 +1419,7 @@ export function listRawExchangeRecordsBySession(
     created_at: number
   }>
 
-  return rows.map(row => ({
+  return rows.map((row) => ({
     id: row.id,
     sessionId: row.session_id,
     turnId: row.turn_id,
@@ -1288,51 +1440,78 @@ export function listRawExchangeRecordsBySession(
 // Sequence helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function getNextTurnNumber(connection: BackendConnection, sessionId: string, ownerStepId: string | null): number {
+export function getNextTurnNumber(
+  connection: BackendConnection,
+  sessionId: string,
+  ownerStepId: string | null,
+): number {
   if (ownerStepId) {
-    const row = connection.prepare(`
+    const row = connection
+      .prepare(
+        `
       SELECT COUNT(*) AS cnt
       FROM turns
       WHERE owner_step_id = ?
-    `).get(ownerStepId) as { cnt: number }
+    `,
+      )
+      .get(ownerStepId) as { cnt: number }
     return row.cnt + 1
   }
 
-  const row = connection.prepare(`
+  const row = connection
+    .prepare(
+      `
     SELECT COALESCE(MAX(turn_number), 0) AS max_turn_number
     FROM turns
     WHERE session_id = ? AND owner_step_id IS NULL
-  `).get(sessionId) as { max_turn_number: number }
+  `,
+    )
+    .get(sessionId) as { max_turn_number: number }
 
   return row.max_turn_number + 1
 }
 
 export function getNextPartOrdinal(connection: BackendConnection, sessionId: string): number {
-  const row = connection.prepare(`
+  const row = connection
+    .prepare(
+      `
     SELECT COALESCE(MAX(ordinal), 0) AS max_ordinal
     FROM parts
     WHERE session_id = ?
-  `).get(sessionId) as { max_ordinal: number }
+  `,
+    )
+    .get(sessionId) as { max_ordinal: number }
 
   return row.max_ordinal + 1
 }
 
 export function getNextRoundPartSequence(connection: BackendConnection, roundId: string): number {
-  const row = connection.prepare(`
+  const row = connection
+    .prepare(
+      `
     SELECT COUNT(*) AS part_count
     FROM parts
     WHERE round_id = ?
-  `).get(roundId) as { part_count: number }
+  `,
+    )
+    .get(roundId) as { part_count: number }
 
   return row.part_count + 1
 }
 
-export function getNextPreludePartSequence(connection: BackendConnection, sessionId: string): number {
-  const row = connection.prepare(`
+export function getNextPreludePartSequence(
+  connection: BackendConnection,
+  sessionId: string,
+): number {
+  const row = connection
+    .prepare(
+      `
     SELECT COUNT(*) AS part_count
     FROM parts
     WHERE session_id = ? AND turn_id IS NULL
-  `).get(sessionId) as { part_count: number }
+  `,
+    )
+    .get(sessionId) as { part_count: number }
 
   return row.part_count + 1
 }

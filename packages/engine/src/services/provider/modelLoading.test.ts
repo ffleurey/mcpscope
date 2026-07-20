@@ -6,11 +6,7 @@ vi.mock('../lmstudio/client.js', () => ({
   unloadModel: vi.fn(),
 }))
 
-import {
-  listModelsWithStatus,
-  loadModel,
-  unloadModel,
-} from '../lmstudio/client.js'
+import { listModelsWithStatus, loadModel, unloadModel } from '../lmstudio/client.js'
 import { ensureModelReady } from './modelLoading.js'
 
 const mockList = vi.mocked(listModelsWithStatus)
@@ -18,11 +14,7 @@ const mockLoad = vi.mocked(loadModel)
 const mockUnload = vi.mocked(unloadModel)
 
 /** Build the subset of LmStudioModelStatus that ensureModelReady reads. */
-function status(
-  key: string,
-  isLoaded: boolean,
-  loadedContextLength: number | null = null,
-) {
+function status(key: string, isLoaded: boolean, loadedContextLength: number | null = null) {
   return { key, isLoaded, loadedContextLength } as Awaited<
     ReturnType<typeof listModelsWithStatus>
   >[number]
@@ -89,12 +81,7 @@ describe('ensureModelReady', () => {
       autoSwap: true,
     })
     expect(mockUnload).toHaveBeenCalledExactlyOnceWith(base('3b'), 'key', 'model-a')
-    expect(mockLoad).toHaveBeenCalledExactlyOnceWith(
-      base('3b'),
-      'key',
-      'model-a',
-      32768,
-    )
+    expect(mockLoad).toHaveBeenCalledExactlyOnceWith(base('3b'), 'key', 'model-a', 32768)
   })
 
   it('does not reload when the target is loaded at the requested context size', async () => {
@@ -136,12 +123,7 @@ describe('ensureModelReady', () => {
       autoSwap: true,
     })
     expect(mockUnload).toHaveBeenCalledExactlyOnceWith(base('4'), 'key', 'model-a')
-    expect(mockLoad).toHaveBeenCalledExactlyOnceWith(
-      base('4'),
-      'key',
-      'model-b',
-      8192,
-    )
+    expect(mockLoad).toHaveBeenCalledExactlyOnceWith(base('4'), 'key', 'model-b', 8192)
   })
 
   it('unloads every other loaded model before loading the target', async () => {
@@ -160,12 +142,7 @@ describe('ensureModelReady', () => {
     expect(mockUnload).toHaveBeenCalledTimes(2)
     expect(mockUnload).toHaveBeenCalledWith(base('5'), undefined, 'model-a')
     expect(mockUnload).toHaveBeenCalledWith(base('5'), undefined, 'model-b')
-    expect(mockLoad).toHaveBeenCalledExactlyOnceWith(
-      base('5'),
-      undefined,
-      'model-c',
-      undefined,
-    )
+    expect(mockLoad).toHaveBeenCalledExactlyOnceWith(base('5'), undefined, 'model-c', undefined)
   })
 
   it('unloads others but skips the load when the target is already loaded alongside them', async () => {
@@ -221,10 +198,6 @@ describe('ensureModelReady', () => {
 
     release()
     await Promise.all([first, second])
-    expect(events).toEqual([
-      'list-1-start',
-      'list-1-end',
-      'list-2-start',
-    ])
+    expect(events).toEqual(['list-1-start', 'list-1-end', 'list-2-start'])
   })
 })

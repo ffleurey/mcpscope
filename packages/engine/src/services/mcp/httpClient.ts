@@ -124,7 +124,9 @@ async function mcpPost(
 
   if (!response.ok) {
     const text = await response.text()
-    throw new Error(`MCP request failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`)
+    throw new Error(
+      `MCP request failed: ${response.status} ${response.statusText}: ${text.slice(0, 500)}`,
+    )
   }
 
   const returnedSessionId = response.headers.get('mcp-session-id')
@@ -152,9 +154,7 @@ async function mcpPost(
       }
     }
 
-    const dataLine = responseBodyText
-      .split('\n')
-      .find(line => line.startsWith('data:'))
+    const dataLine = responseBodyText.split('\n').find((line) => line.startsWith('data:'))
 
     if (!dataLine) {
       throw new Error('MCP SSE response did not contain a data line')
@@ -180,22 +180,39 @@ async function mcpPost(
   }
 }
 
-export async function initializeMcpSession(serverUrl: string, auth?: McpAuth | null): Promise<McpInitializeResult> {
+export async function initializeMcpSession(
+  serverUrl: string,
+  auth?: McpAuth | null,
+): Promise<McpInitializeResult> {
   const normalizedUrl = serverUrl.replace(/\/$/, '')
 
-  const { rpc, sessionId, responseBody, responseBodyText, requestBodyText, responseStatus, requestHeaders, responseHeaders } = await mcpPost(normalizedUrl, {
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'initialize',
-    params: {
-      protocolVersion: MCP_PROTOCOL_VERSION,
-      capabilities: {},
-      clientInfo: {
-        name: 'mcpscope',
-        version: clientVersion(),
+  const {
+    rpc,
+    sessionId,
+    responseBody,
+    responseBodyText,
+    requestBodyText,
+    responseStatus,
+    requestHeaders,
+    responseHeaders,
+  } = await mcpPost(
+    normalizedUrl,
+    {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: {
+          name: 'mcpscope',
+          version: clientVersion(),
+        },
       },
     },
-  }, undefined, auth)
+    undefined,
+    auth,
+  )
 
   if (rpc.error) {
     throw new Error(`MCP initialize error ${rpc.error.code}: ${rpc.error.message}`)
@@ -211,10 +228,7 @@ export async function initializeMcpSession(serverUrl: string, auth?: McpAuth | n
 
   // Record the server's negotiated version so notifications/initialized and
   // all subsequent requests to this server echo it back in the header.
-  negotiatedProtocolVersions.set(
-    normalizedUrl,
-    result.protocolVersion ?? MCP_PROTOCOL_VERSION,
-  )
+  negotiatedProtocolVersions.set(normalizedUrl, result.protocolVersion ?? MCP_PROTOCOL_VERSION)
 
   await mcpPost(
     normalizedUrl,
@@ -249,10 +263,22 @@ export async function initializeMcpSession(serverUrl: string, auth?: McpAuth | n
   }
 }
 
-export async function listMcpTools(serverUrl: string, sessionId: string | null, auth?: McpAuth | null): Promise<McpToolsListResult> {
+export async function listMcpTools(
+  serverUrl: string,
+  sessionId: string | null,
+  auth?: McpAuth | null,
+): Promise<McpToolsListResult> {
   const normalizedUrl = serverUrl.replace(/\/$/, '')
 
-  const { rpc, responseBody, responseBodyText, requestBodyText, responseStatus, requestHeaders, responseHeaders } = await mcpPost(
+  const {
+    rpc,
+    responseBody,
+    responseBodyText,
+    requestBodyText,
+    responseStatus,
+    requestHeaders,
+    responseHeaders,
+  } = await mcpPost(
     normalizedUrl,
     {
       jsonrpc: '2.0',
@@ -277,7 +303,7 @@ export async function listMcpTools(serverUrl: string, sessionId: string | null, 
   }
 
   return {
-    tools: (result.tools ?? []).map(tool => ({
+    tools: (result.tools ?? []).map((tool) => ({
       name: tool.name ?? 'unknown',
       description: tool.description,
       inputSchema: tool.inputSchema,
@@ -305,7 +331,15 @@ export async function callMcpTool(
 ): Promise<McpToolCallResult> {
   const normalizedUrl = serverUrl.replace(/\/$/, '')
 
-  const { rpc, responseBody, responseBodyText, requestBodyText, responseStatus, requestHeaders, responseHeaders } = await mcpPost(
+  const {
+    rpc,
+    responseBody,
+    responseBodyText,
+    requestBodyText,
+    responseStatus,
+    requestHeaders,
+    responseHeaders,
+  } = await mcpPost(
     normalizedUrl,
     {
       jsonrpc: '2.0',
@@ -332,7 +366,9 @@ export async function callMcpTool(
 
   return {
     content: (result.content ?? [])
-      .map(item => (item.type === 'text' ? (item.text ?? '') : `[${item.type ?? 'unknown'} content]`))
+      .map((item) =>
+        item.type === 'text' ? (item.text ?? '') : `[${item.type ?? 'unknown'} content]`,
+      )
       .join('\n'),
     structuredContent: result.structuredContent ?? null,
     isError: result.isError === true,

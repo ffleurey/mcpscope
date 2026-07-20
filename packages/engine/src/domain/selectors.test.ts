@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { PartRecord, SessionRecord } from './model.js'
-import { buildApiMessages, buildModelMessages, deriveContextEntries, deriveTranscriptEntries } from './selectors.js'
+import {
+  buildApiMessages,
+  buildModelMessages,
+  deriveContextEntries,
+  deriveTranscriptEntries,
+} from './selectors.js'
 
 function makeSession(): SessionRecord {
   return {
@@ -132,12 +137,12 @@ describe('domain selectors', () => {
       }),
     ]
 
-    expect(deriveTranscriptEntries(parts).map(entry => entry.type)).toEqual([
+    expect(deriveTranscriptEntries(parts).map((entry) => entry.type)).toEqual([
       'user-message',
       'assistant-reasoning',
       'assistant-content',
     ])
-    expect(deriveContextEntries(parts).map(entry => entry.type)).toEqual([
+    expect(deriveContextEntries(parts).map((entry) => entry.type)).toEqual([
       'user-message',
       'assistant-content',
     ])

@@ -1,4 +1,4 @@
-import type { BackendConnection } from "../persistence/connection.js";
+import type { BackendConnection } from '../persistence/connection.js'
 import { listTurnRecordsBySession } from '../persistence/repository.js'
 import { isSessionTerminalError } from './sessionPresentation.js'
 
@@ -19,7 +19,9 @@ export function computeLifecycleState(
   const activeTurn =
     [...turns]
       .reverse()
-      .find(t => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools') ?? null
+      .find(
+        (t) => t.status === 'draft' || t.status === 'streaming' || t.status === 'awaiting-tools',
+      ) ?? null
   const latestTurn = turns.at(-1) ?? null
 
   if (isSessionTerminalError(connection, summary) || latestTurn?.status === 'error') {

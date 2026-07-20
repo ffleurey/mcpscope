@@ -1,12 +1,12 @@
-import { ensureModelReady } from "../services/provider/index.js";
-import type { ProviderConnection } from "../domain/configuration.js";
-import type { ChatCompletionGateway } from "./modelTurns.js";
+import { ensureModelReady } from '../services/provider/index.js'
+import type { ProviderConnection } from '../domain/configuration.js'
+import type { ChatCompletionGateway } from './modelTurns.js'
 
 interface AutoModelSwapDeps {
   /** Live connection list — the app's config store in production, a stub in tests. */
-  listConnections: () => ProviderConnection[];
+  listConnections: () => ProviderConnection[]
   /** Swap implementation — overridable for tests. */
-  ensureReady?: typeof ensureModelReady;
+  ensureReady?: typeof ensureModelReady
 }
 
 /**
@@ -25,25 +25,24 @@ export function withAutoModelSwap(
   inner: ChatCompletionGateway,
   deps: AutoModelSwapDeps,
 ): ChatCompletionGateway {
-  const listConnections = deps.listConnections;
-  const ensureReady = deps.ensureReady ?? ensureModelReady;
+  const listConnections = deps.listConnections
+  const ensureReady = deps.ensureReady ?? ensureModelReady
 
   async function swapIfNeeded(
     baseUrl: string,
     apiKey: string | undefined,
     body: Record<string, unknown>,
   ): Promise<void> {
-    const modelKey = typeof body.model === "string" ? body.model : undefined;
-    if (!modelKey) return;
+    const modelKey = typeof body.model === 'string' ? body.model : undefined
+    if (!modelKey) return
 
     // Same baseUrl == same physical instance. Enable the swap if *any*
     // connection pointed at this instance has it turned on.
-    const matches = listConnections().filter((c) => c.baseUrl === baseUrl);
-    const primary = matches.find((c) => c.autoSwapModel === true);
-    if (!primary) return;
+    const matches = listConnections().filter((c) => c.baseUrl === baseUrl)
+    const primary = matches.find((c) => c.autoSwapModel === true)
+    if (!primary) return
 
-    const contextSize =
-      typeof body.num_ctx === "number" ? body.num_ctx : undefined;
+    const contextSize = typeof body.num_ctx === 'number' ? body.num_ctx : undefined
     await ensureReady({
       baseUrl,
       apiKey,
@@ -51,7 +50,7 @@ export function withAutoModelSwap(
       modelKey,
       contextSize,
       autoSwap: true,
-    });
+    })
   }
 
   // Build conditionally so optional methods absent on `inner` stay absent
@@ -59,41 +58,34 @@ export function withAutoModelSwap(
   // rejects) and the wrapper advertises exactly the same surface as `inner`.
   const gateway: ChatCompletionGateway = {
     createChatCompletion: async (baseUrl, apiKey, body, signal) => {
-      await swapIfNeeded(baseUrl, apiKey, body);
-      return inner.createChatCompletion(baseUrl, apiKey, body, signal);
+      await swapIfNeeded(baseUrl, apiKey, body)
+      return inner.createChatCompletion(baseUrl, apiKey, body, signal)
     },
-  };
+  }
 
-  const { streamChatCompletion, probePromptTokens, probePromptTokensDetailed } =
-    inner;
+  const { streamChatCompletion, probePromptTokens, probePromptTokensDetailed } = inner
   if (streamChatCompletion) {
-    gateway.streamChatCompletion = async (
-      baseUrl,
-      apiKey,
-      body,
-      callbacks,
-      signal,
-    ) => {
-      await swapIfNeeded(baseUrl, apiKey, body);
-      return streamChatCompletion(baseUrl, apiKey, body, callbacks, signal);
-    };
+    gateway.streamChatCompletion = async (baseUrl, apiKey, body, callbacks, signal) => {
+      await swapIfNeeded(baseUrl, apiKey, body)
+      return streamChatCompletion(baseUrl, apiKey, body, callbacks, signal)
+    }
   }
   if (probePromptTokens) {
     gateway.probePromptTokens = async (baseUrl, apiKey, body) => {
-      await swapIfNeeded(baseUrl, apiKey, body);
-      return probePromptTokens(baseUrl, apiKey, body);
-    };
+      await swapIfNeeded(baseUrl, apiKey, body)
+      return probePromptTokens(baseUrl, apiKey, body)
+    }
   }
   if (probePromptTokensDetailed) {
     gateway.probePromptTokensDetailed = async (baseUrl, apiKey, body) => {
-      await swapIfNeeded(baseUrl, apiKey, body);
-      return probePromptTokensDetailed(baseUrl, apiKey, body);
-    };
+      await swapIfNeeded(baseUrl, apiKey, body)
+      return probePromptTokensDetailed(baseUrl, apiKey, body)
+    }
   }
   // No request body / model key — nothing to swap; pass through untouched.
   if (inner.getLoadedContextLength) {
-    gateway.getLoadedContextLength = inner.getLoadedContextLength;
+    gateway.getLoadedContextLength = inner.getLoadedContextLength
   }
 
-  return gateway;
+  return gateway
 }

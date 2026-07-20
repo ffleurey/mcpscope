@@ -87,34 +87,46 @@ function deriveWorkflowSteps(
   const ownedTurnsByStepId = new Map<string, TurnRecord[]>()
   for (const turn of turns) {
     if (!turn.ownerStepId) continue
-    ownedTurnsByStepId.set(turn.ownerStepId, [...(ownedTurnsByStepId.get(turn.ownerStepId) ?? []), turn])
+    ownedTurnsByStepId.set(turn.ownerStepId, [
+      ...(ownedTurnsByStepId.get(turn.ownerStepId) ?? []),
+      turn,
+    ])
   }
 
   const postambleStepsByTurnId = new Map<string, StepRecord[]>()
   for (const step of steps) {
     if (step.stepTypeKey !== 'compaction') continue
-    const sourceTurnId = typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null
+    const sourceTurnId =
+      typeof step.params.sourceTurnId === 'string' ? step.params.sourceTurnId : null
     if (!sourceTurnId) continue
-    postambleStepsByTurnId.set(sourceTurnId, [...(postambleStepsByTurnId.get(sourceTurnId) ?? []), step])
+    postambleStepsByTurnId.set(sourceTurnId, [
+      ...(postambleStepsByTurnId.get(sourceTurnId) ?? []),
+      step,
+    ])
   }
 
   const artifactsByStepId = new Map<string, TraceArtifactRecord[]>()
   for (const artifact of artifacts) {
     if (!artifact.stepId) continue
-    artifactsByStepId.set(artifact.stepId, [...(artifactsByStepId.get(artifact.stepId) ?? []), artifact])
+    artifactsByStepId.set(artifact.stepId, [
+      ...(artifactsByStepId.get(artifact.stepId) ?? []),
+      artifact,
+    ])
   }
 
   return [...steps]
-    .filter(step => step.stepTypeKey !== 'turn' && step.stepTypeKey !== 'compaction')
+    .filter((step) => step.stepTypeKey !== 'turn' && step.stepTypeKey !== 'compaction')
     .sort((left, right) => left.childIndex - right.childIndex)
     .map((step) => {
-      const ownedTurns = [...(ownedTurnsByStepId.get(step.id) ?? [])]
-        .sort((left, right) => left.turnNumber - right.turnNumber)
+      const ownedTurns = [...(ownedTurnsByStepId.get(step.id) ?? [])].sort(
+        (left, right) => left.turnNumber - right.turnNumber,
+      )
       const postambleSteps = ownedTurns
-        .flatMap(turn => postambleStepsByTurnId.get(turn.id) ?? [])
+        .flatMap((turn) => postambleStepsByTurnId.get(turn.id) ?? [])
         .sort((left, right) => left.childIndex - right.childIndex)
-      const stepArtifacts = [...(artifactsByStepId.get(step.id) ?? [])]
-        .sort((left, right) => left.createdAt - right.createdAt)
+      const stepArtifacts = [...(artifactsByStepId.get(step.id) ?? [])].sort(
+        (left, right) => left.createdAt - right.createdAt,
+      )
 
       return {
         step,

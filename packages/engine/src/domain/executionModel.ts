@@ -179,7 +179,6 @@ export const STEP_TYPE = {
  * reaches the chat-session refactoring phase.
  */
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Session
 // ─────────────────────────────────────────────────────────────────────────────
@@ -225,7 +224,10 @@ export interface Session {
   readonly sessionTypeKey: SessionTypeKey
   readonly status: SessionLifecycleStatus
   /** Owning container (another Session, or a Benchmark), or null for top-level. */
-  readonly parent: { readonly containerId: string; readonly containerTypeKey: ContainerTypeKey } | null
+  readonly parent: {
+    readonly containerId: string
+    readonly containerTypeKey: ContainerTypeKey
+  } | null
   /** Ordered execution trace (steps executed so far). */
   readonly steps: ReadonlyArray<Step>
   readonly params: GenericParams

@@ -21,7 +21,7 @@
  * (e.g. fallback for providers whose responses lack usage info).
  */
 export function estimateTokensFromText(text: string): number {
-  return Math.max(1, Math.round(text.length / 4));
+  return Math.max(1, Math.round(text.length / 4))
 }
 
 /**
@@ -46,27 +46,25 @@ export function buildReasoningParams(
   providerType?: string | null,
 ): Record<string, unknown> {
   // No preference → let the provider use its default
-  if (reasoning === null) return {};
+  if (reasoning === null) return {}
 
   const provider =
-    providerType === "openrouter" || providerType === "ollama"
-      ? providerType
-      : "lmstudio";
+    providerType === 'openrouter' || providerType === 'ollama' ? providerType : 'lmstudio'
 
   // LM Studio always uses explicit reasoning: "on"|"off" in request body
-  if (provider === "lmstudio") {
-    return { reasoning };
+  if (provider === 'lmstudio') {
+    return { reasoning }
   }
 
   // For non-LM-Studio providers, only send params when reasoning is on
-  if (reasoning !== "on") return {};
+  if (reasoning !== 'on') return {}
 
   switch (provider) {
-    case "openrouter":
-      return { reasoning: {}, include_reasoning: true };
-    case "ollama":
-      return { think: true };
+    case 'openrouter':
+      return { reasoning: {}, include_reasoning: true }
+    case 'ollama':
+      return { think: true }
     default:
-      return {};
+      return {}
   }
 }
