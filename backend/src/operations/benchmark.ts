@@ -44,6 +44,7 @@ import {
   deleteSessionRecord,
   listPartRecordsBySession,
   listTurnRecordsBySession,
+  listRoundRecordsBySession,
 } from "mcpscope-engine/persistence/repository.js";
 import {
   generateBenchmarkId,
@@ -77,7 +78,9 @@ import {
 import {
   scorePct,
   aggregateEvaluationScore,
+  aggregateEvaluationDiagnostics,
   type EvaluationScore,
+  type EvaluationDiagnostics,
   type EvaluationSessionScore,
 } from "./benchmarkEvaluationMetrics.js";
 
@@ -1452,6 +1455,21 @@ export interface BenchmarkEvaluationReport extends BenchmarkEvaluationRecord {
   judgedSessions: number;
   /** Completed run sessions skipped because their case snapshot has no rubric. */
   skippedNoRubric: number;
+  /** Pass-level rollup of the per-session judge diagnostics (why judges failed / looped). */
+  diagnostics: EvaluationDiagnostics;
+}
+
+/**
+ * A judge turn whose outcome marks it as having exhausted its tool-round budget —
+ * either it looped without answering (`tool-loop-limit:N`) or only answered on the
+ * forced final round after the cap (`tool-assisted-response-after-limit:N`).
+ */
+function outcomeHitToolCap(outcome: string | null): boolean {
+  return (
+    outcome != null &&
+    (outcome.startsWith("tool-loop-limit:") ||
+      outcome.startsWith("tool-assisted-response-after-limit:"))
+  );
 }
 
 /**
@@ -1516,6 +1534,27 @@ export function getBenchmarkRunEvaluationReports(
         };
       });
 
+      // Judge diagnostics (computed on read from the judge session): tool-round
+      // usage, whether it hit the cap, and — when it produced no verdict — why.
+      const judgeTurns = listTurnRecordsBySession(db.connection, es.analysisSessionId);
+      const judgeTurn = judgeTurns.at(-1) ?? null;
+      const toolRounds = judgeTurn
+        ? listRoundRecordsBySession(db.connection, es.analysisSessionId).filter(
+            (r) => r.turnId === judgeTurn.id,
+          ).length
+        : null;
+      const hitToolCap = outcomeHitToolCap(judgeTurn?.outcome ?? null);
+      const pct = scorePct(awarded, max);
+      // Only resolve the failure reason when there is no verdict — a scored
+      // session has no error to explain, and this avoids an extra read per row.
+      let errorKind: string | null = null;
+      if (pct == null) {
+        const judgeSession = getSessionRecord(db.connection, es.analysisSessionId);
+        errorKind = judgeSession
+          ? (getLatestSessionErrorSummary(db.connection, judgeSession)?.error_kind ?? null)
+          : null;
+      }
+
       return {
         runSessionId: es.runSessionId,
         analysisSessionId: es.analysisSessionId,
@@ -1523,8 +1562,11 @@ export function getBenchmarkRunEvaluationReports(
         status: es.status,
         awarded,
         max,
-        pct: scorePct(awarded, max),
+        pct,
         criteria,
+        toolRounds,
+        hitToolCap,
+        errorKind,
       };
     });
     const judgedSessions = sessions.filter((s) => s.pct != null).length;
@@ -1534,6 +1576,7 @@ export function getBenchmarkRunEvaluationReports(
       expectedSessions,
       judgedSessions,
       skippedNoRubric,
+      diagnostics: aggregateEvaluationDiagnostics(sessions),
     };
   });
 }

@@ -51,6 +51,7 @@ import {
   describeStreamFailure,
   deriveAssistantContentTokenMetadata,
   extractContentSegmentTexts,
+  recoverAnswerFromReasoning,
 } from './turnAssembly.js'
 import {
   sessionContextBody,
@@ -193,6 +194,72 @@ function parseToolCalls(
     name: toolCall.function?.name ?? 'unknown',
     argumentsJson: toolCall.function?.arguments ?? '{}',
   }))
+}
+
+/** Recursively sort object keys so two calls that differ only in key order (or
+ *  insignificant JSON whitespace) produce the same canonical signature. */
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJsonValue)
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, val]) => [key, sortJsonValue(val)]),
+    )
+  }
+  return value
+}
+
+/** Stable signature for a tool call — name + canonicalized arguments — so a
+ *  byte-for-byte or key-reordered repeat of the same call within a turn maps to
+ *  one key. Non-JSON arguments fall back to the raw string. */
+function toolCallSignature(name: string, argumentsJson: string): string {
+  let canonicalArgs = argumentsJson
+  try {
+    canonicalArgs = JSON.stringify(sortJsonValue(JSON.parse(argumentsJson || '{}')))
+  } catch {
+    /* malformed model output — keep the raw string */
+  }
+  return `${name}\u0000${canonicalArgs}`
+}
+
+/**
+ * Loop guard: a model that re-issues an identical tool call within one turn is
+ * almost always stuck (small models re-inspect the same id dozens of times,
+ * burning the whole round budget without answering). Rather than re-execute —
+ * wasting the call and a round — hand back the earlier result plus an explicit
+ * nudge to stop repeating and answer, with the remaining round budget spelled
+ * out. isError stays false: a skipped duplicate is not a new tool failure and
+ * must not inflate error metrics.
+ */
+function buildDuplicateToolCallResult(
+  toolName: string,
+  argumentsJson: string,
+  priorContent: string,
+  roundsLeft: number,
+): McpToolCallResult {
+  const budgetLine =
+    roundsLeft > 0
+      ? `You have ${roundsLeft} tool-call round${roundsLeft === 1 ? '' : 's'} left before you must give your final answer.`
+      : 'This is your last tool-call round; you must give your final answer next.'
+  const notice =
+    `Duplicate tool call skipped: you already called ${toolName} with identical arguments earlier in this turn, so it was not run again. ${budgetLine} ` +
+    'Do not repeat this call — use the result you already have, or give your final answer now. The earlier result is reproduced below:\n\n' +
+    priorContent
+  return {
+    content: notice,
+    structuredContent: null,
+    isError: false,
+    rawResult: null,
+    rawExchange: {
+      requestUrl: 'about:duplicate-tool-call',
+      requestMethod: 'POST',
+      requestBodyText: argumentsJson,
+      responseStatus: 0,
+      responseBody: null,
+      responseBodyText: notice,
+    },
+  }
 }
 
 function createProviderRawExchange(
@@ -1466,6 +1533,9 @@ export async function createToolEnabledTurn(
     baseMessageCount: Math.max(0, requestMessages.length - 1),
     userPart,
   }
+  // Per-turn record of executed tool calls (signature → result content), used to
+  // detect and short-circuit repeated identical calls within this turn.
+  const executedToolCalls = new Map<string, string>()
 
   for (let roundIndex = 0; roundIndex < input.maxToolRounds; roundIndex++) {
     const requestBody: Record<string, unknown> = {
@@ -1661,8 +1731,20 @@ export async function createToolEnabledTurn(
         if (!invalidCallError && !serverUrl) {
           invalidCallError = `Tool call rejected: no tool named "${toolCall.name}" is available in this session.`
         }
+        const signature = toolCallSignature(toolCall.name, toolCall.argumentsJson)
+        const priorContent = executedToolCalls.get(signature)
+        // Rounds the model still gets after this one before the loop forces a stop.
+        const roundsLeft = input.maxToolRounds - 1 - currentRound.roundIndex
         let toolResult: McpToolCallResult
-        if (invalidCallError || !serverUrl) {
+        if (priorContent !== undefined) {
+          // Repeated identical call this turn — short-circuit instead of re-running.
+          toolResult = buildDuplicateToolCallResult(
+            toolCall.name,
+            toolCall.argumentsJson,
+            priorContent,
+            roundsLeft,
+          )
+        } else if (invalidCallError || !serverUrl) {
           toolResult = {
             content: invalidCallError ?? 'Tool call rejected.',
             structuredContent: { error: { message: invalidCallError } },
@@ -1677,6 +1759,7 @@ export async function createToolEnabledTurn(
               responseBodyText: invalidCallError,
             },
           }
+          executedToolCalls.set(signature, toolResult.content)
         } else {
           const serverCtx = mcpContext.serverContexts.get(serverUrl)
           toolResult = await mcpGateway.callTool(
@@ -1686,6 +1769,7 @@ export async function createToolEnabledTurn(
             parsedArgs ?? {},
             serverCtx?.auth ?? null,
           )
+          executedToolCalls.set(signature, toolResult.content)
         }
         const toolResultPart = createToolResultPart(
           session,
@@ -1819,7 +1903,13 @@ export async function createToolEnabledTurn(
       continue
     }
 
-    const assistantContentSegments = extractContentSegmentTexts(streamedCompletion.segments)
+    // Recover an answer emitted in the reasoning channel with empty content
+    // (interleaved-thinking models) — but not on a truncated round, where
+    // reasoning is partial thinking rather than the final answer.
+    const { segments: answerSegments, recovered: answerFromReasoning } = roundTruncated
+      ? { segments: streamedCompletion.segments, recovered: false }
+      : recoverAnswerFromReasoning(streamedCompletion.segments)
+    const assistantContentSegments = extractContentSegmentTexts(answerSegments)
 
     const {
       parts: streamedParts,
@@ -1832,7 +1922,7 @@ export async function createToolEnabledTurn(
       roundNumber: currentRound.roundIndex + 1,
       roundId: currentRound.id,
       ownerStepId: input.ownerStepId ?? null,
-      segments: streamedCompletion.segments,
+      segments: answerSegments,
       reasoningTokens: usage.reasoningTokens,
       contentTokenMetadata: deriveAssistantContentTokenMetadata(
         assistantContentSegments,
@@ -1846,7 +1936,8 @@ export async function createToolEnabledTurn(
 
     // Truncation isn't an error — the response is complete-but-capped — but
     // it's still an anomaly worth surfacing in the transcript rather than
-    // leaving buried in round.finishReason.
+    // leaving buried in round.finishReason. A reasoning-channel recovery gets
+    // its own note so the coercion is visible rather than silent.
     const assistantParts = roundTruncated
       ? [
           ...streamedParts,
@@ -1864,7 +1955,24 @@ export async function createToolEnabledTurn(
             createdAt: completedAt,
           }),
         ]
-      : streamedParts
+      : answerFromReasoning
+        ? [
+            ...streamedParts,
+            buildDiagnosticNotePart({
+              session,
+              turnId,
+              turnNumber,
+              roundNumber: currentRound.roundIndex + 1,
+              roundId: currentRound.id,
+              ownerStepId: input.ownerStepId ?? null,
+              partNumber: nextPartNumber,
+              ordinal: nextOrdinal,
+              text: 'Final answer recovered from the reasoning channel: the model ended the turn with empty content but non-empty reasoning (common for interleaved-thinking models). The reasoning text is surfaced as the assistant answer so it is retained and scored.',
+              summary: 'Answer recovered from reasoning channel',
+              createdAt: completedAt,
+            }),
+          ]
+        : streamedParts
 
     turn.status = 'complete'
     turn.completedAt = completedAt
@@ -1929,9 +2037,194 @@ export async function createToolEnabledTurn(
     }
   }
 
-  // The tool-call loop exhausted maxToolRounds without producing a final 'stop' response.
-  // `currentRound` was inserted as 'streaming' at the end of the last tool-call iteration
-  // but never processed.  Close it out gracefully so the frontend isn't left hanging.
+  // Budget exhausted without a final 'stop' answer. `currentRound` was inserted
+  // as 'streaming' at the end of the last tool-call iteration but never processed.
+  // Before giving up, give the model ONE final round with tools DISABLED and an
+  // explicit instruction to answer now from what it already gathered. A forced,
+  // possibly-imperfect answer is far more useful than an empty error — e.g. an
+  // LLM judge that spent its whole budget inspecting can still emit its verdict.
+  // Only if this also yields no answer do we fall through to the error below.
+  const finalDirective =
+    `You have used all ${input.maxToolRounds} tool-call rounds and cannot call any more tools. ` +
+    'Provide your final answer now, using the information you have already gathered. ' +
+    'If the information is incomplete, give your best answer with what you have.'
+  const finalMessages: ApiMessage[] = [
+    ...requestMessages,
+    { role: 'user', content: finalDirective },
+  ]
+  const finalRequestBody: Record<string, unknown> = {
+    model: session.modelProfileSnapshot.modelKey,
+    stream: true,
+    stream_options: { include_usage: true },
+    messages: finalMessages,
+    // tools intentionally omitted: this round must produce a text answer.
+    ...sessionTemperatureBody(session),
+    ...buildReasoningParams(
+      session.modelProfileSnapshot.reasoning,
+      session.modelProfileSnapshot.connectionBaseUrl,
+      session.modelProfileSnapshot.providerType,
+    ),
+    ...sessionContextBody(session),
+  }
+  currentRound.requestPayloadJson = finalRequestBody
+  updateRoundRecord(database.connection, currentRound)
+
+  let finalCompletion: OaiStreamedChatCompletionResult | null = null
+  try {
+    finalCompletion = await executeChatCompletion(
+      chatCompletionGateway,
+      session.modelProfileSnapshot.connectionBaseUrl,
+      session.modelProfileSnapshot.apiKey ?? undefined,
+      finalRequestBody,
+      {
+        onDelta(delta) {
+          emitEvent?.({ type: 'part-delta', turnId, roundId: currentRound.id, delta })
+        },
+      },
+    )
+  } catch {
+    // Stream failed on the recovery round — finalCompletion stays null and we
+    // fall through to the error path below.
+  }
+
+  // Recover a reasoning-channel answer here too, so an interleaved-thinking model
+  // that answers the forced final round in its reasoning still counts as answered.
+  const finalRecovery = finalCompletion
+    ? recoverAnswerFromReasoning(finalCompletion.segments)
+    : { segments: [], recovered: false }
+  const finalContentSegments = extractContentSegmentTexts(finalRecovery.segments)
+  if (finalCompletion && finalContentSegments.join('').trim().length > 0) {
+    const finalCompletedAt = now()
+    const provider = session.modelProfileSnapshot.providerType ?? 'lmstudio'
+    const finalUsage = normalizeStreamUsage(finalCompletion.rawResponseBody, provider)
+
+    currentRound.status = 'complete'
+    currentRound.finishReason = 'stop'
+    currentRound.completedAt = finalCompletedAt
+    currentRound.usage = {
+      promptTokens: finalUsage.promptTokens,
+      completionTokens: finalUsage.completionTokens,
+      reasoningTokens: finalUsage.reasoningTokens,
+      totalTokens: finalUsage.totalTokens,
+    }
+    currentRound.responseTraceJson = {
+      completion: finalCompletion.completion,
+      assistantSegments: finalCompletion.segments,
+    }
+    rounds.push({ ...currentRound })
+
+    // applyPendingPromptSuffixAttribution always returns null — DB side-effects only
+    await applyPendingPromptSuffixAttribution(
+      database,
+      chatCompletionGateway,
+      session,
+      requestMessages,
+      lmTools,
+      finalUsage.promptTokens,
+      sessionParts,
+      pendingPromptSuffix,
+    )
+
+    const {
+      parts: streamedParts,
+      nextOrdinal,
+      nextPartNumber,
+    } = commitSegmentsToParts({
+      session,
+      turnId,
+      turnNumber,
+      roundNumber: currentRound.roundIndex + 1,
+      roundId: currentRound.id,
+      ownerStepId: input.ownerStepId ?? null,
+      segments: finalRecovery.segments,
+      reasoningTokens: finalUsage.reasoningTokens,
+      contentTokenMetadata: deriveAssistantContentTokenMetadata(
+        finalContentSegments,
+        finalUsage.assistantContentTokens,
+      ),
+      contentContextNote: 'Assistant answer remains part of later model-visible history',
+      initialOrdinal: getNextPartOrdinal(database.connection, session.id),
+      initialPartNumber: getNextRoundPartSequence(database.connection, currentRound.id),
+      createdAt: finalCompletedAt,
+    })
+
+    // Record that this answer was forced after the tool-loop limit, so the trace
+    // still shows the budget was hit even though the turn now completes cleanly.
+    const budgetNote = buildDiagnosticNotePart({
+      session,
+      turnId,
+      turnNumber,
+      roundNumber: currentRound.roundIndex + 1,
+      roundId: currentRound.id,
+      ownerStepId: input.ownerStepId ?? null,
+      partNumber: nextPartNumber,
+      ordinal: nextOrdinal,
+      text:
+        `Tool-call budget reached: the model used all ${input.maxToolRounds} tool rounds, then produced this answer in a final tools-disabled round. ` +
+        `Raise this session's max tool rounds (currently ${input.maxToolRounds}) — or the BACKEND_MAX_TOOL_ROUNDS default — if the workflow legitimately needs more.`,
+      summary: `Final answer forced after tool-loop limit (${input.maxToolRounds} rounds)`,
+      createdAt: finalCompletedAt,
+    })
+    const assistantParts = [...streamedParts, budgetNote]
+
+    const finalRawExchanges = createProviderRawExchange(
+      session,
+      turnId,
+      currentRound.id,
+      finalRequestBody,
+      finalCompletion.rawResponseBody,
+      currentRound.startedAt,
+      finalCompletedAt,
+    )
+
+    turn.status = 'complete'
+    turn.completedAt = finalCompletedAt
+    turn.outcome = `tool-assisted-response-after-limit:${input.maxToolRounds}`
+    turn.usage = { ...currentRound.usage }
+    session.status = 'active'
+    session.updatedAt = finalCompletedAt
+    maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent)
+
+    runInTransaction(database.connection, () => {
+      updateRoundRecord(database.connection, currentRound)
+      finalRawExchanges.forEach((exchange) => insertRawExchangeRecord(database.connection, exchange))
+      assistantParts.forEach((part) => insertPartRecord(database.connection, part))
+      updateTurnRecord(database.connection, turn)
+      updateSessionRecord(database.connection, session)
+    })
+
+    const compaction = applyContextCompaction(database.connection, turn, session.compactionStrategy)
+    Object.assign(turn, compaction.turn)
+
+    assistantParts.forEach((part) => emitEvent?.({ type: 'part-committed', part }))
+    emitEvent?.({ type: 'round-committed', round: { ...currentRound } })
+
+    const persistedParts = listPartRecordsBySession(database.connection, session.id)
+    const trace = buildSessionTraceBundle({
+      session,
+      steps: listStepRecordsBySession(database.connection, session.id),
+      turns: listTurnRecordsBySession(database.connection, session.id),
+      rounds: listRoundRecordsBySession(database.connection, session.id),
+      parts: persistedParts,
+      rawExchanges: listRawExchangeRecordsBySession(database.connection, session.id),
+      transcript: deriveTranscriptEntries(persistedParts),
+      context: deriveContextEntries(persistedParts),
+    })
+    emitEvent?.({ type: 'turn-committed', turn: { ...turn }, trace })
+    return {
+      session,
+      turn,
+      round: currentRound,
+      rounds,
+      parts: persistedParts.filter((part) => part.turnId === turnId),
+      transcript: trace.transcript,
+      context: trace.context,
+    }
+  }
+
+  // The final tools-disabled round also produced no answer (or its stream failed).
+  // `currentRound` is still 'streaming'; close it out gracefully so the frontend
+  // isn't left hanging.
   const errorAt = now()
   currentRound.status = 'error'
   currentRound.finishReason = 'error'
@@ -1958,7 +2251,7 @@ export async function createToolEnabledTurn(
     roleLabel: 'system',
     payload: {
       text:
-        `Turn stopped: reached the maximum of ${input.maxToolRounds} tool-call rounds without a final assistant response. ` +
+        `Turn stopped: reached the maximum of ${input.maxToolRounds} tool-call rounds, and a final tools-disabled round still produced no assistant answer. ` +
         `Raise this session's max tool rounds (currently ${input.maxToolRounds}) — or the BACKEND_MAX_TOOL_ROUNDS default — if this is too low for your workflow.`,
       json: null,
       mimeType: 'text/plain',

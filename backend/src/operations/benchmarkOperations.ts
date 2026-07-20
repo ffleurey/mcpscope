@@ -59,6 +59,7 @@ import type {
   PerToolRollup,
   NumberStats,
 } from "./benchmarkMetrics.js";
+import type { EvaluationSessionScore } from "./benchmarkEvaluationMetrics.js";
 
 // ── snake_case mappers ───────────────────────────────────────────────────────
 
@@ -106,34 +107,51 @@ function evaluationToSnake(e: BenchmarkEvaluationRecord) {
   };
 }
 
+function evaluationDiagnosticsToSnake(d: BenchmarkEvaluationReport["diagnostics"]) {
+  return {
+    hit_tool_cap_count: d.hitToolCapCount,
+    by_error_kind: d.byErrorKind,
+    tool_rounds_stats: numberStatsToSnake(d.toolRoundsStats),
+  };
+}
+
+function evaluationSessionScoreToSnake(s: EvaluationSessionScore) {
+  return {
+    run_session_id: s.runSessionId,
+    analysis_session_id: s.analysisSessionId,
+    source_case_id: s.sourceCaseId,
+    status: s.status,
+    awarded: s.awarded,
+    max: s.max,
+    pct: s.pct,
+    // Judge diagnostics: why a verdict was (or wasn't) produced.
+    tool_rounds: s.toolRounds,
+    hit_tool_cap: s.hitToolCap,
+    error_kind: s.errorKind,
+    criteria: s.criteria.map((cr) => ({
+      id: cr.id,
+      description: cr.description,
+      max: cr.max,
+      points: cr.points,
+      note: cr.note,
+    })),
+  };
+}
+
 function evaluationReportToSnake(e: BenchmarkEvaluationReport) {
   return {
     ...evaluationToSnake(e),
     expected_sessions: e.expectedSessions,
     judged_sessions: e.judgedSessions,
     skipped_no_rubric: e.skippedNoRubric,
+    diagnostics: evaluationDiagnosticsToSnake(e.diagnostics),
     score: {
       overall_pct: e.score.overallPct,
       cases: e.score.cases.map((c) => ({
         source_case_id: c.sourceCaseId,
         name: c.name,
         pct_stats: numberStatsToSnake(c.pctStats),
-        sessions: c.sessions.map((s) => ({
-          run_session_id: s.runSessionId,
-          analysis_session_id: s.analysisSessionId,
-          source_case_id: s.sourceCaseId,
-          status: s.status,
-          awarded: s.awarded,
-          max: s.max,
-          pct: s.pct,
-          criteria: s.criteria.map((cr) => ({
-            id: cr.id,
-            description: cr.description,
-            max: cr.max,
-            points: cr.points,
-            note: cr.note,
-          })),
-        })),
+        sessions: c.sessions.map(evaluationSessionScoreToSnake),
       })),
     },
   };
@@ -483,6 +501,11 @@ function buildEvaluationInspect(
       source_case_id: s.sourceCaseId,
       status: s.status,
       pct: s.pct,
+      // Judge diagnostics travel in both modes — a looping/failed judge is the
+      // thing you most need to see when a pass is incomplete.
+      tool_rounds: s.toolRounds,
+      hit_tool_cap: s.hitToolCap,
+      error_kind: s.errorKind,
       // Full adds the per-criterion grid; summary stays lean and drillable.
       ...(mode === "full"
         ? {
@@ -514,6 +537,7 @@ function buildEvaluationInspect(
       skipped_no_rubric: report.skippedNoRubric,
       incomplete: report.judgedSessions < report.expectedSessions,
       overall_pct: report.score.overallPct,
+      diagnostics: evaluationDiagnosticsToSnake(report.diagnostics),
     },
     sessions: flatSessions,
   };

@@ -38,11 +38,23 @@ npm run verify     # format check, lint, typecheck (all packages), and tests
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**, **[docs/DATA-MODEL.md](docs/DATA-MODEL.md)**,
   **[docs/DATABASE-SCHEMA.md](docs/DATABASE-SCHEMA.md)** — system design, runtime model, schema.
 
-## Pull requests
+## Branching, commits & pull requests
 
-- Branch from `main`, keep PRs focused, and describe what changed and how you verified it.
-- Reference any related issue.
-- CI (`.github/workflows/ci.yml`) must pass; it runs `npm ci` + the same checks as `npm run verify`, plus a production build (`build:all`).
+The workflow, start to finish — **read this before your first commit:**
+
+1. **Always work on a branch off an up-to-date `main`; never commit to `main` directly.** A merged
+   branch is deleted, so first sync: `git checkout main && git pull`. Then branch:
+   `git checkout -b <type>/<short-topic>` (e.g. `fix/…`, `feat/…`, `docs/…`).
+2. **Make small, clean commits** — one logical change each, with a clear message. Keep unrelated
+   changes (e.g. a bug fix vs. a doc update) in separate commits.
+3. **Push as you go** — push each commit right after you make it; no need to batch or delay.
+4. **Run the full gate before opening the PR** (see [Before you open a pull request](#before-you-open-a-pull-request)).
+   A formatting or lint failure fails CI, so never open a PR without a green `npm run verify`.
+5. **Open one PR to `main`** with a **clear title that reflects the whole PR** and a **compact
+   description listing every change**. Reference any related issue. Keep the PR focused.
+
+CI (`.github/workflows/ci.yml`) runs `npm ci` + the same checks as `npm run verify`, plus a
+production build (`build:all`); it must pass.
 
 ## Reporting bugs & requesting features
 

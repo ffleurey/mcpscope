@@ -6,6 +6,9 @@ import { insertStepRecord } from '../persistence/repository.js'
 import { stepTypeKey } from '../domain/executionModel.js'
 import { createSession } from './modelTurns.js'
 import { createToolEnabledTurn } from './toolTurns.js'
+import { resolveHierarchicalId } from './hierarchicalLookup.js'
+import { renderInspect } from '../inspect/renderInspect.js'
+import type { InspectResult } from '../operations/inspect.js'
 import type { ChatCompletionGateway } from './modelTurns.js'
 import type { McpGateway } from './toolTurns.js'
 import { StreamReadError } from '../services/openai/client.js'
@@ -1631,6 +1634,348 @@ describe('tool-enabled turn runtime', () => {
     const diagnostic = result.parts[2]
     expect(diagnostic?.payload.text).toMatch(/truncated/i)
     expect(diagnostic?.context.state).toBe('excluded')
+
+    db.connection.close()
+  })
+
+  // ── Loop-guard fixes: repeated-call short-circuit + last-chance answer ──────
+
+  function toolCallCompletion(id: string, name: string, argumentsJson: string) {
+    return {
+      id,
+      model: 'model-key',
+      created: 1,
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'tool_calls' as const,
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ id, type: 'function', function: { name, arguments: argumentsJson } }],
+          },
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 5, reasoning_tokens: 0, total_tokens: 15 },
+    }
+  }
+
+  function stopCompletion(text: string) {
+    return {
+      id: 'stop-1',
+      model: 'model-key',
+      created: 1,
+      choices: [
+        { index: 0, finish_reason: 'stop' as const, message: { role: 'assistant', content: text } },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 5, reasoning_tokens: 0, total_tokens: 15 },
+    }
+  }
+
+  function makeInspectGateway(callCounter: { count: number }): McpGateway {
+    return {
+      async initializeSession() {
+        return {
+          sessionId: 'mcp-session-1',
+          instructions: 'Inspect the session.',
+          rawExchange: {
+            requestUrl: 'http://localhost:3001/mcp',
+            requestMethod: 'POST',
+            requestBodyText: '{}',
+            responseStatus: 200,
+            responseBody: {},
+          },
+        }
+      },
+      async listTools() {
+        return {
+          tools: [
+            {
+              name: 'inspect',
+              description: 'Inspect a session by id',
+              inputSchema: {
+                type: 'object',
+                properties: { id: { type: 'string' } },
+              },
+            },
+          ],
+          rawResult: {},
+          rawExchange: {
+            requestUrl: 'http://localhost:3001/mcp',
+            requestMethod: 'POST',
+            requestBodyText: '{}',
+            responseStatus: 200,
+            responseBody: {},
+          },
+        }
+      },
+      async callTool() {
+        callCounter.count += 1
+        return {
+          content: 'INSPECT-RESULT-BODY',
+          structuredContent: null,
+          isError: false,
+          rawResult: {},
+          rawExchange: {
+            requestUrl: 'http://localhost:3001/mcp',
+            requestMethod: 'POST',
+            requestBodyText: '{}',
+            responseStatus: 200,
+            responseBody: {},
+          },
+        }
+      },
+    }
+  }
+
+  function makeToolSession(db: ReturnType<typeof openBackendDatabase>) {
+    return createSession(db, {
+      modelProfileSnapshot: {
+        id: 'model-1',
+        name: 'Model',
+        connectionBaseUrl: 'https://example.com/v1',
+        apiKey: null,
+        modelKey: 'model-key',
+        modelDisplayName: 'Model Key',
+        systemPrompt: 'Use tools when required.',
+        temperature: 0,
+        reasoning: 'off',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      mcpProfileSnapshots: [
+        {
+          id: 'mcp-1',
+          name: 'Local MCP',
+          url: 'http://localhost:3001/mcp',
+          transport: 'streamable-http',
+          authType: null,
+          authValue: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    })
+  }
+
+  it('short-circuits a repeated identical tool call within a turn and nudges the model to answer', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+    const counter = { count: 0 }
+    const mcpGateway = makeInspectGateway(counter)
+
+    let round = 0
+    const chatCompletionGateway: ChatCompletionGateway = {
+      async probePromptTokens() {
+        return 5
+      },
+      async createChatCompletion(_baseUrl, _apiKey, body) {
+        const messages = body.messages as Array<{ role: string; content?: string | null }>
+        const lastTool = [...messages].reverse().find((m) => m.role === 'tool')
+        if (lastTool && String(lastTool.content ?? '').includes('Duplicate tool call skipped')) {
+          return stopCompletion('Verdict: done.')
+        }
+        round += 1
+        // Same tool + identical args every round — a degenerate re-inspect loop.
+        return toolCallCompletion(`call-${round}`, 'inspect', '{"id":"X"}')
+      },
+    }
+
+    const session = makeToolSession(db)
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
+      sessionId: session.id,
+      userContent: 'Judge session X.',
+      maxToolRounds: 8,
+    })
+
+    // The identical second call is short-circuited: the server ran only once.
+    expect(counter.count).toBe(1)
+    const toolResults = result.parts.filter((p) => p.partType === 'tool-result')
+    expect(toolResults).toHaveLength(2)
+    expect(toolResults[1]?.payload.text).toMatch(/Duplicate tool call skipped/)
+    // The earlier result is reproduced so an idempotent re-fetch loses nothing.
+    expect(toolResults[1]?.payload.text).toContain('INSPECT-RESULT-BODY')
+    // A skipped duplicate is not a tool error and must not inflate error metrics.
+    expect((toolResults[1]?.provenanceJson as { isError?: boolean } | null)?.isError).toBe(false)
+
+    expect(result.turn.status).toBe('complete')
+    const answer = result.parts.filter((p) => p.partType === 'assistant-content').at(-1)
+    expect(answer?.payload.text).toBe('Verdict: done.')
+
+    db.connection.close()
+  })
+
+  it('gives one final tools-disabled answer round when the tool-call budget is exhausted', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+    const counter = { count: 0 }
+    const mcpGateway = makeInspectGateway(counter)
+
+    let round = 0
+    const chatCompletionGateway: ChatCompletionGateway = {
+      async probePromptTokens() {
+        return 5
+      },
+      async createChatCompletion(_baseUrl, _apiKey, body) {
+        // The recovery round omits tools entirely — that is our signal to answer.
+        if (!body.tools) return stopCompletion('Final forced answer.')
+        round += 1
+        // Distinct args each round so the dedup guard does not interfere.
+        return toolCallCompletion(`call-${round}`, 'inspect', JSON.stringify({ n: round }))
+      },
+    }
+
+    const session = makeToolSession(db)
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
+      sessionId: session.id,
+      userContent: 'Judge session X.',
+      maxToolRounds: 2,
+    })
+
+    expect(counter.count).toBe(2)
+    expect(result.turn.status).toBe('complete')
+    expect(result.turn.outcome).toBe('tool-assisted-response-after-limit:2')
+    const answer = result.parts.filter((p) => p.partType === 'assistant-content').at(-1)
+    expect(answer?.payload.text).toBe('Final forced answer.')
+    const note = result.parts.find((p) => p.partType === 'diagnostic-note')
+    expect(note?.payload.text).toMatch(/budget reached/i)
+    expect(note?.payload.text).toMatch(/final tools-disabled round/i)
+
+    db.connection.close()
+  })
+
+  it('still ends in a tool-loop-limit error when the final tools-disabled round yields no answer', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+    const counter = { count: 0 }
+    const mcpGateway = makeInspectGateway(counter)
+
+    let round = 0
+    const chatCompletionGateway: ChatCompletionGateway = {
+      async probePromptTokens() {
+        return 5
+      },
+      async createChatCompletion(_baseUrl, _apiKey, body) {
+        if (!body.tools) return stopCompletion('') // recovery round also delivers nothing
+        round += 1
+        return toolCallCompletion(`call-${round}`, 'inspect', JSON.stringify({ n: round }))
+      },
+    }
+
+    const session = makeToolSession(db)
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
+      sessionId: session.id,
+      userContent: 'Judge session X.',
+      maxToolRounds: 2,
+    })
+
+    expect(result.turn.status).toBe('error')
+    expect(result.turn.outcome).toBe('tool-loop-limit:2')
+    expect(result.parts.some((p) => p.partType === 'assistant-content')).toBe(false)
+    const note = result.parts.find((p) => p.partType === 'diagnostic-note')
+    expect(note?.payload.text).toMatch(/final tools-disabled round still produced no assistant answer/i)
+
+    db.connection.close()
+  })
+
+  it('marks a terminal turn that delivered no assistant answer as "no final answer" on inspect', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+    const counter = { count: 0 }
+    const mcpGateway = makeInspectGateway(counter)
+
+    let round = 0
+    const chatCompletionGateway: ChatCompletionGateway = {
+      async probePromptTokens() {
+        return 5
+      },
+      async createChatCompletion(_baseUrl, _apiKey, body) {
+        if (!body.tools) return stopCompletion('') // never delivers an answer
+        round += 1
+        return toolCallCompletion(`call-${round}`, 'inspect', JSON.stringify({ n: round }))
+      },
+    }
+
+    const session = makeToolSession(db)
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
+      sessionId: session.id,
+      userContent: 'Judge session X.',
+      maxToolRounds: 2,
+    })
+
+    // Data layer: the turn node carries an explicit no_final_answer marker.
+    const turnLookup = resolveHierarchicalId(db.connection, result.turn.id, 'full')
+    expect(turnLookup.status).toBe('ok')
+    const turnData = (turnLookup as { payload: { data: Record<string, unknown> } }).payload.data
+    expect(turnData['no_final_answer']).toBe(true)
+
+    // Render layer: an explicit line, not a silent absence, for the reader/judge.
+    const text = renderInspect(
+      (turnLookup as { payload: InspectResult }).payload,
+      'text',
+    )
+    expect(text).toMatch(/no final answer/i)
+
+    // A healthy answered turn does NOT carry the marker.
+    const sessionLookup = resolveHierarchicalId(db.connection, session.id, 'full')
+    const sessionText = renderInspect(
+      (sessionLookup as { payload: InspectResult }).payload,
+      'text',
+    )
+    expect(sessionText).toMatch(/no final answer/i)
+
+    db.connection.close()
+  })
+
+  it('recovers a final answer emitted in the reasoning channel with empty content', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+    const counter = { count: 0 }
+    const mcpGateway = makeInspectGateway(counter)
+
+    // Interleaved-thinking model: the answer arrives as reasoning_content, with
+    // content empty, and the round finishes 'stop'.
+    const chatCompletionGateway: ChatCompletionGateway = {
+      async probePromptTokens() {
+        return 5
+      },
+      async createChatCompletion() {
+        return {
+          id: 'c1',
+          model: 'model-key',
+          created: 1,
+          choices: [
+            {
+              index: 0,
+              finish_reason: 'stop',
+              message: {
+                role: 'assistant',
+                content: null,
+                reasoning_content: '**Conclusion:** Stavanger uptime was 90.7% in June 2026.',
+              },
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 20, reasoning_tokens: 20, total_tokens: 30 },
+        }
+      },
+    }
+
+    const session = makeToolSession(db)
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
+      sessionId: session.id,
+      userContent: "What was Stavanger's June uptime?",
+      maxToolRounds: 5,
+    })
+
+    expect(result.turn.status).toBe('complete')
+    // The reasoning is surfaced as the assistant answer so downstream reads it.
+    const answer = result.parts.filter((p) => p.partType === 'assistant-content').at(-1)
+    expect(answer?.payload.text).toBe('**Conclusion:** Stavanger uptime was 90.7% in June 2026.')
+    // The original reasoning part is preserved.
+    expect(result.parts.some((p) => p.partType === 'assistant-reasoning')).toBe(true)
+    // The coercion is visible, not silent.
+    const note = result.parts.find((p) => p.partType === 'diagnostic-note')
+    expect(note?.payload.summary).toMatch(/recovered from reasoning channel/i)
+
+    // The turn now counts as answered — no "no final answer" marker.
+    const turnLookup = resolveHierarchicalId(db.connection, result.turn.id, 'full')
+    const turnData = (turnLookup as { payload: { data: Record<string, unknown> } }).payload.data
+    expect(turnData['no_final_answer']).toBeUndefined()
 
     db.connection.close()
   })

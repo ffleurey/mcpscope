@@ -500,6 +500,25 @@ The runtime flow is:
 9. build the next LM Studio request from accumulated canonical parts and repeat rounds as needed
 10. persist final assistant response and apply compaction
 
+The `maxToolRounds` budget is a loop guard, backed by two general safeguards so a
+model that stalls still yields a usable turn rather than a silent failure:
+
+- **Repeated-call short-circuit** — a tool call whose `(name, canonicalized-arguments)`
+	was already executed earlier in the same turn is not re-run. The earlier result is
+	returned again, prefixed with a nudge that states the remaining round budget and tells
+	the model to stop repeating and answer. This breaks the common degenerate loop of
+	re-issuing the same call, and a skipped duplicate is not counted as a tool error.
+- **Last-chance answer round** — when the budget is exhausted without a final answer,
+	the runtime makes one final completion with tools disabled and an explicit instruction
+	to answer now from what was gathered (outcome `tool-assisted-response-after-limit:N`,
+	with a diagnostic note recording that the budget was hit). Only if that round also
+	produces nothing does the turn end in the `tool-loop-limit:N` error.
+
+A terminal turn that still delivered no assistant answer (errored, hit the limit with
+nothing from the last-chance round, or emitted only reasoning) is marked `no_final_answer`
+in the inspect view, so the absence is an explicit fact for any reader — including an LLM
+judge — rather than a silently missing line.
+
 Important conclusion:
 
 - even in tool mode, later rounds are built from mcpscope-owned reconstructed messages
