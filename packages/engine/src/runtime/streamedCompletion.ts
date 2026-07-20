@@ -69,3 +69,26 @@ export async function executeChatCompletion(
     chunks: [],
   }
 }
+
+/**
+ * A completion is "degenerately empty" when the model ended the round — with a
+ * finish reason of anything but `length` — having emitted no tool call, no
+ * content, and no reasoning text. There is nothing to record, recover, or act
+ * on. This is an observed intermittent provider/connection failure: Gemini 2.5
+ * Flash Lite via OpenRouter, for instance, sometimes burns its whole output
+ * budget on hidden reasoning and returns empty content with finish_reason
+ * "stop" (the usage still reports reasoning_tokens, but no reasoning text is
+ * delivered, so reasoning-channel recovery has nothing to surface). Such a turn
+ * has not really succeeded, so callers treat it as an error the operator can
+ * manually retry rather than silently marking it complete.
+ *
+ * Truncation (`length`) is deliberately excluded: it is a legitimate signal
+ * that a capped-but-real answer exists, which the caller surfaces instead.
+ */
+export function isDegenerateEmptyCompletion(result: OaiStreamedChatCompletionResult): boolean {
+  const finishReason = result.completion.choices[0]?.finish_reason
+  if (finishReason === 'length') return false
+  return !result.segments.some((segment) =>
+    segment.kind === 'tool-call' ? true : segment.text.trim().length > 0,
+  )
+}

@@ -6,8 +6,12 @@ import { WorkflowStep } from '../../workflow/workflowStep.js'
 import type { StepContext } from '../../workflow/stepContext.js'
 import type { StepResult, StepTypeKey } from 'mcpscope-engine/domain/executionModel.js'
 import { STEP_TYPE } from 'mcpscope-engine/domain/executionModel.js'
+import {
+  listPartRecordsBySession,
+  listRoundRecordsBySession,
+} from 'mcpscope-engine/persistence/repository.js'
 import { insertJsonArtifact, getLatestArtifactBySchemaKey } from '../artifactRepository.js'
-import { runAnalysisTurn } from '../boundedTurn.js'
+import { runAnalysisTurn, turnCalledInspect, turnHasFinalAnswer } from '../boundedTurn.js'
 import { extractJsonBlock } from '../shared/extractJson.js'
 import { SCHEMA_KEY as CORE_KEY, type AnalysisSessionState, type AnalysisTarget } from '../schemas.js'
 import type { RubricCriterion } from 'mcpscope-engine/domain/model.js'
@@ -54,8 +58,56 @@ export class RubricJudgeStep extends WorkflowStep {
     if (!targetArtifact) throw new Error('RubricJudgeStep: analysis target artifact missing')
     const analysisTarget = targetArtifact.content as AnalysisTarget
 
+    // Ground truth: did the in-scope turn actually produce a final answer? The
+    // backend can verify this from the target's recorded parts, so the "does an
+    // answer exist" question is never delegated to the judge's discretion — a
+    // flaky judge that skips inspection and fabricates "no final answer" (observed
+    // with Gemini scoring 0 in one round with zero tool calls, for a session that
+    // DID answer) can no longer decide it. When the answer is genuinely absent,
+    // score 0 for every criterion authoritatively, without invoking the judge.
+    const targetParts = listPartRecordsBySession(this.db.connection, analysisTarget.target_session_id)
+    const targetRounds = listRoundRecordsBySession(
+      this.db.connection,
+      analysisTarget.target_session_id,
+    )
+    const targetAnswered = turnHasFinalAnswer(targetParts, targetRounds, analysisTarget.target_turn_id)
+    if (!targetAnswered) {
+      const verdict = clampVerdictToRubric(rubric, {
+        criteria: rubric.map((c) => ({
+          id: c.id,
+          points: 0,
+          note: `Backend-verified: in-scope turn ${analysisTarget.target_turn_id} produced no final answer; scored 0.`,
+        })),
+        comment: `In-scope turn ${analysisTarget.target_turn_id} produced no final answer (backend-verified).`,
+      })
+      const awarded = verdict.criteria.reduce((sum, c) => sum + c.points, 0)
+      const max = rubric.reduce((sum, c) => sum + c.points, 0)
+      insertJsonArtifact(this.db.connection, {
+        id: uuid(), sessionId: analysisSessionId, stepId: this.stepId,
+        content: verdict,
+        metadata: { schema_key: SCHEMA_KEY.VERDICT, awarded_points: awarded, max_points: max },
+        createdAt: ts,
+      })
+      return { status: 'complete', outputArtifacts: [] }
+    }
+
     const question = buildRubricJudgePrompt({ analysisTarget, rubric })
     const turnResult = await runAnalysisTurn(this.db, this.lm, this.mcp, analysisSessionId, question, ctx.emitSink, this.stepId)
+
+    // The target DID answer, so a verdict is only trustworthy if the judge
+    // actually inspected it (the trace is pull-only — nothing is injected). A
+    // verdict produced without a single mcpscope_inspect call was fabricated;
+    // surface it as a retryable error rather than recording bogus scores.
+    const judgeParts = listPartRecordsBySession(this.db.connection, analysisSessionId)
+    const judgeRounds = listRoundRecordsBySession(this.db.connection, analysisSessionId)
+    if (!turnCalledInspect(judgeParts, judgeRounds, turnResult.turnId)) {
+      insertJsonArtifact(this.db.connection, {
+        id: uuid(), sessionId: analysisSessionId, stepId: this.stepId,
+        content: { step_type: 'benchmark_evaluation', error_kind: 'no_inspection', message: `Judge produced a verdict without inspecting the target session (${analysisTarget.target_session_id} did produce a final answer). The verdict is not grounded in the trace — retry the evaluation.` },
+        metadata: { schema_key: CORE_KEY.DIAGNOSTIC }, createdAt: ts,
+      })
+      return { status: 'error', outputArtifacts: [] }
+    }
 
     // No final answer at all → the judge never emitted a verdict. The usual
     // cause is exhausting the tool-call budget without answering (often because

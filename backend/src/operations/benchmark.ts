@@ -814,7 +814,12 @@ async function runOneRepetition(
         title: `${snapshot.name ?? snapshot.sourceCaseId} (rep ${rep})`,
         modelProfileSnapshot: resolved.modelProfileSnapshot,
         mcpProfileSnapshots: resolved.mcpProfileSnapshots,
-        compactionStrategy: "strip-reasoning",
+        // Benchmark test sessions keep their full reasoning transcript: a run is
+        // a diagnostic artifact, so compaction would only discard evidence we
+        // want when inspecting why a session scored the way it did. (Compaction
+        // exists to keep long interactive sessions within context; benchmark
+        // sessions are short and single-turn, so there is no benefit here.)
+        compactionStrategy: "none",
         // Every test session in the run shares the run's snapshotted budget.
         maxToolRounds: run?.maxToolRounds,
         sessionType: "primary",

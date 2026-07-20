@@ -4361,6 +4361,49 @@ describe("analysis launch", () => {
       createdAt: ts,
       completedAt: ts,
     });
+    // A completed turn carries its answer as a final-round assistant-content
+    // part — the evaluation reads this to confirm the target actually answered
+    // before it trusts a judge verdict, so the fixture must include it.
+    const roundId = `${turnId}-R1`;
+    insertRoundRecord(appInst.backendDb.connection, {
+      id: roundId,
+      turnId,
+      roundIndex: 1,
+      status: "complete",
+      finishReason: "stop",
+      usage: {
+        promptTokens: null,
+        completionTokens: null,
+        reasoningTokens: null,
+        totalTokens: null,
+      },
+      requestPayloadJson: null,
+      responseTraceJson: null,
+      startedAt: ts,
+      completedAt: ts,
+    });
+    insertPartRecord(appInst.backendDb.connection, {
+      id: `${turnId}-P1`,
+      sessionId,
+      turnId,
+      roundId,
+      parentPartId: null,
+      ordinal: 1,
+      partType: "assistant-content",
+      roleLabel: "assistant",
+      payload: {
+        text: "The temperature is 21°C.",
+        json: null,
+        mimeType: "text/plain",
+        summary: null,
+      },
+      display: { state: "transcript", collapsedByDefault: false },
+      context: { state: "included", note: null, strippedByCompactionAtTurnId: null },
+      tokens: { count: null, source: "unknown", confidence: "unknown", note: null },
+      provenanceJson: null,
+      createdAt: ts,
+      updatedAt: ts,
+    });
     return turnId;
   }
 
@@ -5435,8 +5478,41 @@ describe("analysis launch", () => {
     app = (await buildBackendApp(config, {
       chatCompletionGateway: {
         ...base,
-        async createChatCompletion() {
-          // Judge over-awards criterion 1 (max 2) to exercise end-to-end clamping.
+        async createChatCompletion(_baseUrl, _apiKey, body) {
+          const messages = (body.messages as Array<{ role: string }>) ?? [];
+          const inspected = messages.some((m) => m.role === "tool");
+          // The judge must inspect the target before it can score it (the trace
+          // is pull-only). First round: call mcpscope_inspect. Second round:
+          // return the verdict (over-awarding criterion 1 to exercise clamping).
+          if (!inspected) {
+            return {
+              id: "cmpl-inspect",
+              object: "chat.completion",
+              created: Date.now(),
+              model: "test-model",
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: "assistant",
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: "call-inspect-1",
+                        type: "function",
+                        function: {
+                          name: "mcpscope_inspect",
+                          arguments: JSON.stringify({ id: targetId }),
+                        },
+                      },
+                    ],
+                  },
+                  finish_reason: "tool_calls",
+                },
+              ],
+              usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            };
+          }
           return {
             id: "cmpl-verdict",
             object: "chat.completion",

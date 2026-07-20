@@ -85,6 +85,85 @@ function mockStreamingFetch(chunks: string[], failAt: number) {
   })
 }
 
+// Mocks fetch to return a body whose reader yields exactly the provided byte
+// chunks (no failure) — used to prove the parse is independent of how the
+// transport happens to frame the bytes.
+function mockChunkedFetch(byteChunks: Uint8Array[]) {
+  return vi.fn(async () => {
+    let index = 0
+    return {
+      ok: true,
+      body: {
+        getReader: () => ({
+          async read() {
+            if (index >= byteChunks.length) return { done: true, value: undefined }
+            const value = byteChunks[index]
+            index += 1
+            return { done: false, value }
+          },
+          async cancel() {
+            /* no-op */
+          },
+        }),
+      },
+      async text() {
+        return ''
+      },
+    } as unknown as Response
+  })
+}
+
+function splitBytes(text: string, size: number): Uint8Array[] {
+  const bytes = new TextEncoder().encode(text)
+  const out: Uint8Array[] = []
+  for (let i = 0; i < bytes.length; i += size) out.push(bytes.slice(i, i + size))
+  return out
+}
+
+describe('streamChatCompletion — recording is independent of transport chunking', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  // The recorded result is a pure re-parse of the fully-accumulated body, so a
+  // response delivered as one burst, byte-by-byte, or split mid-line/mid-JSON
+  // must record identically. This is the invariant behind "we cannot stream an
+  // answer to the frontend and then lose it at record time".
+  const body =
+    ': OPENROUTER PROCESSING\n\n' +
+    sse(
+      '{"id":"c1","model":"m","created":1,"choices":[{"index":0,"delta":{"role":"assistant","content":"The answer "}}]}',
+      '{"choices":[{"index":0,"delta":{"content":"is 42."},"finish_reason":"stop"}]}',
+      '{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}',
+    )
+
+  const framings: Array<{ label: string; chunks: Uint8Array[] }> = [
+    { label: 'single burst (whole body at once)', chunks: [new TextEncoder().encode(body)] },
+    { label: 'byte-by-byte', chunks: splitBytes(body, 1) },
+    { label: 'odd 7-byte frames (splits mid-line and mid-JSON)', chunks: splitBytes(body, 7) },
+  ]
+
+  for (const { label, chunks } of framings) {
+    it(`records the full answer when delivered as ${label}`, async () => {
+      vi.stubGlobal('fetch', mockChunkedFetch(chunks))
+      const emitted: string[] = []
+      const result = await streamChatCompletion(
+        'https://example.com/v1',
+        undefined,
+        { model: 'm' },
+        { onDelta: (d) => d.kind === 'content' && emitted.push(d.textDelta) },
+      )
+      // Recorded result: identical regardless of framing.
+      expect(result.completion.choices[0]?.message?.content).toBe('The answer is 42.')
+      expect(result.completion.choices[0]?.finish_reason).toBe('stop')
+      expect(result.completion.usage?.total_tokens).toBe(15)
+      expect(result.segments).toEqual([{ kind: 'content', text: 'The answer is 42.' }])
+      // Live emission: the frontend sees exactly the same content, in order.
+      expect(emitted.join('')).toBe('The answer is 42.')
+    })
+  }
+})
+
 describe('streamChatCompletion — mid-stream failure recovery', () => {
   afterEach(() => {
     vi.unstubAllGlobals()

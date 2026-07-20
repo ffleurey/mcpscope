@@ -390,10 +390,54 @@ describe("benchmark run", () => {
       ],
       usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
     };
+    // A judge session (which is given the mcpscope_inspect tool) must actually
+    // inspect the target before it can score it — the evaluation now rejects a
+    // verdict produced with zero inspect calls. First judge round: call inspect.
+    // Later round (a tool result is in the messages): return the verdict. The
+    // run-task sessions have no tools, so they fall straight through to the
+    // verdict content (their answer — harmless for this test).
+    const inspectCompletion = {
+      id: "cmpl-judge-inspect",
+      object: "chat.completion",
+      model: "model-key",
+      created: 1,
+      choices: [
+        {
+          index: 0,
+          finish_reason: "tool_calls" as const,
+          message: {
+            role: "assistant" as const,
+            content: null,
+            tool_calls: [
+              {
+                id: "call-inspect-1",
+                type: "function" as const,
+                function: { name: "mcpscope_inspect", arguments: '{"id":"target"}' },
+              },
+            ],
+          },
+        },
+      ],
+      usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+    };
     const gateways: Parameters<typeof buildBackendApp>[1] = {
       chatCompletionGateway: {
         ...base.chatCompletionGateway,
-        async streamChatCompletion() {
+        async streamChatCompletion(_baseUrl, _apiKey, body) {
+          const messages = (body.messages as Array<{ role: string }>) ?? [];
+          const tools = (body.tools as Array<{ function?: { name?: string } }>) ?? [];
+          const canInspect = tools.some((t) => t.function?.name === "mcpscope_inspect");
+          const alreadyInspected = messages.some((m) => m.role === "tool");
+          if (canInspect && !alreadyInspected) {
+            return {
+              completion: inspectCompletion,
+              segments: [{ kind: "tool-call" as const, toolCallIndex: 0 }],
+              rawResponseBody:
+                'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-inspect-1","type":"function","function":{"name":"mcpscope_inspect","arguments":"{\\"id\\":\\"target\\"}"}}]},"finish_reason":"tool_calls"}]}\n\n' +
+                "data: [DONE]\n",
+              chunks: [],
+            };
+          }
           return {
             completion,
             segments: [{ kind: "content" as const, text: verdict }],
