@@ -3,7 +3,7 @@ import type { CreateResult } from "../types.js";
 
 export interface CreateOptions {
   url: string;
-  title: string;
+  title?: string | undefined;
   id?: string | undefined;
   compaction?: "none" | "strip-reasoning" | undefined;
   modelConfigId?: string | undefined;
@@ -19,7 +19,7 @@ function formatDate(epochMs: number): string {
 
 export async function runCreate(opts: CreateOptions): Promise<void> {
   const result = await cliCreate(opts.url, {
-    title: opts.title,
+    ...(opts.title !== undefined ? { title: opts.title } : {}),
     ...(opts.id !== undefined ? { id: opts.id } : {}),
     ...(opts.compaction !== undefined ? { compaction: opts.compaction } : {}),
     ...(opts.modelConfigId !== undefined
@@ -135,9 +135,8 @@ export function parseCreateArgs(
     }
   }
 
-  if (!title) return { error: "Missing required argument: <title>" };
-
-  const opts: CreateOptions = { url: url ?? "", json, wait, title };
+  const opts: CreateOptions = { url: url ?? "", json, wait };
+  if (title !== undefined) opts.title = title;
   if (id !== undefined) opts.id = id;
   if (compaction !== undefined) opts.compaction = compaction;
   if (modelConfigId !== undefined) opts.modelConfigId = modelConfigId;

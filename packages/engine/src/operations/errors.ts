@@ -57,6 +57,7 @@ export function operationErrorToHttpStatus(code: string | undefined): number {
       return 404
     case 'invalid_session_id':
     case 'invalid_hierarchical_id':
+    case 'invalid_title':
     case 'benchmark_empty':
     case 'benchmark_invalid_input':
       return 400

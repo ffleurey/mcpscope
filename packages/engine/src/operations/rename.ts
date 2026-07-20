@@ -7,7 +7,8 @@ import type { OperationContext } from './context.js'
 
 export const renameInputSchema = z.object({
   session_id: z.string().describe('Session ID to rename'),
-  title: z.string().min(1).max(200).describe('New session title'),
+  // .max(200) matches the HTTP route's limit — the surfaces must agree.
+  title: z.string().trim().min(1).max(200).describe('New session title'),
 })
 
 export type RenameInput = z.infer<typeof renameInputSchema>
@@ -36,13 +37,21 @@ export const renameSessionOperation = {
       throw new OperationError('Session not found', 'session_not_found')
     }
 
-    session.title = input.title
+    // Callers may bypass the zod schema (the HTTP route parses its own body),
+    // so trim here too rather than trusting the schema's .trim().
+    const title = input.title.trim()
+    if (!title) {
+      throw new OperationError('Title must not be empty', 'invalid_title')
+    }
+
+    session.title = title
+    session.updatedAt = Date.now()
     updateSessionRecord(ctx.db.connection, session)
 
     return {
       api_version: 1,
       session_id: input.session_id,
-      title: input.title,
+      title,
     }
   },
 }

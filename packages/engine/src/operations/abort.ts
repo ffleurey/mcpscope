@@ -41,7 +41,7 @@ export const abortSessionOperation = {
     if (!ctx.scheduler) {
       throw new OperationError(
         'No execution scheduler is available. The abort operation requires a scheduler context.',
-        'internal',
+        'scheduler_unavailable',
       )
     }
 

@@ -13,7 +13,7 @@ export async function runRenameSession(opts: RenameSessionOptions): Promise<void
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else {
     process.stdout.write(
-      `Renamed session ${result.session.id} to "${result.session.title}"\n`,
+      `Renamed session ${result.session_id} to "${result.title}"\n`,
     );
   }
 }

@@ -33,6 +33,8 @@ import type {
   BenchmarkDeleteResult,
   BenchmarkDeleteRunResult,
   BenchmarkDeleteEvaluationResult,
+  RenameSessionResult,
+  AbortSessionResult,
   RubricCriterion,
 } from './types.js'
 
@@ -252,7 +254,7 @@ export async function cliList(
 /** POST /api/sessions/from-defaults → CreateResult */
 export async function cliCreate(baseUrl: string, input: CreateInput): Promise<CreateResult> {
   return post<CreateResult>(baseUrl, '/api/sessions/from-defaults', {
-    title: input.title,
+    ...(input.title !== undefined ? { title: input.title } : {}),
     ...(input.id !== undefined ? { sessionId: input.id } : {}),
     ...(input.compaction !== undefined ? { compactionStrategy: input.compaction } : {}),
     ...(input.model_config_id !== undefined ? { modelConfigId: input.model_config_id } : {}),
@@ -324,25 +326,23 @@ export async function cliDeleteSession(baseUrl: string, sessionId: string): Prom
   await del(baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}`)
 }
 
-/** PATCH /api/sessions/:sessionId → { session } */
+/** PATCH /api/sessions/:sessionId → RenameSessionResult */
 export async function cliRenameSession(
   baseUrl: string,
   sessionId: string,
   title: string,
-): Promise<{ session: { id: string; title: string } }> {
-  return patch<{ session: { id: string; title: string } }>(
-    baseUrl,
-    `/api/sessions/${encodeURIComponent(sessionId)}`,
-    { title },
-  )
+): Promise<RenameSessionResult> {
+  return patch<RenameSessionResult>(baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}`, {
+    title,
+  })
 }
 
-/** POST /api/sessions/:sessionId/abort → AbortResult */
+/** POST /api/sessions/:sessionId/abort → AbortSessionResult */
 export async function cliAbortSession(
   baseUrl: string,
   sessionId: string,
-): Promise<{ api_version: 1; session_id: string; outcome: string }> {
-  return post<{ api_version: 1; session_id: string; outcome: string }>(
+): Promise<AbortSessionResult> {
+  return post<AbortSessionResult>(
     baseUrl,
     `/api/sessions/${encodeURIComponent(sessionId)}/abort`,
     {},

@@ -1,6 +1,7 @@
 import type { ZodType } from 'zod'
 import {
   createSessionResponseSchema,
+  renameSessionResponseSchema,
   hierarchicalLookupResponseSchema,
   listLmConnectionsResponseSchema,
   listMcpProfilesResponseSchema,
@@ -240,7 +241,7 @@ export function patchSessionTitle(sessionId: string, title: string) {
   return request(`/api/sessions/${sessionId}`, {
     method: 'PATCH',
     body: { title },
-    schema: createSessionResponseSchema,
+    schema: renameSessionResponseSchema,
   })
 }
 

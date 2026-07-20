@@ -236,7 +236,7 @@ export function registerSessionRoutes(deps: RouteDeps): void {
   app.post('/api/sessions/from-defaults', async (request, reply) => {
     const body = z
       .object({
-        title: z.string().min(1).max(200),
+        title: z.string().max(200).optional(),
         sessionId: z.string().optional(),
         compactionStrategy: z.enum(['none', 'strip-reasoning']).optional(),
         modelConfigId: z.string().optional(),
@@ -247,7 +247,7 @@ export function registerSessionRoutes(deps: RouteDeps): void {
       .parse(request.body)
     try {
       const result = await createOperation.execute(opCtx, {
-        title: body.title,
+        ...(body.title !== undefined ? { title: body.title } : {}),
         ...(body.sessionId !== undefined ? { id: body.sessionId } : {}),
         ...(body.compactionStrategy !== undefined ? { compaction: body.compactionStrategy } : {}),
         ...(body.modelConfigId !== undefined ? { model_config_id: body.modelConfigId } : {}),
@@ -549,7 +549,7 @@ export function registerSessionRoutes(deps: RouteDeps): void {
 
   app.patch('/api/sessions/:sessionId', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
-    const { title } = z.object({ title: z.string().min(1).max(200) }).parse(request.body)
+    const { title } = z.object({ title: z.string().trim().min(1).max(200) }).parse(request.body)
     try {
       const result = await renameSessionOperation.execute(opCtx, {
         session_id: sessionId,

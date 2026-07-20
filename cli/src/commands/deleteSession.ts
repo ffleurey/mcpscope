@@ -10,7 +10,11 @@ export async function runDeleteSession(opts: DeleteSessionOptions): Promise<void
   await cliDeleteSession(opts.url, opts.sessionId);
   if (opts.json) {
     process.stdout.write(
-      JSON.stringify({ deleted: true, session_id: opts.sessionId }) + "\n",
+      JSON.stringify(
+        { api_version: 1, deleted: true, session_id: opts.sessionId },
+        null,
+        2,
+      ) + "\n",
     );
   } else {
     process.stdout.write(`Deleted session ${opts.sessionId}\n`);
