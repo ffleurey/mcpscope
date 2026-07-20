@@ -40,9 +40,9 @@ used to give judge/analysis models read-only access to traces (see below).
 
 ## Tool surface
 
-Twenty-four tools mirror the shipped CLI surface exactly — every operation in the backend catalog is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP parity). Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
+Twenty-seven tools mirror the shipped CLI surface exactly — every operation in the backend catalog is both a `mcpscope <id>` CLI command and a `mcpscope_<id>` MCP tool (CLI/MCP parity). Tool names are generated mechanically from the backend-owned operation catalog using the `mcpscope_` prefix.
 
-Seven session/config tools:
+Ten session/config tools:
 
 | MCP tool name               | CLI command                        | Description |
 |-----------------------------|------------------------------------|-------------|
@@ -53,6 +53,9 @@ Seven session/config tools:
 | `mcpscope_inspect`          | `mcpscope inspect`                 | Inspect any object by ID (sessions, parts, and benchmarks/cases/runs/evaluations) |
 | `mcpscope_list_model_configs` | `mcpscope list_model_configs`    | List all model configs |
 | `mcpscope_list_mcp_profiles`  | `mcpscope list_mcp_profiles`     | List all MCP server profiles |
+| `mcpscope_delete_session`   | `mcpscope delete_session`          | Delete a session and all its children (rejects while a job is active/queued) |
+| `mcpscope_rename_session`   | `mcpscope rename_session`          | Rename a session (update its title) |
+| `mcpscope_abort_session`    | `mcpscope abort_session`           | Abort the session's active turn or dequeue its pending job |
 
 Seventeen benchmark tools (the agent-facing benchmark surface — see [BENCHMARK.md](BENCHMARK.md)):
 
@@ -92,7 +95,7 @@ No inputs.
 
 | Field            | Type                              | Required | Description |
 |------------------|-----------------------------------|----------|-------------|
-| `title`          | string                            | ✓        | Session title |
+| `title`          | string                            |          | Session title. When omitted, defaults to `New session` and is auto-titled from the first prompt |
 | `id`             | string                            |          | Optional 4-char session ID |
 | `compaction`     | `"none"` \| `"strip-reasoning"`   |          | Compaction strategy |
 | `model_config_id`| string                            |          | Optional model config ID to use instead of the default |
@@ -113,6 +116,9 @@ No inputs.
 | Field        | Type   | Required | Description |
 |--------------|--------|----------|-------------|
 | `session_id` | string | ✓        | Session ID to check |
+
+When the session has a pending job that has not started executing yet, the result adds
+`queue_position` (1-based position in the scheduler queue).
 
 ### `mcpscope_inspect`
 
@@ -136,6 +142,33 @@ No inputs. Returns a list of all MCP server profiles. Each entry carries `id`, `
 - `disabled_reason` — `null` when selectable, or a string when the profile is currently
   unavailable (a key-gated companion whose API key is not configured; the string names the config
   key to set). A profile with a `disabled_reason` cannot be used to create a session.
+
+### `mcpscope_delete_session`
+
+| Field        | Type   | Required | Description |
+|--------------|--------|----------|-------------|
+| `session_id` | string | ✓        | Session ID to delete |
+
+Deletes the session and all its child sessions, turns, rounds, parts, and raw exchanges.
+Fails with `session_already_queued` while the session has an active or queued job — abort it
+first (`mcpscope_abort_session`).
+
+### `mcpscope_rename_session`
+
+| Field        | Type   | Required | Description |
+|--------------|--------|----------|-------------|
+| `session_id` | string | ✓        | Session ID to rename |
+| `title`      | string | ✓        | New session title (trimmed; 1-200 characters) |
+
+### `mcpscope_abort_session`
+
+| Field        | Type   | Required | Description |
+|--------------|--------|----------|-------------|
+| `session_id` | string | ✓        | Session ID to abort |
+
+Returns `outcome`: `aborted` (active turn signalled), `dequeued` (pending job removed before it
+started), or `not-running` (no job matched the session). Only touches the given session, unlike
+the scheduler-wide abort.
 
 ### `mcpscope_benchmark_create`
 
