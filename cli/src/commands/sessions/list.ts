@@ -3,6 +3,8 @@ import { cliList } from '../../httpClient.js'
 export interface SessionsListOptions {
   url: string
   json: boolean
+  limit?: number
+  offset?: number
 }
 
 function formatDate(epochMs: number): string {
@@ -14,7 +16,10 @@ function truncate(s: string, max: number): string {
 }
 
 export async function runSessionsList(opts: SessionsListOptions): Promise<void> {
-  const result = await cliList(opts.url)
+  const page: { limit?: number; offset?: number } = {}
+  if (opts.limit !== undefined) page.limit = opts.limit
+  if (opts.offset !== undefined) page.offset = opts.offset
+  const result = await cliList(opts.url, page)
   const sessions = result.sessions
 
   if (opts.json) {
@@ -38,12 +43,19 @@ export async function runSessionsList(opts: SessionsListOptions): Promise<void> 
     const id = truncate(session.id, 26)
     const title = truncate(session.title, 32)
     const status = truncate(session.status, 12)
-    const model = truncate(session.model_profile_snapshot.name, 28)
+    const model = truncate(session.model, 28)
     const updated = formatDate(session.updated_at)
     process.stdout.write(
       `${id.padEnd(26)}  ${title.padEnd(32)}  ${status.padEnd(12)}  ${model.padEnd(28)}  ${updated}\n`,
     )
   }
+
+  const shownTo = result.offset + sessions.length
+  process.stdout.write(
+    `\nShowing ${result.offset + 1}-${shownTo} of ${result.total} top-level sessions.` +
+      (result.has_more ? ` Use --offset ${shownTo} for more.` : '') +
+      '\n',
+  )
 }
 
 export function parseSessionsListArgs(
@@ -51,6 +63,8 @@ export function parseSessionsListArgs(
 ): { opts: SessionsListOptions } | { help: true } | { error: string } {
   let url: string | undefined
   let json = false
+  let limit: number | undefined
+  let offset: number | undefined
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i] ?? ''
@@ -60,10 +74,27 @@ export function parseSessionsListArgs(
       if (!url) return { error: '--url requires a value' }
     } else if (arg === '--json') {
       json = true
+    } else if (arg === '--limit') {
+      const raw = args[++i]
+      const value = Number(raw)
+      if (!raw || !Number.isInteger(value) || value < 1) {
+        return { error: '--limit requires a positive integer' }
+      }
+      limit = value
+    } else if (arg === '--offset') {
+      const raw = args[++i]
+      const value = Number(raw)
+      if (!raw || !Number.isInteger(value) || value < 0) {
+        return { error: '--offset requires a non-negative integer' }
+      }
+      offset = value
     } else {
       return { error: `Unknown option: ${arg}` }
     }
   }
 
-  return { opts: { url: url ?? '', json } }
+  const opts: SessionsListOptions = { url: url ?? '', json }
+  if (limit !== undefined) opts.limit = limit
+  if (offset !== undefined) opts.offset = offset
+  return { opts }
 }

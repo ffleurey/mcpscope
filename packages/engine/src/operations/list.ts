@@ -1,41 +1,43 @@
 import { z } from 'zod'
-import { listAllSessionSummaries } from '../persistence/repository.js'
+import { listTopLevelSessionSummaries } from '../persistence/repository.js'
 import type { OperationContext } from './context.js'
 import { computeLifecycleState } from './lifecycleState.js'
-import {
-  getLatestSessionErrorSummary,
-  getSessionWorkflowKind,
-} from './sessionPresentation.js'
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
-export const listInputSchema = z.object({})
+const DEFAULT_LIMIT = 50
+const MAX_LIMIT = 200
+
+export const listInputSchema = z.object({
+  limit: z.number().int().min(1).max(MAX_LIMIT).optional()
+    .describe(`Max sessions to return (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT}).`),
+  offset: z.number().int().min(0).optional()
+    .describe('Number of sessions to skip, for paging through results.'),
+})
 
 export type ListInput = z.infer<typeof listInputSchema>
 
-/** Canonical snake_case session summary — used by both CLI rendering and MCP results. */
+/**
+ * Canonical snake_case session summary — a compact top-level row. `list` only
+ * surfaces standalone primary sessions; benchmark-run and judge sessions are
+ * reached through their benchmark/run, so the row stays minimal by design.
+ */
 export interface SessionSummary {
   id: string
   title: string
   status: 'initializing' | 'ready' | 'running' | 'error'
-  init_status: string
-  session_type: string
-  parent_kind: string | null
-  parent_id: string | null
-  created_at: number
+  model: string
   updated_at: number
-  is_context_exhausted: boolean
-  loaded_context_length: number | null
-  compaction_strategy: string
-  workflow_kind?: string
-  latest_error?: { step_id: string | null; error_kind: string | null; message: string }
-  model_profile_snapshot: { name: string }
-  mcp_profile_snapshots: { name: string }[]
 }
 
 export interface ListResult {
   api_version: 1
   sessions: SessionSummary[]
+  /** Total top-level sessions available (before limit/offset), for paging. */
+  total: number
+  limit: number
+  offset: number
+  has_more: boolean
 }
 
 /** Zod output shape for MCP structured output. Mirrors ListResult. */
@@ -45,61 +47,41 @@ export const listOutputSchema = {
     id: z.string(),
     title: z.string(),
     status: z.enum(['initializing', 'ready', 'running', 'error']),
-    init_status: z.string(),
-    session_type: z.string(),
-    parent_kind: z.string().nullable(),
-    parent_id: z.string().nullable(),
-    created_at: z.number(),
+    model: z.string(),
     updated_at: z.number(),
-    is_context_exhausted: z.boolean(),
-    loaded_context_length: z.number().nullable(),
-    compaction_strategy: z.string(),
-    workflow_kind: z.string().optional(),
-    latest_error: z.object({
-      step_id: z.string().nullable(),
-      error_kind: z.string().nullable(),
-      message: z.string(),
-    }).optional(),
-    model_profile_snapshot: z.object({ name: z.string() }),
-    mcp_profile_snapshots: z.array(z.object({ name: z.string() })),
   })),
+  total: z.number(),
+  limit: z.number(),
+  offset: z.number(),
+  has_more: z.boolean(),
 }
 
 export const listOperation = {
   id: 'list' as const,
-  description: 'List all sessions with ID, title, status, model, and last-updated time.',
+  description:
+    'List top-level sessions (compact: id, title, status, model, last-updated), most recent first. ' +
+    'Only standalone primary sessions — benchmark-run and judge sessions are reached via their benchmark/run. ' +
+    'Paginated with limit/offset.',
   schema: listInputSchema,
   outputSchema: listOutputSchema,
-  async execute(ctx: OperationContext, _input: ListInput): Promise<ListResult> {
-    const rows = listAllSessionSummaries(ctx.db.connection)
+  async execute(ctx: OperationContext, input: ListInput): Promise<ListResult> {
+    const limit = input.limit ?? DEFAULT_LIMIT
+    const offset = input.offset ?? 0
+    const { rows, total } = listTopLevelSessionSummaries(ctx.db.connection, { limit, offset })
+
     return {
       api_version: 1,
-      sessions: rows.map(s => {
-        const workflowKind = getSessionWorkflowKind(ctx.db.connection, s)
-        const state = computeLifecycleState(ctx.db.connection, s)
-        const latestError = state === 'error'
-          ? getLatestSessionErrorSummary(ctx.db.connection, s) ?? undefined
-          : undefined
-
-        return {
-          id: s.id,
-          title: s.title,
-          status: state,
-          init_status: s.initStatus,
-          session_type: s.sessionType,
-          parent_kind: s.parentKind,
-          parent_id: s.parentId,
-          created_at: s.createdAt,
-          updated_at: s.updatedAt,
-          is_context_exhausted: s.isContextExhausted,
-          loaded_context_length: s.loadedContextLength,
-          compaction_strategy: s.compactionStrategy,
-          ...(workflowKind ? { workflow_kind: workflowKind } : {}),
-          ...(latestError ? { latest_error: latestError } : {}),
-          model_profile_snapshot: { name: s.modelProfileSnapshot.name },
-          mcp_profile_snapshots: s.mcpProfileSnapshots.map(snap => ({ name: snap.name })),
-        }
-      }),
+      sessions: rows.map(s => ({
+        id: s.id,
+        title: s.title,
+        status: computeLifecycleState(ctx.db.connection, s),
+        model: s.modelProfileSnapshot.name,
+        updated_at: s.updatedAt,
+      })),
+      total,
+      limit,
+      offset,
+      has_more: offset + rows.length < total,
     }
   },
 }

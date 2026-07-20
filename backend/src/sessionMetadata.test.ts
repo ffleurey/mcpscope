@@ -656,7 +656,7 @@ describe("session metadata API", () => {
     }
   });
 
-  it("GET /api/sessions includes analysis sessions and their failure metadata", async () => {
+  it("GET /api/sessions?include_children=true includes analysis sessions and their failure metadata", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
     app = (await buildBackendApp(config)).app;
@@ -732,7 +732,12 @@ describe("session metadata API", () => {
       createdAt: ts + 3,
     });
 
-    const listRes = await app.inject({ method: "GET", url: "/api/sessions" });
+    // The lean default list is top-level primaries only; analysis sessions and
+    // their failure metadata surface on the include_children payload.
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/api/sessions?include_children=true",
+    });
     expect(listRes.statusCode).toBe(200);
     const sessions = listRes.json().sessions as Array<{
       id: string;
@@ -779,7 +784,7 @@ describe("session metadata API", () => {
     });
   });
 
-  it("GET /api/sessions returns session_type in list payload", async () => {
+  it("GET /api/sessions?include_children=true returns session_type in list payload", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
     app = (await buildBackendApp(config)).app;
@@ -790,7 +795,10 @@ describe("session metadata API", () => {
       payload: { title: "Primary", modelProfileSnapshot: BASE_MODEL_SNAPSHOT },
     });
 
-    const listRes = await app.inject({ method: "GET", url: "/api/sessions" });
+    const listRes = await app.inject({
+      method: "GET",
+      url: "/api/sessions?include_children=true",
+    });
     expect(listRes.statusCode).toBe(200);
     const sessions = listRes.json().sessions as Array<{
       session_type: string;

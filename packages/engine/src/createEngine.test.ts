@@ -103,7 +103,14 @@ describe("createEngine", () => {
 
     // A fresh in-memory engine has no sessions.
     const sessions = await engine.listSessions();
-    expect(sessions).toEqual({ api_version: 1, sessions: [] });
+    expect(sessions).toEqual({
+      api_version: 1,
+      sessions: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      has_more: false,
+    });
 
     // Trace of an unknown session is null (not a throw).
     expect(engine.getTrace("NOPE")).toBeNull();

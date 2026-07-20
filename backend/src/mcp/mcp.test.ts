@@ -167,19 +167,14 @@ describe("backend result shape contracts — snake_case throughout", () => {
       "id",
       "title",
       "status",
-      "init_status",
-      "created_at",
+      "model",
       "updated_at",
-      "is_context_exhausted",
-      "loaded_context_length",
-      "compaction_strategy",
-      "model_profile_snapshot",
-      "mcp_profile_snapshots",
     ];
-    expect(sessionFields).toContain("init_status");
-    expect(sessionFields).toContain("model_profile_snapshot");
-    expect(sessionFields).not.toContain("initStatus");
-    expect(sessionFields).not.toContain("modelProfileSnapshot");
+    expect(sessionFields).toContain("model");
+    expect(sessionFields).toContain("updated_at");
+    // Compact by design: no snake_case internals, no camelCase leakage.
+    expect(sessionFields).not.toContain("updatedAt" as keyof Session);
+    expect(sessionFields).not.toContain("model_profile_snapshot" as keyof Session);
   });
 });
 

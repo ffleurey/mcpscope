@@ -297,6 +297,73 @@ describe("backend foundation", () => {
     ).toEqual([secondSessionId]);
   });
 
+  it("returns compact top-level session rows and paginates with limit/offset", async () => {
+    const config = makeTestConfig();
+    dataDir = config.dataDir;
+    app = (await buildBackendApp(config)).app;
+
+    const makeSnapshot = (id: string, ts: number) => ({
+      id,
+      name: "Model",
+      connectionBaseUrl: "https://example.com/v1",
+      apiKey: null,
+      modelKey: "model-key",
+      modelDisplayName: "Model Key",
+      systemPrompt: "Reply exactly.",
+      temperature: 0,
+      reasoning: "on",
+      createdAt: ts,
+      updatedAt: ts,
+    });
+
+    // Create two ready top-level sessions (older first).
+    const ids: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/sessions",
+        payload: {
+          title: `Session ${i}`,
+          modelProfileSnapshot: makeSnapshot(`model-${i}`, i + 1),
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const id = res.json().session.id as string;
+      ids.push(id);
+      const rec = getSessionRecord(app.backendDb.connection, id)!;
+      rec.initStatus = "ready";
+      rec.updatedAt = Date.now() + i; // stable newest-first order
+      updateSessionRecord(app.backendDb.connection, rec);
+    }
+    const [firstId, secondId] = ids;
+
+    // Compact row: exactly id, title, status, model, updated_at — no heavy internals.
+    const full = await app.inject({ method: "GET", url: "/api/sessions" });
+    expect(full.statusCode).toBe(200);
+    const body = full.json();
+    expect(body).toMatchObject({ total: 2, limit: 50, offset: 0, has_more: false });
+    expect(Object.keys(body.sessions[0]).sort()).toEqual([
+      "id",
+      "model",
+      "status",
+      "title",
+      "updated_at",
+    ]);
+    expect(body.sessions[0].model).toBe("Model");
+
+    // limit=1 returns the newest session and signals more.
+    const page1 = await app.inject({ method: "GET", url: "/api/sessions?limit=1" });
+    const p1 = page1.json();
+    expect(p1.sessions.map((s: { id: string }) => s.id)).toEqual([secondId]);
+    expect(p1).toMatchObject({ total: 2, limit: 1, offset: 0, has_more: true });
+
+    // offset=1 returns the next page and clears has_more.
+    const page2 = await app.inject({ method: "GET", url: "/api/sessions?limit=1&offset=1" });
+    const p2 = page2.json();
+    expect(p2.sessions.map((s: { id: string }) => s.id)).toEqual([firstId]);
+    expect(p2).toMatchObject({ total: 2, limit: 1, offset: 1, has_more: false });
+  });
+
   it("supports explicit session IDs and validates duplicates/format", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
@@ -5076,7 +5143,7 @@ describe("analysis launch", () => {
     );
   });
 
-  it("analysis child session appears in both default and include_children session lists", async () => {
+  it("analysis child session is excluded from the default list but present with include_children", async () => {
     const config = makeTestConfig();
     dataDir = config.dataDir;
     app = (await buildBackendApp(config, {
@@ -5099,7 +5166,8 @@ describe("analysis launch", () => {
     expect(launchRes.statusCode).toBe(201);
     const childId = launchRes.json().session.id as string;
 
-    // Default list now includes analysis children as well.
+    // Default list surfaces top-level primaries only — the analysis child is
+    // reached through its parent session, not the top-level list.
     const primaryList = await app!.inject({
       method: "GET",
       url: "/api/sessions",
@@ -5109,9 +5177,9 @@ describe("analysis launch", () => {
       .json()
       .sessions.map((s: { id: string }) => s.id);
     expect(primaryIds).toContain(targetId);
-    expect(primaryIds).toContain(childId);
+    expect(primaryIds).not.toContain(childId);
 
-    // include_children=true preserves the same inclusive behavior.
+    // include_children=true still exposes children for the frontend.
     const fullList = await app!.inject({
       method: "GET",
       url: "/api/sessions?include_children=true",

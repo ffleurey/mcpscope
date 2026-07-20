@@ -18,13 +18,16 @@ mcpscope …                                  # default: http://localhost:3066
 
 ## Commands
 
-### `mcpscope list [--json]`
+### `mcpscope list [--limit <n>] [--offset <n>] [--json]`
 
-Lists all sessions. Alias for `sessions list`.  
-Text output is a columnar table (ID, title, status, model, updated).  
-`--json` → `{ api_version: 1, sessions: [...] }`. Analysis- and benchmark-owned sessions carry
-additional fields (e.g. `session_type`, `parent_kind`, `parent_id`, `workflow_kind`,
-`latest_error`).
+Lists top-level sessions — standalone primary sessions only, most recently updated first.
+Benchmark-run and judge/analysis sessions are intentionally excluded; reach them through
+their benchmark/run (`benchmark_inspect`, `benchmark_run_report`) or parent session. Alias
+for `sessions list`.  
+Text output is a columnar table (ID, title, status, model, updated) followed by a
+`Showing X-Y of N` line. Paginated with `--limit` (default 50, max 200) and `--offset`.  
+`--json` → `{ api_version: 1, sessions: [{ id, title, status, model, updated_at }], total, limit, offset, has_more }`.
+Rows are deliberately compact; richer per-session detail comes from `inspect`.
 
 ### `mcpscope create <title> [--id <session-id>] [--compaction <strategy>] [--model-config <id>] [--mcp-profile <id>...] [--max-tool-rounds <n>] [--wait] [--json]`
 

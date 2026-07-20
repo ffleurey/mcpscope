@@ -10,19 +10,17 @@ export interface SessionSummary {
   id: string;
   title: string;
   status: string;
-  init_status: string;
-  created_at: number;
+  model: string;
   updated_at: number;
-  is_context_exhausted: boolean;
-  loaded_context_length: number | null;
-  compaction_strategy: string;
-  model_profile_snapshot: { name: string };
-  mcp_profile_snapshots: { name: string }[];
 }
 
 export interface ListResult {
   api_version: 1;
   sessions: SessionSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
 }
 
 export interface CreateInput {
