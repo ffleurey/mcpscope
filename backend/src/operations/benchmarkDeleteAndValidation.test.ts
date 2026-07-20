@@ -14,7 +14,47 @@ import type { FastifyInstance } from "fastify";
 import { buildBackendApp } from "../app.js";
 import { openBackendDatabase } from "mcpscope-engine/persistence/db.js";
 import { createBenchmarkRun } from "../persistence/benchmarkRepository.js";
-import type { BenchmarkRunRecord } from "mcpscope-engine/domain/model.js";
+import {
+  createSessionRecord,
+  getSessionRecord,
+} from "mcpscope-engine/persistence/repository.js";
+import type {
+  BenchmarkRunRecord,
+  SessionRecord,
+} from "mcpscope-engine/domain/model.js";
+
+function makeBenchmarkChildSession(id: string, runId: string): SessionRecord {
+  return {
+    id,
+    title: `run session ${id}`,
+    status: "ready",
+    initStatus: "ready",
+    sessionType: "primary",
+    parentKind: "benchmark",
+    parentId: runId,
+    createdAt: 1,
+    updatedAt: 1,
+    modelProfileSnapshot: {
+      id: "model-1",
+      name: "Model",
+      connectionBaseUrl: "https://example.com/v1",
+      apiKey: null,
+      modelKey: "model-key",
+      modelDisplayName: "Model Key",
+      systemPrompt: "Reply exactly.",
+      temperature: 0,
+      reasoning: "on",
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    mcpProfileSnapshots: [],
+    loadedContextLength: null,
+    systemPromptTokens: null,
+    toolDefinitionsTokens: null,
+    isContextExhausted: false,
+    compactionStrategy: "strip-reasoning",
+  };
+}
 
 function makeTestConfig() {
   const dataDir = `.tmp-test-data/${crypto.randomUUID()}`;
@@ -159,6 +199,60 @@ describe("catalog delete operations (benchmark / run / evaluation)", () => {
       url: `/api/operations/benchmarks/${benchmarkId}`,
     });
     expect(inspect.statusCode).toBe(404);
+  });
+
+  it("benchmark_delete cascades to its runs and their produced sessions", async () => {
+    const { app, config } = await makeApp();
+    const benchmarkId = await createBenchmarkViaHttp(app);
+
+    // A terminal run with one produced session record (as a real run would leave).
+    const db = openBackendDatabase(config.sqlitePath);
+    createSessionRecord(db.connection, makeBenchmarkChildSession("RSES", "R-DONE"));
+    const run = makeRunRecord("R-DONE", benchmarkId, "complete");
+    run.sessions = [
+      { sessionId: "RSES", sourceCaseId: `${benchmarkId}.1`, repetition: 1, status: "complete", error: null },
+    ];
+    createBenchmarkRun(db.connection, run);
+
+    const deleted = await app.inject({
+      method: "POST",
+      url: "/api/operations/benchmark-delete",
+      payload: { benchmark_id: benchmarkId },
+    });
+    expect(deleted.statusCode).toBe(200);
+
+    // The run and its session must be gone — no orphans left behind.
+    const status = await app.inject({
+      method: "GET",
+      url: "/api/operations/benchmark-runs/R-DONE/status",
+    });
+    expect(status.statusCode).toBe(404);
+    expect(getSessionRecord(db.connection, "RSES")).toBeNull();
+  });
+
+  it("benchmark_delete refuses (and rolls back) when a run is still active", async () => {
+    const { app, config } = await makeApp();
+    const benchmarkId = await createBenchmarkViaHttp(app);
+
+    const db = openBackendDatabase(config.sqlitePath);
+    createBenchmarkRun(db.connection, makeRunRecord("R-ACTV", benchmarkId, "running"));
+
+    const deleted = await app.inject({
+      method: "POST",
+      url: "/api/operations/benchmark-delete",
+      payload: { benchmark_id: benchmarkId },
+    });
+    expect(deleted.statusCode).toBe(409);
+    expect(
+      (deleted.json() as { error: { code?: string } }).error.code,
+    ).toBe("benchmark_run_active");
+
+    // Rolled back: the benchmark still exists (nothing half-deleted).
+    const inspect = await app.inject({
+      method: "GET",
+      url: `/api/operations/benchmarks/${benchmarkId}`,
+    });
+    expect(inspect.statusCode).toBe(200);
   });
 
   it("benchmark_delete_run refuses an active run (409) and deletes a terminal one", async () => {

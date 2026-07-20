@@ -85,16 +85,22 @@ The backing tables (`benchmarks`, `benchmark_cases`, `benchmark_runs`,
   that judged it. **Scores are not stored** — they are computed on read from the judge
   sessions' verdict artifacts (see [Evaluation](#evaluation-llm-rubric-judging)).
 
-A benchmark is an **editable blueprint**; a run is a **first-class, independent snapshot** of
-the cases + settings it ran (an *association*, not composition). At launch the run resolves
-and records the effective model/MCP and snapshots the selected cases, so **editing or deleting
-the benchmark or its cases never alters a past run or its report**. Model and MCP selection
+A benchmark is an **editable blueprint**; a run is a **first-class, self-contained snapshot** of
+the cases + settings it ran. At launch the run resolves and records the effective model/MCP and
+snapshots the selected cases, so **editing the benchmark or its cases never alters a past run or
+its report**. A run is still owned by its benchmark for *lifecycle*, though: it is only reachable
+through that benchmark, so **deleting the benchmark deletes its runs too** (see Lifecycles).
+Model and MCP selection
 are run-level (the point is to run the same cases against different model/MCP combinations);
 cases hold only the prompt + expectations.
 
 ### Lifecycles
 
-- Deleting a **benchmark** cascades to its **cases** but leaves its **runs** intact.
+- Deleting a **benchmark** cascades to its **cases** and its **runs** — each run taking its
+  produced sessions, judge sessions, and evaluations with it (via the run-delete path below).
+  A run is only reachable through its benchmark, so leaving it behind would orphan it and leak
+  its sessions into `list`. The delete is atomic: if any run is still active it is refused
+  (`benchmark_run_active`) and nothing is removed.
 - Deleting a **run** removes its produced sessions and its **evaluations** (the grouping
   records cascade; the judge analysis sessions are children of the run-sessions and go with
   them).
@@ -158,7 +164,7 @@ surface). These camelCase routes are not part of the MCP operation catalog.
 | `POST` | `/api/benchmarks` | `{ name, description? }` | `{ benchmark }` |
 | `GET` | `/api/benchmarks/:id` | — | `{ benchmark, cases[], runs[] }` |
 | `PATCH` | `/api/benchmarks/:id` | `{ name?, description? }` | `{ benchmark }` |
-| `DELETE` | `/api/benchmarks/:id` | — | `204` (cascades to cases; runs are kept) |
+| `DELETE` | `/api/benchmarks/:id` | — | `204` (cascades to cases and runs; refused `409` if a run is active) |
 | `POST` | `/api/benchmarks/:id/cases` | `{ prompt, name?, expectedToolsCalled?, expectedToolsNotCalled?, rubric? }` | `201 { case }` |
 | `POST` | `/api/benchmarks/:id/cases/from-session` | `{ sessionId, name? }` | `201 { case }` |
 | `PATCH` | `/api/benchmark-cases/:caseId` | `{ name?, prompt?, orderIndex?, expectedToolsCalled?, expectedToolsNotCalled?, rubric? }` | `{ case }` |

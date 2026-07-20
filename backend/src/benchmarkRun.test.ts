@@ -225,14 +225,26 @@ describe("benchmark run", () => {
     expect(extracted.name).toBe("Extracted");
     expect(extracted.expectedToolsCalled).toEqual([]); // model-only, no tools
 
-    // Snapshot independence: editing the case then deleting the whole benchmark
-    // must NOT alter the past run or its report.
+    // Snapshot independence: editing the source case must NOT alter the past
+    // run or its report — the run is a frozen snapshot.
     const originalCaseId = body.run.cases[0].sourceCaseId as string;
     await app.inject({
       method: "PATCH",
       url: `/api/benchmark-cases/${originalCaseId}`,
       payload: { prompt: "EDITED PROMPT" },
     });
+    const afterEdit = await app.inject({
+      method: "GET",
+      url: `/api/benchmark-runs/${runId}`,
+    });
+    expect(afterEdit.statusCode).toBe(200);
+    const afterEditBody = afterEdit.json();
+    expect(afterEditBody.run.cases[0].prompt).toBe("What is the weather?");
+    expect(afterEditBody.report.cases[0].prompt).toBe("What is the weather?");
+    expect(afterEditBody.report.sessionCount).toBe(2);
+
+    // Deleting the benchmark cascades: a run is only reachable through its
+    // benchmark, so it (and its sessions) must go with it — no orphans.
     const del = await app.inject({
       method: "DELETE",
       url: `/api/benchmarks/${benchmarkId}`,
@@ -243,11 +255,7 @@ describe("benchmark run", () => {
       method: "GET",
       url: `/api/benchmark-runs/${runId}`,
     });
-    expect(after.statusCode).toBe(200); // run survives benchmark deletion
-    const afterBody = after.json();
-    expect(afterBody.run.cases[0].prompt).toBe("What is the weather?");
-    expect(afterBody.report.cases[0].prompt).toBe("What is the weather?");
-    expect(afterBody.report.sessionCount).toBe(2);
+    expect(after.statusCode).toBe(404); // run cascaded away with its benchmark
   });
 
   it("runs via the snake_case catalog operations and reports progress", async () => {
