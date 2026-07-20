@@ -94,6 +94,13 @@ describe("engine barrel", () => {
     expect(handle.opCtx.scheduler).toBe(handle.scheduler);
 
     const result = await listOperation.execute(handle.opCtx, {});
-    expect(result).toEqual({ api_version: 1, sessions: [] });
+    expect(result).toEqual({
+      api_version: 1,
+      sessions: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      has_more: false,
+    });
   });
 });

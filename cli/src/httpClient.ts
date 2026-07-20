@@ -196,8 +196,15 @@ function parseRawResponse<T>(response: { status: number; text: string }): T {
 // ─── Operation call functions — pass-through to canonical HTTP result shapes ──
 
 /** GET /api/sessions → ListResult */
-export async function cliList(baseUrl: string): Promise<ListResult> {
-  return request<ListResult>(baseUrl, "/api/sessions");
+export async function cliList(
+  baseUrl: string,
+  options?: { limit?: number; offset?: number },
+): Promise<ListResult> {
+  const params = new URLSearchParams();
+  if (options?.limit !== undefined) params.set("limit", String(options.limit));
+  if (options?.offset !== undefined) params.set("offset", String(options.offset));
+  const query = params.toString();
+  return request<ListResult>(baseUrl, `/api/sessions${query ? `?${query}` : ""}`);
 }
 
 /** POST /api/sessions/from-defaults → CreateResult */

@@ -68,7 +68,7 @@ Usage: mcpscope <command> [options]
 
   mcpscope serve [--port <n>] [--host <host>] [--data-dir <path>] [--no-open]
 
-  mcpscope list [--json]
+  mcpscope list [--limit <n>] [--offset <n>] [--json]
   mcpscope create <title> [--id <session-id>] [--compaction strip-reasoning|none] [--model-config <id>] [--mcp-profile <id>...] [--max-tool-rounds <n>] [--wait] [--json]
   mcpscope send <session-id> <prompt> [--wait] [--json]
   mcpscope status <session-id> [--json]

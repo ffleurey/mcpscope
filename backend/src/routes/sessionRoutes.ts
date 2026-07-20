@@ -410,8 +410,12 @@ export function registerSessionRoutes(deps: RouteDeps): void {
   });
 
   app.get("/api/sessions", async (request) => {
-    const { include_children } = z
-      .object({ include_children: z.enum(["true", "false"]).optional() })
+    const { include_children, limit, offset } = z
+      .object({
+        include_children: z.enum(["true", "false"]).optional(),
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+        offset: z.coerce.number().int().min(0).optional(),
+      })
       .parse(request.query);
     if (include_children === "true") {
       const rows = listAllSessionSummaries(database.connection);
@@ -420,7 +424,7 @@ export function registerSessionRoutes(deps: RouteDeps): void {
         sessions: rows.map((s) => buildSessionSummaryPayload(deps, s)),
       };
     }
-    return listOperation.execute(opCtx, {});
+    return listOperation.execute(opCtx, { limit, offset });
   });
 
   // Operation-backed config listings (canonical snake_case shape, consumed by

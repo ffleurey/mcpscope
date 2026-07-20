@@ -46,7 +46,7 @@ Seven session/config tools:
 
 | MCP tool name               | CLI command                        | Description |
 |-----------------------------|------------------------------------|-------------|
-| `mcpscope_list`             | `mcpscope list`                    | List all sessions |
+| `mcpscope_list`             | `mcpscope list`                    | List top-level sessions (standalone primaries), compact and paginated |
 | `mcpscope_create`           | `mcpscope create`                  | Create a session from defaults or explicit model/MCP selection |
 | `mcpscope_send`             | `mcpscope send`                    | Start a user turn |
 | `mcpscope_status`           | `mcpscope status`                  | Get session lifecycle state |

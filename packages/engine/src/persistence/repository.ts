@@ -18,6 +18,7 @@ export {
   listSessionSummaries,
   listChildSessionSummaries,
   listAllSessionSummaries,
+  listTopLevelSessionSummaries,
   findActiveSession,
   recoverInterruptedState,
   registerRecoveryStep,

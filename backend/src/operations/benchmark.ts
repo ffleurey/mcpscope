@@ -198,9 +198,21 @@ export function updateBenchmarkEntry(
 
 export function deleteBenchmarkEntry(db: BackendDatabase, id: string): void {
   requireBenchmark(db, id);
-  // A benchmark is an editable blueprint; its runs are independent snapshots and
-  // are intentionally NOT deleted with it (no cascade). Cases cascade via FK.
-  deleteBenchmark(db.connection, id);
+  // Cascade: a run is only reachable through its benchmark, so deleting the
+  // benchmark must take its runs — and each run's produced sessions, judge
+  // sessions, and evaluations — with it. Otherwise runs become orphans pointing
+  // at a benchmark that no longer exists, and their sessions leak into `list`.
+  // (Cases cascade via FK; runs do not, hence the explicit sweep.) Atomic: if
+  // any run is active, deleteBenchmarkRunEntry throws and the whole delete rolls
+  // back rather than leaving the benchmark half-stripped of its runs. The runs
+  // are deleted sequentially inside the transaction; a benchmark holds a handful
+  // of runs in practice, so the held-transaction cost is negligible.
+  runInTransaction(db.connection, () => {
+    for (const run of listBenchmarkRuns(db.connection, id)) {
+      deleteBenchmarkRunEntry(db, run.id);
+    }
+    deleteBenchmark(db.connection, id);
+  });
 }
 
 export function deleteBenchmarkRunEntry(db: BackendDatabase, runId: string): void {

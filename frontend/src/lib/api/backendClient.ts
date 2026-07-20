@@ -5,7 +5,7 @@ import {
   listLmConnectionsResponseSchema,
   listMcpProfilesResponseSchema,
   listModelConfigsResponseSchema,
-  listSessionsResponseSchema,
+  listSessionsWithChildrenResponseSchema,
   sessionTraceBundleSchema,
   sessionCreationDefaultsResponseSchema,
   upsertLmConnectionResponseSchema,
@@ -129,10 +129,12 @@ export function fetchHealth() {
   return request('/api/health', { schema: healthResponseSchema })
 }
 
-export function listSessions(options?: { includeChildren?: boolean }) {
-  const url = options?.includeChildren ? '/api/sessions?include_children=true' : '/api/sessions'
-  return request(url, {
-    schema: listSessionsResponseSchema,
+// The frontend always needs the full tree (sidebar shows primary chats, benchmark
+// runs, and analysis children), so this always requests include_children. The lean
+// default GET /api/sessions shape is the MCP/CLI `list` contract and is never used here.
+export function listSessions() {
+  return request('/api/sessions?include_children=true', {
+    schema: listSessionsWithChildrenResponseSchema,
   })
 }
 

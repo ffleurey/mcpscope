@@ -473,6 +473,35 @@ export function listAllSessionSummaries(connection: BackendConnection): SessionS
   return rows.map(mapV2SessionSummaryRow)
 }
 
+/**
+ * Returns top-level primary sessions (standalone chats) with pagination, most
+ * recently updated first. Deliberately excludes benchmark-run child sessions
+ * (`parent_container_id` set) and analysis/judge sessions (non-primary type):
+ * those are reached through their benchmark/run or parent session, not the
+ * top-level list. `total` is the unpaginated count so callers can signal
+ * truncation.
+ */
+export function listTopLevelSessionSummaries(
+  connection: BackendConnection,
+  options: { limit: number; offset: number },
+): { rows: SessionSummary[]; total: number } {
+  // Hardcoded constant predicate (no user input) shared by the count and page
+  // queries so they can never drift out of sync.
+  const where = `session_type_key = 'primary' AND parent_container_id IS NULL`
+  const total = (connection.prepare(
+    `SELECT COUNT(*) AS n FROM sessions WHERE ${where}`,
+  ).get() as { n: number }).n
+  const rows = connection.prepare(`
+    SELECT *
+    FROM sessions
+    WHERE ${where}
+    ORDER BY updated_at DESC, created_at DESC
+    LIMIT @limit OFFSET @offset
+  `).all({ limit: options.limit, offset: options.offset }) as V2SessionRow[]
+
+  return { rows: rows.map(mapV2SessionSummaryRow), total }
+}
+
 export function findActiveSession(
   connection: BackendConnection,
   excludeSessionId?: string,
