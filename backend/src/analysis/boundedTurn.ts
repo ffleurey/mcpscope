@@ -9,7 +9,7 @@
  * that need responseText, turnId, and assistantReasoningPartIds.
  */
 
-import type { PartRecord } from 'mcpscope-engine/domain/model.js'
+import type { PartRecord, RoundRecord } from 'mcpscope-engine/domain/model.js'
 import { DEFAULT_MAX_TOOL_ROUNDS } from 'mcpscope-engine/domain/model.js'
 import { getSessionRecord } from 'mcpscope-engine/persistence/repository.js'
 import type { BackendDatabase } from 'mcpscope-engine/persistence/db.js'
@@ -49,6 +49,50 @@ export function selectFinalRoundContent(
     .join('')
     .trim()
   return { responseText, assistantContentPartIds: finalContentParts.map(p => p.id) }
+}
+
+/** Final round of a turn (highest round index), or null if the turn has none. */
+function finalRoundOf(rounds: RoundRecord[], turnId: string): RoundRecord | null {
+  const turnRounds = rounds.filter((r) => r.turnId === turnId)
+  if (turnRounds.length === 0) return null
+  return turnRounds.reduce((a, b) => (b.roundIndex > a.roundIndex ? b : a))
+}
+
+/**
+ * Whether a turn produced a non-empty final answer — the same "final round
+ * assistant-content" definition callers parse. Ground truth the backend can
+ * verify itself, so it never has to take a flaky judge's word for whether a
+ * session answered.
+ */
+export function turnHasFinalAnswer(
+  parts: PartRecord[],
+  rounds: RoundRecord[],
+  turnId: string,
+): boolean {
+  const finalRound = finalRoundOf(rounds, turnId)
+  if (!finalRound) return false
+  return selectFinalRoundContent(parts, finalRound.id).responseText.length > 0
+}
+
+/**
+ * Whether a turn issued at least one `mcpscope_inspect` tool call. The judge's
+ * trace is pull-only (not injected), so a verdict is only grounded if the judge
+ * actually inspected the target; a verdict produced with zero inspect calls was
+ * fabricated and must not be trusted.
+ */
+export function turnCalledInspect(
+  parts: PartRecord[],
+  rounds: RoundRecord[],
+  turnId: string,
+): boolean {
+  const turnRoundIds = new Set(rounds.filter((r) => r.turnId === turnId).map((r) => r.id))
+  return parts.some(
+    (p) =>
+      p.partType === 'tool-call' &&
+      p.roundId != null &&
+      turnRoundIds.has(p.roundId) &&
+      (p.payload.json as { name?: string } | null)?.name === 'mcpscope_inspect',
+  )
 }
 
 /**

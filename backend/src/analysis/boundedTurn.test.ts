@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import type { PartRecord } from 'mcpscope-engine/domain/model.js'
-import { selectFinalRoundContent } from './boundedTurn.js'
+import type { PartRecord, RoundRecord } from 'mcpscope-engine/domain/model.js'
+import {
+  selectFinalRoundContent,
+  turnCalledInspect,
+  turnHasFinalAnswer,
+} from './boundedTurn.js'
+
+function makeRound(id: string, turnId: string, roundIndex: number): RoundRecord {
+  return { id, turnId, roundIndex } as RoundRecord
+}
+
+function makeToolCallPart(overrides: Partial<PartRecord> & { toolName?: string }): PartRecord {
+  const part = makePart({ ...overrides, partType: 'tool-call' })
+  part.payload = { text: null, json: { name: overrides.toolName }, mimeType: null, summary: null }
+  return part
+}
 
 function makePart(overrides: Partial<PartRecord>): PartRecord {
   return {
@@ -60,5 +74,64 @@ describe('selectFinalRoundContent', () => {
     const { responseText, assistantContentPartIds } = selectFinalRoundContent(parts, 'r2')
     expect(responseText).toBe('{}')
     expect(assistantContentPartIds).toEqual(['ans'])
+  })
+})
+
+describe('turnHasFinalAnswer', () => {
+  const rounds = [makeRound('r1', 't1', 0), makeRound('r2', 't1', 1)]
+
+  it('is true when the final round has non-empty assistant-content', () => {
+    const parts = [
+      makePart({ roundId: 'r1', partType: 'assistant-content', payload: { text: 'inspecting' } as PartRecord['payload'] }),
+      makePart({ roundId: 'r2', partType: 'assistant-content', payload: { text: 'The answer is 42.' } as PartRecord['payload'] }),
+    ]
+    expect(turnHasFinalAnswer(parts, rounds, 't1')).toBe(true)
+  })
+
+  it('is false when the final round produced only reasoning / a tool call (no content)', () => {
+    const parts = [
+      makePart({ roundId: 'r2', partType: 'assistant-reasoning', payload: { text: 'thought but never answered' } as PartRecord['payload'] }),
+    ]
+    expect(turnHasFinalAnswer(parts, rounds, 't1')).toBe(false)
+  })
+
+  it('is false when the turn has no rounds', () => {
+    expect(turnHasFinalAnswer([], [], 't1')).toBe(false)
+  })
+
+  it('ignores an answer in an earlier round when the final round is empty', () => {
+    const parts = [
+      makePart({ roundId: 'r1', partType: 'assistant-content', payload: { text: 'stray intermediate prose' } as PartRecord['payload'] }),
+    ]
+    expect(turnHasFinalAnswer(parts, rounds, 't1')).toBe(false)
+  })
+})
+
+describe('turnCalledInspect', () => {
+  const rounds = [makeRound('r1', 't1', 0), makeRound('r2', 't1', 1)]
+
+  it('is true when the turn issued at least one mcpscope_inspect call', () => {
+    const parts = [
+      makeToolCallPart({ roundId: 'r1', toolName: 'mcpscope_inspect' }),
+      makePart({ roundId: 'r2', partType: 'assistant-content', payload: { text: '{}' } as PartRecord['payload'] }),
+    ]
+    expect(turnCalledInspect(parts, rounds, 't1')).toBe(true)
+  })
+
+  it('is false when the judge answered with zero tool calls (the fabrication case)', () => {
+    const parts = [
+      makePart({ roundId: 'r1', partType: 'assistant-content', payload: { text: '{"criteria":[]}' } as PartRecord['payload'] }),
+    ]
+    expect(turnCalledInspect(parts, rounds, 't1')).toBe(false)
+  })
+
+  it('is false when the only tool call is a non-inspect tool (e.g. status)', () => {
+    const parts = [makeToolCallPart({ roundId: 'r1', toolName: 'mcpscope_status' })]
+    expect(turnCalledInspect(parts, rounds, 't1')).toBe(false)
+  })
+
+  it('ignores inspect calls from a different turn', () => {
+    const parts = [makeToolCallPart({ roundId: 'rX', toolName: 'mcpscope_inspect' })]
+    expect(turnCalledInspect(parts, rounds, 't1')).toBe(false)
   })
 })
