@@ -48,6 +48,32 @@ The docs above are references, not pre-read requirements. Keep context lean and 
 - Keep machine-readable result shapes in `snake_case`.
 - Treat [backend-data/](backend-data/) as local runtime and test-artifact state only.
 
+## Inspect a running mcpscope with mcpscope
+
+You are normally connected to a live mcpscope over **MCP** (the `mcpscope_*` tools; the CLI
+mirrors them). That inspection surface — `mcpscope_inspect`, `mcpscope_status`,
+`mcpscope_benchmark_run_report`, `mcpscope_benchmark_run_evaluations`, and the rest — is the
+canonical, product-supported way to read sessions, runs, and evaluations. **Default to it and
+lean on it hard** for any question about runtime state; dogfooding is also how we find its gaps.
+
+- **Use the MCP tools first.** They return the same canonical views the product is built around
+  (UI id-pill, CLI, and MCP all resolve through one `inspect`). If a tool's schema isn't loaded
+  yet, load it (ToolSearch) — that small step is not a reason to route around the product.
+- **If the user asks you to inspect and the MCP tools aren't available, say so** and ask to
+  connect them — don't silently fall back to a workaround.
+- **Only use another method (e.g. querying `backend-data/mcpscope.db` directly) when you can
+  state exactly why the MCP surface can't answer the question.** The SQLite file is an
+  implementation detail; the inspect surface is the contract.
+- **Not every fallback is a gap.** Working *on* the MCP server or CLI itself — fixing or
+  extending it — legitimately uses other tools; that's building the product, not going around
+  it. No product-change signal there.
+
+**When the inspect surface genuinely can't answer a question, that's a product finding — act on it:**
+1. Understand and **generalize** it: what capability is missing beyond this one case?
+2. If the fix is **small and trivial**, make it now as part of your change.
+3. Otherwise **open a GitHub issue** motivated by the concrete case and generalized to its broader
+   value, so the gap outlives your session.
+
 ## Engineering Standards
 
 - Avoid adding new libraries, new architecture, or accidental complexity unless the task explicitly requires it.
@@ -68,6 +94,12 @@ code comments.
 ## Validation
 
 Choose the smallest check that matches the change; **before opening a PR run the full gate (`npm run verify`)**. See [TESTING.md](docs/TESTING.md) for the canonical command list and exactly what the gate runs.
+
+**Branch, commit, and PR workflow** — always work on a branch off an up-to-date `main`, make small
+clean commits (pushing as you go), run `npm run verify` green, then open a single PR with a clear
+title and a compact list of every change. The canonical step-by-step is in
+[CONTRIBUTING.md → Branching, commits & pull requests](CONTRIBUTING.md#branching-commits--pull-requests);
+**read it before your first commit.**
 
 ## High-Value References
 
