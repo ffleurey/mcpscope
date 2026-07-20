@@ -7,7 +7,7 @@
  * lookup that the OAI-compat endpoints do not expose.
  */
 
-import { rootUrl } from "../openai/client.js";
+import { rootUrl } from '../openai/client.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Ollama-specific: full model details via native /api/show endpoint
@@ -24,15 +24,15 @@ export async function getOllamaModelDetails(
   modelKey: string,
 ): Promise<Record<string, unknown> | null> {
   try {
-    const apiUrl = `${rootUrl(baseUrl)}/api/show`;
+    const apiUrl = `${rootUrl(baseUrl)}/api/show`
     const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: modelKey }),
-    });
-    if (!response.ok) return null;
-    return (await response.json()) as Record<string, unknown>;
+    })
+    if (!response.ok) return null
+    return (await response.json()) as Record<string, unknown>
   } catch {
-    return null;
+    return null
   }
 }

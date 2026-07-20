@@ -1,51 +1,69 @@
-export { listOperation, listOutputSchema, listInputSchema } from "mcpscope-engine/operations/list.js";
-export type { ListInput, ListResult, SessionSummary } from "mcpscope-engine/operations/list.js";
+export {
+  listOperation,
+  listOutputSchema,
+  listInputSchema,
+} from 'mcpscope-engine/operations/list.js'
+export type { ListInput, ListResult, SessionSummary } from 'mcpscope-engine/operations/list.js'
 
 export {
   listModelConfigsOperation,
   listModelConfigsOutputSchema,
   listModelConfigsInputSchema,
-} from "mcpscope-engine/operations/listConfigs.js";
+} from 'mcpscope-engine/operations/listConfigs.js'
 export type {
   ListModelConfigsInput,
   ListModelConfigsResult,
   ModelConfigSummary,
-} from "mcpscope-engine/operations/listConfigs.js";
+} from 'mcpscope-engine/operations/listConfigs.js'
 
 export {
   listMcpProfilesOperation,
   listMcpProfilesOutputSchema,
   listMcpProfilesInputSchema,
-} from "mcpscope-engine/operations/listConfigs.js";
+} from 'mcpscope-engine/operations/listConfigs.js'
 export type {
   ListMcpProfilesInput,
   ListMcpProfilesResult,
   McpProfileSummary,
-} from "mcpscope-engine/operations/listConfigs.js";
+} from 'mcpscope-engine/operations/listConfigs.js'
 
 export {
   createOperation,
   createOutputSchema,
   createInputSchema,
-} from "mcpscope-engine/operations/create.js";
-export type { CreateInput, CreateResult } from "mcpscope-engine/operations/create.js";
+} from 'mcpscope-engine/operations/create.js'
+export type { CreateInput, CreateResult } from 'mcpscope-engine/operations/create.js'
 
-export { sendOperation, sendOutputSchema, sendInputSchema } from "mcpscope-engine/operations/send.js";
-export type { SendInput, SendResult } from "mcpscope-engine/operations/send.js";
+export {
+  sendOperation,
+  sendOutputSchema,
+  sendInputSchema,
+} from 'mcpscope-engine/operations/send.js'
+export type { SendInput, SendResult } from 'mcpscope-engine/operations/send.js'
 
 export {
   statusOperation,
   statusOutputSchema,
   statusInputSchema,
-} from "mcpscope-engine/operations/status.js";
-export type { StatusInput, StatusResult } from "mcpscope-engine/operations/status.js";
+} from 'mcpscope-engine/operations/status.js'
+export type { StatusInput, StatusResult } from 'mcpscope-engine/operations/status.js'
 
 export {
   inspectOperation,
   inspectOutputSchema,
   inspectInputSchema,
-} from "mcpscope-engine/operations/inspect.js";
-export type { InspectInput, InspectResult } from "mcpscope-engine/operations/inspect.js";
+  registerInspectIdResolver,
+} from 'mcpscope-engine/operations/inspect.js'
+export type { InspectInput, InspectResult } from 'mcpscope-engine/operations/inspect.js'
+
+export { deleteSessionOperation } from 'mcpscope-engine/operations/delete.js'
+export type { DeleteInput, DeleteResult } from 'mcpscope-engine/operations/delete.js'
+
+export { renameSessionOperation } from 'mcpscope-engine/operations/rename.js'
+export type { RenameInput, RenameResult } from 'mcpscope-engine/operations/rename.js'
+
+export { abortSessionOperation } from 'mcpscope-engine/operations/abort.js'
+export type { AbortInput, AbortResult } from 'mcpscope-engine/operations/abort.js'
 
 export {
   benchmarkCreateOperation,
@@ -99,20 +117,20 @@ export {
   benchmarkDeleteEvaluationOperation,
   benchmarkDeleteEvaluationInputSchema,
   benchmarkDeleteEvaluationOutputSchema,
-} from "./benchmarkOperations.js";
+} from './benchmarkOperations.js'
 
 export {
   engineOperationList,
   registerOperationExtension,
   getOperationList,
   getOperationCatalog,
-} from "mcpscope-engine/operations/catalog.js";
-export type { BackendOperation } from "mcpscope-engine/operations/catalog.js";
+} from 'mcpscope-engine/operations/catalog.js'
+export type { BackendOperation } from 'mcpscope-engine/operations/catalog.js'
 
-export type { OperationContext } from "mcpscope-engine/operations/context.js";
+export type { OperationContext } from 'mcpscope-engine/operations/context.js'
 
 export {
   OperationError,
   operationErrorResponse,
   operationErrorToHttpStatus,
-} from "mcpscope-engine/operations/errors.js";
+} from 'mcpscope-engine/operations/errors.js'

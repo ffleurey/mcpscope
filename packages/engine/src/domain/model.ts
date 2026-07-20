@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { providerTypeValues } from "./configuration.js";
+import { z } from 'zod'
+import { providerTypeValues } from './configuration.js'
 
 /**
  * Single schema/domain version recorded in schema_meta and reported on /api/system.
@@ -12,7 +12,7 @@ import { providerTypeValues } from "./configuration.js";
  * temperature, i.e. provider default); an older DB has it NOT NULL and must be
  * recreated fresh.
  */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 6
 
 /**
  * Default per-session tool-round budget: the cap on tool-call rounds in a single
@@ -23,122 +23,96 @@ export const SCHEMA_VERSION = 6;
  * source of truth for the limit. `BACKEND_MAX_TOOL_ROUNDS` overrides this default
  * deployment-wide for sessions that don't specify one.
  */
-export const DEFAULT_MAX_TOOL_ROUNDS = 20;
+export const DEFAULT_MAX_TOOL_ROUNDS = 20
 
-export const sessionTypeValues = ["primary", "session_analysis"] as const;
-export const parentKindValues = ["session", "benchmark"] as const;
+export const sessionTypeValues = ['primary', 'session_analysis'] as const
+export const parentKindValues = ['session', 'benchmark'] as const
 
-export const sessionStatusValues = [
-  "draft",
-  "ready",
-  "active",
-  "error",
-  "archived",
-] as const;
-export const sessionInitStatusValues = [
-  "pending",
-  "initializing",
-  "ready",
-  "error",
-] as const;
+export const sessionStatusValues = ['draft', 'ready', 'active', 'error', 'archived'] as const
+export const sessionInitStatusValues = ['pending', 'initializing', 'ready', 'error'] as const
 export const turnStatusValues = [
-  "draft",
-  "streaming",
-  "awaiting-tools",
-  "complete",
-  "error",
-  "aborted",
-] as const;
-export const roundStatusValues = [
-  "pending",
-  "streaming",
-  "complete",
-  "error",
-  "aborted",
-] as const;
+  'draft',
+  'streaming',
+  'awaiting-tools',
+  'complete',
+  'error',
+  'aborted',
+] as const
+export const roundStatusValues = ['pending', 'streaming', 'complete', 'error', 'aborted'] as const
 export const roundFinishReasonValues = [
-  "stop",
-  "tool_calls",
-  "length",
-  "error",
-  "cancelled",
-] as const;
-export const compactionStrategyValues = ["none", "strip-reasoning"] as const;
+  'stop',
+  'tool_calls',
+  'length',
+  'error',
+  'cancelled',
+] as const
+export const compactionStrategyValues = ['none', 'strip-reasoning'] as const
 export const benchmarkRunStatusValues = [
-  "pending",
-  "running",
+  'pending',
+  'running',
   // Paused between tasks by the user (resumable). Set when a pause is requested;
   // the coordinator finishes the current task, then holds before the next.
-  "paused",
+  'paused',
   // Stopped by the user (resumable). The in-flight task was cancelled; completed
   // tasks are kept. Resume re-launches the coordinator over the remaining work.
-  "stopped",
-  "complete",
-  "error",
-] as const;
+  'stopped',
+  'complete',
+  'error',
+] as const
 export const partTypeValues = [
-  "system-prompt",
-  "mcp-instructions",
-  "tool-definitions",
-  "user-message",
-  "assistant-reasoning",
-  "assistant-content",
-  "tool-call",
-  "tool-result",
-  "diagnostic-note",
-] as const;
-export const displayStateValues = [
-  "transcript",
-  "diagnostic",
-  "hidden",
-] as const;
+  'system-prompt',
+  'mcp-instructions',
+  'tool-definitions',
+  'user-message',
+  'assistant-reasoning',
+  'assistant-content',
+  'tool-call',
+  'tool-result',
+  'diagnostic-note',
+] as const
+export const displayStateValues = ['transcript', 'diagnostic', 'hidden'] as const
 export const contextStateValues = [
-  "included",
-  "excluded",
-  "stripped",
-  "historical-only",
-  "round-only",
-] as const;
+  'included',
+  'excluded',
+  'stripped',
+  'historical-only',
+  'round-only',
+] as const
 export const tokenSourceValues = [
-  "exact-api",
-  "delta-derived",
-  "corrected",
-  "estimated",
-  "manual",
-  "unknown",
-] as const;
-export const tokenConfidenceValues = [
-  "exact",
-  "corrected",
-  "estimated",
-  "unknown",
-] as const;
+  'exact-api',
+  'delta-derived',
+  'corrected',
+  'estimated',
+  'manual',
+  'unknown',
+] as const
+export const tokenConfidenceValues = ['exact', 'corrected', 'estimated', 'unknown'] as const
 export const exchangeKindValues = [
   // Provider-agnostic exchange kinds (current)
-  "llm-request",
-  "llm-response",
-  "llm-probe-request",
-  "llm-probe-response",
+  'llm-request',
+  'llm-response',
+  'llm-probe-request',
+  'llm-probe-response',
   // MCP exchanges
-  "mcp-request",
-  "mcp-response",
-] as const;
+  'mcp-request',
+  'mcp-response',
+] as const
 
-export const sessionTypeSchema = z.enum(sessionTypeValues);
-export const parentKindSchema = z.enum(parentKindValues);
+export const sessionTypeSchema = z.enum(sessionTypeValues)
+export const parentKindSchema = z.enum(parentKindValues)
 
-export const sessionStatusSchema = z.enum(sessionStatusValues);
-export const sessionInitStatusSchema = z.enum(sessionInitStatusValues);
-export const turnStatusSchema = z.enum(turnStatusValues);
-export const roundStatusSchema = z.enum(roundStatusValues);
-export const roundFinishReasonSchema = z.enum(roundFinishReasonValues);
-export const compactionStrategySchema = z.enum(compactionStrategyValues);
-export const partTypeSchema = z.enum(partTypeValues);
-export const displayStateSchema = z.enum(displayStateValues);
-export const contextStateSchema = z.enum(contextStateValues);
-export const tokenSourceSchema = z.enum(tokenSourceValues);
-export const tokenConfidenceSchema = z.enum(tokenConfidenceValues);
-export const exchangeKindSchema = z.enum(exchangeKindValues);
+export const sessionStatusSchema = z.enum(sessionStatusValues)
+export const sessionInitStatusSchema = z.enum(sessionInitStatusValues)
+export const turnStatusSchema = z.enum(turnStatusValues)
+export const roundStatusSchema = z.enum(roundStatusValues)
+export const roundFinishReasonSchema = z.enum(roundFinishReasonValues)
+export const compactionStrategySchema = z.enum(compactionStrategyValues)
+export const partTypeSchema = z.enum(partTypeValues)
+export const displayStateSchema = z.enum(displayStateValues)
+export const contextStateSchema = z.enum(contextStateValues)
+export const tokenSourceSchema = z.enum(tokenSourceValues)
+export const tokenConfidenceSchema = z.enum(tokenConfidenceValues)
+export const exchangeKindSchema = z.enum(exchangeKindValues)
 
 export const modelProfileSnapshotSchema = z.object({
   id: z.string(),
@@ -150,37 +124,37 @@ export const modelProfileSnapshotSchema = z.object({
   systemPrompt: z.string(),
   // null/undefined => use the provider default (omit `temperature` from the request).
   temperature: z.number().optional().nullable(),
-  reasoning: z.enum(["on", "off"]).nullable(),
+  reasoning: z.enum(['on', 'off']).nullable(),
   providerType: z.enum(providerTypeValues).nullable().optional(),
   contextSize: z.number().int().positive().optional().nullable(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
-});
+})
 
 export const mcpProfileSnapshotSchema = z.object({
   id: z.string(),
   name: z.string(),
   url: z.string().url(),
-  transport: z.literal("streamable-http"),
-  authType: z.enum(["none", "bearer", "basic"]).nullable(),
+  transport: z.literal('streamable-http'),
+  authType: z.enum(['none', 'bearer', 'basic']).nullable(),
   authValue: z.string().nullable(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
-});
+})
 
 export const tokenMetadataSchema = z.object({
   count: z.number().int().nonnegative().nullable(),
   source: tokenSourceSchema,
   confidence: tokenConfidenceSchema,
   note: z.string().nullable(),
-});
+})
 
 export const partPayloadSchema = z.object({
   text: z.string().nullable(),
   json: z.unknown().nullable(),
   mimeType: z.string().nullable(),
   summary: z.string().nullable(),
-});
+})
 
 export const partContextSchema = z.object({
   state: contextStateSchema,
@@ -191,26 +165,26 @@ export const partContextSchema = z.object({
   // trace bundle and the frontend readers, so it stays until a deliberate
   // trace-format version bump.
   strippedByCompactionAtTurnId: z.string().nullable(),
-});
+})
 
 export const partDisplaySchema = z.object({
   state: displayStateSchema,
   collapsedByDefault: z.boolean(),
-});
+})
 
 // Reason a session failed to initialize (MCP handshake / token probe), persisted
 // so the failure is diagnosable after the fact via list/status/inspect.
 export const sessionInitErrorSchema = z.object({
   errorKind: z.string(),
   message: z.string(),
-});
+})
 
 export const sessionRecordSchema = z.object({
   id: z.string(),
   title: z.string(),
   status: sessionStatusSchema,
   initStatus: sessionInitStatusSchema,
-  sessionType: sessionTypeSchema.default("primary"),
+  sessionType: sessionTypeSchema.default('primary'),
   parentKind: parentKindSchema.nullable().default(null),
   parentId: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
@@ -227,7 +201,7 @@ export const sessionRecordSchema = z.object({
   maxToolRounds: z.number().int().positive().optional(),
   initError: sessionInitErrorSchema.nullable().optional(),
   analysisState: z.record(z.string(), z.unknown()).optional(),
-});
+})
 
 // Slim summary returned by GET /api/sessions — only what the UI and CLI need for listing.
 // The full SessionRecord is available via GET /api/sessions/:sessionId/trace.
@@ -236,7 +210,7 @@ export const sessionSummarySchema = z.object({
   title: z.string(),
   status: sessionStatusSchema,
   initStatus: sessionInitStatusSchema,
-  sessionType: sessionTypeSchema.default("primary"),
+  sessionType: sessionTypeSchema.default('primary'),
   parentKind: parentKindSchema.nullable().default(null),
   parentId: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
@@ -247,14 +221,14 @@ export const sessionSummarySchema = z.object({
   initError: sessionInitErrorSchema.nullable().optional(),
   modelProfileSnapshot: z.object({ name: z.string() }),
   mcpProfileSnapshots: z.array(z.object({ name: z.string() })).default([]),
-});
+})
 
 export const usageSummarySchema = z.object({
   promptTokens: z.number().int().nonnegative().nullable(),
   completionTokens: z.number().int().nonnegative().nullable(),
   reasoningTokens: z.number().int().nonnegative().nullable(),
   totalTokens: z.number().int().nonnegative().nullable(),
-});
+})
 
 export const stepRecordSchema = z.object({
   id: z.string(),
@@ -267,7 +241,7 @@ export const stepRecordSchema = z.object({
   state: z.record(z.string(), z.unknown()),
   createdAt: z.number().int().nonnegative(),
   completedAt: z.number().int().nonnegative().nullable(),
-});
+})
 
 export const turnRecordSchema = z.object({
   id: z.string(),
@@ -283,7 +257,7 @@ export const turnRecordSchema = z.object({
   contextTokensAfterCompaction: z.number().int().nonnegative().nullable(),
   compactionApplied: compactionStrategySchema.nullable(),
   compactionTokensRemoved: z.number().int().nonnegative().nullable(),
-});
+})
 
 export const roundRecordSchema = z.object({
   id: z.string(),
@@ -296,7 +270,7 @@ export const roundRecordSchema = z.object({
   usage: usageSummarySchema,
   requestPayloadJson: z.unknown().nullable(),
   responseTraceJson: z.unknown().nullable(),
-});
+})
 
 export const partRecordSchema = z.object({
   id: z.string(),
@@ -314,7 +288,7 @@ export const partRecordSchema = z.object({
   provenanceJson: z.unknown().nullable(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
-});
+})
 
 export const rawExchangeRecordSchema = z.object({
   id: z.string(),
@@ -330,7 +304,7 @@ export const rawExchangeRecordSchema = z.object({
   responseHeadersJson: z.unknown().nullable(),
   responseBody: z.string().nullable(),
   createdAt: z.number().int().nonnegative(),
-});
+})
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Benchmark (static test suite), cases, and runs
@@ -341,7 +315,7 @@ export const rawExchangeRecordSchema = z.object({
 // and parentId = the run id.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const benchmarkRunStatusSchema = z.enum(benchmarkRunStatusValues);
+export const benchmarkRunStatusSchema = z.enum(benchmarkRunStatusValues)
 
 // One scored rubric criterion: a natural-language condition checked by the LLM
 // judge against the session trace, worth up to `points`. `id` is 1-based and
@@ -353,8 +327,8 @@ export const rubricCriterionSchema = z.object({
   id: z.number().int().positive(),
   description: z.string().min(1),
   points: z.number().int().nonnegative(),
-});
-export type RubricCriterion = z.infer<typeof rubricCriterionSchema>;
+})
+export type RubricCriterion = z.infer<typeof rubricCriterionSchema>
 
 export const benchmarkRecordSchema = z.object({
   id: z.string(),
@@ -362,7 +336,7 @@ export const benchmarkRecordSchema = z.object({
   description: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
-});
+})
 
 export const benchmarkCaseRecordSchema = z.object({
   id: z.string(),
@@ -380,7 +354,7 @@ export const benchmarkCaseRecordSchema = z.object({
   sourceSessionId: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
-});
+})
 
 // A run is an independent snapshot spawned from a (mutable) benchmark blueprint.
 // It captures the case content + settings it ran, so editing or deleting the
@@ -394,7 +368,7 @@ export const benchmarkRunCaseSnapshotSchema = z.object({
   // Snapshot of the case rubric at launch, so an after-the-fact evaluation
   // scores against the rubric as it was when the run executed.
   rubric: z.array(rubricCriterionSchema).default([]),
-});
+})
 
 // One run-session: which snapshotted case and repetition a session corresponds to.
 // status tracks in-flight progress: 'running' is recorded right after the session
@@ -404,13 +378,11 @@ export const benchmarkRunSessionSchema = z.object({
   sourceCaseId: z.string(),
   repetition: z.number().int().positive(),
   // 'cancelled' = interrupted by a user stop; kept for review, re-run only on retry.
-  status: z
-    .enum(["running", "complete", "error", "cancelled"])
-    .default("running"),
+  status: z.enum(['running', 'complete', 'error', 'cancelled']).default('running'),
   // Why the session failed (init unreachable, model error, non-complete turn).
   // Null while running, complete, or cancelled.
   error: z.string().nullable().default(null),
-});
+})
 
 export const benchmarkRunRecordSchema = z.object({
   id: z.string(),
@@ -434,7 +406,7 @@ export const benchmarkRunRecordSchema = z.object({
   updatedAt: z.number().int().nonnegative(),
   startedAt: z.number().int().nonnegative().nullable().default(null),
   completedAt: z.number().int().nonnegative().nullable().default(null),
-});
+})
 
 /**
  * Default judge sampling temperature. Deliberately small but non-zero: at exactly
@@ -442,7 +414,7 @@ export const benchmarkRunRecordSchema = z.object({
  * loop verbatim, so retry can never recover it. A little entropy lets retries
  * escape, and for rubric judging there is no real benefit to bitwise determinism.
  */
-export const DEFAULT_JUDGE_TEMPERATURE = 0.2;
+export const DEFAULT_JUDGE_TEMPERATURE = 0.2
 
 // An evaluation is a separate, repeatable judging pass over a completed run with
 // a chosen judge model. It is a thin grouping/index over the reused
@@ -453,10 +425,8 @@ export const benchmarkEvaluationSessionSchema = z.object({
   runSessionId: z.string(),
   analysisSessionId: z.string(),
   // 'cancelled' = interrupted by a user stop; kept for review, re-run only on retry.
-  status: z
-    .enum(["running", "complete", "error", "cancelled"])
-    .default("running"),
-});
+  status: z.enum(['running', 'complete', 'error', 'cancelled']).default('running'),
+})
 
 export const benchmarkEvaluationRecordSchema = z.object({
   id: z.string(),
@@ -469,52 +439,46 @@ export const benchmarkEvaluationRecordSchema = z.object({
   error: z.string().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
-});
+})
 
-export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>;
-export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>;
+export type ModelProfileSnapshot = z.infer<typeof modelProfileSnapshotSchema>
+export type McpProfileSnapshot = z.infer<typeof mcpProfileSnapshotSchema>
 
-export type TokenMetadata = z.infer<typeof tokenMetadataSchema>;
-export type CompactionStrategy = z.infer<typeof compactionStrategySchema>;
-export type SessionType = z.infer<typeof sessionTypeSchema>;
-export type ParentKind = z.infer<typeof parentKindSchema>;
-export type SessionRecord = z.infer<typeof sessionRecordSchema>;
-export type SessionSummary = z.infer<typeof sessionSummarySchema>;
-export type StepRecord = z.infer<typeof stepRecordSchema>;
-export type TurnRecord = z.infer<typeof turnRecordSchema>;
-export type RoundRecord = z.infer<typeof roundRecordSchema>;
-export type PartRecord = z.infer<typeof partRecordSchema>;
-export type RawExchangeRecord = z.infer<typeof rawExchangeRecordSchema>;
-export type BenchmarkRecord = z.infer<typeof benchmarkRecordSchema>;
-export type BenchmarkCaseRecord = z.infer<typeof benchmarkCaseRecordSchema>;
-export type BenchmarkRunCaseSnapshot = z.infer<
-  typeof benchmarkRunCaseSnapshotSchema
->;
-export type BenchmarkRunSession = z.infer<typeof benchmarkRunSessionSchema>;
-export type BenchmarkRunRecord = z.infer<typeof benchmarkRunRecordSchema>;
-export type BenchmarkEvaluationSession = z.infer<
-  typeof benchmarkEvaluationSessionSchema
->;
-export type BenchmarkEvaluationRecord = z.infer<
-  typeof benchmarkEvaluationRecordSchema
->;
+export type TokenMetadata = z.infer<typeof tokenMetadataSchema>
+export type CompactionStrategy = z.infer<typeof compactionStrategySchema>
+export type SessionType = z.infer<typeof sessionTypeSchema>
+export type ParentKind = z.infer<typeof parentKindSchema>
+export type SessionRecord = z.infer<typeof sessionRecordSchema>
+export type SessionSummary = z.infer<typeof sessionSummarySchema>
+export type StepRecord = z.infer<typeof stepRecordSchema>
+export type TurnRecord = z.infer<typeof turnRecordSchema>
+export type RoundRecord = z.infer<typeof roundRecordSchema>
+export type PartRecord = z.infer<typeof partRecordSchema>
+export type RawExchangeRecord = z.infer<typeof rawExchangeRecordSchema>
+export type BenchmarkRecord = z.infer<typeof benchmarkRecordSchema>
+export type BenchmarkCaseRecord = z.infer<typeof benchmarkCaseRecordSchema>
+export type BenchmarkRunCaseSnapshot = z.infer<typeof benchmarkRunCaseSnapshotSchema>
+export type BenchmarkRunSession = z.infer<typeof benchmarkRunSessionSchema>
+export type BenchmarkRunRecord = z.infer<typeof benchmarkRunRecordSchema>
+export type BenchmarkEvaluationSession = z.infer<typeof benchmarkEvaluationSessionSchema>
+export type BenchmarkEvaluationRecord = z.infer<typeof benchmarkEvaluationRecordSchema>
 
 export function getDomainModelSummary() {
   return {
     version: SCHEMA_VERSION,
     // Canonical execution-model entities in the landed implementation.
     entities: [
-      "session",
-      "step",
-      "turn",
-      "round",
-      "part",
-      "raw-exchange",
-      "artifact",
-      "benchmark",
-      "benchmark-case",
-      "benchmark-run",
-      "benchmark-evaluation",
+      'session',
+      'step',
+      'turn',
+      'round',
+      'part',
+      'raw-exchange',
+      'artifact',
+      'benchmark',
+      'benchmark-case',
+      'benchmark-run',
+      'benchmark-evaluation',
     ],
     enums: {
       sessionTypeValues,
@@ -533,5 +497,5 @@ export function getDomainModelSummary() {
       tokenConfidenceValues,
       exchangeKindValues,
     },
-  };
+  }
 }

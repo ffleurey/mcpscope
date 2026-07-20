@@ -153,30 +153,58 @@ export class ExecutionScheduler {
     if (this.lastTerminalJob?.jobId === jobId) {
       return Promise.resolve({ ...this.lastTerminalJob })
     }
-    const stillPresent = this.activeJob?.jobId === jobId
-      || this.pendingJobs.some(j => j.jobId === jobId)
+    const stillPresent =
+      this.activeJob?.jobId === jobId || this.pendingJobs.some((j) => j.jobId === jobId)
     if (!stillPresent) return Promise.resolve(null)
 
-    return new Promise<TerminalJob | null>(resolve => {
-      const unsub = this.subscribe(evt => {
+    return new Promise<TerminalJob | null>((resolve) => {
+      const unsub = this.subscribe((evt) => {
         if (
-          (evt.type === 'scheduler-job-completed' || evt.type === 'scheduler-job-failed')
-          && evt.job.jobId === jobId
+          (evt.type === 'scheduler-job-completed' || evt.type === 'scheduler-job-failed') &&
+          evt.job.jobId === jobId
         ) {
-          unsub(); resolve({ ...evt.job })
+          unsub()
+          resolve({ ...evt.job })
           return
         }
         if (evt.type === 'scheduler-job-removed' && evt.jobId === jobId) {
-          unsub(); resolve(null)
+          unsub()
+          resolve(null)
         }
       })
       // Re-check after subscribing to close the race window
-      if (this.lastTerminalJob?.jobId === jobId) { unsub(); resolve({ ...this.lastTerminalJob }); return }
-      if (
-        this.activeJob?.jobId !== jobId
-        && !this.pendingJobs.some(j => j.jobId === jobId)
-      ) { unsub(); resolve(null) }
+      if (this.lastTerminalJob?.jobId === jobId) {
+        unsub()
+        resolve({ ...this.lastTerminalJob })
+        return
+      }
+      if (this.activeJob?.jobId !== jobId && !this.pendingJobs.some((j) => j.jobId === jobId)) {
+        unsub()
+        resolve(null)
+      }
     })
+  }
+
+  /**
+   * Targeted abort: abort the active job if it belongs to `sessionId`,
+   * otherwise dequeue any pending job for that session.
+   * Returns 'aborted' if the active job was signalled, 'dequeued' if a pending
+   * job was removed, or 'not-running' if no job matched.
+   */
+  abortTargeted(sessionId: string): 'aborted' | 'dequeued' | 'not-running' {
+    if (this.activeJob?.target.sessionId === sessionId && this.activeAbort) {
+      this.activeAbort.abort()
+      return 'aborted'
+    }
+    const pendingIdx = this.pendingJobs.findIndex((j) => j.target.sessionId === sessionId)
+    if (pendingIdx !== -1) {
+      const [job] = this.pendingJobs.splice(pendingIdx, 1)
+      if (job) {
+        this.emit({ type: 'scheduler-job-removed', jobId: job.jobId, target: job.target })
+      }
+      return 'dequeued'
+    }
+    return 'not-running'
   }
 
   /**
@@ -185,7 +213,7 @@ export class ExecutionScheduler {
    * Returns true if the job was found and removed.
    */
   removeJob(jobId: string): boolean {
-    const idx = this.pendingJobs.findIndex(j => j.jobId === jobId)
+    const idx = this.pendingJobs.findIndex((j) => j.jobId === jobId)
     if (idx === -1) return false
     const [job] = this.pendingJobs.splice(idx, 1)
     if (!job) return false
@@ -206,7 +234,7 @@ export class ExecutionScheduler {
    * Returns the new job.
    */
   enqueueInit(opCtx: SchedulerContext, sessionId: string, owner?: ExecutionJobOwner): ExecutionJob {
-    assertInitJobAllowed(opCtx, sessionId, value => this.hasJobForSession(value))
+    assertInitJobAllowed(opCtx, sessionId, (value) => this.hasJobForSession(value))
 
     const job: ExecutionJob = {
       jobId: randomUUID(),
@@ -233,8 +261,15 @@ export class ExecutionScheduler {
    *
    * Returns the new job.
    */
-  enqueueSession(opCtx: SchedulerContext, sessionId: string, prompt?: string, owner?: ExecutionJobOwner): ExecutionJob {
-    const executionKind = getSessionExecutionKind(opCtx, sessionId, prompt, value => this.hasJobForSession(value))
+  enqueueSession(
+    opCtx: SchedulerContext,
+    sessionId: string,
+    prompt?: string,
+    owner?: ExecutionJobOwner,
+  ): ExecutionJob {
+    const executionKind = getSessionExecutionKind(opCtx, sessionId, prompt, (value) =>
+      this.hasJobForSession(value),
+    )
     return executionKind === 'primary'
       ? this.enqueuePrimarySession(opCtx, sessionId, prompt as string, owner)
       : this.enqueueAnalysisSession(opCtx, sessionId, owner)
@@ -264,7 +299,11 @@ export class ExecutionScheduler {
     return job
   }
 
-  private enqueueAnalysisSession(opCtx: SchedulerContext, sessionId: string, owner?: ExecutionJobOwner): ExecutionJob {
+  private enqueueAnalysisSession(
+    opCtx: SchedulerContext,
+    sessionId: string,
+    owner?: ExecutionJobOwner,
+  ): ExecutionJob {
     const job: ExecutionJob = {
       jobId: randomUUID(),
       target: { kind: 'session', sessionId },
@@ -299,7 +338,7 @@ export class ExecutionScheduler {
     while (this.pendingJobs.length > 0) {
       // Wait if paused (boundary-based: waits before starting next job)
       if (this.controlState === 'paused') {
-        await new Promise<void>(resolve => {
+        await new Promise<void>((resolve) => {
           this.resumeResolve = resolve
         })
       }
@@ -355,13 +394,13 @@ export class ExecutionScheduler {
    * Enqueue a step target.
    *
    * Admission: the session must be a ready analysis session, the analysis
-    * state phase must not be complete or error, and the session must not already
-    * have an active or pending job.
+   * state phase must not be complete or error, and the session must not already
+   * have an active or pending job.
    *
    * Returns the new job.
    */
   enqueueStep(opCtx: SchedulerContext, sessionId: string): ExecutionJob {
-    assertStepJobAllowed(opCtx, sessionId, value => this.hasJobForSession(value))
+    assertStepJobAllowed(opCtx, sessionId, (value) => this.hasJobForSession(value))
 
     const job: ExecutionJob = {
       jobId: randomUUID(),
@@ -410,7 +449,7 @@ export class ExecutionScheduler {
 
   private hasJobForSession(sessionId: string): boolean {
     if (this.activeJob?.target.sessionId === sessionId) return true
-    return this.pendingJobs.some(j => j.target.sessionId === sessionId)
+    return this.pendingJobs.some((j) => j.target.sessionId === sessionId)
   }
 
   private emit(event: SchedulerEvent): void {

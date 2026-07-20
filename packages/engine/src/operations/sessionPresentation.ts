@@ -36,7 +36,10 @@ export interface SessionPresenter {
     summary: { id: string; status: string; initStatus: string; sessionType: string },
   ): boolean
   /** Session-type-specific latest-error summary, richer than the init-failure fallback. */
-  getLatestErrorSummary(connection: BackendConnection, sessionId: string): SessionErrorSummary | null
+  getLatestErrorSummary(
+    connection: BackendConnection,
+    sessionId: string,
+  ): SessionErrorSummary | null
   /**
    * Step-scoped latest-error summary (e.g. the step's latest analysis
    * diagnostic), surfaced as the step's `latest_error` in inspect results.
@@ -67,7 +70,9 @@ export function getSessionWorkflowLabel(
   connection: BackendConnection,
   session: { id: string; sessionType: string },
 ): string | null {
-  return presenterRegistry.get(session.sessionType)?.getWorkflowLabel(connection, session.id) ?? null
+  return (
+    presenterRegistry.get(session.sessionType)?.getWorkflowLabel(connection, session.id) ?? null
+  )
 }
 
 /** Step-scoped latest-error summary for a session's step, via its registered presenter (null for plain sessions). */
@@ -77,7 +82,9 @@ export function getSessionStepErrorSummary(
   stepId: string,
 ): SessionErrorSummary | null {
   return (
-    presenterRegistry.get(session.sessionType)?.getStepErrorSummary(connection, session.id, stepId) ?? null
+    presenterRegistry
+      .get(session.sessionType)
+      ?.getStepErrorSummary(connection, session.id, stepId) ?? null
   )
 }
 
@@ -113,7 +120,11 @@ export function getLatestSessionErrorSummary(
     ?.getLatestErrorSummary(connection, session.id)
   if (presented) return presented
   if (session.initError) {
-    return { step_id: null, error_kind: session.initError.errorKind, message: session.initError.message }
+    return {
+      step_id: null,
+      error_kind: session.initError.errorKind,
+      message: session.initError.message,
+    }
   }
   return null
 }

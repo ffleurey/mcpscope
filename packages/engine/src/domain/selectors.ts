@@ -56,11 +56,11 @@ export function buildModelMessages(
 ): ModelMessage[] {
   const apiMessages = buildApiMessages(session, historicalParts, nextUserContent)
 
-  return apiMessages
-    .filter((message): message is ModelMessage => (
-      (message.role === 'system' || message.role === 'user' || message.role === 'assistant')
-      && typeof message.content === 'string'
-    ))
+  return apiMessages.filter(
+    (message): message is ModelMessage =>
+      (message.role === 'system' || message.role === 'user' || message.role === 'assistant') &&
+      typeof message.content === 'string',
+  )
 }
 
 export function buildApiMessages(
@@ -70,7 +70,9 @@ export function buildApiMessages(
 ): ApiMessage[] {
   const sortedParts = sortParts(historicalParts)
   const messages: ApiMessage[] = []
-  const hasSystemPromptPart = sortedParts.some(part => part.turnId === null && part.partType === 'system-prompt')
+  const hasSystemPromptPart = sortedParts.some(
+    (part) => part.turnId === null && part.partType === 'system-prompt',
+  )
   const toolCallsByRound = new Map<string, ApiToolCall[]>()
   const assistantContentByRound = new Map<string, string[]>()
   const emittedAssistantToolRounds = new Set<string>()
@@ -79,7 +81,11 @@ export function buildApiMessages(
     if (part.context.state !== 'included' || !part.roundId) continue
 
     if (part.partType === 'tool-call') {
-      const toolJson = part.payload.json as { id?: string; name?: string; arguments?: string } | null
+      const toolJson = part.payload.json as {
+        id?: string
+        name?: string
+        arguments?: string
+      } | null
       const toolCalls = toolCallsByRound.get(part.roundId) ?? []
       toolCalls.push({
         id: toolJson?.id ?? part.id,
@@ -104,7 +110,10 @@ export function buildApiMessages(
     if (!part) continue
     if (part.context.state !== 'included') continue
 
-    if ((part.partType === 'system-prompt' || part.partType === 'mcp-instructions') && part.payload.text) {
+    if (
+      (part.partType === 'system-prompt' || part.partType === 'mcp-instructions') &&
+      part.payload.text
+    ) {
       messages.push({
         role: 'system',
         content: part.payload.text,
@@ -192,12 +201,16 @@ export function buildLmToolDefinitions(parts: PartRecord[]): Array<{
   }
 }> {
   return sortParts(parts)
-    .filter(part => part.partType === 'tool-definitions')
-    .flatMap(part => {
+    .filter((part) => part.partType === 'tool-definitions')
+    .flatMap((part) => {
       const tools = Array.isArray(part.payload.json) ? part.payload.json : []
       return tools
-        .map(tool => {
-          const record = tool as { name?: string; description?: string; inputSchema?: Record<string, unknown> }
+        .map((tool) => {
+          const record = tool as {
+            name?: string
+            description?: string
+            inputSchema?: Record<string, unknown>
+          }
           if (!record.name) return null
           return {
             type: 'function' as const,
@@ -208,21 +221,25 @@ export function buildLmToolDefinitions(parts: PartRecord[]): Array<{
             },
           }
         })
-        .filter((value): value is {
-          type: 'function'
-          function: {
-            name: string
-            description: string
-            parameters: Record<string, unknown>
-          }
-        } => value !== null)
+        .filter(
+          (
+            value,
+          ): value is {
+            type: 'function'
+            function: {
+              name: string
+              description: string
+              parameters: Record<string, unknown>
+            }
+          } => value !== null,
+        )
     })
 }
 
 export function deriveTranscriptEntries(parts: PartRecord[]): TranscriptEntry[] {
   return sortParts(parts)
-    .filter(part => part.display.state === 'transcript')
-    .map(part => ({
+    .filter((part) => part.display.state === 'transcript')
+    .map((part) => ({
       id: part.id,
       turnId: part.turnId,
       roundId: part.roundId,
@@ -237,8 +254,8 @@ export function deriveTranscriptEntries(parts: PartRecord[]): TranscriptEntry[] 
 
 export function deriveContextEntries(parts: PartRecord[]): ContextEntry[] {
   return sortParts(parts)
-    .filter(part => part.context.state === 'included' || part.context.state === 'round-only')
-    .map(part => ({
+    .filter((part) => part.context.state === 'included' || part.context.state === 'round-only')
+    .map((part) => ({
       id: part.id,
       turnId: part.turnId,
       roundId: part.roundId,

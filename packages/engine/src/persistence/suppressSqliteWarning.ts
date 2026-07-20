@@ -11,26 +11,23 @@
 // Only the SQLite ExperimentalWarning is swallowed — every other warning (including
 // other ExperimentalWarnings) passes through untouched.
 
-type EmitWarning = typeof process.emitWarning;
+type EmitWarning = typeof process.emitWarning
 
-const original: EmitWarning = process.emitWarning.bind(process);
+const original: EmitWarning = process.emitWarning.bind(process)
 
-function isSqliteExperimentalWarning(
-  warning: string | Error,
-  typeOrOptions: unknown,
-): boolean {
-  const message = typeof warning === "string" ? warning : warning.message;
-  if (!/sqlite/i.test(message)) return false;
+function isSqliteExperimentalWarning(warning: string | Error, typeOrOptions: unknown): boolean {
+  const message = typeof warning === 'string' ? warning : warning.message
+  if (!/sqlite/i.test(message)) return false
   const type =
-    typeof typeOrOptions === "string"
+    typeof typeOrOptions === 'string'
       ? typeOrOptions
-      : typeof typeOrOptions === "object" && typeOrOptions !== null
+      : typeof typeOrOptions === 'object' && typeOrOptions !== null
         ? (typeOrOptions as { type?: string }).type
-        : undefined;
-  return type === "ExperimentalWarning";
+        : undefined
+  return type === 'ExperimentalWarning'
 }
 
 process.emitWarning = ((warning: string | Error, ...rest: unknown[]): void => {
-  if (isSqliteExperimentalWarning(warning, rest[0])) return;
-  (original as (...args: unknown[]) => void)(warning, ...rest);
-}) as EmitWarning;
+  if (isSqliteExperimentalWarning(warning, rest[0])) return
+  ;(original as (...args: unknown[]) => void)(warning, ...rest)
+}) as EmitWarning

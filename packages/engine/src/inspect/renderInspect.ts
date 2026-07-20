@@ -1,4 +1,4 @@
-import type { InspectResult } from "../operations/inspect.js";
+import type { InspectResult } from '../operations/inspect.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Backend-owned rendering of inspect payloads. This is a core domain feature:
@@ -9,370 +9,351 @@ import type { InspectResult } from "../operations/inspect.js";
 // (text ⊆ json by construction).
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type InspectFormat = "text" | "json";
+export type InspectFormat = 'text' | 'json'
 
-type AnyRecord = Record<string, unknown>;
-type Emit = (line: string) => void;
+type AnyRecord = Record<string, unknown>
+type Emit = (line: string) => void
 
-export function renderInspect(
-  result: InspectResult,
-  format: InspectFormat,
-): string {
-  if (format === "json") return JSON.stringify(result, null, 2);
-  return renderText(result);
+export function renderInspect(result: InspectResult, format: InspectFormat): string {
+  if (format === 'json') return JSON.stringify(result, null, 2)
+  return renderText(result)
 }
 
 function renderText(result: InspectResult): string {
-  const lines: string[] = [];
-  const out: Emit = (line) => lines.push(line);
-  const d = result.data as AnyRecord;
+  const lines: string[] = []
+  const out: Emit = (line) => lines.push(line)
+  const d = result.data as AnyRecord
 
   switch (result.type) {
-    case "session":
-      renderSessionText(d, out);
-      break;
-    case "turn":
-      renderTurnParts(d, out);
-      break;
-    case "step":
-      renderGenericStep(d, out);
-      break;
-    case "round":
-      renderRoundText(d, out);
-      break;
-    case "setup":
-      renderSetupText(d, out);
-      break;
-    case "part":
-      renderPart(d, "", out);
-      break;
-    case "benchmark":
-      renderBenchmarkText(d, out);
-      break;
-    case "benchmark_case":
-      renderBenchmarkCaseText(d, out);
-      break;
-    case "benchmark_run":
-      renderBenchmarkRunText(d, out);
-      break;
-    case "benchmark_evaluation":
-      renderBenchmarkEvaluationText(d, out);
-      break;
+    case 'session':
+      renderSessionText(d, out)
+      break
+    case 'turn':
+      renderTurnParts(d, out)
+      break
+    case 'step':
+      renderGenericStep(d, out)
+      break
+    case 'round':
+      renderRoundText(d, out)
+      break
+    case 'setup':
+      renderSetupText(d, out)
+      break
+    case 'part':
+      renderPart(d, '', out)
+      break
+    case 'benchmark':
+      renderBenchmarkText(d, out)
+      break
+    case 'benchmark_case':
+      renderBenchmarkCaseText(d, out)
+      break
+    case 'benchmark_run':
+      renderBenchmarkRunText(d, out)
+      break
+    case 'benchmark_evaluation':
+      renderBenchmarkEvaluationText(d, out)
+      break
     default:
       // Unknown type: fall back to structural JSON so callers still get a
       // complete, lossless payload rather than nothing.
-      return JSON.stringify(result, null, 2);
+      return JSON.stringify(result, null, 2)
   }
-  return lines.join("\n");
+  return lines.join('\n')
 }
 
 // ─── Benchmark family ─────────────────────────────────────────────────────────
 
 function arr(value: unknown): AnyRecord[] {
-  return Array.isArray(value) ? (value as AnyRecord[]) : [];
+  return Array.isArray(value) ? (value as AnyRecord[]) : []
 }
 
 function renderBenchmarkText(data: AnyRecord, out: Emit): void {
-  const b = (data["benchmark"] as AnyRecord) ?? {};
-  out(`${String(b["id"] ?? "")}  ${b["name"] ?? ""}`);
-  if (b["description"]) out(`  ${b["description"]}`);
+  const b = (data['benchmark'] as AnyRecord) ?? {}
+  out(`${String(b['id'] ?? '')}  ${b['name'] ?? ''}`)
+  if (b['description']) out(`  ${b['description']}`)
 
-  const cases = arr(data["cases"]);
+  const cases = arr(data['cases'])
   if (cases.length > 0) {
-    out("");
-    out(`cases (${cases.length})`);
+    out('')
+    out(`cases (${cases.length})`)
     for (const c of cases) {
-      const crit = c["rubric_criteria_count"];
-      const critStr = crit != null ? `  [${crit} criteria]` : "";
-      out(`  ${c["id"]}  ${c["name"] ?? ""}${critStr}`);
-      if (c["prompt"]) out(`    ${truncate(String(c["prompt"]), 100)}`);
+      const crit = c['rubric_criteria_count']
+      const critStr = crit != null ? `  [${crit} criteria]` : ''
+      out(`  ${c['id']}  ${c['name'] ?? ''}${critStr}`)
+      if (c['prompt']) out(`    ${truncate(String(c['prompt']), 100)}`)
     }
   }
 
-  const runs = arr(data["runs"]);
+  const runs = arr(data['runs'])
   if (runs.length > 0) {
-    out("");
-    out(`runs (${runs.length})`);
+    out('')
+    out(`runs (${runs.length})`)
     for (const r of runs) {
-      const total = r["total_sessions"];
-      const completed = r["completed_sessions"];
-      const failed = Number(r["failed_sessions"] ?? 0);
-      const sessionStr =
-        total != null ? `  ${completed}/${total} sessions` : "";
-      const failStr = failed > 0 ? ` (${failed} failed)` : "";
-      const evalIds = (r["evaluation_ids"] as string[] | undefined) ?? [];
-      const evalStr = evalIds.length > 0 ? `  evals: ${evalIds.join(", ")}` : "";
-      out(`  ${r["id"]}  ${r["status"]}${sessionStr}${failStr}${evalStr}`);
+      const total = r['total_sessions']
+      const completed = r['completed_sessions']
+      const failed = Number(r['failed_sessions'] ?? 0)
+      const sessionStr = total != null ? `  ${completed}/${total} sessions` : ''
+      const failStr = failed > 0 ? ` (${failed} failed)` : ''
+      const evalIds = (r['evaluation_ids'] as string[] | undefined) ?? []
+      const evalStr = evalIds.length > 0 ? `  evals: ${evalIds.join(', ')}` : ''
+      out(`  ${r['id']}  ${r['status']}${sessionStr}${failStr}${evalStr}`)
     }
   }
 }
 
 function renderBenchmarkCaseText(data: AnyRecord, out: Emit): void {
-  out(`${String(data["id"] ?? "")}  ${data["name"] ?? ""}`);
-  const calls = (data["expected_tools_called"] as string[] | undefined) ?? [];
-  const notCalls =
-    (data["expected_tools_not_called"] as string[] | undefined) ?? [];
-  if (calls.length > 0) out(`  expects called      ${calls.join(", ")}`);
-  if (notCalls.length > 0) out(`  expects not called  ${notCalls.join(", ")}`);
-  if (data["source_session_id"])
-    out(`  from session        ${data["source_session_id"]}`);
-  out("");
-  out("prompt");
-  renderTextBlock(String(data["prompt"] ?? ""), "  ", out);
+  out(`${String(data['id'] ?? '')}  ${data['name'] ?? ''}`)
+  const calls = (data['expected_tools_called'] as string[] | undefined) ?? []
+  const notCalls = (data['expected_tools_not_called'] as string[] | undefined) ?? []
+  if (calls.length > 0) out(`  expects called      ${calls.join(', ')}`)
+  if (notCalls.length > 0) out(`  expects not called  ${notCalls.join(', ')}`)
+  if (data['source_session_id']) out(`  from session        ${data['source_session_id']}`)
+  out('')
+  out('prompt')
+  renderTextBlock(String(data['prompt'] ?? ''), '  ', out)
 
-  const rubric = arr(data["rubric"]);
+  const rubric = arr(data['rubric'])
   if (rubric.length > 0) {
-    out("");
-    out("rubric");
+    out('')
+    out('rubric')
     for (const cr of rubric) {
-      out(`  [${cr["points"]} pts] (#${cr["id"]}) ${cr["description"] ?? ""}`);
+      out(`  [${cr['points']} pts] (#${cr['id']}) ${cr['description'] ?? ''}`)
     }
   }
 }
 
 function renderRunHeader(run: AnyRecord, out: Emit): void {
-  out(`${String(run["id"] ?? "")}  ${run["benchmark_name"] ?? ""}  ${run["status"] ?? ""}`);
-  const runModel = run["model_name"] ?? run["model_config_id"];
-  if (runModel) out(`  model       ${runModel}`);
-  const profiles = (run["mcp_profile_ids"] as string[] | undefined) ?? [];
-  if (profiles.length > 0) out(`  mcp         ${profiles.join(", ")}`);
-  if (run["repetitions"] != null)
-    out(`  reps        ${run["repetitions"]}  max tool rounds ${run["max_tool_rounds"] ?? "?"}`);
-  if (run["error"]) out(`  error       ${run["error"]}`);
+  out(`${String(run['id'] ?? '')}  ${run['benchmark_name'] ?? ''}  ${run['status'] ?? ''}`)
+  const runModel = run['model_name'] ?? run['model_config_id']
+  if (runModel) out(`  model       ${runModel}`)
+  const profiles = (run['mcp_profile_ids'] as string[] | undefined) ?? []
+  if (profiles.length > 0) out(`  mcp         ${profiles.join(', ')}`)
+  if (run['repetitions'] != null)
+    out(`  reps        ${run['repetitions']}  max tool rounds ${run['max_tool_rounds'] ?? '?'}`)
+  if (run['error']) out(`  error       ${run['error']}`)
 }
 
 function renderBenchmarkRunText(data: AnyRecord, out: Emit): void {
-  const run = (data["run"] as AnyRecord) ?? {};
-  renderRunHeader(run, out);
+  const run = (data['run'] as AnyRecord) ?? {}
+  renderRunHeader(run, out)
 
-  const progress = (data["progress"] as AnyRecord) ?? {};
-  if (progress["total_sessions"] != null) {
-    const failed = Number(progress["failed_sessions"] ?? 0);
+  const progress = (data['progress'] as AnyRecord) ?? {}
+  if (progress['total_sessions'] != null) {
+    const failed = Number(progress['failed_sessions'] ?? 0)
     out(
-      `  progress    ${progress["completed_sessions"]}/${progress["total_sessions"]} sessions` +
-        (failed > 0 ? `, ${failed} failed` : ""),
-    );
-    for (const pc of arr(progress["per_case"])) {
-      out(`    ${pc["source_case_id"]} ${pc["name"] ?? ""}: ${pc["completed"]}/${pc["total"]}`);
+      `  progress    ${progress['completed_sessions']}/${progress['total_sessions']} sessions` +
+        (failed > 0 ? `, ${failed} failed` : ''),
+    )
+    for (const pc of arr(progress['per_case'])) {
+      out(`    ${pc['source_case_id']} ${pc['name'] ?? ''}: ${pc['completed']}/${pc['total']}`)
     }
   }
 
-  const evals = arr(data["evaluations"]);
+  const evals = arr(data['evaluations'])
   if (evals.length > 0) {
-    out("");
-    out("evaluations");
+    out('')
+    out('evaluations')
     for (const e of evals) {
-      const judge = e["judge_model_name"] ?? e["judge_model_config_id"];
+      const judge = e['judge_model_name'] ?? e['judge_model_config_id']
       const pct =
-        e["overall_pct"] != null
-          ? `  overall ${Math.round(Number(e["overall_pct"]) * 100)}%`
-          : "";
-      const incomplete = e["incomplete"] ? " ⚠" : "";
+        e['overall_pct'] != null ? `  overall ${Math.round(Number(e['overall_pct']) * 100)}%` : ''
+      const incomplete = e['incomplete'] ? ' ⚠' : ''
       const skipped =
-        Number(e["skipped_no_rubric"]) > 0
-          ? `  (+${e["skipped_no_rubric"]} skipped, no rubric)`
-          : "";
+        Number(e['skipped_no_rubric']) > 0
+          ? `  (+${e['skipped_no_rubric']} skipped, no rubric)`
+          : ''
       out(
-        `  ${e["id"]}  ${e["status"]}${pct}  judged ${e["judged_sessions"]}/${e["expected_sessions"]}${skipped}${incomplete}  judge ${judge}`,
-      );
+        `  ${e['id']}  ${e['status']}${pct}  judged ${e['judged_sessions']}/${e['expected_sessions']}${skipped}${incomplete}  judge ${judge}`,
+      )
     }
   }
 
-  const perCase = arr(data["per_case"]);
+  const perCase = arr(data['per_case'])
   if (perCase.length > 0) {
-    out("");
-    out("per case");
+    out('')
+    out('per case')
     for (const c of perCase) {
-      const sr =
-        c["success_rate"] != null
-          ? `${Math.round(Number(c["success_rate"]) * 100)}%`
-          : "—";
+      const sr = c['success_rate'] != null ? `${Math.round(Number(c['success_rate']) * 100)}%` : '—'
       out(
-        `  ${c["source_case_id"]}  pass ${fmtNum(c["pass_count"])}/${c["session_count"]} (${sr})  pass@k ${fmtNum(c["pass_at_k"])}  pass^k ${fmtNum(c["pass_hat_k"])}`,
-      );
+        `  ${c['source_case_id']}  pass ${fmtNum(c['pass_count'])}/${c['session_count']} (${sr})  pass@k ${fmtNum(c['pass_at_k'])}  pass^k ${fmtNum(c['pass_hat_k'])}`,
+      )
     }
   }
 
-  const perTool = (data["per_tool"] as AnyRecord) ?? {};
-  const toolNames = Object.keys(perTool);
+  const perTool = (data['per_tool'] as AnyRecord) ?? {}
+  const toolNames = Object.keys(perTool)
   if (toolNames.length > 0) {
-    out("");
-    out("per tool");
+    out('')
+    out('per tool')
     for (const name of toolNames) {
-      const t = perTool[name] as AnyRecord;
+      const t = perTool[name] as AnyRecord
       out(
-        `  ${name}  ${t["calls"]} calls, ${t["errors"]} errors (${Math.round(Number(t["error_rate"] ?? 0) * 100)}%), ${t["result_payload_chars"]} chars`,
-      );
+        `  ${name}  ${t['calls']} calls, ${t['errors']} errors (${Math.round(Number(t['error_rate'] ?? 0) * 100)}%), ${t['result_payload_chars']} chars`,
+      )
     }
   }
 
-  const sessions = arr(data["sessions"]);
+  const sessions = arr(data['sessions'])
   if (sessions.length > 0) {
-    out("");
-    out(`sessions (${sessions.length})`);
+    out('')
+    out(`sessions (${sessions.length})`)
     for (const s of sessions) {
-      const where = `${s["source_case_id"]} rep ${s["repetition"]}`;
-      let metrics = "";
-      if (s["tool_call_count"] != null) {
-        const err = Number(s["tool_error_count"] ?? 0);
+      const where = `${s['source_case_id']} rep ${s['repetition']}`
+      let metrics = ''
+      if (s['tool_call_count'] != null) {
+        const err = Number(s['tool_error_count'] ?? 0)
         metrics =
-          `  ${s["tool_call_count"]} calls` +
-          (err > 0 ? `, ${err} err` : "") +
-          (s["total_tokens"] != null ? `, ${s["total_tokens"]} tok` : "");
+          `  ${s['tool_call_count']} calls` +
+          (err > 0 ? `, ${err} err` : '') +
+          (s['total_tokens'] != null ? `, ${s['total_tokens']} tok` : '')
       }
-      out(`  ${s["session_id"]}  ${where}  ${s["status"]}${metrics}`);
+      out(`  ${s['session_id']}  ${where}  ${s['status']}${metrics}`)
     }
   }
 }
 
 function renderBenchmarkEvaluationText(data: AnyRecord, out: Emit): void {
-  const ev = (data["evaluation"] as AnyRecord) ?? {};
+  const ev = (data['evaluation'] as AnyRecord) ?? {}
   const overall =
-    ev["overall_pct"] != null
-      ? `  overall ${Math.round(Number(ev["overall_pct"]) * 100)}%`
-      : "";
-  out(`${String(ev["id"] ?? "")}  evaluation of ${ev["run_id"] ?? ""}  ${ev["status"] ?? ""}${overall}`);
-  const judge = ev["judge_model_name"] ?? ev["judge_model_config_id"] ?? "";
-  const temp =
-    ev["judge_temperature"] != null ? `  temp ${ev["judge_temperature"]}` : "";
-  out(`  judge       ${judge}${temp}`);
-  const incomplete = ev["incomplete"] ? "  ⚠ incomplete" : "";
+    ev['overall_pct'] != null ? `  overall ${Math.round(Number(ev['overall_pct']) * 100)}%` : ''
+  out(
+    `${String(ev['id'] ?? '')}  evaluation of ${ev['run_id'] ?? ''}  ${ev['status'] ?? ''}${overall}`,
+  )
+  const judge = ev['judge_model_name'] ?? ev['judge_model_config_id'] ?? ''
+  const temp = ev['judge_temperature'] != null ? `  temp ${ev['judge_temperature']}` : ''
+  out(`  judge       ${judge}${temp}`)
+  const incomplete = ev['incomplete'] ? '  ⚠ incomplete' : ''
   const skipped =
-    Number(ev["skipped_no_rubric"]) > 0
-      ? `  (+${ev["skipped_no_rubric"]} skipped, no rubric)`
-      : "";
-  out(`  judged      ${ev["judged_sessions"]}/${ev["expected_sessions"]}${skipped}${incomplete}`);
-  if (ev["error"]) out(`  error       ${ev["error"]}`);
+    Number(ev['skipped_no_rubric']) > 0 ? `  (+${ev['skipped_no_rubric']} skipped, no rubric)` : ''
+  out(`  judged      ${ev['judged_sessions']}/${ev['expected_sessions']}${skipped}${incomplete}`)
+  if (ev['error']) out(`  error       ${ev['error']}`)
 
   // Pass-level judge diagnostics: turn "N incomplete" into a cause at a glance —
   // how many judges hit the tool cap, the failure kinds, and the round spread.
-  const diag = (ev["diagnostics"] as AnyRecord) ?? {};
-  const byKind = (diag["by_error_kind"] as AnyRecord) ?? {};
-  const kindPairs = Object.entries(byKind);
-  const roundStats = diag["tool_rounds_stats"] as AnyRecord | null;
-  const diagParts: string[] = [];
-  if (Number(diag["hit_tool_cap_count"]) > 0)
-    diagParts.push(`${diag["hit_tool_cap_count"]} hit tool cap`);
-  if (kindPairs.length > 0)
-    diagParts.push(kindPairs.map(([k, n]) => `${k}×${n}`).join(", "));
-  if (roundStats && roundStats["max"] != null)
-    diagParts.push(`judge rounds max ${roundStats["max"]}`);
-  if (diagParts.length > 0) out(`  diagnostics ${diagParts.join(" · ")}`);
+  const diag = (ev['diagnostics'] as AnyRecord) ?? {}
+  const byKind = (diag['by_error_kind'] as AnyRecord) ?? {}
+  const kindPairs = Object.entries(byKind)
+  const roundStats = diag['tool_rounds_stats'] as AnyRecord | null
+  const diagParts: string[] = []
+  if (Number(diag['hit_tool_cap_count']) > 0)
+    diagParts.push(`${diag['hit_tool_cap_count']} hit tool cap`)
+  if (kindPairs.length > 0) diagParts.push(kindPairs.map(([k, n]) => `${k}×${n}`).join(', '))
+  if (roundStats && roundStats['max'] != null)
+    diagParts.push(`judge rounds max ${roundStats['max']}`)
+  if (diagParts.length > 0) out(`  diagnostics ${diagParts.join(' · ')}`)
 
-  const perCase = arr(data["per_case"]);
+  const perCase = arr(data['per_case'])
   if (perCase.length > 0) {
-    out("");
-    out("per case");
+    out('')
+    out('per case')
     for (const c of perCase) {
-      const stats = (c["pct_stats"] as AnyRecord) ?? {};
-      const mean = stats["mean"] != null ? `mean ${Math.round(Number(stats["mean"]) * 100)}%` : "—";
-      out(`  ${c["source_case_id"]}  ${c["name"] ?? ""}  ${mean}`);
+      const stats = (c['pct_stats'] as AnyRecord) ?? {}
+      const mean = stats['mean'] != null ? `mean ${Math.round(Number(stats['mean']) * 100)}%` : '—'
+      out(`  ${c['source_case_id']}  ${c['name'] ?? ''}  ${mean}`)
     }
   }
 
-  const sessions = arr(data["sessions"]);
+  const sessions = arr(data['sessions'])
   if (sessions.length > 0) {
-    out("");
-    out(`sessions (${sessions.length})`);
+    out('')
+    out(`sessions (${sessions.length})`)
     for (const s of sessions) {
-      const pct =
-        s["pct"] != null ? `  ${Math.round(Number(s["pct"]) * 100)}%` : "";
-      const rounds = s["tool_rounds"] != null ? `  ${s["tool_rounds"]} rounds` : "";
-      const cap = s["hit_tool_cap"] ? "  ⚠ tool cap" : "";
-      const ek = s["error_kind"] ? `  ${s["error_kind"]}` : "";
+      const pct = s['pct'] != null ? `  ${Math.round(Number(s['pct']) * 100)}%` : ''
+      const rounds = s['tool_rounds'] != null ? `  ${s['tool_rounds']} rounds` : ''
+      const cap = s['hit_tool_cap'] ? '  ⚠ tool cap' : ''
+      const ek = s['error_kind'] ? `  ${s['error_kind']}` : ''
       out(
-        `  ${s["analysis_session_id"]}  judges ${s["run_session_id"]}  ${s["source_case_id"]}  ${s["status"]}${pct}${rounds}${cap}${ek}`,
-      );
-      const criteria = arr(s["criteria"]);
+        `  ${s['analysis_session_id']}  judges ${s['run_session_id']}  ${s['source_case_id']}  ${s['status']}${pct}${rounds}${cap}${ek}`,
+      )
+      const criteria = arr(s['criteria'])
       for (const cr of criteria) {
-        const note = cr["note"] ? `  — ${truncate(String(cr["note"]), 80)}` : "";
-        out(`    [${cr["points"]}/${cr["max"]}] (#${cr["id"]}) ${cr["description"] ?? ""}${note}`);
+        const note = cr['note'] ? `  — ${truncate(String(cr['note']), 80)}` : ''
+        out(`    [${cr['points']}/${cr['max']}] (#${cr['id']}) ${cr['description'] ?? ''}${note}`)
       }
     }
   }
 }
 
 function fmtNum(value: unknown): string {
-  if (value == null) return "—";
-  const n = Number(value);
-  return Number.isInteger(n) ? String(n) : n.toFixed(2);
+  if (value == null) return '—'
+  const n = Number(value)
+  return Number.isInteger(n) ? String(n) : n.toFixed(2)
 }
 
 function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
+  return text.length > max ? `${text.slice(0, max)}…` : text
 }
 
 // ─── Token annotation ─────────────────────────────────────────────────────────
 
-function tokens(
-  count: number | null | undefined,
-  state: string | undefined,
-): string {
-  if (count == null) return "";
-  const suffix = state && state !== "included" ? ` - ${state}` : "";
-  return `  (${count} tokens${suffix})`;
+function tokens(count: number | null | undefined, state: string | undefined): string {
+  if (count == null) return ''
+  const suffix = state && state !== 'included' ? ` - ${state}` : ''
+  return `  (${count} tokens${suffix})`
 }
 
 // ─── Part ─────────────────────────────────────────────────────────────────────
 
 function renderPartLine(part: AnyRecord, indent: string, out: Emit): void {
-  const id = String(part["id"] ?? "");
-  const type = String(part["type"] ?? "");
-  const toolName = part["tool_name"] ? `  ${part["tool_name"]}` : "";
+  const id = String(part['id'] ?? '')
+  const type = String(part['type'] ?? '')
+  const toolName = part['tool_name'] ? `  ${part['tool_name']}` : ''
   // tool_definitions in a container view list names only; show the count so the
   // tool surface is legible and the part is visibly drillable for full schemas (F6).
-  const toolsList = part["tools"] as string[] | undefined;
-  const toolCount = Array.isArray(toolsList) ? `  ${toolsList.length} tools` : "";
-  const state = String(part["context_state"] ?? "");
-  const count = part["token_count"] != null ? Number(part["token_count"]) : null;
-  out(`${indent}${id}  ${type}${toolName}${toolCount}${tokens(count, state)}`);
+  const toolsList = part['tools'] as string[] | undefined
+  const toolCount = Array.isArray(toolsList) ? `  ${toolsList.length} tools` : ''
+  const state = String(part['context_state'] ?? '')
+  const count = part['token_count'] != null ? Number(part['token_count']) : null
+  out(`${indent}${id}  ${type}${toolName}${toolCount}${tokens(count, state)}`)
 }
 
 function renderTextBlock(text: string, indent: string, out: Emit): void {
-  for (const line of text.split("\n")) out(`${indent}${line}`);
+  for (const line of text.split('\n')) out(`${indent}${line}`)
 }
 
 function renderPartContent(part: AnyRecord, indent: string, out: Emit): void {
-  const content = part["content"] as AnyRecord | undefined;
+  const content = part['content'] as AnyRecord | undefined
   if (content) {
-    if (typeof content["text"] === "string") {
-      renderTextBlock(content["text"], indent, out);
-    } else if (Array.isArray(content["json"])) {
-      renderTextBlock(JSON.stringify(content["json"], null, 2), indent, out);
+    if (typeof content['text'] === 'string') {
+      renderTextBlock(content['text'], indent, out)
+    } else if (Array.isArray(content['json'])) {
+      renderTextBlock(JSON.stringify(content['json'], null, 2), indent, out)
     }
   }
 
   // tool_definitions: render tool names as comma-separated list
-  const toolsList = part["tools"] as string[] | undefined;
+  const toolsList = part['tools'] as string[] | undefined
   if (toolsList && toolsList.length > 0) {
-    out(`${indent}${toolsList.join(", ")}`);
+    out(`${indent}${toolsList.join(', ')}`)
   }
 
   // tool_call parameters in nested (session/turn) views — compact one-liner
-  const toolArguments = part["tool_arguments"];
-  if (toolArguments !== undefined && part["tool_payload"] === undefined) {
-    out(`${indent}${JSON.stringify(toolArguments)}`);
+  const toolArguments = part['tool_arguments']
+  if (toolArguments !== undefined && part['tool_payload'] === undefined) {
+    out(`${indent}${JSON.stringify(toolArguments)}`)
   }
 
-  const toolPayload = part["tool_payload"] as AnyRecord | undefined;
+  const toolPayload = part['tool_payload'] as AnyRecord | undefined
   if (toolPayload) {
-    const call = toolPayload["call"];
-    const result = toolPayload["result"] as AnyRecord | undefined;
-    out(`${indent}call  ${JSON.stringify(call)}`);
+    const call = toolPayload['call']
+    const result = toolPayload['result'] as AnyRecord | undefined
+    out(`${indent}call  ${JSON.stringify(call)}`)
     if (result) {
-      out(`${indent}result`);
-      if (typeof result["text"] === "string") {
-        renderTextBlock(result["text"], indent + "  ", out);
+      out(`${indent}result`)
+      if (typeof result['text'] === 'string') {
+        renderTextBlock(result['text'], indent + '  ', out)
       } else {
-        renderTextBlock(JSON.stringify(result, null, 2), indent + "  ", out);
+        renderTextBlock(JSON.stringify(result, null, 2), indent + '  ', out)
       }
     }
   }
 }
 
 function renderPart(part: AnyRecord, indent: string, out: Emit): void {
-  renderPartLine(part, indent, out);
-  renderPartContent(part, indent + "  ", out);
+  renderPartLine(part, indent, out)
+  renderPartContent(part, indent + '  ', out)
 }
 
 // ─── Flatten helpers ──────────────────────────────────────────────────────────
@@ -381,192 +362,183 @@ function renderTurnHeader(turn: AnyRecord, out: Emit): void {
   // A turn gets a header line (id, status, round count, token cost) so it reads
   // like a step in the session view and a direct turn inspect is self-describing —
   // and so "how costly / how many rounds was this turn?" is answerable up front.
-  const id = String(turn["id"] ?? "");
-  if (!id) return;
-  const status = turn["status"] ? `  ${String(turn["status"])}` : "";
-  const outcome = turn["outcome"] ? ` (${String(turn["outcome"])})` : "";
-  const rounds = (turn["rounds"] as AnyRecord[] | undefined) ?? [];
-  const roundStr = `  ${rounds.length} round${rounds.length === 1 ? "" : "s"}`;
-  const total = (turn["tokens"] as AnyRecord | undefined)?.["total"];
-  const tokenStr = total != null ? `  (${Number(total)} tokens)` : "";
-  out(`${id}  turn${status}${outcome}${roundStr}${tokenStr}`);
+  const id = String(turn['id'] ?? '')
+  if (!id) return
+  const status = turn['status'] ? `  ${String(turn['status'])}` : ''
+  const outcome = turn['outcome'] ? ` (${String(turn['outcome'])})` : ''
+  const rounds = (turn['rounds'] as AnyRecord[] | undefined) ?? []
+  const roundStr = `  ${rounds.length} round${rounds.length === 1 ? '' : 's'}`
+  const total = (turn['tokens'] as AnyRecord | undefined)?.['total']
+  const tokenStr = total != null ? `  (${Number(total)} tokens)` : ''
+  out(`${id}  turn${status}${outcome}${roundStr}${tokenStr}`)
   // Make a missing final answer a visible fact rather than a silent absence:
   // a terminal turn that produced no assistant answer (errored, hit a limit, or
   // emitted only reasoning) has nothing to grade or read as its result.
-  if (turn["no_final_answer"]) {
-    out(`  no final answer — this turn produced no assistant answer`);
+  if (turn['no_final_answer']) {
+    out(`  no final answer — this turn produced no assistant answer`)
   }
 }
 
 function renderTurnParts(turn: AnyRecord, out: Emit): void {
-  const rounds = turn["rounds"] as AnyRecord[] | undefined;
-  if (!rounds) return;
-  renderTurnHeader(turn, out);
+  const rounds = turn['rounds'] as AnyRecord[] | undefined
+  if (!rounds) return
+  renderTurnHeader(turn, out)
   for (const round of rounds) {
-    const parts = round["parts"] as AnyRecord[] | undefined;
+    const parts = round['parts'] as AnyRecord[] | undefined
     if (parts) {
-      for (const part of parts) renderPart(part, "", out);
+      for (const part of parts) renderPart(part, '', out)
     }
   }
 }
 
 function renderLatestError(step: AnyRecord, indent: string, out: Emit): void {
   // F8: the step's failure reason. Today's CLI dropped it entirely; render it.
-  const latestError = step["latest_error"] as AnyRecord | undefined;
-  if (!latestError) return;
-  const kind = latestError["error_kind"] ? `${latestError["error_kind"]}: ` : "";
-  const message = String(latestError["message"] ?? "");
-  out(`${indent}error  ${kind}${message}`);
+  const latestError = step['latest_error'] as AnyRecord | undefined
+  if (!latestError) return
+  const kind = latestError['error_kind'] ? `${latestError['error_kind']}: ` : ''
+  const message = String(latestError['message'] ?? '')
+  out(`${indent}error  ${kind}${message}`)
 }
 
 function renderGenericStep(step: AnyRecord, out: Emit): void {
-  const id = String(step["id"] ?? "");
-  const type = String(step["type"] ?? "step");
-  const status = step["status"] ? `  ${String(step["status"])}` : "";
-  const strategy = step["strategy"] ? `  ${String(step["strategy"])}` : "";
+  const id = String(step['id'] ?? '')
+  const type = String(step['type'] ?? 'step')
+  const status = step['status'] ? `  ${String(step['status'])}` : ''
+  const strategy = step['strategy'] ? `  ${String(step['strategy'])}` : ''
   const sourceTurn =
-    step["source_turn_number"] != null
-      ? `  after turn ${String(step["source_turn_number"])}`
-      : "";
-  out(`${id}  ${type}${status}${strategy}${sourceTurn}`);
+    step['source_turn_number'] != null ? `  after turn ${String(step['source_turn_number'])}` : ''
+  out(`${id}  ${type}${status}${strategy}${sourceTurn}`)
 
-  renderLatestError(step, "  ", out);
+  renderLatestError(step, '  ', out)
 
   // Compaction: prefer the richer `stripped_parts` (full mode) over the bare
   // `stripped_part_ids`. Render one line per part and the (usually shared) reason
   // just once instead of repeating the boilerplate per part.
-  const strippedParts = Array.isArray(step["stripped_parts"])
-    ? (step["stripped_parts"] as AnyRecord[])
-    : [];
-  const strippedPartIds = Array.isArray(step["stripped_part_ids"])
-    ? (step["stripped_part_ids"] as unknown[])
-    : [];
+  const strippedParts = Array.isArray(step['stripped_parts'])
+    ? (step['stripped_parts'] as AnyRecord[])
+    : []
+  const strippedPartIds = Array.isArray(step['stripped_part_ids'])
+    ? (step['stripped_part_ids'] as unknown[])
+    : []
   if (strippedParts.length > 0) {
     const total = strippedParts.reduce(
-      (sum, p) => sum + (p["token_count"] != null ? Number(p["token_count"]) : 0),
+      (sum, p) => sum + (p['token_count'] != null ? Number(p['token_count']) : 0),
       0,
-    );
-    out(`  stripped ${strippedParts.length} parts (${total} tokens)`);
+    )
+    out(`  stripped ${strippedParts.length} parts (${total} tokens)`)
     for (const strippedPart of strippedParts) {
-      const strippedId = String(strippedPart["id"] ?? "");
-      const strippedType = strippedPart["type"]
-        ? `  ${String(strippedPart["type"])}`
-        : "";
+      const strippedId = String(strippedPart['id'] ?? '')
+      const strippedType = strippedPart['type'] ? `  ${String(strippedPart['type'])}` : ''
       const strippedTokens =
-        strippedPart["token_count"] != null
-          ? `  (${Number(strippedPart["token_count"])} tokens)`
-          : "";
-      out(`    ${strippedId}${strippedType}${strippedTokens}`);
+        strippedPart['token_count'] != null
+          ? `  (${Number(strippedPart['token_count'])} tokens)`
+          : ''
+      out(`    ${strippedId}${strippedType}${strippedTokens}`)
     }
     const reasons = new Set(
       strippedParts
-        .map((p) => (typeof p["reason"] === "string" ? p["reason"] : ""))
+        .map((p) => (typeof p['reason'] === 'string' ? p['reason'] : ''))
         .filter(Boolean),
-    );
+    )
     if (reasons.size === 1) {
-      out(`  reason  ${[...reasons][0]}`);
+      out(`  reason  ${[...reasons][0]}`)
     } else {
       for (const strippedPart of strippedParts) {
-        if (typeof strippedPart["reason"] === "string") {
-          out(`    ${String(strippedPart["id"] ?? "")}  ${strippedPart["reason"]}`);
+        if (typeof strippedPart['reason'] === 'string') {
+          out(`    ${String(strippedPart['id'] ?? '')}  ${strippedPart['reason']}`)
         }
       }
     }
   } else if (strippedPartIds.length > 0) {
-    out(`  stripped ${strippedPartIds.length} parts`);
+    out(`  stripped ${strippedPartIds.length} parts`)
     for (const partId of strippedPartIds) {
-      out(`    ${String(partId)}`);
+      out(`    ${String(partId)}`)
     }
   }
 
-  const parts = step["parts"] as AnyRecord[] | undefined;
+  const parts = step['parts'] as AnyRecord[] | undefined
   if (parts) {
-    for (const part of parts) renderPart(part, "  ", out);
+    for (const part of parts) renderPart(part, '  ', out)
   }
 
   // Owned turns (analysis steps): the step's actual work — the agent/judge's
   // rounds, tool calls, and final answer. Without this an analysis-session inspect
   // shows only the step headers and the judge's trace/verdict is invisible.
-  const ownedTurns = step["turns"] as AnyRecord[] | undefined;
+  const ownedTurns = step['turns'] as AnyRecord[] | undefined
   if (ownedTurns) {
-    for (const turn of ownedTurns) renderTurnParts(turn, out);
+    for (const turn of ownedTurns) renderTurnParts(turn, out)
   }
 }
 
 // ─── Type-specific text renderers ─────────────────────────────────────────────
 
 function renderSessionText(data: AnyRecord, out: Emit): void {
-  const model = data["model"] as AnyRecord | undefined;
-  const mcp = data["mcp"] as Array<{ name: string }> | undefined;
-  const ctxWindow = data["context_window"] as AnyRecord | undefined;
+  const model = data['model'] as AnyRecord | undefined
+  const mcp = data['mcp'] as Array<{ name: string }> | undefined
+  const ctxWindow = data['context_window'] as AnyRecord | undefined
 
-  out(`${String(data["id"] ?? "")}  ${data["title"] ?? ""}`);
+  out(`${String(data['id'] ?? '')}  ${data['title'] ?? ''}`)
   if (model) {
-    const key = model["key"] ? `  ${String(model["key"])}` : "";
-    out(`  model       ${model["name"] ?? ""}${key}`);
+    const key = model['key'] ? `  ${String(model['key'])}` : ''
+    out(`  model       ${model['name'] ?? ''}${key}`)
   }
   if (mcp && mcp.length > 0) {
-    out(`  mcp         ${mcp.map((m) => m.name).join(", ")}`);
+    out(`  mcp         ${mcp.map((m) => m.name).join(', ')}`)
   }
   if (ctxWindow)
-    out(
-      `  context     ${ctxWindow["used"] ?? "?"} / ${ctxWindow["available"] ?? "?"} tokens`,
-    );
-  if (data["compaction_strategy"])
-    out(`  compaction  ${data["compaction_strategy"]}`);
-  if (data["max_tool_rounds"] != null)
-    out(`  tool rounds ${String(data["max_tool_rounds"])}`);
-  const parentRef = data["parent_ref"] as AnyRecord | undefined;
-  if (parentRef && parentRef["id"])
-    out(`  parent      ${parentRef["kind"] ?? ""} ${parentRef["id"]}`);
+    out(`  context     ${ctxWindow['used'] ?? '?'} / ${ctxWindow['available'] ?? '?'} tokens`)
+  if (data['compaction_strategy']) out(`  compaction  ${data['compaction_strategy']}`)
+  if (data['max_tool_rounds'] != null) out(`  tool rounds ${String(data['max_tool_rounds'])}`)
+  const parentRef = data['parent_ref'] as AnyRecord | undefined
+  if (parentRef && parentRef['id'])
+    out(`  parent      ${parentRef['kind'] ?? ''} ${parentRef['id']}`)
 
   // F9/F10: a uniform terminal status + (when failed) the failure reason, so a
   // session's outcome is visible from the header without reading the whole trace.
-  if (data["terminal_status"])
-    out(`  status      ${String(data["terminal_status"])}`);
-  renderLatestError(data, "  ", out);
+  if (data['terminal_status']) out(`  status      ${String(data['terminal_status'])}`)
+  renderLatestError(data, '  ', out)
 
-  const setup = data["setup"] as AnyRecord | undefined;
+  const setup = data['setup'] as AnyRecord | undefined
   if (setup) {
-    out("");
-    const parts = setup["parts"] as AnyRecord[] | undefined;
+    out('')
+    const parts = setup['parts'] as AnyRecord[] | undefined
     if (parts) {
-      for (const part of parts) renderPart(part, "", out);
+      for (const part of parts) renderPart(part, '', out)
     }
   }
 
-  const steps = data["steps"] as AnyRecord[] | undefined;
+  const steps = data['steps'] as AnyRecord[] | undefined
   if (steps && steps.length > 0) {
     for (const step of steps) {
-      out("");
-      if (String(step["type"] ?? "") === "turn") {
-        renderTurnParts(step, out);
+      out('')
+      if (String(step['type'] ?? '') === 'turn') {
+        renderTurnParts(step, out)
       } else {
-        renderGenericStep(step, out);
+        renderGenericStep(step, out)
       }
     }
-    return;
+    return
   }
 
-  const turns = data["turns"] as AnyRecord[] | undefined;
+  const turns = data['turns'] as AnyRecord[] | undefined
   if (turns && turns.length > 0) {
     for (const turn of turns) {
-      out("");
-      renderTurnParts(turn, out);
+      out('')
+      renderTurnParts(turn, out)
     }
   }
 }
 
 function renderRoundText(data: AnyRecord, out: Emit): void {
-  const parts = data["parts"] as AnyRecord[] | undefined;
+  const parts = data['parts'] as AnyRecord[] | undefined
   if (parts) {
-    for (const part of parts) renderPart(part, "", out);
+    for (const part of parts) renderPart(part, '', out)
   }
 }
 
 function renderSetupText(data: AnyRecord, out: Emit): void {
-  const parts = data["parts"] as AnyRecord[] | undefined;
+  const parts = data['parts'] as AnyRecord[] | undefined
   if (parts) {
-    for (const part of parts) renderPart(part, "", out);
+    for (const part of parts) renderPart(part, '', out)
   }
 }

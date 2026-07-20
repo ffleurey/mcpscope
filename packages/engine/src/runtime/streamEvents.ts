@@ -36,6 +36,12 @@ export type TurnStreamEvent =
       message: string
       errorType?: string
     }
+  | {
+      /** Emitted when the engine auto-titles a session from the first prompt. */
+      type: 'session-title-changed'
+      sessionId: string
+      title: string
+    }
 
 export type TurnStreamEventSink = (event: TurnStreamEvent) => void
 

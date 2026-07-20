@@ -520,13 +520,16 @@ export function describeStreamFailure(err: unknown): {
   receivedBytes: number | null
   segments: AssistantSegment[]
   completion: OaiChatCompletionResponse | null
+  errorType: 'internal' | 'aborted' | 'provider_unreachable'
 } {
+  const errorType = classifyStreamError(err)
   if (err instanceof StreamReadError) {
     return {
       message: err.message,
       receivedBytes: err.receivedBytes,
       segments: err.partial.segments,
       completion: err.partial.completion,
+      errorType,
     }
   }
   return {
@@ -534,7 +537,45 @@ export function describeStreamFailure(err: unknown): {
     receivedBytes: null,
     segments: [],
     completion: null,
+    errorType,
   }
+}
+
+/**
+ * Classify a stream/request error into a typed error category.
+ * Distinguishes user-requested abort from provider-unreachable from generic internal failures.
+ */
+function classifyStreamError(err: unknown): 'internal' | 'aborted' | 'provider_unreachable' {
+  // Check for abort: either a DOMException with name 'AbortError', or wrapped
+  // inside a StreamReadError's cause.
+  const candidate =
+    err instanceof StreamReadError ? ((err as { cause?: unknown }).cause ?? err) : err
+  const name =
+    candidate instanceof DOMException ||
+    (typeof candidate === 'object' && candidate !== null && 'name' in candidate)
+      ? (candidate as { name: string }).name
+      : undefined
+  if (name === 'AbortError') return 'aborted'
+
+  // Check for provider-unreachable: connection refused, DNS failure, timeout,
+  // fetch network errors.
+  const message = err instanceof Error ? err.message : String(err ?? '')
+  const lowerMessage = message.toLowerCase()
+  if (
+    lowerMessage.includes('econnrefused') ||
+    lowerMessage.includes('fetch failed') ||
+    lowerMessage.includes('enotfound') ||
+    lowerMessage.includes('econnreset') ||
+    lowerMessage.includes('etimedout') ||
+    lowerMessage.includes('network error') ||
+    lowerMessage.includes('getaddrinfo') ||
+    lowerMessage.includes('und_err_') ||
+    lowerMessage.includes('request timed out')
+  ) {
+    return 'provider_unreachable'
+  }
+
+  return 'internal'
 }
 
 export interface StreamFailureRecoveryInput {

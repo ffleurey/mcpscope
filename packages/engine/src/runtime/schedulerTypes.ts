@@ -38,10 +38,7 @@ export interface ExecutionJobOwner {
  * shapes (e.g. the analysis workflow's analysis-* events), which the
  * scheduler relays opaquely to subscribers.
  */
-export type SchedulerExecutionEvent =
-  | TurnStreamEvent
-  | PreludeStreamEvent
-  | ExecutorStreamEvent
+export type SchedulerExecutionEvent = TurnStreamEvent | PreludeStreamEvent | ExecutorStreamEvent
 
 /** Executor-defined stream event; the scheduler relays it without interpreting it. */
 export type ExecutorStreamEvent = { type: string; [key: string]: unknown }
@@ -79,7 +76,12 @@ export type SchedulerEvent =
   | { type: 'scheduler-job-removed'; jobId: string; target: ExecutionTarget }
   | { type: 'scheduler-paused' }
   | { type: 'scheduler-resumed' }
-  | { type: 'scheduler-execution-event'; sessionId: string; jobId: string; event: SchedulerExecutionEvent }
+  | {
+      type: 'scheduler-execution-event'
+      sessionId: string
+      jobId: string
+      event: SchedulerExecutionEvent
+    }
 
 export type SchedulerEventListener = (event: SchedulerEvent) => void
 

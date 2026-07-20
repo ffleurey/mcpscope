@@ -22,11 +22,7 @@
  *   - `*Repository` interfaces define the backend-owned read/write API.
  */
 
-import type {
-  StepTypeKey,
-  GenericParams,
-  GenericState,
-} from './executionModel.js'
+import type { StepTypeKey, GenericParams, GenericState } from './executionModel.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step persistence record

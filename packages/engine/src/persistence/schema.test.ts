@@ -13,7 +13,7 @@ describe('schema version guard', () => {
   }
 
   afterEach(() => {
-    cleanupDirs.forEach(dir => fs.rmSync(dir, { recursive: true, force: true }))
+    cleanupDirs.forEach((dir) => fs.rmSync(dir, { recursive: true, force: true }))
     cleanupDirs.clear()
   })
 
@@ -28,9 +28,7 @@ describe('schema version guard', () => {
   it('fails loudly on a database stamped with a different schema version', () => {
     const sqlitePath = makeSqlitePath()
     const db = openBackendDatabase(sqlitePath)
-    db.connection
-      .prepare("UPDATE schema_meta SET value = '5' WHERE key = 'schema_version'")
-      .run()
+    db.connection.prepare("UPDATE schema_meta SET value = '5' WHERE key = 'schema_version'").run()
     db.connection.close()
     expect(() => openBackendDatabase(sqlitePath)).toThrow(/schema version mismatch/i)
   })

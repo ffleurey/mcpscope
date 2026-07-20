@@ -7,21 +7,29 @@ import type { OperationContext } from './context.js'
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
 export const inspectInputSchema = z.object({
-  id: z.string().describe(
-    'ID to inspect. Runtime formats: SSS (session), SSS.S (setup), '
-    + 'SSS.NT (turn), SSS.NW or SSS.NC (deterministic step), SSS.W.NT.N (round), SSS.W.NT.N.N-X (part). Example: QGWA.4W.1T, QGWA.4W.1T.2, or QGWA.4W.1T.2.3-R. '
-    + 'Benchmark formats: B-XXXX (benchmark), B-XXXX.N (case), R-XXXX (run; full mode adds the metrics report), E-XXXX (evaluation with scores). '
-    + 'Inspecting a session, setup, turn, step, or round is useful for finding child IDs; '
-    + 'inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content.',
-  ),
-  short: z.boolean().optional().describe(
-    'When true, omit part content and return token counts only. Parts always return full content regardless.',
-  ),
-  format: z.enum(['text', 'json']).optional().describe(
-    'Output rendering. "text" (default) is a compact, human- and LLM-readable view. '
-    + '"json" returns the full structured payload. The two carry the same information; '
-    + 'text omits a few structural/plumbing fields for readability.',
-  ),
+  id: z
+    .string()
+    .describe(
+      'ID to inspect. Runtime formats: SSS (session), SSS.S (setup), ' +
+        'SSS.NT (turn), SSS.NW or SSS.NC (deterministic step), SSS.W.NT.N (round), SSS.W.NT.N.N-X (part). Example: QGWA.4W.1T, QGWA.4W.1T.2, or QGWA.4W.1T.2.3-R. ' +
+        'Benchmark formats: B-XXXX (benchmark), B-XXXX.N (case), R-XXXX (run; full mode adds the metrics report), E-XXXX (evaluation with scores). ' +
+        'Inspecting a session, setup, turn, step, or round is useful for finding child IDs; ' +
+        'inspect the returned part IDs directly for full evidence such as tool payloads, tool results, and part content.',
+    ),
+  short: z
+    .boolean()
+    .optional()
+    .describe(
+      'When true, omit part content and return token counts only. Parts always return full content regardless.',
+    ),
+  format: z
+    .enum(['text', 'json'])
+    .optional()
+    .describe(
+      'Output rendering. "text" (default) is a compact, human- and LLM-readable view. ' +
+        '"json" returns the full structured payload. The two carry the same information; ' +
+        'text omits a few structural/plumbing fields for readability.',
+    ),
 })
 
 export type InspectInput = z.infer<typeof inspectInputSchema>
@@ -64,12 +72,12 @@ export function registerInspectIdResolver(key: string, resolver: InspectIdResolv
 export const inspectOperation = {
   id: 'inspect' as const,
   description:
-    'Inspect any object by ID. Supports sessions, setups, deterministic steps, turns, rounds, and parts, '
-    + 'plus benchmarks (B-), cases (B-.N), runs (R-), and evaluations (E-). '
-    + 'Use session, turn, step, or round inspection to map the tree, then inspect returned part IDs directly for detailed evidence. '
-    + 'Direct part inspection is how you read exact tool payloads/results and full part content. '
-    + 'Use short=true to get token counts only without part content. '
-    + 'Prefer inspecting specific turn or part IDs over full session dumps.',
+    'Inspect any object by ID. Supports sessions, setups, deterministic steps, turns, rounds, and parts, ' +
+    'plus benchmarks (B-), cases (B-.N), runs (R-), and evaluations (E-). ' +
+    'Use session, turn, step, or round inspection to map the tree, then inspect returned part IDs directly for detailed evidence. ' +
+    'Direct part inspection is how you read exact tool payloads/results and full part content. ' +
+    'Use short=true to get token counts only without part content. ' +
+    'Prefer inspecting specific turn or part IDs over full session dumps.',
   schema: inspectInputSchema,
   outputSchema: inspectOutputSchema,
   async execute(ctx: OperationContext, input: InspectInput): Promise<InspectResult> {

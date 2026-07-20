@@ -1,39 +1,37 @@
-import { z } from "zod";
-import { runInTransaction } from "../persistence/connection.js";
-import type { OperationError } from "./errors.js";
-import type { McpProfileSnapshot } from "../domain/model.js";
-import type { OperationContext } from "./context.js";
-import { createSession } from "../runtime/modelTurns.js";
-import { getSessionRecord } from "../persistence/repository.js";
-import {
-  mapSessionIdError,
-  resolvePrimarySessionInputs,
-} from "./sessionCreationShared.js";
+import { z } from 'zod'
+import { runInTransaction } from '../persistence/connection.js'
+import type { OperationError } from './errors.js'
+import type { McpProfileSnapshot } from '../domain/model.js'
+import type { OperationContext } from './context.js'
+import { createSession } from '../runtime/modelTurns.js'
+import { getSessionRecord } from '../persistence/repository.js'
+import { mapSessionIdError, resolvePrimarySessionInputs } from './sessionCreationShared.js'
 
 // ─── Canonical contract ───────────────────────────────────────────────────────
 
 export const createInputSchema = z.object({
   // .max(200) matches the HTTP route's limit — the surfaces must agree.
-  title: z.string().min(1).max(200).describe("Session title"),
-  id: z
+  title: z
     .string()
-    .optional()
-    .describe("Optional explicit 4-char session ID (A-Z 2-9, no O/I/0/1)"),
-  compaction: z
-    .enum(["none", "strip-reasoning"])
+    .max(200)
     .optional()
     .describe(
-      "Compaction strategy applied after each turn. Defaults to strip-reasoning.",
+      "Session title. When omitted, defaults to 'New session' and is auto-titled from the first prompt.",
     ),
+  id: z.string().optional().describe('Optional explicit 4-char session ID (A-Z 2-9, no O/I/0/1)'),
+  compaction: z
+    .enum(['none', 'strip-reasoning'])
+    .optional()
+    .describe('Compaction strategy applied after each turn. Defaults to strip-reasoning.'),
   model_config_id: z
     .string()
     .optional()
-    .describe("Optional model config ID to use instead of the default"),
+    .describe('Optional model config ID to use instead of the default'),
   mcp_profile_ids: z
     .array(z.string())
     .optional()
     .describe(
-      "Optional list of MCP profile IDs. When provided, replaces the default-enabled selection.",
+      'Optional list of MCP profile IDs. When provided, replaces the default-enabled selection.',
     ),
   max_tool_rounds: z
     .number()
@@ -41,33 +39,33 @@ export const createInputSchema = z.object({
     .positive()
     .optional()
     .describe(
-      "Max tool-call rounds per turn before the turn fails (loop guard). Defaults to the backend default.",
+      'Max tool-call rounds per turn before the turn fails (loop guard). Defaults to the backend default.',
     ),
   wait: z
     .boolean()
     .optional()
     .describe(
-      "Block until initialization finishes. The returned init_status is then terminal "
-      + "(ready or error) and the session can accept a prompt immediately — no status polling needed.",
+      'Block until initialization finishes. The returned init_status is then terminal ' +
+        '(ready or error) and the session can accept a prompt immediately — no status polling needed.',
     ),
-});
+})
 
-export type CreateInput = z.infer<typeof createInputSchema>;
+export type CreateInput = z.infer<typeof createInputSchema>
 
 export interface CreateResult {
-  api_version: 1;
+  api_version: 1
   session: {
-    id: string;
-    title: string;
-    status: string;
-    init_status: string;
-    model: { id: string; name: string };
-    mcp: { id: string; name: string }[];
-    compaction_strategy: string;
-    max_tool_rounds: number | null;
-    created_at: number;
-    updated_at: number;
-  };
+    id: string
+    title: string
+    status: string
+    init_status: string
+    model: { id: string; name: string }
+    mcp: { id: string; name: string }[]
+    compaction_strategy: string
+    max_tool_rounds: number | null
+    created_at: number
+    updated_at: number
+  }
 }
 
 /** Zod output shape for MCP structured output. Mirrors CreateResult. */
@@ -85,101 +83,95 @@ export const createOutputSchema = {
     created_at: z.number(),
     updated_at: z.number(),
   }),
-};
+}
 
 export const createOperation = {
-  id: "create" as const,
+  id: 'create' as const,
   description:
-    "Create a new session using backend-owned defaults (model config, LM connection, MCP profile). " +
-    "Returns immediately by default (session may still be initializing; poll with status until " +
-    "state=ready). Pass wait=true to block until initialization finishes and skip polling.",
+    'Create a new session using backend-owned defaults (model config, LM connection, MCP profile). ' +
+    'Returns immediately by default (session may still be initializing; poll with status until ' +
+    'state=ready). Pass wait=true to block until initialization finishes and skip polling.',
   schema: createInputSchema,
   outputSchema: createOutputSchema,
-  async execute(
-    ctx: OperationContext,
-    input: CreateInput,
-  ): Promise<CreateResult> {
-    const { db, logger } = ctx;
-    let mcpSnapshotsRef: McpProfileSnapshot[] = [];
+  async execute(ctx: OperationContext, input: CreateInput): Promise<CreateResult> {
+    const { db, logger } = ctx
+    let mcpSnapshotsRef: McpProfileSnapshot[] = []
 
     type TransactionResult =
-      | { kind: "resolution_error"; error: OperationError }
-      | { kind: "id_error"; error: OperationError }
+      | { kind: 'resolution_error'; error: OperationError }
+      | { kind: 'id_error'; error: OperationError }
       | {
-          kind: "created";
-          session: ReturnType<typeof createSession>;
-          modelConfigId: string;
-          modelConfigName: string;
-        };
-
-    const result: TransactionResult = runInTransaction(
-      db.connection,
-      (): TransactionResult => {
-        const resolved = resolvePrimarySessionInputs(ctx.configStore, {
-          modelConfigId: input.model_config_id,
-          mcpProfileIds: input.mcp_profile_ids,
-        });
-        if (!resolved.ok) {
-          return { kind: "resolution_error", error: resolved.error };
+          kind: 'created'
+          session: ReturnType<typeof createSession>
+          modelConfigId: string
+          modelConfigName: string
         }
 
-        try {
-          const session = createSession(db, {
-            sessionId: input.id,
-            title: input.title,
-            modelProfileSnapshot: resolved.modelProfileSnapshot,
-            mcpProfileSnapshots: resolved.mcpProfileSnapshots,
-            compactionStrategy: input.compaction ?? "strip-reasoning",
-            maxToolRounds: input.max_tool_rounds ?? ctx.maxToolRounds,
-          });
-          mcpSnapshotsRef = resolved.mcpProfileSnapshots;
-          return {
-            kind: "created",
-            session,
-            modelConfigId: resolved.modelConfigId,
-            modelConfigName: resolved.modelConfigName,
-          };
-        } catch (error) {
-          const mapped = mapSessionIdError(error);
-          if (mapped) return { kind: "id_error", error: mapped };
-          throw error;
-        }
-      },
-    );
+    const result: TransactionResult = runInTransaction(db.connection, (): TransactionResult => {
+      const resolved = resolvePrimarySessionInputs(ctx.configStore, {
+        modelConfigId: input.model_config_id,
+        mcpProfileIds: input.mcp_profile_ids,
+      })
+      if (!resolved.ok) {
+        return { kind: 'resolution_error', error: resolved.error }
+      }
 
-    if (result.kind === "resolution_error" || result.kind === "id_error") {
-      throw result.error;
+      try {
+        const session = createSession(db, {
+          sessionId: input.id,
+          title: input.title,
+          modelProfileSnapshot: resolved.modelProfileSnapshot,
+          mcpProfileSnapshots: resolved.mcpProfileSnapshots,
+          compactionStrategy: input.compaction ?? 'strip-reasoning',
+          maxToolRounds: input.max_tool_rounds ?? ctx.maxToolRounds,
+        })
+        mcpSnapshotsRef = resolved.mcpProfileSnapshots
+        return {
+          kind: 'created',
+          session,
+          modelConfigId: resolved.modelConfigId,
+          modelConfigName: resolved.modelConfigName,
+        }
+      } catch (error) {
+        const mapped = mapSessionIdError(error)
+        if (mapped) return { kind: 'id_error', error: mapped }
+        throw error
+      }
+    })
+
+    if (result.kind === 'resolution_error' || result.kind === 'id_error') {
+      throw result.error
     }
 
-    const { session, modelConfigId, modelConfigName } = result;
+    const { session, modelConfigId, modelConfigName } = result
 
-    let initJobId: string | null = null;
+    let initJobId: string | null = null
     if (ctx.scheduler) {
       try {
-        initJobId = ctx.scheduler.enqueueInit(ctx, session.id).jobId;
+        initJobId = ctx.scheduler.enqueueInit(ctx, session.id).jobId
       } catch (err: unknown) {
         logger?.error(
           {
             sessionId: session.id,
             err: err instanceof Error ? err.message : String(err),
           },
-          "Scheduler init enqueue failed (non-fatal — session will initialize on first turn)",
-        );
+          'Scheduler init enqueue failed (non-fatal — session will initialize on first turn)',
+        )
       }
     }
 
     // wait=true: block until initialization reaches a terminal state and
     // report the final statuses, so callers can send a prompt right away.
-    let finalStatus = session.status;
-    let finalInitStatus = session.initStatus;
-    let finalUpdatedAt = session.updatedAt;
+    let finalStatus = session.status
+    let finalInitStatus = session.initStatus
+    let finalUpdatedAt = session.updatedAt
     if (input.wait === true && ctx.scheduler && initJobId) {
-      await ctx.scheduler.awaitJob(initJobId);
-      const refreshed = getSessionRecord(db.connection, session.id);
+      await ctx.scheduler.awaitJob(initJobId)
+      const refreshed = getSessionRecord(db.connection, session.id)
       if (refreshed) {
-        finalStatus = refreshed.status;
-        finalInitStatus = refreshed.initStatus;
-        finalUpdatedAt = refreshed.updatedAt;
+        finalStatus = refreshed.status
+        finalInitStatus = refreshed.initStatus
+        finalUpdatedAt = refreshed.updatedAt
       }
     }
 
@@ -197,6 +189,6 @@ export const createOperation = {
         created_at: session.createdAt,
         updated_at: finalUpdatedAt,
       },
-    };
+    }
   },
-};
+}

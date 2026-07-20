@@ -1,23 +1,18 @@
-import { formatCompactionStepId } from "./hierarchicalIds.js";
-import { STEP_TYPE } from "./executionModel.js";
-import { runInTransaction, type BackendConnection } from "../persistence/connection.js";
-import type {
-  CompactionStrategy,
-  PartRecord,
-  StepRecord,
-  TurnRecord,
-} from "./model.js";
-import { getNextChildIndex } from "../persistence/repository.js";
+import { formatCompactionStepId } from './hierarchicalIds.js'
+import { STEP_TYPE } from './executionModel.js'
+import { runInTransaction, type BackendConnection } from '../persistence/connection.js'
+import type { CompactionStrategy, PartRecord, StepRecord, TurnRecord } from './model.js'
+import { getNextChildIndex } from '../persistence/repository.js'
 
 export interface CompactionStepResult {
-  turn: TurnRecord;
-  step: StepRecord;
-  parts: PartRecord[];
-  strippedPartIds: string[];
-  strippedPartCount: number;
-  contextTokensAtTurnEnd: number | null;
-  contextTokensAfterCompaction: number | null;
-  compactionTokensRemoved: number | null;
+  turn: TurnRecord
+  step: StepRecord
+  parts: PartRecord[]
+  strippedPartIds: string[]
+  strippedPartCount: number
+  contextTokensAtTurnEnd: number | null
+  contextTokensAfterCompaction: number | null
+  compactionTokensRemoved: number | null
 }
 
 export function applyContextCompaction(
@@ -32,7 +27,7 @@ export function applyContextCompaction(
   // and the inner per-part wrapper still compose.
   return runInTransaction(connection, () =>
     applyContextCompactionInner(connection, completedTurn, strategy),
-  );
+  )
 }
 
 function applyContextCompactionInner(
@@ -40,7 +35,7 @@ function applyContextCompactionInner(
   completedTurn: TurnRecord,
   strategy: CompactionStrategy,
 ): CompactionStepResult {
-  const now = Date.now();
+  const now = Date.now()
 
   // The cumulative context total is anchored to the exact API-reported
   // totalTokens for the current turn (promptTokens + completionTokens).
@@ -49,12 +44,12 @@ function applyContextCompactionInner(
   //   - When totalTokens is available: use it directly.
   //   - When totalTokens is null: fall back to the part-sum heuristic
   //     (Math.max(SUM(part_counts), promptTokens)).
-  const totalTokens = completedTurn.usage.totalTokens;
-  const promptTokens = completedTurn.usage.promptTokens ?? null;
-  let contextTokensAtTurnEnd: number | null;
+  const totalTokens = completedTurn.usage.totalTokens
+  const promptTokens = completedTurn.usage.promptTokens ?? null
+  let contextTokensAtTurnEnd: number | null
 
   if (totalTokens != null) {
-    contextTokensAtTurnEnd = totalTokens;
+    contextTokensAtTurnEnd = totalTokens
   } else {
     const tokenSumRow = connection
       .prepare(
@@ -65,20 +60,20 @@ function applyContextCompactionInner(
           AND context_state IN ('included', 'round-only')
       `,
       )
-      .get(completedTurn.id) as { total: number | null };
-    const tokenSum = tokenSumRow.total ?? null;
+      .get(completedTurn.id) as { total: number | null }
+    const tokenSum = tokenSumRow.total ?? null
     contextTokensAtTurnEnd =
       tokenSum !== null && promptTokens !== null
         ? Math.max(tokenSum, promptTokens)
-        : (tokenSum ?? promptTokens);
+        : (tokenSum ?? promptTokens)
   }
 
-  let contextTokensAfterCompaction: number | null = contextTokensAtTurnEnd;
-  let compactionTokensRemoved: number | null = 0;
-  let strippedPartIds: string[] = [];
+  let contextTokensAfterCompaction: number | null = contextTokensAtTurnEnd
+  let compactionTokensRemoved: number | null = 0
+  let strippedPartIds: string[] = []
 
-  const childIndex = getNextChildIndex(connection, completedTurn.sessionId);
-  const stepId = formatCompactionStepId(completedTurn.sessionId, childIndex);
+  const childIndex = getNextChildIndex(connection, completedTurn.sessionId)
+  const stepId = formatCompactionStepId(completedTurn.sessionId, childIndex)
 
   // Create and insert the compaction step first so the FK on parts is satisfied.
   const step: StepRecord = {
@@ -87,7 +82,7 @@ function applyContextCompactionInner(
     stepTypeKey: STEP_TYPE.COMPACTION,
     parentStepId: null,
     childIndex,
-    status: "complete",
+    status: 'complete',
     params: {
       strategy,
       sourceTurnId: completedTurn.id,
@@ -102,7 +97,7 @@ function applyContextCompactionInner(
     },
     createdAt: now,
     completedAt: now,
-  };
+  }
 
   connection
     .prepare(
@@ -126,9 +121,9 @@ function applyContextCompactionInner(
       stateJson: JSON.stringify(step.state),
       createdAt: step.createdAt,
       completedAt: step.completedAt,
-    });
+    })
 
-  if (strategy === "strip-reasoning") {
+  if (strategy === 'strip-reasoning') {
     const reasoningParts = connection
       .prepare(
         `
@@ -140,37 +135,30 @@ function applyContextCompactionInner(
       `,
       )
       .all(completedTurn.id) as Array<{
-      id: string;
-      token_count: number | null;
-      token_source: string | null;
-    }>;
+      id: string
+      token_count: number | null
+      token_source: string | null
+    }>
 
     if (reasoningParts.length > 0) {
-      strippedPartIds = reasoningParts.map((part) => part.id);
+      strippedPartIds = reasoningParts.map((part) => part.id)
 
       // Only use exact-from-API token counts in compaction math.
       // Estimated-from-text counts are display-only and would cause
       // context tracking drift if used here.
-      const allCountsAreExact = reasoningParts.every(
-        (p) => p.token_source === "exact-api",
-      );
+      const allCountsAreExact = reasoningParts.every((p) => p.token_source === 'exact-api')
       if (allCountsAreExact) {
-        const strippedTokens = reasoningParts.reduce(
-          (sum, p) => sum + (p.token_count ?? 0),
-          0,
-        );
-        compactionTokensRemoved = strippedTokens;
+        const strippedTokens = reasoningParts.reduce((sum, p) => sum + (p.token_count ?? 0), 0)
+        compactionTokensRemoved = strippedTokens
         contextTokensAfterCompaction =
-          contextTokensAtTurnEnd !== null
-            ? contextTokensAtTurnEnd - strippedTokens
-            : null;
+          contextTokensAtTurnEnd !== null ? contextTokensAtTurnEnd - strippedTokens : null
       } else {
         // When any reasoning part has a non-exact token count (estimated,
         // delta-derived, or unknown), we cannot reliably determine how
         // many tokens were removed.  Set tokensRemoved to null to indicate
         // unknown, and leave contextTokensAfterCompaction unchanged.
-        compactionTokensRemoved = null;
-        contextTokensAfterCompaction = contextTokensAtTurnEnd;
+        compactionTokensRemoved = null
+        contextTokensAfterCompaction = contextTokensAtTurnEnd
       }
 
       const updatePart = connection.prepare(`
@@ -179,14 +167,15 @@ function applyContextCompactionInner(
             stripped_by_compaction_at_step_id = ?,
             updated_at = ?
         WHERE id = ?
-      `);
+      `)
 
-      const updateAll = () => runInTransaction(connection, () => {
-        for (const partId of strippedPartIds) {
-          updatePart.run(stepId, now, partId);
-        }
-      });
-      updateAll();
+      const updateAll = () =>
+        runInTransaction(connection, () => {
+          for (const partId of strippedPartIds) {
+            updatePart.run(stepId, now, partId)
+          }
+        })
+      updateAll()
 
       // Update the step state with actual compaction results.
       connection
@@ -206,7 +195,7 @@ function applyContextCompactionInner(
             contextTokensAfterCompaction,
             compactionTokensRemoved,
           }),
-        });
+        })
     }
   }
 
@@ -216,7 +205,7 @@ function applyContextCompactionInner(
     contextTokensAfterCompaction,
     compactionApplied: strategy,
     compactionTokensRemoved,
-  };
+  }
 
   connection
     .prepare(
@@ -235,7 +224,7 @@ function applyContextCompactionInner(
       contextTokensAfterCompaction,
       compactionApplied: strategy,
       compactionTokensRemoved,
-    });
+    })
 
   return {
     turn: updatedTurn,
@@ -246,5 +235,5 @@ function applyContextCompactionInner(
     contextTokensAtTurnEnd,
     contextTokensAfterCompaction,
     compactionTokensRemoved,
-  };
+  }
 }

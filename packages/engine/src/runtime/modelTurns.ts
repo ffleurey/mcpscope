@@ -231,6 +231,7 @@ interface ModelTurnFailureInfo {
   receivedBytes: number | null
   segments: AssistantSegment[]
   completion: OaiChatCompletionResponse | null
+  errorType: 'internal' | 'aborted' | 'provider_unreachable'
 }
 
 /**
@@ -272,7 +273,7 @@ function finalizeModelTurnStreamFailure(
   })
 
   round.status = 'error'
-  round.finishReason = 'error'
+  round.finishReason = info.errorType === 'aborted' ? 'cancelled' : 'error'
   round.completedAt = completedAt
   round.requestPayloadJson = requestBody
   round.responseTraceJson = {
@@ -281,7 +282,7 @@ function finalizeModelTurnStreamFailure(
     error: info.message,
   }
 
-  turn.status = 'error'
+  turn.status = info.errorType === 'aborted' ? 'aborted' : 'error'
   turn.completedAt = completedAt
   turn.outcome = `step-error: ${info.message}`
 
@@ -328,7 +329,7 @@ function finalizeModelTurnStreamFailure(
   emitEvent?.({
     type: 'turn-failed',
     turnId,
-    errorType: 'internal',
+    errorType: info.errorType,
     message: info.message,
   })
 
@@ -541,6 +542,7 @@ export async function createModelOnlyTurn(
         receivedBytes: null,
         segments: streamedCompletion.segments,
         completion,
+        errorType: 'internal',
       },
       emitEvent,
     )
@@ -566,6 +568,7 @@ export async function createModelOnlyTurn(
         receivedBytes: null,
         segments: [],
         completion,
+        errorType: 'provider_unreachable',
       },
       emitEvent,
     )
@@ -703,7 +706,7 @@ export async function createModelOnlyTurn(
 
   session.status = 'active'
   session.updatedAt = completedAt
-  maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent)
+  maybeApplyAutomaticSessionTitle(session, turn.turnNumber, input.userContent, emitEvent)
   // SHORTCUT: this attribution probe runs BEFORE the turn's finalize
   // transaction, so a transient non-400 probe failure (which
   // probeRequestPromptTokens deliberately propagates) throws away an

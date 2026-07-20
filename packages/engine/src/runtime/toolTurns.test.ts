@@ -1870,7 +1870,9 @@ describe('tool-enabled turn runtime', () => {
     expect(result.turn.outcome).toBe('tool-loop-limit:2')
     expect(result.parts.some((p) => p.partType === 'assistant-content')).toBe(false)
     const note = result.parts.find((p) => p.partType === 'diagnostic-note')
-    expect(note?.payload.text).toMatch(/final tools-disabled round still produced no assistant answer/i)
+    expect(note?.payload.text).toMatch(
+      /final tools-disabled round still produced no assistant answer/i,
+    )
 
     db.connection.close()
   })
@@ -1906,18 +1908,12 @@ describe('tool-enabled turn runtime', () => {
     expect(turnData['no_final_answer']).toBe(true)
 
     // Render layer: an explicit line, not a silent absence, for the reader/judge.
-    const text = renderInspect(
-      (turnLookup as { payload: InspectResult }).payload,
-      'text',
-    )
+    const text = renderInspect((turnLookup as { payload: InspectResult }).payload, 'text')
     expect(text).toMatch(/no final answer/i)
 
     // A healthy answered turn does NOT carry the marker.
     const sessionLookup = resolveHierarchicalId(db.connection, session.id, 'full')
-    const sessionText = renderInspect(
-      (sessionLookup as { payload: InspectResult }).payload,
-      'text',
-    )
+    const sessionText = renderInspect((sessionLookup as { payload: InspectResult }).payload, 'text')
     expect(sessionText).toMatch(/no final answer/i)
 
     db.connection.close()
@@ -1950,7 +1946,12 @@ describe('tool-enabled turn runtime', () => {
               },
             },
           ],
-          usage: { prompt_tokens: 10, completion_tokens: 20, reasoning_tokens: 20, total_tokens: 30 },
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            reasoning_tokens: 20,
+            total_tokens: 30,
+          },
         }
       },
     }

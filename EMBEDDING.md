@@ -211,17 +211,34 @@ engine.config.listModelConfigs()   // → ModelConfig[]
 
 ```ts
 const { session } = await engine.createSession({
-  title: 'Support chat',
-  model_config_id: 'qwen',       // optional; falls back to sessionCreationDefaults
-  mcp_profile_ids: ['weather'],  // optional; overrides the default-enabled selection
-  compaction: 'strip-reasoning', // optional: 'none' | 'strip-reasoning' (default)
-  wait: true,                    // block until init finishes
+  title: 'Support chat',          // optional — defaults to 'New session'; auto-titled from first prompt
+  model_config_id: 'qwen',        // optional; falls back to sessionCreationDefaults
+  mcp_profile_ids: ['weather'],   // optional; overrides the default-enabled selection
+  compaction: 'strip-reasoning',  // optional: 'none' | 'strip-reasoning' (default)
+  wait: true,                     // block until init finishes
 })
 // session = { id, title, status, init_status, model: { id, name } }
 ```
 
 Session initialization connects to the MCP servers and probes the model. With
 `wait: true`, `session.init_status` is terminal (`ready` or `error`) on return.
+
+When `title` is omitted (or default), the engine auto-titles the session from the
+first user prompt and emits a `session-title-changed` event on `onEvent`.
+
+### Manage sessions
+
+```ts
+// Rename a session.
+const { session_id, title } = await engine.renameSession({
+  session_id: session.id,
+  title: 'New title',
+})
+
+// Delete a session and all its child sessions, turns, rounds, parts, and raw
+// exchanges. Rejects if the session has an active or queued job.
+const { deleted } = await engine.deleteSession({ session_id: session.id })
+```
 
 ### Send a turn
 
@@ -244,12 +261,22 @@ const status = await engine.status({ session_id: session.id })
 // status.session.state: 'initializing' | 'ready' | 'running' | 'error'
 // status.session.latest_error?: { step_id, error_kind, message }
 // status.active_turn: { id, status } | null
+// status.queue_position?: number   // 1-based queue position when queued
 ```
 
-### Abort
+When a session has a pending (draft) turn that hasn't started executing yet,
+`queue_position` gives its 1-based position in the scheduler queue.
+
+### Abort a session
 
 ```ts
-engine.abortActive()   // aborts the currently running job, if any
+// Targeted abort: aborts the active turn if running, dequeues if pending,
+// or reports not-running. Use this instead of abortActive() for per-session control.
+const { outcome } = await engine.abortSession({ session_id: session.id })
+// outcome: 'aborted' | 'dequeued' | 'not-running'
+
+// Legacy: abort whatever is currently running (session-agnostic).
+engine.abortActive()   // returns boolean; true if an active job was signalled
 ```
 
 ## 7. Transparency: the event stream
@@ -286,7 +313,8 @@ const unsubscribe = engine.onEvent((event) => {
 | `part-committed` | A finished part — full `PartRecord` incl. token attribution + context-window state. |
 | `round-committed` | A round finished. |
 | `turn-committed` | The turn finished; carries the full trace bundle. |
-| `turn-failed` | The turn errored. |
+| `turn-failed` | The turn errored. `errorType` distinguishes `'aborted'` (user stop), `'provider_unreachable'` (connection refused/DNS), and `'internal'` (other failures). |
+| `session-title-changed` | The engine auto-titled the session from the first prompt (emitted once per session, on turn 1). |
 
 So a live token stream comes from `part-delta`; durable, attributable records come
 from `part-committed`; and `turn-committed` hands you the whole trace without a
@@ -437,6 +465,9 @@ wiring — `listSessions()`, `getTrace()`, `onEvent()` all work without a model.
 | `listSessions` | `() => Promise<ListResult>` |
 | `inspect` | `(input: InspectInput) => Promise<InspectResult>` |
 | `getTrace` | `(sessionId: string) => SessionTraceBundle \| null` |
+| `renameSession` | `(input: RenameInput) => Promise<RenameResult>` |
+| `deleteSession` | `(input: DeleteInput) => Promise<DeleteResult>` |
+| `abortSession` | `(input: AbortInput) => Promise<AbortResult>` |
 | `onEvent` | `(listener: (e: SchedulerEvent) => void) => () => void` |
 | `abortActive` | `() => boolean` |
 | `close` | `() => void` |
@@ -480,12 +511,15 @@ engine.onEvent(e => {                     // e: SchedulerEvent
   if (e.type === 'scheduler-execution-event') { /* e.sessionId, e.event: TurnStreamEvent */ }
 })                                        // → returns unsubscribe()
 
-const { session } = await engine.createSession({ title, model_config_id?, mcp_profile_ids?, wait? })
+const { session } = await engine.createSession({ title?, model_config_id?, mcp_profile_ids?, wait? })
 const { turn }    = await engine.send({ session_id: session.id, prompt, wait? })
 const status      = await engine.status({ session_id: session.id })
 const { sessions }= await engine.listSessions()
 const node        = await engine.inspect({ id, short?, format? })
 const trace       = engine.getTrace(session.id)         // SessionTraceBundle | null
+const { deleted } = await engine.deleteSession({ session_id })
+const { outcome } = await engine.abortSession({ session_id })  // 'aborted' | 'dequeued' | 'not-running'
+await engine.renameSession({ session_id, title })
 engine.abortActive()
 engine.close()
 

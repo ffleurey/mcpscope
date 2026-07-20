@@ -5,7 +5,7 @@
 // persistence/benchmarkRepository.js by workbench code — neither is
 // re-exported here.
 
-export type { ActiveSessionInfo, RecoveryStep } from "./repositoryRuntime.js";
+export type { ActiveSessionInfo, RecoveryStep } from './repositoryRuntime.js'
 export {
   insertStepRecord,
   updateStepRecord,
@@ -43,4 +43,4 @@ export {
   getNextPartOrdinal,
   getNextRoundPartSequence,
   getNextPreludePartSequence,
-} from "./repositoryRuntime.js";
+} from './repositoryRuntime.js'

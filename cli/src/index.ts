@@ -1,26 +1,20 @@
 #!/usr/bin/env node
-import fs from "node:fs";
-import { pathToFileURL } from "node:url";
-import { resolveBackendUrl } from "./config.js";
-import { getPackageVersion } from "./version.js";
-import { OperationError, printError } from "./errors.js";
-import {
-  parseSessionsListArgs,
-  runSessionsList,
-} from "./commands/sessions/list.js";
-import { parseInspectArgs, runInspect } from "./commands/inspect.js";
-import { parseServeArgs, runServe } from "./commands/serve.js";
-import { parseCreateArgs, runCreate } from "./commands/create.js";
-import { parseSendArgs, runSend } from "./commands/send.js";
-import { parseStatusArgs, runStatus } from "./commands/status.js";
-import {
-  parseListModelConfigsArgs,
-  runListModelConfigs,
-} from "./commands/listModelConfigs.js";
-import {
-  parseListMcpProfilesArgs,
-  runListMcpProfiles,
-} from "./commands/listMcpProfiles.js";
+import fs from 'node:fs'
+import { pathToFileURL } from 'node:url'
+import { resolveBackendUrl } from './config.js'
+import { getPackageVersion } from './version.js'
+import { OperationError, printError } from './errors.js'
+import { parseSessionsListArgs, runSessionsList } from './commands/sessions/list.js'
+import { parseInspectArgs, runInspect } from './commands/inspect.js'
+import { parseServeArgs, runServe } from './commands/serve.js'
+import { parseCreateArgs, runCreate } from './commands/create.js'
+import { parseSendArgs, runSend } from './commands/send.js'
+import { parseStatusArgs, runStatus } from './commands/status.js'
+import { parseListModelConfigsArgs, runListModelConfigs } from './commands/listModelConfigs.js'
+import { parseListMcpProfilesArgs, runListMcpProfiles } from './commands/listMcpProfiles.js'
+import { parseDeleteSessionArgs, runDeleteSession } from './commands/deleteSession.js'
+import { parseRenameSessionArgs, runRenameSession } from './commands/renameSession.js'
+import { parseAbortSessionArgs, runAbortSession } from './commands/abortSession.js'
 import {
   parseBenchmarkCreateArgs,
   runBenchmarkCreate,
@@ -56,10 +50,11 @@ import {
   runBenchmarkRunEvaluations,
   parseBenchmarkEvaluationControlArgs,
   runBenchmarkEvaluationControl,
-} from "./commands/benchmark.js";
+} from './commands/benchmark.js'
 
 function printHelp(): void {
-  process.stdout.write(`mcpscope — local-first workbench for developing, inspecting, and benchmarking MCP servers.
+  process.stdout
+    .write(`mcpscope — local-first workbench for developing, inspecting, and benchmarking MCP servers.
 Backend + Web UI at http://localhost:3066 (mcpscope serve); this CLI and the MCP interface
 (http://localhost:3066/mcp) drive the same sessions. The core loop — create --wait, send --wait,
 inspect — is walked through with real numbers in EXAMPLE.md.
@@ -75,6 +70,10 @@ Usage: mcpscope <command> [options]
   mcpscope inspect <id> [--short] [--json]
   mcpscope list_model_configs [--json]
   mcpscope list_mcp_profiles [--json]
+
+  mcpscope delete_session <session-id> [--json]
+  mcpscope rename_session <session-id> <title> [--json]
+  mcpscope abort_session <session-id> [--json]
 
   mcpscope benchmark_create <name> [--description <text>] [--json]
   mcpscope benchmark_list [--json]
@@ -98,370 +97,347 @@ Usage: mcpscope <command> [options]
 Options:
   --json        emit JSON instead of text
   --url <url>   backend URL  (default: http://localhost:3066, or MCPSCOPE_URL)
-`);
+`)
 }
 
 export async function main(argv: string[]): Promise<void> {
-  const args = argv.slice(2);
+  const args = argv.slice(2)
 
   // Extract global --url before dispatching (may be overridden per-command too)
-  let globalUrl: string | undefined;
-  const filteredArgs: string[] = [];
+  let globalUrl: string | undefined
+  const filteredArgs: string[] = []
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i] ?? "";
-    if (arg === "--url") {
-      const value = args[++i];
-      if (value === undefined || value.startsWith("--")) {
-        printError("--url requires a value");
-        process.exit(2);
+    const arg = args[i] ?? ''
+    if (arg === '--url') {
+      const value = args[++i]
+      if (value === undefined || value.startsWith('--')) {
+        printError('--url requires a value')
+        process.exit(2)
       }
-      globalUrl = value;
+      globalUrl = value
     } else {
-      filteredArgs.push(arg);
+      filteredArgs.push(arg)
     }
   }
 
-  const [cmd, sub, ...rest] = filteredArgs;
+  const [cmd, sub, ...rest] = filteredArgs
 
-  if (!cmd || cmd === "-h" || cmd === "--help") {
-    printHelp();
-    return;
+  if (!cmd || cmd === '-h' || cmd === '--help') {
+    printHelp()
+    return
   }
 
-  if (cmd === "--version" || cmd === "-v") {
-    process.stdout.write(`mcpscope ${getPackageVersion()}\n`);
-    return;
+  if (cmd === '--version' || cmd === '-v') {
+    process.stdout.write(`mcpscope ${getPackageVersion()}\n`)
+    return
   }
 
   // Local launcher (not a catalog operation): boots the bundled backend + frontend.
-  if (cmd === "serve") {
-    const parsed = parseServeArgs([sub, ...rest].filter(Boolean) as string[]);
-    if ("help" in parsed) {
-      printHelp();
-      return;
+  if (cmd === 'serve') {
+    const parsed = parseServeArgs([sub, ...rest].filter(Boolean) as string[])
+    if ('help' in parsed) {
+      printHelp()
+      return
     }
-    if ("error" in parsed) {
-      printError(parsed.error);
-      printError("Run `mcpscope --help` for usage.");
-      process.exit(2);
+    if ('error' in parsed) {
+      printError(parsed.error)
+      printError('Run `mcpscope --help` for usage.')
+      process.exit(2)
     }
-    await runServe(parsed.opts);
-    return;
+    await runServe(parsed.opts)
+    return
   }
 
-  if (cmd === "list") {
-    const parsed = parseSessionsListArgs(
-      [sub, ...rest].filter(Boolean) as string[],
-    );
-    if ("help" in parsed) {
-      printHelp();
-      return;
+  if (cmd === 'list') {
+    const parsed = parseSessionsListArgs([sub, ...rest].filter(Boolean) as string[])
+    if ('help' in parsed) {
+      printHelp()
+      return
     }
-    if ("error" in parsed) {
-      printError(parsed.error);
-      printError("Run `mcpscope --help` for usage.");
-      process.exit(2);
+    if ('error' in parsed) {
+      printError(parsed.error)
+      printError('Run `mcpscope --help` for usage.')
+      process.exit(2)
     }
-    const { opts } = parsed;
-    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl);
-    await runSessionsList({ ...opts, url: resolvedUrl });
-    return;
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runSessionsList({ ...opts, url: resolvedUrl })
+    return
   }
 
-  if (cmd === "create") {
-    const parsed = parseCreateArgs([sub, ...rest].filter(Boolean) as string[]);
-    if ("help" in parsed) {
-      printHelp();
-      return;
+  if (cmd === 'create') {
+    const parsed = parseCreateArgs([sub, ...rest].filter(Boolean) as string[])
+    if ('help' in parsed) {
+      printHelp()
+      return
     }
-    if ("error" in parsed) {
-      printError(parsed.error);
-      printError("Run `mcpscope --help` for usage.");
-      process.exit(2);
+    if ('error' in parsed) {
+      printError(parsed.error)
+      printError('Run `mcpscope --help` for usage.')
+      process.exit(2)
     }
-    const { opts } = parsed;
-    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl);
-    await runCreate({ ...opts, url: resolvedUrl });
-    return;
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runCreate({ ...opts, url: resolvedUrl })
+    return
   }
 
-  if (cmd === "send") {
-    const parsed = await parseSendArgs(
-      [sub, ...rest].filter(Boolean) as string[],
-    );
-    if ("help" in parsed) {
-      printHelp();
-      return;
+  if (cmd === 'send') {
+    const parsed = await parseSendArgs([sub, ...rest].filter(Boolean) as string[])
+    if ('help' in parsed) {
+      printHelp()
+      return
     }
-    if ("error" in parsed) {
-      printError(parsed.error);
-      printError("Run `mcpscope --help` for usage.");
-      process.exit(2);
+    if ('error' in parsed) {
+      printError(parsed.error)
+      printError('Run `mcpscope --help` for usage.')
+      process.exit(2)
     }
-    const { opts } = parsed;
-    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl);
-    await runSend({ ...opts, url: resolvedUrl });
-    return;
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runSend({ ...opts, url: resolvedUrl })
+    return
   }
 
-  if (cmd === "status") {
-    const parsed = parseStatusArgs([sub, ...rest].filter(Boolean) as string[]);
-    if ("help" in parsed) {
-      printHelp();
-      return;
+  if (cmd === 'status') {
+    const parsed = parseStatusArgs([sub, ...rest].filter(Boolean) as string[])
+    if ('help' in parsed) {
+      printHelp()
+      return
     }
-    if ("error" in parsed) {
-      printError(parsed.error);
-      printError("Run `mcpscope --help` for usage.");
-      process.exit(2);
+    if ('error' in parsed) {
+      printError(parsed.error)
+      printError('Run `mcpscope --help` for usage.')
+      process.exit(2)
     }
-    const { opts } = parsed;
-    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl);
-    await runStatus({ ...opts, url: resolvedUrl });
-    return;
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runStatus({ ...opts, url: resolvedUrl })
+    return
   }
 
-  if (cmd === "sessions") {
-    if (!sub || sub === "-h" || sub === "--help") {
-      printHelp();
-      return;
+  if (cmd === 'sessions') {
+    if (!sub || sub === '-h' || sub === '--help') {
+      printHelp()
+      return
     }
 
-    if (sub === "list") {
-      const parsed = parseSessionsListArgs(rest);
+    if (sub === 'list') {
+      const parsed = parseSessionsListArgs(rest)
 
-      if ("help" in parsed) {
-        printHelp();
-        return;
+      if ('help' in parsed) {
+        printHelp()
+        return
       }
-      if ("error" in parsed) {
-        printError(parsed.error);
-        printError("Run `mcpscope --help` for usage.");
-        process.exit(2);
+      if ('error' in parsed) {
+        printError(parsed.error)
+        printError('Run `mcpscope --help` for usage.')
+        process.exit(2)
       }
 
-      const { opts } = parsed;
-      const resolvedUrl = resolveBackendUrl(opts.url || globalUrl);
-      await runSessionsList({ ...opts, url: resolvedUrl });
-      return;
+      const { opts } = parsed
+      const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+      await runSessionsList({ ...opts, url: resolvedUrl })
+      return
     }
 
-    printError(`Unknown subcommand: sessions ${sub}`);
-    printError("Run `mcpscope --help` for usage.");
-    process.exit(2);
+    printError(`Unknown subcommand: sessions ${sub}`)
+    printError('Run `mcpscope --help` for usage.')
+    process.exit(2)
   }
 
   const dispatchFlat = async <T extends { url: string }>(
     parsed: { opts: T } | { help: true } | { error: string },
     run: (opts: T) => Promise<void>,
   ): Promise<void> => {
-    if ("help" in parsed) {
-      printHelp();
-      return;
+    if ('help' in parsed) {
+      printHelp()
+      return
     }
-    if ("error" in parsed) {
-      printError(parsed.error);
-      printError("Run `mcpscope --help` for usage.");
-      process.exit(2);
+    if ('error' in parsed) {
+      printError(parsed.error)
+      printError('Run `mcpscope --help` for usage.')
+      process.exit(2)
     }
-    const { opts } = parsed;
-    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl);
-    await run({ ...opts, url: resolvedUrl });
-  };
-
-  const benchmarkArgs = [sub, ...rest].filter(Boolean) as string[];
-
-  if (cmd === "benchmark_create") {
-    await dispatchFlat(parseBenchmarkCreateArgs(benchmarkArgs), runBenchmarkCreate);
-    return;
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await run({ ...opts, url: resolvedUrl })
   }
 
-  if (cmd === "benchmark_list") {
-    await dispatchFlat(parseBenchmarkListArgs(benchmarkArgs), runBenchmarkList);
-    return;
+  const benchmarkArgs = [sub, ...rest].filter(Boolean) as string[]
+
+  if (cmd === 'benchmark_create') {
+    await dispatchFlat(parseBenchmarkCreateArgs(benchmarkArgs), runBenchmarkCreate)
+    return
   }
 
-  if (cmd === "benchmark_inspect") {
-    await dispatchFlat(
-      parseBenchmarkInspectArgs(benchmarkArgs),
-      runBenchmarkInspect,
-    );
-    return;
+  if (cmd === 'benchmark_list') {
+    await dispatchFlat(parseBenchmarkListArgs(benchmarkArgs), runBenchmarkList)
+    return
   }
 
-  if (cmd === "benchmark_add_case") {
-    await dispatchFlat(
-      parseBenchmarkAddCaseArgs(benchmarkArgs),
-      runBenchmarkAddCase,
-    );
-    return;
+  if (cmd === 'benchmark_inspect') {
+    await dispatchFlat(parseBenchmarkInspectArgs(benchmarkArgs), runBenchmarkInspect)
+    return
   }
 
-  if (cmd === "benchmark_add_case_from_session") {
+  if (cmd === 'benchmark_add_case') {
+    await dispatchFlat(parseBenchmarkAddCaseArgs(benchmarkArgs), runBenchmarkAddCase)
+    return
+  }
+
+  if (cmd === 'benchmark_add_case_from_session') {
     await dispatchFlat(
       parseBenchmarkAddCaseFromSessionArgs(benchmarkArgs),
       runBenchmarkAddCaseFromSession,
-    );
-    return;
+    )
+    return
   }
 
-  if (cmd === "benchmark_update_case") {
-    await dispatchFlat(
-      parseBenchmarkUpdateCaseArgs(benchmarkArgs),
-      runBenchmarkUpdateCase,
-    );
-    return;
+  if (cmd === 'benchmark_update_case') {
+    await dispatchFlat(parseBenchmarkUpdateCaseArgs(benchmarkArgs), runBenchmarkUpdateCase)
+    return
   }
 
-  if (cmd === "benchmark_delete_case") {
-    await dispatchFlat(
-      parseBenchmarkDeleteCaseArgs(benchmarkArgs),
-      runBenchmarkDeleteCase,
-    );
-    return;
+  if (cmd === 'benchmark_delete_case') {
+    await dispatchFlat(parseBenchmarkDeleteCaseArgs(benchmarkArgs), runBenchmarkDeleteCase)
+    return
   }
 
-  if (cmd === "benchmark_delete") {
-    await dispatchFlat(
-      parseBenchmarkDeleteArgs(benchmarkArgs),
-      runBenchmarkDelete,
-    );
-    return;
+  if (cmd === 'benchmark_delete') {
+    await dispatchFlat(parseBenchmarkDeleteArgs(benchmarkArgs), runBenchmarkDelete)
+    return
   }
 
-  if (cmd === "benchmark_delete_run") {
-    await dispatchFlat(
-      parseBenchmarkDeleteRunArgs(benchmarkArgs),
-      runBenchmarkDeleteRun,
-    );
-    return;
+  if (cmd === 'benchmark_delete_run') {
+    await dispatchFlat(parseBenchmarkDeleteRunArgs(benchmarkArgs), runBenchmarkDeleteRun)
+    return
   }
 
-  if (cmd === "benchmark_delete_evaluation") {
+  if (cmd === 'benchmark_delete_evaluation') {
     await dispatchFlat(
       parseBenchmarkDeleteEvaluationArgs(benchmarkArgs),
       runBenchmarkDeleteEvaluation,
-    );
-    return;
+    )
+    return
   }
 
-  if (cmd === "benchmark_run") {
-    await dispatchFlat(parseBenchmarkRunArgs(benchmarkArgs), runBenchmarkRun);
-    return;
+  if (cmd === 'benchmark_run') {
+    await dispatchFlat(parseBenchmarkRunArgs(benchmarkArgs), runBenchmarkRun)
+    return
   }
 
-  if (cmd === "benchmark_run_status") {
-    await dispatchFlat(
-      parseBenchmarkRunStatusArgs(benchmarkArgs),
-      runBenchmarkRunStatus,
-    );
-    return;
+  if (cmd === 'benchmark_run_status') {
+    await dispatchFlat(parseBenchmarkRunStatusArgs(benchmarkArgs), runBenchmarkRunStatus)
+    return
   }
 
-  if (cmd === "benchmark_run_report") {
-    await dispatchFlat(
-      parseBenchmarkRunReportArgs(benchmarkArgs),
-      runBenchmarkRunReport,
-    );
-    return;
+  if (cmd === 'benchmark_run_report') {
+    await dispatchFlat(parseBenchmarkRunReportArgs(benchmarkArgs), runBenchmarkRunReport)
+    return
   }
 
-  if (cmd === "benchmark_run_control") {
-    await dispatchFlat(
-      parseBenchmarkRunControlArgs(benchmarkArgs),
-      runBenchmarkRunControl,
-    );
-    return;
+  if (cmd === 'benchmark_run_control') {
+    await dispatchFlat(parseBenchmarkRunControlArgs(benchmarkArgs), runBenchmarkRunControl)
+    return
   }
 
-  if (cmd === "benchmark_evaluate") {
-    await dispatchFlat(
-      parseBenchmarkEvaluateArgs(benchmarkArgs),
-      runBenchmarkEvaluate,
-    );
-    return;
+  if (cmd === 'benchmark_evaluate') {
+    await dispatchFlat(parseBenchmarkEvaluateArgs(benchmarkArgs), runBenchmarkEvaluate)
+    return
   }
 
-  if (cmd === "benchmark_run_evaluations") {
-    await dispatchFlat(
-      parseBenchmarkRunEvaluationsArgs(benchmarkArgs),
-      runBenchmarkRunEvaluations,
-    );
-    return;
+  if (cmd === 'benchmark_run_evaluations') {
+    await dispatchFlat(parseBenchmarkRunEvaluationsArgs(benchmarkArgs), runBenchmarkRunEvaluations)
+    return
   }
 
-  if (cmd === "benchmark_evaluation_control") {
+  if (cmd === 'benchmark_evaluation_control') {
     await dispatchFlat(
       parseBenchmarkEvaluationControlArgs(benchmarkArgs),
       runBenchmarkEvaluationControl,
-    );
-    return;
+    )
+    return
   }
 
-  if (cmd === "inspect") {
-    const parsed = parseInspectArgs([sub, ...rest].filter(Boolean) as string[]);
+  if (cmd === 'inspect') {
+    const parsed = parseInspectArgs([sub, ...rest].filter(Boolean) as string[])
 
-    if ("help" in parsed) {
-      printHelp();
-      return;
+    if ('help' in parsed) {
+      printHelp()
+      return
     }
-    if ("error" in parsed) {
-      printError(parsed.error);
-      printError("Run `mcpscope --help` for usage.");
-      process.exit(2);
+    if ('error' in parsed) {
+      printError(parsed.error)
+      printError('Run `mcpscope --help` for usage.')
+      process.exit(2)
     }
 
-    const { opts } = parsed;
-    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl);
-    await runInspect({ ...opts, url: resolvedUrl });
-    return;
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runInspect({ ...opts, url: resolvedUrl })
+    return
   }
 
-  if (cmd === "list_model_configs") {
-    const parsed = parseListModelConfigsArgs(
-      [sub, ...rest].filter(Boolean) as string[],
-    );
-    if ("help" in parsed) {
-      printHelp();
-      return;
+  if (cmd === 'list_model_configs') {
+    const parsed = parseListModelConfigsArgs([sub, ...rest].filter(Boolean) as string[])
+    if ('help' in parsed) {
+      printHelp()
+      return
     }
-    if ("error" in parsed) {
-      printError(parsed.error);
-      printError("Run `mcpscope --help` for usage.");
-      process.exit(2);
+    if ('error' in parsed) {
+      printError(parsed.error)
+      printError('Run `mcpscope --help` for usage.')
+      process.exit(2)
     }
-    const { opts } = parsed;
-    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl);
-    await runListModelConfigs({ ...opts, url: resolvedUrl });
-    return;
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runListModelConfigs({ ...opts, url: resolvedUrl })
+    return
   }
 
-  if (cmd === "list_mcp_profiles") {
-    const parsed = parseListMcpProfilesArgs(
-      [sub, ...rest].filter(Boolean) as string[],
-    );
-    if ("help" in parsed) {
-      printHelp();
-      return;
+  if (cmd === 'list_mcp_profiles') {
+    const parsed = parseListMcpProfilesArgs([sub, ...rest].filter(Boolean) as string[])
+    if ('help' in parsed) {
+      printHelp()
+      return
     }
-    if ("error" in parsed) {
-      printError(parsed.error);
-      printError("Run `mcpscope --help` for usage.");
-      process.exit(2);
+    if ('error' in parsed) {
+      printError(parsed.error)
+      printError('Run `mcpscope --help` for usage.')
+      process.exit(2)
     }
-    const { opts } = parsed;
-    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl);
-    await runListMcpProfiles({ ...opts, url: resolvedUrl });
-    return;
+    const { opts } = parsed
+    const resolvedUrl = resolveBackendUrl(opts.url || globalUrl)
+    await runListMcpProfiles({ ...opts, url: resolvedUrl })
+    return
   }
 
-  printError(`Unknown command: ${cmd}`);
-  printError("Run `mcpscope --help` for usage.");
-  process.exit(2);
+  // Operation-backed session management commands
+  const sessionMgmtArgs = [sub, ...rest].filter(Boolean) as string[]
+
+  if (cmd === 'delete_session') {
+    await dispatchFlat(parseDeleteSessionArgs(sessionMgmtArgs), runDeleteSession)
+    return
+  }
+
+  if (cmd === 'rename_session') {
+    await dispatchFlat(parseRenameSessionArgs(sessionMgmtArgs), runRenameSession)
+    return
+  }
+
+  if (cmd === 'abort_session') {
+    await dispatchFlat(parseAbortSessionArgs(sessionMgmtArgs), runAbortSession)
+    return
+  }
+
+  printError(`Unknown command: ${cmd}`)
+  printError('Run `mcpscope --help` for usage.')
+  process.exit(2)
 }
 
 function reportFatal(err: unknown): never {
-  const wantsJson = process.argv.includes("--json");
+  const wantsJson = process.argv.includes('--json')
   if (err instanceof OperationError) {
     if (wantsJson) {
       // Machine-readable error envelope — same shape as the backend's, so
@@ -471,22 +447,20 @@ function reportFatal(err: unknown): never {
           error: {
             message: err.message,
             ...(err.code !== undefined ? { code: err.code } : {}),
-            ...(err.active_session !== undefined
-              ? { active_session: err.active_session }
-              : {}),
+            ...(err.active_session !== undefined ? { active_session: err.active_session } : {}),
           },
         })}\n`,
-      );
+      )
     } else {
-      printError(err.message);
-      if (err.message.startsWith("Cannot reach backend") && err.message.includes("ECONNREFUSED")) {
-        printError("Is mcpscope running? Start it with `mcpscope serve`.");
+      printError(err.message)
+      if (err.message.startsWith('Cannot reach backend') && err.message.includes('ECONNREFUSED')) {
+        printError('Is mcpscope running? Start it with `mcpscope serve`.')
       }
     }
-    process.exit(1);
+    process.exit(1)
   }
-  printError(err instanceof Error ? err.message : String(err));
-  process.exit(1);
+  printError(err instanceof Error ? err.message : String(err))
+  process.exit(1)
 }
 
 // Entry-point guard: importing this module (tests, tooling) must not execute
@@ -494,13 +468,13 @@ function reportFatal(err: unknown): never {
 // symlink (node_modules/.bin/mcpscope), while import.meta.url is the resolved
 // module path.
 const invokedScript = (() => {
-  if (!process.argv[1]) return null;
+  if (!process.argv[1]) return null
   try {
-    return pathToFileURL(fs.realpathSync(process.argv[1])).href;
+    return pathToFileURL(fs.realpathSync(process.argv[1])).href
   } catch {
-    return null;
+    return null
   }
-})();
+})()
 if (invokedScript === import.meta.url) {
-  main(process.argv).catch(reportFatal);
+  main(process.argv).catch(reportFatal)
 }

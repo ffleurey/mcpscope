@@ -22,7 +22,7 @@
  * migration code: a fresh/empty database is initialized to the current schema.
  */
 
-import type { BackendConnection } from "./connection.js";
+import type { BackendConnection } from './connection.js'
 import {
   compactionStrategyValues,
   contextStateValues,
@@ -36,14 +36,14 @@ import {
   tokenSourceValues,
   turnStatusValues,
   SCHEMA_VERSION,
-} from "../domain/model.js";
-import { ARTIFACT_TYPE } from "../domain/executionModel.js";
+} from '../domain/model.js'
+import { ARTIFACT_TYPE } from '../domain/executionModel.js'
 
 export function sqlEnum(values: readonly string[]): string {
-  return values.map((v) => `'${v}'`).join(", ");
+  return values.map((v) => `'${v}'`).join(', ')
 }
 
-const artifactTypeValues = Object.values(ARTIFACT_TYPE) as string[];
+const artifactTypeValues = Object.values(ARTIFACT_TYPE) as string[]
 
 /**
  * Schema-extension registry — the engine-side hook that lets the workbench
@@ -61,18 +61,15 @@ const artifactTypeValues = Object.values(ARTIFACT_TYPE) as string[];
  */
 export interface SchemaExtension {
   /** Applies the extension's DDL (CREATE TABLE IF NOT EXISTS style, idempotent). */
-  apply(connection: BackendConnection): void;
+  apply(connection: BackendConnection): void
   /** Required columns per table, merged into `validateSchema`'s check. */
-  requiredColumns: Record<string, readonly string[]>;
+  requiredColumns: Record<string, readonly string[]>
 }
 
-const schemaExtensions = new Map<string, SchemaExtension>();
+const schemaExtensions = new Map<string, SchemaExtension>()
 
-export function registerSchemaExtension(
-  name: string,
-  extension: SchemaExtension,
-): void {
-  schemaExtensions.set(name, extension);
+export function registerSchemaExtension(name: string, extension: SchemaExtension): void {
+  schemaExtensions.set(name, extension)
 }
 
 export function initializeSchema(connection: BackendConnection): void {
@@ -287,21 +284,21 @@ export function initializeSchema(connection: BackendConnection): void {
 
     CREATE INDEX IF NOT EXISTS idx_artifacts_session_id ON artifacts(session_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_step_id ON artifacts(step_id);
-  `);
+  `)
 
   // Registered schema extensions (e.g. the workbench's benchmark tables) apply
   // their DDL after the core tables and before the version stamp — the same
   // position their DDL occupied when it was inlined here.
   for (const extension of schemaExtensions.values()) {
-    extension.apply(connection);
+    extension.apply(connection)
   }
 
   const upsertMeta = connection.prepare(`
     INSERT INTO schema_meta (key, value)
     VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `);
-  upsertMeta.run("schema_version", String(SCHEMA_VERSION));
+  `)
+  upsertMeta.run('schema_version', String(SCHEMA_VERSION))
 }
 
 /**
@@ -313,172 +310,165 @@ export function initializeSchema(connection: BackendConnection): void {
  * SQLITE_CONSTRAINT errors. Must run BEFORE initializeSchema, which
  * unconditionally re-stamps the current version.
  */
-export function assertSchemaVersion(
-  connection: BackendConnection,
-  sqlitePath: string,
-): void {
+export function assertSchemaVersion(connection: BackendConnection, sqlitePath: string): void {
   const hasMeta = connection
-    .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'",
-    )
-    .get() as { name: string } | undefined;
-  if (!hasMeta) return; // fresh database — initializeSchema stamps it below
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'")
+    .get() as { name: string } | undefined
+  if (!hasMeta) return // fresh database — initializeSchema stamps it below
   const row = connection
     .prepare("SELECT value FROM schema_meta WHERE key = 'schema_version'")
-    .get() as { value: string } | undefined;
-  if (!row) return; // meta table without a stamp: let initializeSchema stamp it
+    .get() as { value: string } | undefined
+  if (!row) return // meta table without a stamp: let initializeSchema stamp it
   if (row.value !== String(SCHEMA_VERSION)) {
     throw new Error(
       `Database schema version mismatch: ${sqlitePath} was created with schema version ` +
         `${row.value}, but this build of mcpscope uses version ${SCHEMA_VERSION} and has no ` +
         `migration support (pre-1.0). Move or delete that file to start fresh, or run the ` +
         `mcpscope version that created it.`,
-    );
+    )
   }
 }
 
 export function validateSchema(connection: BackendConnection): void {
   const getColumns = (table: string): Set<string> => {
-    const rows = connection
-      .prepare(`PRAGMA table_info(${table})`)
-      .all() as { name: string }[];
-    return new Set(rows.map((r) => r.name));
-  };
+    const rows = connection.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+    return new Set(rows.map((r) => r.name))
+  }
 
   const required: Record<string, string[]> = {
     sessions: [
-      "id",
-      "title",
-      "session_type_key",
-      "parent_container_type_key",
-      "parent_container_id",
-      "status",
-      "init_status",
-      "params_json",
-      "state_json",
-      "analysis_state_json",
-      "created_at",
-      "updated_at",
+      'id',
+      'title',
+      'session_type_key',
+      'parent_container_type_key',
+      'parent_container_id',
+      'status',
+      'init_status',
+      'params_json',
+      'state_json',
+      'analysis_state_json',
+      'created_at',
+      'updated_at',
     ],
     steps: [
-      "id",
-      "session_id",
-      "step_type_key",
-      "parent_step_id",
-      "child_index",
-      "status",
-      "params_json",
-      "state_json",
-      "created_at",
-      "completed_at",
+      'id',
+      'session_id',
+      'step_type_key',
+      'parent_step_id',
+      'child_index',
+      'status',
+      'params_json',
+      'state_json',
+      'created_at',
+      'completed_at',
     ],
     turns: [
-      "id",
-      "session_id",
-      "owner_step_id",
-      "turn_number",
-      "status",
-      "outcome",
-      "prompt_tokens",
-      "completion_tokens",
-      "reasoning_tokens",
-      "total_tokens",
-      "context_tokens_at_turn_end",
-      "context_tokens_after_compaction",
-      "compaction_applied",
-      "compaction_tokens_removed",
-      "created_at",
-      "completed_at",
+      'id',
+      'session_id',
+      'owner_step_id',
+      'turn_number',
+      'status',
+      'outcome',
+      'prompt_tokens',
+      'completion_tokens',
+      'reasoning_tokens',
+      'total_tokens',
+      'context_tokens_at_turn_end',
+      'context_tokens_after_compaction',
+      'compaction_applied',
+      'compaction_tokens_removed',
+      'created_at',
+      'completed_at',
     ],
     rounds: [
-      "id",
-      "turn_id",
-      "session_id",
-      "round_index",
-      "status",
-      "finish_reason",
-      "prompt_tokens",
-      "completion_tokens",
-      "reasoning_tokens",
-      "total_tokens",
-      "request_payload_json",
-      "response_trace_json",
-      "started_at",
-      "completed_at",
+      'id',
+      'turn_id',
+      'session_id',
+      'round_index',
+      'status',
+      'finish_reason',
+      'prompt_tokens',
+      'completion_tokens',
+      'reasoning_tokens',
+      'total_tokens',
+      'request_payload_json',
+      'response_trace_json',
+      'started_at',
+      'completed_at',
     ],
     parts: [
-      "id",
-      "session_id",
-      "turn_id",
-      "round_id",
-      "parent_part_id",
-      "ordinal",
-      "part_type",
-      "role_label",
-      "payload_text",
-      "payload_json",
-      "payload_mime_type",
-      "payload_summary",
-      "display_state",
-      "collapsed_by_default",
-      "context_state",
-      "context_note",
-      "stripped_by_compaction_at_step_id",
-      "token_count",
-      "token_source",
-      "token_confidence",
-      "token_note",
-      "provenance_json",
-      "created_at",
-      "updated_at",
+      'id',
+      'session_id',
+      'turn_id',
+      'round_id',
+      'parent_part_id',
+      'ordinal',
+      'part_type',
+      'role_label',
+      'payload_text',
+      'payload_json',
+      'payload_mime_type',
+      'payload_summary',
+      'display_state',
+      'collapsed_by_default',
+      'context_state',
+      'context_note',
+      'stripped_by_compaction_at_step_id',
+      'token_count',
+      'token_source',
+      'token_confidence',
+      'token_note',
+      'provenance_json',
+      'created_at',
+      'updated_at',
     ],
     raw_exchanges: [
-      "id",
-      "session_id",
-      "turn_id",
-      "round_id",
-      "kind",
-      "request_url",
-      "request_method",
-      "request_headers_json",
-      "request_body",
-      "response_status",
-      "response_headers_json",
-      "response_body",
-      "created_at",
+      'id',
+      'session_id',
+      'turn_id',
+      'round_id',
+      'kind',
+      'request_url',
+      'request_method',
+      'request_headers_json',
+      'request_body',
+      'response_status',
+      'response_headers_json',
+      'response_body',
+      'created_at',
     ],
     artifacts: [
-      "id",
-      "session_id",
-      "step_id",
-      "artifact_type_key",
-      "content_text",
-      "content_json",
-      "content_data",
-      "mime_type",
-      "metadata_json",
-      "created_at",
+      'id',
+      'session_id',
+      'step_id',
+      'artifact_type_key',
+      'content_text',
+      'content_json',
+      'content_data',
+      'mime_type',
+      'metadata_json',
+      'created_at',
     ],
-  };
+  }
 
-  const missing: string[] = [];
+  const missing: string[] = []
   for (const extension of schemaExtensions.values()) {
     for (const [table, columns] of Object.entries(extension.requiredColumns)) {
-      required[table] = [...(required[table] ?? []), ...columns];
+      required[table] = [...(required[table] ?? []), ...columns]
     }
   }
   for (const [table, columns] of Object.entries(required)) {
-    const existing = getColumns(table);
+    const existing = getColumns(table)
     for (const col of columns) {
-      if (!existing.has(col)) missing.push(`${table}.${col}`);
+      if (!existing.has(col)) missing.push(`${table}.${col}`)
     }
   }
 
   if (missing.length > 0) {
     throw new Error(
-      `Schema validation failed — missing columns:\n  ${missing.join("\n  ")}\n` +
+      `Schema validation failed — missing columns:\n  ${missing.join('\n  ')}\n` +
         `This indicates a failed or incomplete schema initialization.`,
-    );
+    )
   }
 }
 
@@ -492,7 +482,7 @@ export function querySchemaSummary(connection: BackendConnection) {
       ORDER BY name
     `,
     )
-    .all() as { name: string }[];
+    .all() as { name: string }[]
 
   const metaRows = connection
     .prepare(
@@ -502,10 +492,10 @@ export function querySchemaSummary(connection: BackendConnection) {
       ORDER BY key
     `,
     )
-    .all() as { key: string; value: string }[];
+    .all() as { key: string; value: string }[]
 
   return {
     tables: rows.map((row) => row.name),
     meta: Object.fromEntries(metaRows.map((row) => [row.key, row.value])),
-  };
+  }
 }
