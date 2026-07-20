@@ -1922,4 +1922,61 @@ describe('tool-enabled turn runtime', () => {
 
     db.connection.close()
   })
+
+  it('recovers a final answer emitted in the reasoning channel with empty content', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+    const counter = { count: 0 }
+    const mcpGateway = makeInspectGateway(counter)
+
+    // Interleaved-thinking model: the answer arrives as reasoning_content, with
+    // content empty, and the round finishes 'stop'.
+    const chatCompletionGateway: ChatCompletionGateway = {
+      async probePromptTokens() {
+        return 5
+      },
+      async createChatCompletion() {
+        return {
+          id: 'c1',
+          model: 'model-key',
+          created: 1,
+          choices: [
+            {
+              index: 0,
+              finish_reason: 'stop',
+              message: {
+                role: 'assistant',
+                content: null,
+                reasoning_content: '**Conclusion:** Stavanger uptime was 90.7% in June 2026.',
+              },
+            },
+          ],
+          usage: { prompt_tokens: 10, completion_tokens: 20, reasoning_tokens: 20, total_tokens: 30 },
+        }
+      },
+    }
+
+    const session = makeToolSession(db)
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
+      sessionId: session.id,
+      userContent: "What was Stavanger's June uptime?",
+      maxToolRounds: 5,
+    })
+
+    expect(result.turn.status).toBe('complete')
+    // The reasoning is surfaced as the assistant answer so downstream reads it.
+    const answer = result.parts.filter((p) => p.partType === 'assistant-content').at(-1)
+    expect(answer?.payload.text).toBe('**Conclusion:** Stavanger uptime was 90.7% in June 2026.')
+    // The original reasoning part is preserved.
+    expect(result.parts.some((p) => p.partType === 'assistant-reasoning')).toBe(true)
+    // The coercion is visible, not silent.
+    const note = result.parts.find((p) => p.partType === 'diagnostic-note')
+    expect(note?.payload.summary).toMatch(/recovered from reasoning channel/i)
+
+    // The turn now counts as answered — no "no final answer" marker.
+    const turnLookup = resolveHierarchicalId(db.connection, result.turn.id, 'full')
+    const turnData = (turnLookup as { payload: { data: Record<string, unknown> } }).payload.data
+    expect(turnData['no_final_answer']).toBeUndefined()
+
+    db.connection.close()
+  })
 })

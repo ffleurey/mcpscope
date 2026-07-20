@@ -51,6 +51,7 @@ import {
   describeStreamFailure,
   deriveAssistantContentTokenMetadata,
   extractContentSegmentTexts,
+  recoverAnswerFromReasoning,
 } from './turnAssembly.js'
 import {
   sessionContextBody,
@@ -1902,7 +1903,13 @@ export async function createToolEnabledTurn(
       continue
     }
 
-    const assistantContentSegments = extractContentSegmentTexts(streamedCompletion.segments)
+    // Recover an answer emitted in the reasoning channel with empty content
+    // (interleaved-thinking models) — but not on a truncated round, where
+    // reasoning is partial thinking rather than the final answer.
+    const { segments: answerSegments, recovered: answerFromReasoning } = roundTruncated
+      ? { segments: streamedCompletion.segments, recovered: false }
+      : recoverAnswerFromReasoning(streamedCompletion.segments)
+    const assistantContentSegments = extractContentSegmentTexts(answerSegments)
 
     const {
       parts: streamedParts,
@@ -1915,7 +1922,7 @@ export async function createToolEnabledTurn(
       roundNumber: currentRound.roundIndex + 1,
       roundId: currentRound.id,
       ownerStepId: input.ownerStepId ?? null,
-      segments: streamedCompletion.segments,
+      segments: answerSegments,
       reasoningTokens: usage.reasoningTokens,
       contentTokenMetadata: deriveAssistantContentTokenMetadata(
         assistantContentSegments,
@@ -1929,7 +1936,8 @@ export async function createToolEnabledTurn(
 
     // Truncation isn't an error — the response is complete-but-capped — but
     // it's still an anomaly worth surfacing in the transcript rather than
-    // leaving buried in round.finishReason.
+    // leaving buried in round.finishReason. A reasoning-channel recovery gets
+    // its own note so the coercion is visible rather than silent.
     const assistantParts = roundTruncated
       ? [
           ...streamedParts,
@@ -1947,7 +1955,24 @@ export async function createToolEnabledTurn(
             createdAt: completedAt,
           }),
         ]
-      : streamedParts
+      : answerFromReasoning
+        ? [
+            ...streamedParts,
+            buildDiagnosticNotePart({
+              session,
+              turnId,
+              turnNumber,
+              roundNumber: currentRound.roundIndex + 1,
+              roundId: currentRound.id,
+              ownerStepId: input.ownerStepId ?? null,
+              partNumber: nextPartNumber,
+              ordinal: nextOrdinal,
+              text: 'Final answer recovered from the reasoning channel: the model ended the turn with empty content but non-empty reasoning (common for interleaved-thinking models). The reasoning text is surfaced as the assistant answer so it is retained and scored.',
+              summary: 'Answer recovered from reasoning channel',
+              createdAt: completedAt,
+            }),
+          ]
+        : streamedParts
 
     turn.status = 'complete'
     turn.completedAt = completedAt
@@ -2062,9 +2087,12 @@ export async function createToolEnabledTurn(
     // fall through to the error path below.
   }
 
-  const finalContentSegments = finalCompletion
-    ? extractContentSegmentTexts(finalCompletion.segments)
-    : []
+  // Recover a reasoning-channel answer here too, so an interleaved-thinking model
+  // that answers the forced final round in its reasoning still counts as answered.
+  const finalRecovery = finalCompletion
+    ? recoverAnswerFromReasoning(finalCompletion.segments)
+    : { segments: [], recovered: false }
+  const finalContentSegments = extractContentSegmentTexts(finalRecovery.segments)
   if (finalCompletion && finalContentSegments.join('').trim().length > 0) {
     const finalCompletedAt = now()
     const provider = session.modelProfileSnapshot.providerType ?? 'lmstudio'
@@ -2108,7 +2136,7 @@ export async function createToolEnabledTurn(
       roundNumber: currentRound.roundIndex + 1,
       roundId: currentRound.id,
       ownerStepId: input.ownerStepId ?? null,
-      segments: finalCompletion.segments,
+      segments: finalRecovery.segments,
       reasoningTokens: finalUsage.reasoningTokens,
       contentTokenMetadata: deriveAssistantContentTokenMetadata(
         finalContentSegments,

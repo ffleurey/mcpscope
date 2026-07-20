@@ -67,6 +67,7 @@ import {
   describeStreamFailure,
   deriveAssistantContentTokenMetadata,
   extractContentSegmentTexts,
+  recoverAnswerFromReasoning,
 } from './turnAssembly.js'
 
 export interface ChatCompletionGateway {
@@ -569,7 +570,13 @@ export async function createModelOnlyTurn(
     assistantSegments: streamedCompletion.segments,
   }
 
-  const contentSegments = extractContentSegmentTexts(streamedCompletion.segments)
+  // Recover an answer emitted in the reasoning channel with empty content
+  // (interleaved-thinking models) — but not on a truncated round, where
+  // reasoning is partial thinking rather than the final answer.
+  const { segments: answerSegments, recovered: answerFromReasoning } = truncated
+    ? { segments: streamedCompletion.segments, recovered: false }
+    : recoverAnswerFromReasoning(streamedCompletion.segments)
+  const contentSegments = extractContentSegmentTexts(answerSegments)
 
   const {
     parts: streamedParts,
@@ -582,7 +589,7 @@ export async function createModelOnlyTurn(
     roundNumber: 1,
     roundId,
     ownerStepId: input.ownerStepId ?? null,
-    segments: streamedCompletion.segments,
+    segments: answerSegments,
     reasoningTokens: usage.reasoningTokens,
     contentTokenMetadata: deriveAssistantContentTokenMetadata(
       contentSegments,
@@ -596,7 +603,8 @@ export async function createModelOnlyTurn(
 
   // Truncation isn't an error — the response is complete-but-capped — but it's
   // still an anomaly worth surfacing in the transcript rather than leaving
-  // buried in round.finishReason.
+  // buried in round.finishReason. A reasoning-channel recovery gets its own note
+  // so the coercion is visible rather than silent.
   const assistantParts = truncated
     ? [
         ...streamedParts,
@@ -614,7 +622,24 @@ export async function createModelOnlyTurn(
           createdAt: completedAt,
         }),
       ]
-    : streamedParts
+    : answerFromReasoning
+      ? [
+          ...streamedParts,
+          buildDiagnosticNotePart({
+            session,
+            turnId,
+            turnNumber,
+            roundNumber: 1,
+            roundId,
+            ownerStepId: input.ownerStepId ?? null,
+            partNumber: nextPartNumber,
+            ordinal: nextOrdinal,
+            text: 'Final answer recovered from the reasoning channel: the model ended the turn with empty content but non-empty reasoning (common for interleaved-thinking models). The reasoning text is surfaced as the assistant answer so it is retained and scored.',
+            summary: 'Answer recovered from reasoning channel',
+            createdAt: completedAt,
+          }),
+        ]
+      : streamedParts
 
   const rawRequestExchange = {
     id: createUuid(),

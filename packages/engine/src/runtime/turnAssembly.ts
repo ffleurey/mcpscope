@@ -50,6 +50,32 @@ export function extractContentSegmentTexts(segments: AssistantSegment[]): string
 }
 
 /**
+ * Recover a final answer that a model emitted in the reasoning channel.
+ *
+ * Interleaved-thinking models (e.g. Kimi K2.5) can deliver their final
+ * user-facing answer as reasoning (`reasoning_content` / `reasoning` /
+ * `<think>`) with empty `content`. On a clean final round that leaves the turn
+ * with an assistant answer of nothing while the answer sits in reasoning —
+ * which compaction then strips and a judge scores as "no answer". When a final
+ * round has reasoning text but no assistant content, surface the reasoning as
+ * the answer too by appending a synthesized content segment, so the answer is
+ * retained and scored. (Its token share resolves to ~0 because the cost was
+ * already counted as reasoning tokens — see deriveAssistantContentTokenMetadata.)
+ *
+ * Only call this for a clean final round (finish_reason 'stop'); a truncated or
+ * intermediate tool-call round legitimately carries reasoning without content.
+ */
+export function recoverAnswerFromReasoning(segments: AssistantSegment[]): {
+  segments: AssistantSegment[]
+  recovered: boolean
+} {
+  if (extractContentSegmentTexts(segments).length > 0) return { segments, recovered: false }
+  const reasoning = extractReasoningSegmentTexts(segments).join('\n\n')
+  if (reasoning.length === 0) return { segments, recovered: false }
+  return { segments: [...segments, { kind: 'content', text: reasoning }], recovered: true }
+}
+
+/**
  * Derives per-segment token metadata for the reasoning parts of one round.
  *
  * Decision tree (reference: toolTurns.buildReasoningPartsFromSegments):
