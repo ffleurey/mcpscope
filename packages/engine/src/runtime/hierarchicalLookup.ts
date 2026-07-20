@@ -280,6 +280,19 @@ function buildTurnNode(
     return buildRoundNode(round, roundParts, toolResultsByParent, mode, isDirectLookup)
   })
   const usage = turn.usage
+  // Whether this turn delivered an assistant answer at all. A terminal turn that
+  // produced no non-empty assistant-content part delivered no final answer — the
+  // model errored, hit a limit, or (e.g. some providers) emitted only reasoning
+  // with empty content. That absence is otherwise silent in the overview (the
+  // answer line is simply missing), which leads a reader — or an LLM judge — to
+  // hunt for an answer that was never produced. Surface it as an explicit fact.
+  const isTerminalTurn = turn.status === 'complete' || turn.status === 'error'
+  const deliveredFinalAnswer = allParts.some(
+    (p) =>
+      p.turnId === turn.id &&
+      p.partType === 'assistant-content' &&
+      (p.payload.text?.trim().length ?? 0) > 0,
+  )
   return {
     id: turn.id,
     type: 'turn',
@@ -289,6 +302,7 @@ function buildTurnNode(
     // since a mid-stream provider failure leaves no diagnostic part. A clean turn
     // needs no outcome beyond status:complete.
     ...(turn.status !== 'complete' && turn.outcome ? { outcome: turn.outcome } : {}),
+    ...(isTerminalTurn && !deliveredFinalAnswer ? { no_final_answer: true } : {}),
     // Turn-level token cost (from the turn's own usage) so "how costly was this
     // turn?" and the per-turn comparison are answerable from the overview without
     // summing parts. Same shape as the run report's per-session tokens.

@@ -372,6 +372,12 @@ function renderTurnHeader(turn: AnyRecord, out: Emit): void {
   const total = (turn["tokens"] as AnyRecord | undefined)?.["total"];
   const tokenStr = total != null ? `  (${Number(total)} tokens)` : "";
   out(`${id}  turn${status}${outcome}${roundStr}${tokenStr}`);
+  // Make a missing final answer a visible fact rather than a silent absence:
+  // a terminal turn that produced no assistant answer (errored, hit a limit, or
+  // emitted only reasoning) has nothing to grade or read as its result.
+  if (turn["no_final_answer"]) {
+    out(`  no final answer — this turn produced no assistant answer`);
+  }
 }
 
 function renderTurnParts(turn: AnyRecord, out: Emit): void {
