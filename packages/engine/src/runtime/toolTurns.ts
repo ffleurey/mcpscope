@@ -82,7 +82,7 @@ import {
 } from './sessionPrelude.js'
 import { probeRequestPromptTokens } from './promptTokenProbing.js'
 import { applyContextCompaction } from '../domain/compaction.js'
-import { executeChatCompletion } from './streamedCompletion.js'
+import { executeChatCompletion, isDegenerateEmptyCompletion } from './streamedCompletion.js'
 import type { TurnStreamEventSink } from './streamEvents.js'
 import { maybeApplyAutomaticSessionTitle } from './sessionTitles.js'
 
@@ -1320,6 +1320,10 @@ function finalizeToolTurnStreamFailure(
   ownerStepId: string | null,
   info: ToolTurnFailureInfo,
   emitEvent: TurnStreamEventSink | undefined,
+  // A provider response that arrived intact but empty (see the empty-completion
+  // path) is worth keeping so the operator can inspect exactly what came back;
+  // a mid-stream read failure has nothing to persist and passes none.
+  rawExchanges: RawExchangeRecord[] = [],
 ): RuntimeTurnResult {
   const completedAt = now()
 
@@ -1354,6 +1358,9 @@ function finalizeToolTurnStreamFailure(
   const errorTx = () =>
     runInTransaction(database.connection, () => {
       updateRoundRecord(database.connection, currentRound)
+      for (const exchange of rawExchanges) {
+        insertRawExchangeRecord(database.connection, exchange)
+      }
       for (const part of recovery.parts) {
         insertPartRecord(database.connection, part)
       }
@@ -1596,6 +1603,49 @@ export async function createToolEnabledTurn(
     const finishReason = completion.choices[0]?.finish_reason
     const provider = session.modelProfileSnapshot.providerType ?? 'lmstudio'
     const usage = normalizeStreamUsage(streamedCompletion.rawResponseBody, provider)
+
+    // A response that arrived intact but empty — no content, no tool call, and
+    // no reasoning text (finish_reason not "length") — is a provider/connection
+    // failure, not a real answer. It commonly happens with OpenRouter-fronted
+    // models (e.g. Gemini 2.5 Flash Lite burning its whole budget on hidden
+    // reasoning). Mark the turn errored so it lands in the manually-retryable
+    // error state rather than being silently recorded as a completed, answerless
+    // turn. The raw exchange is preserved so the empty response stays inspectable.
+    if (isDegenerateEmptyCompletion(streamedCompletion)) {
+      currentRound.usage = {
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        reasoningTokens: usage.reasoningTokens,
+        totalTokens: usage.totalTokens,
+      }
+      return finalizeToolTurnStreamFailure(
+        database,
+        session,
+        turn,
+        currentRound,
+        rounds,
+        turnId,
+        turnNumber,
+        input.ownerStepId ?? null,
+        {
+          message:
+            'Model returned an empty response (no content, tool call, or reasoning). This is usually a transient provider or connection error — retry the session.',
+          receivedBytes: null,
+          segments: [],
+          completion,
+        },
+        emitEvent,
+        createProviderRawExchange(
+          session,
+          turnId,
+          currentRound.id,
+          requestBody,
+          streamedCompletion.rawResponseBody,
+          currentRound.startedAt,
+          completedAt,
+        ),
+      )
+    }
 
     currentRound.status = 'complete'
     const roundTruncated = finishReason === 'length'

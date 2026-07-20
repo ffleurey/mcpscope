@@ -1979,4 +1979,46 @@ describe('tool-enabled turn runtime', () => {
 
     db.connection.close()
   })
+
+  it('errors an empty completion (no content/tool call/reasoning) instead of completing it', async () => {
+    const db = openBackendDatabase(makeSqlitePath())
+    const counter = { count: 0 }
+    const mcpGateway = makeInspectGateway(counter)
+
+    // The Gemini-via-OpenRouter glitch: finish_reason "stop" with empty content,
+    // no tool call, and no reasoning text (all output went to hidden reasoning).
+    const chatCompletionGateway: ChatCompletionGateway = {
+      async probePromptTokens() {
+        return 5
+      },
+      async createChatCompletion() {
+        return stopCompletion('')
+      },
+    }
+
+    const session = makeToolSession(db)
+    const result = await createToolEnabledTurn(db, chatCompletionGateway, mcpGateway, {
+      sessionId: session.id,
+      userContent: 'Is camera X worse than the others?',
+      maxToolRounds: 5,
+    })
+
+    // The turn is an error (manually retryable), not a silently-completed one.
+    expect(result.turn.status).toBe('error')
+    expect(result.turn.outcome).toMatch(/empty response/i)
+    expect(result.parts.some((p) => p.partType === 'assistant-content')).toBe(false)
+    const note = result.parts.find((p) => p.partType === 'diagnostic-note')
+    expect(note?.payload.text).toMatch(/empty response/i)
+
+    // The empty provider response is preserved for inspection (raw exchange for
+    // the errored completion round is persisted, not discarded).
+    const rawExchangeCount = db.connection
+      .prepare(
+        "SELECT COUNT(*) AS c FROM raw_exchanges WHERE session_id = ? AND round_id IS NOT NULL AND kind = 'llm-response'",
+      )
+      .get(session.id) as { c: number }
+    expect(rawExchangeCount.c).toBeGreaterThan(0)
+
+    db.connection.close()
+  })
 })

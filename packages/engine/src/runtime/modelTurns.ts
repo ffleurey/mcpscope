@@ -55,7 +55,7 @@ import { buildSessionTraceBundle } from '../domain/trace.js'
 import { deriveExactDeltaTokenMetadata } from '../domain/tokenAccounting.js'
 import { createSystemPromptPart, ensureSessionPreludeTokenMetadata } from './sessionPrelude.js'
 import { probeRequestPromptTokens } from './promptTokenProbing.js'
-import { executeChatCompletion } from './streamedCompletion.js'
+import { executeChatCompletion, isDegenerateEmptyCompletion } from './streamedCompletion.js'
 import type { TurnStreamEventSink } from './streamEvents.js'
 import { applyContextCompaction } from '../domain/compaction.js'
 import { DEFAULT_SESSION_TITLE, maybeApplyAutomaticSessionTitle } from './sessionTitles.js'
@@ -540,6 +540,31 @@ export async function createModelOnlyTurn(
         message: `Unsupported finish reason for model-only pipeline: ${finishReason ?? 'unknown'}`,
         receivedBytes: null,
         segments: streamedCompletion.segments,
+        completion,
+      },
+      emitEvent,
+    )
+  }
+  // A response that arrived intact but empty — no content and no reasoning text
+  // (finish_reason "stop", not "length") — is a provider/connection failure, not
+  // a real answer. Treat it as a manually-retryable error rather than a
+  // completed, answerless turn. (Common with OpenRouter-fronted models that burn
+  // their whole budget on hidden reasoning; see isDegenerateEmptyCompletion.)
+  if (isDegenerateEmptyCompletion(streamedCompletion)) {
+    return finalizeModelTurnStreamFailure(
+      database,
+      session,
+      turn,
+      round,
+      turnId,
+      turnNumber,
+      input.ownerStepId ?? null,
+      requestBody,
+      {
+        message:
+          'Model returned an empty response (no content or reasoning). This is usually a transient provider or connection error — retry the session.',
+        receivedBytes: null,
+        segments: [],
         completion,
       },
       emitEvent,
