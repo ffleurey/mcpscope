@@ -244,6 +244,21 @@ function renderBenchmarkEvaluationText(data: AnyRecord, out: Emit): void {
   out(`  judged      ${ev["judged_sessions"]}/${ev["expected_sessions"]}${skipped}${incomplete}`);
   if (ev["error"]) out(`  error       ${ev["error"]}`);
 
+  // Pass-level judge diagnostics: turn "N incomplete" into a cause at a glance —
+  // how many judges hit the tool cap, the failure kinds, and the round spread.
+  const diag = (ev["diagnostics"] as AnyRecord) ?? {};
+  const byKind = (diag["by_error_kind"] as AnyRecord) ?? {};
+  const kindPairs = Object.entries(byKind);
+  const roundStats = diag["tool_rounds_stats"] as AnyRecord | null;
+  const diagParts: string[] = [];
+  if (Number(diag["hit_tool_cap_count"]) > 0)
+    diagParts.push(`${diag["hit_tool_cap_count"]} hit tool cap`);
+  if (kindPairs.length > 0)
+    diagParts.push(kindPairs.map(([k, n]) => `${k}×${n}`).join(", "));
+  if (roundStats && roundStats["max"] != null)
+    diagParts.push(`judge rounds max ${roundStats["max"]}`);
+  if (diagParts.length > 0) out(`  diagnostics ${diagParts.join(" · ")}`);
+
   const perCase = arr(data["per_case"]);
   if (perCase.length > 0) {
     out("");
@@ -262,8 +277,11 @@ function renderBenchmarkEvaluationText(data: AnyRecord, out: Emit): void {
     for (const s of sessions) {
       const pct =
         s["pct"] != null ? `  ${Math.round(Number(s["pct"]) * 100)}%` : "";
+      const rounds = s["tool_rounds"] != null ? `  ${s["tool_rounds"]} rounds` : "";
+      const cap = s["hit_tool_cap"] ? "  ⚠ tool cap" : "";
+      const ek = s["error_kind"] ? `  ${s["error_kind"]}` : "";
       out(
-        `  ${s["analysis_session_id"]}  judges ${s["run_session_id"]}  ${s["source_case_id"]}  ${s["status"]}${pct}`,
+        `  ${s["analysis_session_id"]}  judges ${s["run_session_id"]}  ${s["source_case_id"]}  ${s["status"]}${pct}${rounds}${cap}${ek}`,
       );
       const criteria = arr(s["criteria"]);
       for (const cr of criteria) {

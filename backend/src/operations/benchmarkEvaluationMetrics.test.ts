@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   scorePct,
   aggregateEvaluationScore,
+  aggregateEvaluationDiagnostics,
   type EvaluationSessionScore,
 } from "./benchmarkEvaluationMetrics.js";
 
@@ -31,6 +32,9 @@ function s(
     max: pct == null ? null : 4,
     pct,
     criteria: [],
+    toolRounds: null,
+    hitToolCap: false,
+    errorKind: pct == null ? "no_verdict" : null,
     ...overrides,
   };
 }
@@ -70,5 +74,27 @@ describe("aggregateEvaluationScore", () => {
     const out = aggregateEvaluationScore([s("c1", null)], new Map([["c1", null]]));
     expect(out.overallPct).toBeNull();
     expect(out.cases[0]?.pctStats).toBeNull();
+  });
+});
+
+describe("aggregateEvaluationDiagnostics", () => {
+  it("counts cap hits, tallies error kinds, and summarizes judge round usage", () => {
+    const out = aggregateEvaluationDiagnostics([
+      s("c1", 1, { toolRounds: 3 }),
+      s("c1", null, { toolRounds: 20, hitToolCap: true, errorKind: "no_verdict" }),
+      s("c2", null, { toolRounds: 20, hitToolCap: true, errorKind: "no_verdict" }),
+      s("c2", null, { toolRounds: 12, errorKind: "json_parse_error" }),
+    ]);
+    expect(out.hitToolCapCount).toBe(2);
+    expect(out.byErrorKind).toEqual({ no_verdict: 2, json_parse_error: 1 });
+    expect(out.toolRoundsStats?.max).toBe(20);
+    expect(out.toolRoundsStats?.min).toBe(3);
+  });
+
+  it("is empty/null when there are no diagnostics to report", () => {
+    const out = aggregateEvaluationDiagnostics([s("c1", 1, { toolRounds: null })]);
+    expect(out.hitToolCapCount).toBe(0);
+    expect(out.byErrorKind).toEqual({});
+    expect(out.toolRoundsStats).toBeNull();
   });
 });
