@@ -17,17 +17,17 @@ export async function runStatus(opts: StatusOptions): Promise<void> {
   const state = result.session.state
   process.stdout.write(`${result.session.id}  ${state}\n`)
 
-  if (state === 'running' && result.active_turn) {
+  if ((state === 'running' || state === 'queued') && result.active_turn) {
     process.stdout.write(`  turn  ${result.active_turn.id}  ${result.active_turn.status}\n`)
   }
 
   if (result.queue_position !== undefined) {
-    process.stdout.write(`  queued  position ${result.queue_position}\n`)
+    process.stdout.write(`  position  ${result.queue_position} in queue\n`)
   }
 
   if (state === 'ready') {
     process.stdout.write(`\nRun 'mcpscope send ${result.session.id} <prompt>' to start a turn.\n`)
-  } else if (state === 'running') {
+  } else if (state === 'running' || state === 'queued') {
     process.stdout.write(`\nRun 'mcpscope status ${result.session.id}' again to poll for completion.\n`)
   } else if (state === 'initializing') {
     process.stdout.write(`\nRun 'mcpscope status ${result.session.id}' again to check initialization progress.\n`)

@@ -69,7 +69,7 @@ export interface StatusResult {
   api_version: 1;
   session: {
     id: string;
-    state: "initializing" | "ready" | "running" | "error";
+    state: "initializing" | "ready" | "running" | "queued" | "error";
   };
   active_turn: { id: string; status: string } | null;
   /** Present when the session has a pending job in the scheduler queue (1-based). */
