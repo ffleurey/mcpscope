@@ -33,6 +33,7 @@ import type {
   BenchmarkDeleteResult,
   BenchmarkDeleteRunResult,
   BenchmarkDeleteEvaluationResult,
+  DeleteSessionResult,
   RenameSessionResult,
   AbortSessionResult,
   RubricCriterion,
@@ -133,7 +134,7 @@ async function post<T>(baseUrl: string, path: string, body: unknown): Promise<T>
   return parseRawResponse<T>(raw)
 }
 
-async function del(baseUrl: string, path: string): Promise<void> {
+async function del<T>(baseUrl: string, path: string): Promise<T> {
   const url = `${baseUrl}${path}`
   let response: Response
   try {
@@ -141,9 +142,7 @@ async function del(baseUrl: string, path: string): Promise<void> {
   } catch (cause) {
     throw new OperationError(`Cannot reach backend at ${baseUrl}: ${rootErrorMessage(cause)}`)
   }
-  if (!response.ok) {
-    await parseResponse<unknown>(response, baseUrl)
-  }
+  return parseResponse<T>(response, baseUrl)
 }
 
 function patchRaw(url: string, bodyText: string): Promise<{ status: number; text: string }> {
@@ -321,9 +320,12 @@ export async function cliListMcpProfiles(baseUrl: string): Promise<ListMcpProfil
   return request<ListMcpProfilesResult>(baseUrl, '/api/operations/mcp-profiles')
 }
 
-/** DELETE /api/sessions/:sessionId → 204 */
-export async function cliDeleteSession(baseUrl: string, sessionId: string): Promise<void> {
-  await del(baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}`)
+/** DELETE /api/sessions/:sessionId → DeleteSessionResult (idempotent) */
+export async function cliDeleteSession(
+  baseUrl: string,
+  sessionId: string,
+): Promise<DeleteSessionResult> {
+  return del<DeleteSessionResult>(baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}`)
 }
 
 /** PATCH /api/sessions/:sessionId → RenameSessionResult */
