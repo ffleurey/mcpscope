@@ -150,8 +150,10 @@ No inputs. Returns a list of all MCP server profiles. Each entry carries `id`, `
 | `session_id` | string | ✓        | Session ID to delete |
 
 Deletes the session and all its child sessions, turns, rounds, parts, and raw exchanges.
-Fails with `session_already_queued` while the session has an active or queued job — abort it
-first (`mcpscope_abort_session`).
+Idempotent: deleting an unknown or already-deleted session is not an error — the result's
+`deleted` field is `true` when a session was removed and `false` when no session with that id
+existed. Fails with `session_already_queued` while the session has an active or queued job —
+abort it first (`mcpscope_abort_session`).
 
 ### `mcpscope_rename_session`
 
