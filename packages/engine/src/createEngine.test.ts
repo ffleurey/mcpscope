@@ -206,7 +206,7 @@ describe('createEngine', () => {
     const aborted = await engine.abortSession({ session_id: created.session.id })
     expect(aborted.outcome).toBe('not-running')
 
-    // Delete removes the session; a second delete reports not-found.
+    // Delete removes the session; a second delete is idempotent (deleted=false).
     const deleted = await engine.deleteSession({ session_id: created.session.id })
     expect(deleted).toEqual({
       api_version: 1,
@@ -214,9 +214,15 @@ describe('createEngine', () => {
       session_id: created.session.id,
     })
     expect(engine.getTrace(created.session.id)).toBeNull()
-    await expect(engine.deleteSession({ session_id: created.session.id })).rejects.toThrow(
-      'Session not found',
-    )
+    const deletedAgain = await engine.deleteSession({ session_id: created.session.id })
+    expect(deletedAgain).toEqual({
+      api_version: 1,
+      deleted: false,
+      session_id: created.session.id,
+    })
+    // An id that never existed is likewise a no-op, not an error.
+    const deletedUnknown = await engine.deleteSession({ session_id: 'ZZZZ' })
+    expect(deletedUnknown).toEqual({ api_version: 1, deleted: false, session_id: 'ZZZZ' })
   })
 
   it('auto-titles an untitled session from the first prompt and emits session-title-changed', async () => {
