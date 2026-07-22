@@ -117,8 +117,10 @@ No inputs.
 |--------------|--------|----------|-------------|
 | `session_id` | string | ✓        | Session ID to check |
 
-When the session has a pending job that has not started executing yet, the result adds
-`queue_position` (1-based position in the scheduler queue).
+`session.state` is one of `initializing`, `ready`, `running` (a turn is actively
+executing), `queued` (a turn is accepted but waiting behind another running job), or
+`error`. When the session has a pending job that has not started executing yet, the state
+is `queued` and the result adds `queue_position` (1-based position in the scheduler queue).
 
 ### `mcpscope_inspect`
 
