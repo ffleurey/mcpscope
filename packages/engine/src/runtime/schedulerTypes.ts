@@ -59,6 +59,15 @@ export interface TerminalJob extends ActiveExecutionJob {
   endedAt: number
   outcome: 'completed' | 'failed'
   error?: string
+  /**
+   * Present on a failed job whose failure the turn pipeline classified. Same
+   * closed taxonomy as the nested `turn-failed` event's `errorType`, reused
+   * verbatim (never re-classified here) so an embedder listening at the job
+   * layer can tell an abort from a provider outage from an internal error
+   * without subscribing to per-turn stream events. Absent when the failure
+   * has no turn-level classification (e.g. a throw before any turn ran).
+   */
+  errorType?: 'aborted' | 'provider_unreachable' | 'internal'
 }
 
 export interface ExecutionSnapshot {
