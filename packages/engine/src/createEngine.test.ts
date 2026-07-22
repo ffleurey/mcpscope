@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createEngine, type Engine, type SchedulerEvent } from './index.js'
 import type { ChatCompletionGateway } from './runtime/modelTurns.js'
 import { providerConnectionSchema, modelConfigSchema } from './domain/configuration.js'
@@ -248,10 +248,102 @@ describe('createEngine', () => {
 
     unsubscribe()
   })
+
+  it("reports state 'queued' with a queue position for a turn waiting behind an active job", async () => {
+    const gated = makeGatedGateway()
+    engine = await makeConfiguredEngine(gated.gateway)
+
+    const a = await engine.createSession({ model_config_id: 'm-1', wait: true })
+    const b = await engine.createSession({ model_config_id: 'm-1', wait: true })
+
+    // Start A's turn (do not wait) and hold it active in the model call.
+    await engine.send({ session_id: a.session.id, prompt: 'ping', wait: false })
+    await gated.callStarted
+
+    // B's turn is accepted but must wait behind A's active job.
+    await engine.send({ session_id: b.session.id, prompt: 'ping', wait: false })
+
+    const statusB = await engine.status({ session_id: b.session.id })
+    expect(statusB.session.state).toBe('queued')
+    expect(statusB.queue_position).toBe(1)
+
+    // A is actively executing — 'running', never 'queued', no queue position.
+    const statusA = await engine.status({ session_id: a.session.id })
+    expect(statusA.session.state).toBe('running')
+    expect(statusA.queue_position).toBeUndefined()
+
+    // Let both jobs drain so close() doesn't race an in-flight call.
+    gated.release()
+    await vi.waitFor(async () => {
+      const [sa, sb] = await Promise.all([
+        engine!.status({ session_id: a.session.id }),
+        engine!.status({ session_id: b.session.id }),
+      ])
+      if (sa.session.state !== 'ready' || sb.session.state !== 'ready') {
+        throw new Error('jobs not drained yet')
+      }
+    })
+  })
+
+  it("marks a job failed with errorType 'aborted' on abort", async () => {
+    const gated = makeGatedGateway()
+    engine = await makeConfiguredEngine(gated.gateway)
+
+    const failed: Extract<SchedulerEvent, { type: 'scheduler-job-failed' }>[] = []
+    const unsubscribe = engine.onEvent((e) => {
+      if (e.type === 'scheduler-job-failed') failed.push(e)
+    })
+
+    const created = await engine.createSession({ model_config_id: 'm-1', wait: true })
+    await engine.send({ session_id: created.session.id, prompt: 'ping', wait: false })
+    await gated.callStarted
+
+    const aborted = await engine.abortSession({ session_id: created.session.id })
+    expect(aborted.outcome).toBe('aborted')
+
+    // Wait for the turn job to settle as failed.
+    const turnFailed = await vi.waitFor(() => {
+      const evt = failed.find((e) => e.job.target.kind === 'session')
+      if (!evt) throw new Error('no failed job yet')
+      return evt
+    })
+    expect(turnFailed.job.outcome).toBe('failed')
+    expect(turnFailed.job.errorType).toBe('aborted')
+
+    unsubscribe()
+    gated.release()
+  })
+
+  it("marks a job failed with errorType 'internal' on an unclassified model failure", async () => {
+    engine = await makeConfiguredEngine(makeThrowingGateway())
+
+    const failed: Extract<SchedulerEvent, { type: 'scheduler-job-failed' }>[] = []
+    const unsubscribe = engine.onEvent((e) => {
+      if (e.type === 'scheduler-job-failed') failed.push(e)
+    })
+
+    const created = await engine.createSession({ model_config_id: 'm-1', wait: true })
+    const sent = await engine.send({
+      session_id: created.session.id,
+      prompt: 'ping',
+      wait: true,
+    })
+    expect(sent.turn.status).toBe('error')
+
+    const turnFailed = failed.find((e) => e.job.target.kind === 'session')
+    expect(turnFailed).toBeDefined()
+    expect(turnFailed!.job.outcome).toBe('failed')
+    expect(turnFailed!.job.errorType).toBe('internal')
+    expect(turnFailed!.job.error).toContain('LM Studio connection lost')
+
+    unsubscribe()
+  })
 })
 
-/** An engine wired to the scripted gateway with one connection + model config. */
-async function makeConfiguredEngine(): Promise<Engine> {
+/** An engine wired to a chat gateway (scripted by default) with one connection + model config. */
+async function makeConfiguredEngine(
+  gateway: ChatCompletionGateway = makeScriptedGateway(),
+): Promise<Engine> {
   const connection = providerConnectionSchema.parse({
     id: 'lm-1',
     name: 'Scripted',
@@ -273,6 +365,58 @@ async function makeConfiguredEngine(): Promise<Engine> {
       modelConfigs: [modelConfig],
       sessionCreationDefaults: { defaultModelConfigId: 'm-1', updatedAt: 1 },
     },
-    dependencies: { chatCompletionGateway: makeScriptedGateway() },
+    dependencies: { chatCompletionGateway: gateway },
   })
+}
+
+/**
+ * A chat gateway whose model call blocks until released, or rejects with an
+ * AbortError if the job's abort signal fires first. Lets a test hold one job
+ * active (so another session's turn queues behind it) and exercise abort.
+ */
+function makeGatedGateway(): {
+  gateway: ChatCompletionGateway
+  release: () => void
+  callStarted: Promise<void>
+} {
+  let release!: () => void
+  const released = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let markCallStarted!: () => void
+  const callStarted = new Promise<void>((resolve) => {
+    markCallStarted = resolve
+  })
+  const base = makeScriptedGateway()
+  const gateway: ChatCompletionGateway = {
+    ...base,
+    async createChatCompletion(baseUrl, apiKey, body, signal) {
+      markCallStarted()
+      await new Promise<void>((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(new DOMException('The operation was aborted', 'AbortError'))
+          return
+        }
+        const onAbort = () =>
+          reject(new DOMException('The operation was aborted', 'AbortError'))
+        signal?.addEventListener('abort', onAbort, { once: true })
+        void released.then(() => {
+          signal?.removeEventListener('abort', onAbort)
+          resolve()
+        })
+      })
+      return base.createChatCompletion(baseUrl, apiKey, body, signal)
+    },
+  }
+  return { gateway, release, callStarted }
+}
+
+/** A chat gateway whose model call always throws — an unclassified internal failure. */
+function makeThrowingGateway(): ChatCompletionGateway {
+  return {
+    ...makeScriptedGateway(),
+    async createChatCompletion() {
+      throw new Error('LM Studio connection lost')
+    },
+  }
 }

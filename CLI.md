@@ -89,10 +89,11 @@ Returns the current lifecycle state of a session.
 |-------|---------|
 | `initializing` | session setup / prelude still in progress |
 | `ready` | session can accept a prompt |
-| `running` | a turn is currently executing |
+| `running` | a turn is actively executing |
+| `queued` | a turn has been accepted but is waiting behind another running job |
 | `error` | session is in a failed state |
 
-**Text output** — always shows session ID and state; when `running`, also shows the active turn ID; when the session's turn is still queued behind other work, shows its 1-based queue position; when `ready`, suggests the next `send` command.  
+**Text output** — always shows session ID and state; when `running` or `queued`, also shows the active turn ID; when the session's turn is still queued behind other work, shows its 1-based queue position; when `ready`, suggests the next `send` command.  
 **JSON output** — `{ api_version: 1, session: { id, state }, active_turn: { id, status } | null }`.
 When the session has a pending job that has not started executing yet, adds `queue_position`
 (1-based position in the scheduler queue).

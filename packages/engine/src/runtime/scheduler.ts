@@ -77,6 +77,16 @@ export type {
   SchedulerEventListener,
 } from './schedulerTypes.js'
 
+/**
+ * Mutable holder the worker hands to a job's execution so a turn-level failure
+ * classification (from a relayed `turn-failed` event) can flow back out even
+ * when the turn pipeline swallows the failure and returns normally.
+ */
+interface JobTurnFailure {
+  errorType?: 'aborted' | 'provider_unreachable' | 'internal'
+  message?: string
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ExecutionScheduler
 // ─────────────────────────────────────────────────────────────────────────────
@@ -355,24 +365,49 @@ export class ExecutionScheduler {
       this.activeAbort = abort
       this.emit({ type: 'scheduler-job-started', job: { ...activeJob } })
 
-      try {
-        await this.executeJob(activeJob, opCtx, abort.signal)
+      // Collects any turn-level failure classification observed while this job
+      // ran. The turn pipeline catches stream failures internally (persisting
+      // the recovered trace and emitting a `turn-failed` event) and returns
+      // normally rather than throwing, so a failed turn does not surface as a
+      // thrown error here — we detect it from the relayed event instead and
+      // reuse the pipeline's own classification verbatim.
+      const turnFailure: JobTurnFailure = {}
 
-        const terminal: TerminalJob = {
-          ...activeJob,
-          endedAt: Date.now(),
-          outcome: 'completed',
+      try {
+        await this.executeJob(activeJob, opCtx, abort.signal, turnFailure)
+
+        if (turnFailure.errorType) {
+          const terminal: TerminalJob = {
+            ...activeJob,
+            endedAt: Date.now(),
+            outcome: 'failed',
+            ...(turnFailure.message !== undefined ? { error: turnFailure.message } : {}),
+            errorType: turnFailure.errorType,
+          }
+          this.activeJob = null
+          this.activeAbort = null
+          this.lastTerminalJob = terminal
+          this.emit({ type: 'scheduler-job-failed', job: { ...terminal } })
+        } else {
+          const terminal: TerminalJob = {
+            ...activeJob,
+            endedAt: Date.now(),
+            outcome: 'completed',
+          }
+          this.activeJob = null
+          this.activeAbort = null
+          this.lastTerminalJob = terminal
+          this.emit({ type: 'scheduler-job-completed', job: { ...terminal } })
         }
-        this.activeJob = null
-        this.activeAbort = null
-        this.lastTerminalJob = terminal
-        this.emit({ type: 'scheduler-job-completed', job: { ...terminal } })
       } catch (err) {
         const terminal: TerminalJob = {
           ...activeJob,
           endedAt: Date.now(),
           outcome: 'failed',
           error: err instanceof Error ? err.message : String(err),
+          // A turn-failed event may have been relayed before the throw; carry
+          // its classification when present rather than re-deriving one here.
+          ...(turnFailure.errorType ? { errorType: turnFailure.errorType } : {}),
         }
         this.activeJob = null
         this.activeAbort = null
@@ -419,10 +454,27 @@ export class ExecutionScheduler {
     job: ActiveExecutionJob,
     opCtx: SchedulerContext,
     signal: AbortSignal,
+    turnFailure: JobTurnFailure,
   ): Promise<void> {
     const emitExecutionEvent = (
       event: Extract<SchedulerEvent, { type: 'scheduler-execution-event' }>['event'],
     ) => {
+      // A turn that couldn't reach a clean stop reports its typed reason on a
+      // `turn-failed` event. Capture the latest one so the worker can mark the
+      // job failed with the pipeline's own classification (see runWorker).
+      if (event.type === 'turn-failed') {
+        const { errorType, message } = event as { errorType?: unknown; message?: unknown }
+        if (
+          errorType === 'aborted' ||
+          errorType === 'provider_unreachable' ||
+          errorType === 'internal'
+        ) {
+          turnFailure.errorType = errorType
+        }
+        if (typeof message === 'string') {
+          turnFailure.message = message
+        }
+      }
       this.emit({
         type: 'scheduler-execution-event',
         sessionId: job.target.sessionId,

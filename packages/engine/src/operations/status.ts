@@ -17,7 +17,7 @@ export interface StatusResult {
   api_version: 1
   session: {
     id: string
-    state: 'initializing' | 'ready' | 'running' | 'error'
+    state: 'initializing' | 'ready' | 'running' | 'queued' | 'error'
     workflow_kind?: string
     latest_error?: { step_id: string | null; error_kind: string | null; message: string }
   }
@@ -31,7 +31,7 @@ export const statusOutputSchema = {
   api_version: z.literal(1),
   session: z.object({
     id: z.string(),
-    state: z.enum(['initializing', 'ready', 'running', 'error']),
+    state: z.enum(['initializing', 'ready', 'running', 'queued', 'error']),
     workflow_kind: z.string().optional(),
     latest_error: z
       .object({
@@ -50,7 +50,8 @@ export const statusOperation = {
   description:
     'Get the current lifecycle state of a session. ' +
     'States: initializing (setup in progress), ready (can accept a prompt), ' +
-    'running (turn in progress), error (failed state). ' +
+    'running (turn actively executing), queued (turn accepted but waiting behind ' +
+    'another running job), error (failed state). ' +
     'When a session is queued, queue_position gives its 1-based position in the pending queue.',
   schema: statusInputSchema,
   outputSchema: statusOutputSchema,
@@ -70,11 +71,16 @@ export const statusOperation = {
         ) ?? null
     const latestTurn = turns.at(-1) ?? null
 
-    const state = computeLifecycleState(db.connection, session)
+    const lifecycleState = computeLifecycleState(db.connection, session)
 
     // Determine if the session has a pending scheduler job and its queue position.
+    // A queued turn is a refinement of 'running': the turn is accepted (a draft
+    // exists) but is waiting behind another session's active job. 'queued' is a
+    // derived, status-level state — the persisted lifecycle only knows 'running'
+    // — so that 'running' can mean "actively executing" for status consumers.
     let queuePosition: number | undefined
-    if (ctx.scheduler && state === 'running' && activeTurn?.status === 'draft') {
+    let state: StatusResult['session']['state'] = lifecycleState
+    if (ctx.scheduler && lifecycleState === 'running' && activeTurn?.status === 'draft') {
       const snap = ctx.scheduler.getSnapshot()
       // A draft turn that's not the active job means it's queued.
       const isActive = snap.activeJob?.target.sessionId === input.session_id
@@ -82,11 +88,17 @@ export const statusOperation = {
         const idx = snap.pendingJobs.findIndex((j) => j.target.sessionId === input.session_id)
         if (idx !== -1) {
           queuePosition = idx + 1 // 1-based
+          state = 'queued'
         }
       }
     }
 
-    const relevantTurn = state === 'running' ? activeTurn : state === 'error' ? latestTurn : null
+    const relevantTurn =
+      state === 'running' || state === 'queued'
+        ? activeTurn
+        : state === 'error'
+          ? latestTurn
+          : null
 
     const workflowKind = getSessionWorkflowKind(db.connection, session)
     const latestError =

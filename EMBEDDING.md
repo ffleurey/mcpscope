@@ -260,14 +260,23 @@ is `running`); observe completion via `onEvent`.
 
 ```ts
 const status = await engine.status({ session_id: session.id })
-// status.session.state: 'initializing' | 'ready' | 'running' | 'error'
+// status.session.state: 'initializing' | 'ready' | 'running' | 'queued' | 'error'
 // status.session.latest_error?: { step_id, error_kind, message }
 // status.active_turn: { id, status } | null
 // status.queue_position?: number   // 1-based queue position when queued
 ```
 
-When a session has a pending (draft) turn that hasn't started executing yet,
-`queue_position` gives its 1-based position in the scheduler queue.
+When a session has a pending (draft) turn that hasn't started executing yet
+(it is waiting behind another session's active job), the state is `queued` and
+`queue_position` gives its 1-based position in the scheduler queue. `running`
+means the turn is actively executing.
+
+`onEvent` relays `scheduler-job-failed` when a job fails. Its `job.errorType`
+(`'aborted' | 'provider_unreachable' | 'internal'`) carries the turn pipeline's
+own classification, so an embedder listening at the job layer can distinguish a
+user abort from a provider outage from an internal error without subscribing to
+per-turn stream events. It is absent when a failure has no turn-level
+classification (e.g. a throw before any turn ran).
 
 ### Abort a session
 
