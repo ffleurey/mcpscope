@@ -277,7 +277,12 @@ describe("backend foundation", () => {
       method: "DELETE",
       url: `/api/sessions/${firstSessionId}`,
     });
-    expect(deleteResponse.statusCode).toBe(204);
+    expect(deleteResponse.statusCode).toBe(200);
+    expect(deleteResponse.json()).toEqual({
+      api_version: 1,
+      deleted: true,
+      session_id: firstSessionId,
+    });
 
     const deletedTraceResponse = await app.inject({
       method: "GET",
@@ -365,11 +370,32 @@ describe("backend foundation", () => {
     });
     expect(abortMissing.statusCode).toBe(404);
 
+    // delete_session is idempotent: deleting an unknown id is a 200 with
+    // deleted=false, not a 404 (unlike rename/abort above).
     const deleteMissing = await app.inject({
       method: "DELETE",
       url: "/api/sessions/ZZZZ",
     });
-    expect(deleteMissing.statusCode).toBe(404);
+    expect(deleteMissing.statusCode).toBe(200);
+    expect(deleteMissing.json()).toEqual({
+      api_version: 1,
+      deleted: false,
+      session_id: "ZZZZ",
+    });
+
+    // Deleting the same real session twice is safe: the second call is a no-op.
+    const deleteAgain = await app.inject({
+      method: "DELETE",
+      url: `/api/sessions/${sessionId}`,
+    });
+    expect(deleteAgain.statusCode).toBe(200);
+    expect(deleteAgain.json().deleted).toBe(true);
+    const deleteAgainRepeat = await app.inject({
+      method: "DELETE",
+      url: `/api/sessions/${sessionId}`,
+    });
+    expect(deleteAgainRepeat.statusCode).toBe(200);
+    expect(deleteAgainRepeat.json().deleted).toBe(false);
   });
 
   it("returns compact top-level session rows and paginates with limit/offset", async () => {

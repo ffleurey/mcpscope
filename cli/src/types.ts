@@ -88,6 +88,13 @@ export interface AbortSessionResult {
   outcome: "aborted" | "dequeued" | "not-running";
 }
 
+export interface DeleteSessionResult {
+  api_version: 1;
+  // true if a session was deleted; false if no session with this id existed.
+  deleted: boolean;
+  session_id: string;
+}
+
 export interface InspectInput {
   id: string;
   short?: boolean;

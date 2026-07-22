@@ -236,7 +236,9 @@ const { session_id, title } = await engine.renameSession({
 })
 
 // Delete a session and all its child sessions, turns, rounds, parts, and raw
-// exchanges. Rejects if the session has an active or queued job.
+// exchanges. Idempotent: an unknown / already-deleted id is not an error —
+// `deleted` is true when a session was removed, false when none existed.
+// Rejects only if the session has an active or queued job.
 const { deleted } = await engine.deleteSession({ session_id: session.id })
 ```
 
@@ -517,7 +519,7 @@ const status      = await engine.status({ session_id: session.id })
 const { sessions }= await engine.listSessions()
 const node        = await engine.inspect({ id, short?, format? })
 const trace       = engine.getTrace(session.id)         // SessionTraceBundle | null
-const { deleted } = await engine.deleteSession({ session_id })
+const { deleted } = await engine.deleteSession({ session_id })  // idempotent; deleted=false if no such session
 const { outcome } = await engine.abortSession({ session_id })  // 'aborted' | 'dequeued' | 'not-running'
 await engine.renameSession({ session_id, title })
 engine.abortActive()

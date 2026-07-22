@@ -186,13 +186,16 @@ requirement).
 Deletes a session and all its child sessions, turns, rounds, parts, and raw exchanges.
 Rejects if the session has an active or queued job — abort it first (`abort_session`).
 
-**Text output** — `Deleted session <id>`.  
-**JSON output** — `{ api_version: 1, deleted: true, session_id }`.
+Idempotent: deleting an unknown or already-deleted session is **not** an error. `deleted` is
+`true` when a session was removed and `false` when no session with that id existed.
+
+**Text output** — `Deleted session <id>` when a session was removed, or `No session <id> to
+delete` when none existed.  
+**JSON output** — `{ api_version: 1, deleted, session_id }`.
 
 **Error codes in JSON**:
 | code | meaning |
 |------|---------|
-| `session_not_found` | session ID does not exist |
 | `session_already_queued` | the session has an active or queued job |
 
 ### `mcpscope rename_session <session-id> <title> [--json]`

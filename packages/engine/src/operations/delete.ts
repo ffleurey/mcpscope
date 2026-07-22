@@ -20,7 +20,9 @@ export interface DeleteResult {
 /** Zod output shape for MCP structured output. Mirrors DeleteResult. */
 export const deleteOutputSchema = {
   api_version: z.literal(1),
-  deleted: z.boolean(),
+  deleted: z
+    .boolean()
+    .describe('true if a session was deleted; false if no session with this id existed'),
   session_id: z.string(),
 }
 
@@ -28,7 +30,8 @@ export const deleteSessionOperation = {
   id: 'delete_session' as const,
   description:
     'Delete a session and all its child sessions, turns, rounds, parts, and raw exchanges. ' +
-    'Rejects if the session has an active or queued job.',
+    'Idempotent: deleting an unknown or already-deleted session is not an error and returns ' +
+    'deleted=false. Rejects if the session has an active or queued job.',
   schema: deleteInputSchema,
   outputSchema: deleteOutputSchema,
   async execute(ctx: OperationContext, input: DeleteInput): Promise<DeleteResult> {
@@ -45,11 +48,9 @@ export const deleteSessionOperation = {
       }
     }
 
+    // Idempotent: an unknown / already-deleted id is not an error — the desired
+    // end state (no such session) already holds, so report deleted=false.
     const deleted = deleteSessionRecord(ctx.db.connection, input.session_id)
-    if (!deleted) {
-      throw new OperationError('Session not found', 'session_not_found')
-    }
-
-    return { api_version: 1, deleted: true, session_id: input.session_id }
+    return { api_version: 1, deleted, session_id: input.session_id }
   },
 }

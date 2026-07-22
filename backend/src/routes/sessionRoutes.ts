@@ -401,11 +401,11 @@ export function registerSessionRoutes(deps: RouteDeps): void {
   app.delete('/api/sessions/:sessionId', async (request, reply) => {
     const { sessionId } = z.object({ sessionId: z.string() }).parse(request.params)
     try {
-      await deleteSessionOperation.execute(opCtx, {
+      // delete_session is idempotent: an unknown id is a 200 with deleted=false,
+      // not a 404. Return the canonical operation result verbatim (thin delegate).
+      return await deleteSessionOperation.execute(opCtx, {
         session_id: sessionId,
       })
-      reply.code(204)
-      return null
     } catch (err) {
       return handleOperationError(err, reply)
     }

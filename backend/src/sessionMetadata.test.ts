@@ -1212,7 +1212,12 @@ describe("session metadata API", () => {
       method: "DELETE",
       url: "/api/sessions/PRNT",
     });
-    expect(deleteRes.statusCode).toBe(204);
+    expect(deleteRes.statusCode).toBe(200);
+    expect(deleteRes.json()).toEqual({
+      api_version: 1,
+      deleted: true,
+      session_id: "PRNT",
+    });
 
     // Child should also be gone
     const childLookup = await app.inject({
