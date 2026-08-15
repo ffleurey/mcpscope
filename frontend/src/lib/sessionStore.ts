@@ -171,9 +171,28 @@ async function refreshActiveTrace(): Promise<SessionTraceBundle | null> {
   }
 }
 
+// In dev, the backend can still be compiling/starting when the frontend's
+// first fetch fires (e.g. `npm run dev` builds the engine before the server
+// listens), so give it a couple of short retries before giving up.
+const INIT_SESSIONS_MAX_ATTEMPTS = 5
+const INIT_SESSIONS_RETRY_DELAY_MS = 500
+
 export async function initSessionStore(): Promise<void> {
   clearSessionError()
-  await refreshSessions()
+  for (let attempt = 1; attempt <= INIT_SESSIONS_MAX_ATTEMPTS; attempt++) {
+    try {
+      await refreshSessions()
+      break
+    } catch (error) {
+      if (attempt === INIT_SESSIONS_MAX_ATTEMPTS) {
+        // Not a startup race — surface it instead of leaving the app
+        // half-initialized with no visible error.
+        setSessionError(toAppError(error))
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, INIT_SESSIONS_RETRY_DELAY_MS))
+    }
+  }
   activeChatId.set(null)
   activeTrace.set(null)
   activeTurnStream.set(null)
