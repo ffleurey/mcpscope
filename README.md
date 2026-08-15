@@ -8,7 +8,10 @@ a CLI + MCP interface for your coding agent.**
 
 **Its runtime ships separately as [`mcpscope-engine`](EMBEDDING.md) — an embeddable,
 zero-dependency TypeScript chat/agent engine (MCP tool calling, local-first LLM providers, durable
-`node:sqlite` sessions, streaming transparency events) for building your own MCP-powered app.**
+`node:sqlite` sessions, streaming transparency events) for building your own MCP-powered app. To
+start from a working app instead of a blank file, fork
+[mcpscope-chat-template](https://github.com/ffleurey/mcpscope-chat-template) — an MCP server, the
+engine, and an embeddable chat UI in one small Node process.**
 
 Building a good MCP server is empirical work, and you rarely do it alone anymore: a coding agent
 can run every benchmark and read every trace, but the numbers only get *good* when the developer
@@ -156,6 +159,7 @@ loop where you and your coding agent iterate on your own MCP server together.
 - [MCP.md](MCP.md) - MCP interface: transport, tool surface, and structured results
 - [CLI.md](CLI.md) - CLI commands, flags, output format, and exit codes
 - [EMBEDDING.md](EMBEDDING.md) - embed the `mcpscope-engine` package in your own Node.js/TypeScript app: `createEngine()`, config, sessions, events, and a full Express integration
+- [mcpscope-chat-template](https://github.com/ffleurey/mcpscope-chat-template) - a forkable starter app built on the engine: MCP server + agent loop + embeddable chat UI in one Node process, with docs on MCP tool design
 
 ### Internals & contributing
 

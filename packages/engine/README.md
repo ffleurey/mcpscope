@@ -14,6 +14,10 @@ transparency — and almost no dependencies.
 
 > Requires **Node.js >= 24** (for a stable `node:sqlite`). Apache-2.0.
 
+Want a running start? [mcpscope-chat-template](https://github.com/ffleurey/mcpscope-chat-template)
+is a forkable starter app built on this engine — an MCP server, the agent loop, and an embeddable
+chat UI in one small Node process.
+
 ## Install
 
 ```sh
