@@ -15,7 +15,7 @@ workflow (`.github/workflows/release.yml`) automatically, in parallel:
 
 The version is baked into the Docker image at build time (shown in the app footer); the Electron
 installers take their version from `package.json`, which **must** match the release tag (`vX.Y.Z`).
-`npm version` (step 2) keeps them in sync.
+`npm version` (step 3) keeps them in sync.
 
 ---
 
@@ -28,7 +28,30 @@ git checkout main && git pull
 npm run verify   # full gate — see TESTING.md
 ```
 
-### 2. Bump the version
+### 2. Check for open vulnerabilities
+
+```bash
+npm audit   # covers the root app and the mcpscope-engine workspace (one lockfile)
+```
+
+Since the release also publishes a Docker image, scan the built image too:
+
+```bash
+docker build -t mcpscope:release-check .
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v trivy-cache:/root/.cache/ \
+  aquasec/trivy image --scanners vuln mcpscope:release-check
+```
+
+**This is a check, not a fix-it-now step.** Dependency bumps need their own QA pass — they can
+change runtime behavior — so they don't belong in the middle of cutting a release:
+
+- **Open high/critical findings** (or a meaningful pile of lower-severity ones): stop here, flag
+  it back rather than patching inline. Open a separate PR that updates the vulnerable
+  dependencies, goes through normal review, a green `npm run verify`, and manual QA of whatever
+  the bump touches. Only restart this checklist from step 1 once that PR is merged to `main`.
+- **Clean, or only low/moderate findings with no fix available:** continue to step 3.
+
+### 3. Bump the version
 
 Use `npm version` — it updates `package.json` and creates a git tag automatically.
 
@@ -52,13 +75,13 @@ The release workflow asserts all three match the tag and publishes the engine
 **before** the root (the root depends on `mcpscope-engine@<same version>`), so a
 mismatch fails the release rather than shipping a broken dependency.
 
-### 3. Push the tag
+### 4. Push the tag
 
 ```bash
 git push --follow-tags
 ```
 
-### 4. Create a GitHub Release
+### 5. Create a GitHub Release
 
 ```bash
 gh release create v$(node -p "require('./package.json').version") \
@@ -68,7 +91,7 @@ gh release create v$(node -p "require('./package.json').version") \
 
 Or use the GitHub web UI: **Releases → Draft a new release → choose the tag**.
 
-### 5. CI builds and publishes the artifacts
+### 6. CI builds and publishes the artifacts
 
 The workflow in `.github/workflows/release.yml` triggers automatically and runs three jobs:
 
@@ -136,7 +159,7 @@ repeated here so the two docs cannot drift.
 
 Release-side notes for the published image:
 
-- **Tags:** `:X.Y.Z` (exact), `:X.Y` (major.minor), and `:latest` (see step 5 above).
+- **Tags:** `:X.Y.Z` (exact), `:X.Y` (major.minor), and `:latest` (see step 6 above).
 - **CLI in-container:** the image bundles the CLI, so commands run against the same container (`docker exec -i mcpscope-app mcpscope <cmd>`) — see [../CLI.md](../CLI.md).
 
 - **docker-compose (optional):** point `image:` at `ghcr.io/ffleurey/mcpscope:latest` (and drop
