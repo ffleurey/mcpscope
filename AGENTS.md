@@ -46,7 +46,12 @@ The docs above are references, not pre-read requirements. Keep context lean and 
 - Keep the first change narrow and local to the owning backend abstraction.
 - Prefer backend-owned semantics over adapter-specific behavior.
 - Keep machine-readable result shapes in `snake_case`.
-- Treat [backend-data/](backend-data/) as local runtime and test-artifact state only.
+- [backend-data/](backend-data/) is not source, but it is **not disposable either**: it holds
+  the live dev SQLite DB (sessions, benchmarks) and `mcpscope.config.json` (LM connections,
+  model configs, MCP profiles) — real local state with no git history to recover from, because
+  the whole folder is gitignored (so `git status` won't flag it as at risk). Never delete,
+  truncate, or reset anything in it — including for a "clean" test environment — without first
+  reading [backend-data/README.md](backend-data/README.md) and checking with the user.
 
 ## Inspect a running mcpscope with mcpscope
 

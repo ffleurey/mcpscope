@@ -4,6 +4,11 @@ Local backend runtime data and live-test captures.
 
 This folder is intentionally **not** a source tree. It is the backend working-data area plus ignored integration-test output generated on a developer machine.
 
+**Not disposable.** This folder is gitignored, but `mcpscope.db` and `mcpscope.config.json` are
+real local state (sessions, LM connections, model configs, MCP profiles) with no git history to
+fall back on. Never delete, truncate, or reset any file here — including to force a "clean" test
+run — without checking with the user first.
+
 ## Structure
 
 - `mcpscope.db` - default local SQLite database used by the backend
