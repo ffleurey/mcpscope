@@ -6,6 +6,12 @@ Node.js/TypeScript app. If you just want to read the package's one-page summary,
 see [`packages/engine/README.md`](packages/engine/README.md); this document is
 the full tutorial and integration reference.
 
+Prefer starting from a complete working app rather than integrating step by step?
+Fork [mcpscope-chat-template](https://github.com/ffleurey/mcpscope-chat-template):
+an MCP server, this engine, and an embeddable chat UI in one small Node process,
+built the way this guide describes — swap in your own domain behind `/mcp` and
+keep the rest.
+
 > **Audience:** developers (and coding agents) integrating the engine in-process.
 > Every code snippet is written against the real public API and is meant to
 > compile as-is.
