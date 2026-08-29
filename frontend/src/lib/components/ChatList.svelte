@@ -168,7 +168,7 @@
 <style>
   .empty {
     padding: 0.75rem;
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
 
@@ -192,7 +192,7 @@
   .session-item {
     background: none;
     color: var(--text-dim);
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     font-family: inherit;
     list-style: none;
   }
@@ -218,7 +218,6 @@
 
   .child-item > .session-row {
     padding-left: 0;
-    background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
   }
 
   .child-item:hover > .session-row {
@@ -270,12 +269,12 @@
   .session-id {
     flex-shrink: 0;
     font-family: monospace;
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     opacity: 0.7;
   }
 
   .child-id {
-    font-size: 0.72rem;
+    font-size: var(--font-label);
   }
 
   .session-title {
@@ -287,14 +286,14 @@
   }
 
   .child-title {
-    font-size: 0.79rem;
+    font-size: var(--font-meta);
     font-style: italic;
     opacity: 0.9;
   }
 
   .session-date {
     flex-shrink: 0;
-    font-size: 0.7rem;
+    font-size: var(--font-label);
     opacity: 0.55;
     white-space: nowrap;
   }
@@ -326,7 +325,7 @@
     border: none;
     cursor: pointer;
     color: var(--text-dim);
-    font-size: 0.9rem;
+    font-size: var(--font-ui);
     line-height: 1;
     padding: 0.1rem 0.25rem;
     transition: color 0.1s;

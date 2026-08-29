@@ -154,12 +154,12 @@
     border: 1px solid var(--red-bright);
     border-radius: 4px;
     color: var(--red-bright);
-    font-size: 0.875rem;
+    font-size: var(--font-ui);
   }
   .loading {
     padding: 2rem;
     color: var(--text-dim);
-    font-size: 0.9rem;
+    font-size: var(--font-ui);
   }
   /* Transient confirmation when developer mode is toggled (Konami code). */
   .dev-toast {
@@ -172,7 +172,7 @@
     border: 1px solid var(--amber-dim);
     border-radius: 4px;
     color: var(--amber-bright);
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     z-index: 100;
   }
 </style>

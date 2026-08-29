@@ -158,7 +158,7 @@
   }
 
   .dialog-title {
-    font-size: 0.9rem;
+    font-size: var(--font-ui);
     font-weight: 600;
     color: var(--text-bright);
     min-width: 0;

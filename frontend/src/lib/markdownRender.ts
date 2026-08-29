@@ -1,11 +1,22 @@
 import MarkdownIt from 'markdown-it'
 
-// Raw HTML from model output is kept disabled — this renderer is for preview only.
+// Raw HTML from model output is kept disabled — model-authored tags render as text.
 const md = new MarkdownIt({
   html: false,
   linkify: true,
   typographer: false,
 })
+
+// Rendered output lives inside the app shell: links must open in a new tab
+// and never carry an opener reference back.
+const defaultLinkOpen =
+  md.renderer.rules.link_open ??
+  ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
+md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  tokens[idx].attrSet('target', '_blank')
+  tokens[idx].attrSet('rel', 'noopener noreferrer')
+  return defaultLinkOpen(tokens, idx, options, env, self)
+}
 
 /**
  * Renders markdown source text to an HTML string.

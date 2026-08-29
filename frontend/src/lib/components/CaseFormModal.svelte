@@ -254,7 +254,7 @@
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
-    font-size: 0.75rem;
+    font-size: var(--font-label);
   }
   .rubric-row {
     display: flex;
@@ -272,7 +272,7 @@
     text-align: right;
   }
   .rubric-pts {
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
   }
   .rubric-add {

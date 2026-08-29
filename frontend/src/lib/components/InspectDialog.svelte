@@ -229,7 +229,7 @@
     color: var(--text-dim);
     cursor: pointer;
     font-family: var(--mono);
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     line-height: 1;
     padding: 0.22rem 0.5rem;
   }
@@ -250,7 +250,7 @@
     border-radius: 6px;
     color: var(--text-bright);
     font-family: var(--mono);
-    font-size: 0.74rem;
+    font-size: var(--font-label);
     padding: 0.22rem 0.5rem;
     width: 14rem;
     max-width: 40vw;
@@ -268,7 +268,7 @@
   }
 
   .control-label {
-    font-size: 0.66rem;
+    font-size: var(--font-label);
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--text-dim);
@@ -281,7 +281,7 @@
     color: var(--text-dim);
     cursor: pointer;
     font-family: var(--mono);
-    font-size: 0.74rem;
+    font-size: var(--font-label);
     padding: 0.22rem 0.7rem;
     white-space: nowrap;
   }
@@ -308,7 +308,7 @@
     margin: 0;
     padding: 1rem;
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     line-height: 1.5;
     color: var(--text-bright);
     white-space: pre-wrap;
@@ -341,6 +341,6 @@
     padding: 1.5rem;
     color: var(--text-dim);
     font-family: var(--mono);
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
   }
 </style>

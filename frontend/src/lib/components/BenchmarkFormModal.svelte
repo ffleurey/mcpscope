@@ -90,7 +90,7 @@
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
-    font-size: 0.75rem;
+    font-size: var(--font-label);
   }
   :global(.benchmark-form-dialog) {
     max-width: min(520px, 95vw);

@@ -263,7 +263,7 @@
     display: inline-block;
     margin-left: 0.4rem;
     padding: 0.02rem 0.4rem;
-    font-size: 0.7rem;
+    font-size: var(--font-label);
     font-weight: 500;
     letter-spacing: 0.02em;
     color: var(--text-dim);
@@ -284,7 +284,7 @@
   /* The required-configuration message shown under an unavailable built-in. */
   .profile-note {
     margin-top: 0.15rem;
-    font-size: 0.72rem;
+    font-size: var(--font-label);
     line-height: 1.3;
     color: var(--text-dim);
   }

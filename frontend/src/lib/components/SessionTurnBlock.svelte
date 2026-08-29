@@ -4,20 +4,18 @@
   import CompactRoundContent from './CompactRoundContent.svelte'
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import IdBadge from './IdBadge.svelte'
-  import MarkdownPreviewDialog from './MarkdownPreviewDialog.svelte'
+  import SessionAnswerBlock from './SessionAnswerBlock.svelte'
+  import TokenPill from './TokenPill.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
-  import { looksLikeMarkdown } from '../markdownRender'
-  import { highlightStructuredText } from '../textHighlight'
+  import { normalizeMessageText } from '../format'
   import Icon from './Icon.svelte'
-  import { iconChevronRight, iconArrowDown, iconView } from '../design/icons'
+  import { iconChevronRight, iconArrowDown } from '../design/icons'
 
   interface Props {
     turn: TurnRecord
     rounds: RoundRecord[]
     parts: PartRecord[]
     roundStreams: StreamingRoundState[]
-    /** chat: clean chat view; inspect: full detail with round headers + buttons */
-    mode?: 'chat' | 'inspect'
     contextSnapshotsByRound?: Map<string, ContextEntry[]>
     loadedContextLength?: number | null
   }
@@ -27,15 +25,12 @@
     rounds,
     parts,
     roundStreams,
-    mode = 'chat',
     contextSnapshotsByRound,
     loadedContextLength = null,
   }: Props = $props()
 
-  let showMarkdownPreview = $state(false)
-  let markdownPreviewSource = $state('')
-  /** Chat mode: collapsed = show only answers; expanded = show full round detail */
-  let chatCollapsed = $state(true)
+  /** Collapsed = answers only; expanded = full round detail. Live turns are always expanded. */
+  let expanded = $state(false)
   /** Assessment prompt: collapsed by default for analysis turns */
   let promptCollapsed = $state(true)
 
@@ -76,25 +71,13 @@
       turn.status === 'error' ||
       (isAnalysisWorkflowTurn && userPart !== null),
   )
-
-  function normalizeText(text: string | null | undefined): string | null {
-    if (!text) return null
-    const normalized = text.replace(/^(?:[ \t]*\n)+/, '').replace(/(?:\n[ \t]*)+$/, '')
-    return normalized.length > 0 ? normalized : null
-  }
-
-  function openMarkdownPreview(text: string): void {
-    markdownPreviewSource = text
-    showMarkdownPreview = true
-  }
+  const statusNoteworthy = $derived(turn.status === 'error' || turn.status === 'aborted')
 </script>
 
-<!-- ─── Both modes share the compact-turn foundation ───────────────────── -->
 <section class="compact-turn">
   <!-- User message: collapsible for analysis workflows, always visible elsewhere -->
   {#if userPart}
-    {#if isAnalysisWorkflowTurn && mode === 'chat'}
-      <!-- Assessment prompt: collapsible with toggle -->
+    {#if isAnalysisWorkflowTurn}
       <button
         class="assessment-prompt-toggle"
         onclick={() => {
@@ -108,11 +91,10 @@
         <span class="toggle-label">Assessment Prompt</span>
       </button>
       {#if !promptCollapsed}
-        <TracePartBlock part={userPart} mode="compact" />
+        <TracePartBlock part={userPart} />
       {/if}
     {:else}
-      <!-- Regular turn: always visible -->
-      <TracePartBlock part={userPart} mode="compact" />
+      <TracePartBlock part={userPart} />
     {/if}
   {/if}
 
@@ -120,81 +102,100 @@
     <div class="compact-round">
       <div class="compact-round-parts">
         {#each ungroupedParts as part (part.id)}
-          <TracePartBlock {part} mode="compact" />
+          <TracePartBlock {part} />
         {/each}
       </div>
     </div>
   {/if}
 
-  {#if mode === 'chat' && turnIsComplete}
-    <!-- ── Chat mode, completed ──────────────────────────────────────── -->
-
-    <!-- Toggle row: above the content, only when there's detail to show -->
-    {#if hasDetail}
-      <div class="chat-toggle-row">
-        <button
-          class="chat-toggle-btn"
-          onclick={() => {
-            chatCollapsed = !chatCollapsed
-          }}
-        >
-          <span class="disclosure-arrow" class:open={!chatCollapsed}
+  {#if turnIsComplete}
+    <!-- ── Completed turn: quiet meta row, answers by default, detail on expand ── -->
+    <div class="turn-meta-row has-reveal">
+      <button
+        class="turn-toggle"
+        onclick={() => {
+          expanded = !expanded
+        }}
+        disabled={!hasDetail}
+        aria-expanded={expanded}
+      >
+        {#if hasDetail}
+          <span class="disclosure-arrow" class:open={expanded}
             ><Icon path={iconChevronRight} /></span
           >
-          <span class="status-pill dim" class:error={turn.status === 'error'}>
-            {turn.status}
-          </span>
-          <span class="chat-toggle-stats">
-            {sortedRounds.length} round{sortedRounds.length !== 1 ? 's' : ''}
-            {#if toolCallCount > 0}· {toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}{/if}
-            {#if turn.usage.totalTokens !== null}· {turn.usage.totalTokens.toLocaleString()}
-              tokens{/if}
-          </span>
-          {#if turn.outcome && turn.outcome !== 'stop'}
-            <span class="status-pill dim">{turn.outcome}</span>
-          {/if}
-        </button>
-      </div>
-    {/if}
+        {/if}
+        <span class="turn-stats">
+          {sortedRounds.length} round{sortedRounds.length !== 1 ? 's' : ''}
+          {#if toolCallCount > 0}· {toolCallCount} tool call{toolCallCount !== 1 ? 's' : ''}{/if}
+          {#if turn.usage.totalTokens !== null}·
+            <span class="tokens-value">{turn.usage.totalTokens.toLocaleString()} tokens</span
+            >{/if}
+          {#if turn.outcome && turn.outcome !== 'stop'}· {turn.outcome}{/if}
+        </span>
+      </button>
+      {#if statusNoteworthy}
+        <span class="pill red">{turn.status}</span>
+      {/if}
+      <span class="reveal-item pill-end"><IdBadge id={turn.id} /></span>
+    </div>
 
-    {#if chatCollapsed}
-      <!-- Collapsed: answer text with monochrome markdown highlighting -->
+    {#if !expanded}
+      <!-- Answers only: the chat layer -->
       {#each assistantContentParts as part (part.id)}
-        {@const text = normalizeText(part.payload.text)}
+        {@const text = normalizeMessageText(part.payload.text)}
         {#if text}
-          {@const rendered = highlightStructuredText(text)}
-          <div class="chat-answer-block has-reveal">
-            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-            <pre class="chat-answer-text">{@html rendered.html}</pre>
-            {#if looksLikeMarkdown(text)}
-              <button
-                class="icon-btn icon-btn-reveal"
-                onclick={() => openMarkdownPreview(text)}
-                aria-label="Render preview"
-                title="Render preview"
-              >
-                <Icon path={iconView} />
-              </button>
-            {/if}
+          <div class="chat-answer-block">
+            <SessionAnswerBlock {text} partId={part.id} />
           </div>
         {/if}
       {/each}
     {:else}
-      <!-- Expanded: full round detail (answers visible within rounds) -->
+      <!-- Full round detail -->
       {#each sortedRounds as round (round.id)}
         {@const roundParts = (partsByRound.get(round.id) ?? []).filter(
           (p) => p.id !== userPart?.id,
         )}
         {@const roundStream = roundStreamsByRound.get(round.id) ?? null}
         <section class="compact-round">
+          <div class="round-header has-reveal">
+            <span class="round-header-text"
+              >Round {round.roundIndex + 1} · {round.finishReason ?? round.status}</span
+            >
+            <TokenPill count={round.usage.totalTokens} short />
+            <span class="reveal-item"><IdBadge id={round.id} /></span>
+          </div>
           <div class="compact-round-parts">
             <CompactRoundContent parts={roundParts} {roundStream} />
           </div>
         </section>
       {/each}
+
+      <!-- Compaction note (detail layer) -->
+      {#if turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
+        <div class="compaction-summary">
+          {#if turn.compactionTokensRemoved !== null && turn.compactionTokensRemoved > 0}
+            <span class="compaction-label"
+              ><Icon path={iconArrowDown} /> {turn.compactionApplied}</span
+            >
+            <span class="compaction-tokens"
+              >−{turn.compactionTokensRemoved.toLocaleString()} tokens</span
+            >
+            {#if turn.contextTokensAtTurnEnd !== null && turn.contextTokensAfterCompaction !== null}
+              <span class="compaction-range"
+                >{turn.contextTokensAtTurnEnd.toLocaleString()} → {turn.contextTokensAfterCompaction.toLocaleString()}</span
+              >
+            {/if}
+          {:else}
+            <span class="compaction-label"
+              ><Icon path={iconArrowDown} /> {turn.compactionApplied}</span
+            >
+            <span class="compaction-tokens">no tokens removed</span>
+          {/if}
+        </div>
+      {/if}
     {/if}
 
-    <!-- Context bar: always visible after a completed chat turn -->
+    <!-- Context bar: always visible after a completed turn -->
     {#if lastRound}
       {@const lastSnapshot = contextSnapshotsByRound?.get(lastRound.id) ?? null}
       {#if lastSnapshot && lastSnapshot.length > 0}
@@ -211,44 +212,29 @@
       {/if}
     {/if}
   {:else}
-    <!-- ── Chat (in-progress) OR Inspect (always): all rounds shown ──── -->
+    <!-- ── Live turn: all rounds shown expanded ─────────────────────── -->
     {#each sortedRounds as round (round.id)}
       {@const roundParts = (partsByRound.get(round.id) ?? []).filter((p) => p.id !== userPart?.id)}
       {@const roundStream = roundStreamsByRound.get(round.id) ?? null}
       {@const roundSnapshot = contextSnapshotsByRound?.get(round.id) ?? null}
       <section class="compact-round">
-        <!-- Round meta header: inspect mode only -->
-        {#if mode === 'inspect'}
-          <div class="inspect-id-row">
-            <IdBadge id={turn.id} />
-          </div>
-          <div class="compact-round-meta">
-            <span class="compact-round-label">Round {round.roundIndex + 1}</span>
-            <span class="compact-round-status">{round.finishReason ?? round.status}</span>
-            {#if round.usage.totalTokens !== null}
-              <span class="compact-round-tokens"
-                >{round.usage.totalTokens.toLocaleString()} total</span
-              >
-            {/if}
-            <div class="compact-round-actions">
-              <IdBadge id={round.id} />
-            </div>
-          </div>
-        {/if}
+        <div class="round-header has-reveal">
+          <span class="round-header-text"
+            >Round {round.roundIndex + 1} · {round.finishReason ?? round.status}</span
+          >
+          <TokenPill count={round.usage.totalTokens} short />
+          <span class="reveal-item"><IdBadge id={round.id} /></span>
+        </div>
 
         <div class="compact-round-parts">
           {#if roundParts.length > 0 || roundStream}
-            <CompactRoundContent
-              parts={roundParts}
-              {roundStream}
-              inspectMode={mode === 'inspect'}
-            />
+            <CompactRoundContent parts={roundParts} {roundStream} />
           {:else if round.status === 'streaming'}
             <div class="round-streaming-hint">Waiting for streamed output…</div>
           {/if}
         </div>
 
-        {#if roundSnapshot && roundSnapshot.length > 0 && !turnIsComplete}
+        {#if roundSnapshot && roundSnapshot.length > 0}
           <div class="round-ctx-bar">
             <ContextSnapshotBar
               entries={roundSnapshot}
@@ -261,65 +247,11 @@
         {/if}
       </section>
     {/each}
-
-    <!-- Context bar after completed turn (inspect, or chat while still streaming end) -->
-    {#if turnIsComplete && lastRound}
-      {@const lastSnapshot = contextSnapshotsByRound?.get(lastRound.id) ?? null}
-      {#if lastSnapshot && lastSnapshot.length > 0}
-        <div class="turn-ctx-bar">
-          <ContextSnapshotBar
-            entries={lastSnapshot}
-            contextSize={loadedContextLength}
-            label="After turn {turn.turnNumber}"
-            showLegend={false}
-            turnId={turn.id}
-            compact
-          />
-        </div>
-      {/if}
-    {/if}
-
-    <!-- Compaction note: inspect mode only -->
-    {#if mode === 'inspect' && turn.compactionApplied !== null && turn.compactionApplied !== 'none'}
-      <div class="compaction-summary">
-        {#if turn.compactionTokensRemoved !== null && turn.compactionTokensRemoved > 0}
-          <span class="compaction-label"
-            ><Icon path={iconArrowDown} /> {turn.compactionApplied}</span
-          >
-          <span class="compaction-tokens"
-            >−{turn.compactionTokensRemoved.toLocaleString()} tokens</span
-          >
-          {#if turn.contextTokensAtTurnEnd !== null && turn.contextTokensAfterCompaction !== null}
-            <span class="compaction-range"
-              >{turn.contextTokensAtTurnEnd.toLocaleString()} → {turn.contextTokensAfterCompaction.toLocaleString()}</span
-            >
-          {/if}
-        {:else}
-          <span class="compaction-label"
-            ><Icon path={iconArrowDown} /> {turn.compactionApplied}</span
-          >
-          <span class="compaction-tokens">no tokens removed</span>
-        {/if}
-      </div>
-    {/if}
   {/if}
 </section>
 
-{#if showMarkdownPreview}
-  <MarkdownPreviewDialog
-    source={markdownPreviewSource}
-    onClose={() => {
-      showMarkdownPreview = false
-    }}
-  />
-{/if}
-
 <style>
   .compact-turn {
-    --chat-indent: 0.82rem;
-    --chat-pad: 0.72rem;
-    --chat-gap: 0.42rem;
-    --chat-stack: 0.14rem;
     margin-top: 0.72rem;
   }
 
@@ -327,7 +259,7 @@
     margin-top: 0;
   }
 
-  /* ── Rounds (shared by both modes) ──────────────────────────────────── */
+  /* ── Rounds ─────────────────────────────────────────────────────────── */
   .compact-round {
     margin-top: var(--chat-gap);
     margin-left: var(--chat-indent);
@@ -335,33 +267,17 @@
     border-left: 2px solid var(--border);
   }
 
-  .compact-round-meta {
+  .round-header {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    flex-wrap: wrap;
+    font-size: var(--font-label);
+    color: var(--text-dim);
     margin-bottom: var(--chat-stack);
   }
 
-  .inspect-id-row {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    margin-bottom: 0.2rem;
-  }
-
-  .compact-round-label,
-  .compact-round-status,
-  .compact-round-tokens {
-    font-size: 0.7rem;
-    color: var(--text-dim);
-  }
-
-  .compact-round-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    margin-left: auto;
+  .round-header-text {
+    white-space: nowrap;
   }
 
   .compact-round-parts {
@@ -371,7 +287,7 @@
   }
 
   .round-streaming-hint {
-    font-size: 0.78rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
     padding: 0.3rem 0;
     font-style: italic;
@@ -391,73 +307,57 @@
     border-left: 2px solid var(--border);
   }
 
-  /* ── Chat mode: markdown syntax-highlighted answer text ─────────────── */
+  /* ── Answer block (chat layer) ──────────────────────────────────────── */
   .chat-answer-block {
-    position: relative;
-    display: flex;
-    flex-direction: column;
     margin-top: var(--chat-gap);
     margin-left: var(--chat-indent);
     padding-left: var(--chat-pad);
     border-left: 2px solid var(--border);
   }
 
-  .chat-answer-text {
-    font-size: 1rem;
-    font-family: inherit;
-    line-height: 1.5;
-    color: var(--green-bright);
-    white-space: pre-wrap;
-    word-break: break-word;
-    margin: 0;
-  }
-
-  /* Monochrome green markdown highlighting */
-  /* Structural emphasis (was amber): glow + bold */
-  .chat-answer-text :global(.hljs-strong),
-  .chat-answer-text :global(.hljs-section),
-  .chat-answer-text :global(.hljs-bullet) {
-    font-weight: 700;
-    color: var(--green-glow);
-  }
-  /* Inline elements (was blue): glow only */
-  .chat-answer-text :global(.hljs-code),
-  .chat-answer-text :global(.hljs-link) {
-    color: var(--green-glow);
-  }
-  .chat-answer-text :global(.hljs-emphasis),
-  .chat-answer-text :global(.hljs-quote) {
-    font-style: italic;
-  }
-
-  /* ── Chat mode: toggle row ──────────────────────────────────────────── */
-  .chat-toggle-row {
-    margin-top: var(--chat-gap);
-    margin-left: var(--chat-indent);
-  }
-
-  .chat-toggle-btn {
+  /* ── Turn meta row (metadata layer) ─────────────────────────────────── */
+  .turn-meta-row {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.22rem var(--chat-pad);
-    border: none;
-    background: none;
-    cursor: pointer;
+    margin-top: var(--chat-gap);
+    margin-left: var(--chat-indent);
     border-left: 2px solid var(--border);
     border-radius: 0 4px 4px 0;
-    width: 100%;
-    text-align: left;
-  }
-
-  .chat-toggle-btn:hover {
-    background: var(--bg-hover);
-  }
-
-  .chat-toggle-stats {
-    font-size: 0.7rem;
+    padding: 0.22rem var(--chat-pad);
+    font-size: var(--font-label);
     color: var(--text-dim);
+  }
+
+  .turn-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: none;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+    font-size: inherit;
+    font-family: inherit;
+    text-align: left;
+    min-width: 0;
+  }
+
+  .turn-toggle:disabled {
+    cursor: default;
+  }
+
+  .turn-toggle:not(:disabled):hover .turn-stats {
+    color: var(--text-bright);
+  }
+
+  .turn-stats {
     font-variant-numeric: tabular-nums;
+  }
+
+  .turn-stats .tokens-value {
+    color: var(--amber-bright);
   }
 
   /* ── Assessment prompt toggle ──────────────────────────────────────── */
@@ -473,7 +373,7 @@
     border-radius: 0 4px 4px 0;
     width: 100%;
     text-align: left;
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
   }
 
@@ -485,7 +385,7 @@
     font-weight: 500;
   }
 
-  /* ── Compaction note ────────────────────────────────────────────────── */
+  /* ── Compaction note (detail layer) ─────────────────────────────────── */
   .compaction-summary {
     display: flex;
     align-items: center;
@@ -495,7 +395,7 @@
     padding: 0.2rem 0.5rem;
     background: var(--bg-surface);
     border-radius: 4px;
-    font-size: 0.68rem;
+    font-size: var(--font-label);
   }
 
   .compaction-label {

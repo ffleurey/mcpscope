@@ -142,7 +142,7 @@
 <style>
   .empty {
     padding: 0.4rem 0.75rem 0.6rem;
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
 
@@ -160,7 +160,7 @@
   .run-item {
     background: none;
     color: var(--text-dim);
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     font-family: inherit;
   }
 
@@ -185,7 +185,6 @@
 
   .child-item > .run-row {
     padding-left: 0;
-    background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
   }
 
   .child-item:hover > .run-row,
@@ -232,7 +231,7 @@
   .run-id {
     flex-shrink: 0;
     font-family: var(--mono);
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     opacity: 0.7;
   }
 
@@ -252,7 +251,7 @@
 
   .run-date {
     flex-shrink: 0;
-    font-size: 0.7rem;
+    font-size: var(--font-label);
     opacity: 0.55;
     white-space: nowrap;
   }
@@ -283,7 +282,7 @@
     border: none;
     cursor: pointer;
     color: var(--text-dim);
-    font-size: 0.9rem;
+    font-size: var(--font-ui);
     line-height: 1;
     padding: 0.1rem 0.25rem;
     transition: color 0.1s;

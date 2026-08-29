@@ -142,7 +142,7 @@
 
 <style>
   .target-label {
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     margin: 0;
     display: flex;

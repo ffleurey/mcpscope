@@ -12,7 +12,6 @@
     roundStreamsByTurn: Map<string, StreamingRoundState[]>
     contextSnapshotsByRound?: Map<string, ContextEntry[]>
     loadedContextLength?: number | null
-    mode?: 'chat' | 'inspect'
   }
 
   const {
@@ -22,7 +21,6 @@
     roundStreamsByTurn,
     contextSnapshotsByRound,
     loadedContextLength = null,
-    mode = 'chat',
   }: Props = $props()
 
   const step = $derived(workflowStep.step)
@@ -178,9 +176,9 @@
   })
 </script>
 
-<section class="analysis-workflow-block">
-  <div class="analysis-workflow-meta">
-    <div class="analysis-workflow-line">
+<section class="card analysis-workflow-block">
+  <div class="card-meta has-reveal">
+    <div class="card-line">
       <span class="analysis-workflow-label">{label}</span>
       <span
         class="analysis-workflow-status"
@@ -191,7 +189,7 @@
         <span class="analysis-workflow-detail">{detail}</span>
       {/each}
     </div>
-    <div class="analysis-workflow-actions">
+    <div class="analysis-workflow-actions reveal-item">
       <IdBadge id={step.id} />
     </div>
   </div>
@@ -200,14 +198,14 @@
     {#if artifactLabels.length > 0}
       <div class="analysis-workflow-artifacts">
         {#each artifactLabels as label (label)}
-          <span class="status-pill soft">{label}</span>
+          <span class="pill">{label}</span>
         {/each}
       </div>
     {/if}
 
     {#if latestDiagnostic}
       <div class="analysis-workflow-error">
-        <span class="analysis-workflow-error-label">Step failure</span>
+        <span class="meta-label analysis-workflow-error-label">Step failure</span>
         <span class="analysis-workflow-error-message">{latestDiagnostic.message}</span>
         {#if latestDiagnostic.errorKind}
           <span class="analysis-workflow-error-kind">{latestDiagnostic.errorKind}</span>
@@ -217,10 +215,10 @@
 
     {#if contextRetirementNotes.length > 0}
       <div class="analysis-workflow-retirement">
-        <div class="analysis-workflow-section-title">Context changes</div>
+        <div class="meta-label">Context changes</div>
         <div class="analysis-workflow-retirement-list">
           {#each contextRetirementNotes as note (note)}
-            <span class="status-pill soft">{note}</span>
+            <span class="pill">{note}</span>
           {/each}
         </div>
       </div>
@@ -228,13 +226,12 @@
 
     {#each workflowStep.ownedTurns as turn, index (turn.id)}
       <div class="analysis-workflow-section">
-        <div class="analysis-workflow-section-title">{labelOwnedTurn(index)}</div>
+        <div class="meta-label">{labelOwnedTurn(index)}</div>
         <SessionTurnBlock
           {turn}
           rounds={roundsByTurn.get(turn.id) ?? []}
           parts={partsByTurn.get(turn.id) ?? []}
           roundStreams={roundStreamsByTurn.get(turn.id) ?? []}
-          {mode}
           {contextSnapshotsByRound}
           {loadedContextLength}
         />
@@ -243,8 +240,8 @@
 
     {#each workflowStep.postambleSteps as postamble (postamble.id)}
       <div class="analysis-workflow-section">
-        <div class="analysis-workflow-section-title">Regular compaction</div>
-        <SessionCompactionStepBlock step={postamble} parts={[]} {mode} />
+        <div class="meta-label">Regular compaction</div>
+        <SessionCompactionStepBlock step={postamble} parts={[]} />
       </div>
     {/each}
 
@@ -263,36 +260,17 @@
 <style>
   .analysis-workflow-block {
     margin: 0.6rem 0 0.9rem;
-    padding: 0.8rem 0.95rem;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--bg-surface);
-  }
-
-  .analysis-workflow-meta {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-bottom: 0.6rem;
-  }
-
-  .analysis-workflow-line {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    align-items: center;
   }
 
   .analysis-workflow-label {
-    font-size: 0.84rem;
+    font-size: var(--font-ui);
     font-weight: 700;
     color: var(--text-bright);
   }
 
   .analysis-workflow-status,
   .analysis-workflow-detail {
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
   }
 
@@ -319,16 +297,14 @@
     color: var(--text-bright);
   }
 
+  /* Meta-label shape, but it inherits the error banner's bright text. */
   .analysis-workflow-error-label {
-    font-size: 0.74rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    color: inherit;
   }
 
   .analysis-workflow-error-message,
   .analysis-workflow-error-kind {
-    font-size: 0.77rem;
+    font-size: var(--font-meta);
   }
 
   .analysis-workflow-error-kind {
@@ -338,14 +314,6 @@
   .analysis-workflow-section {
     display: grid;
     gap: 0.3rem;
-  }
-
-  .analysis-workflow-section-title {
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-dim);
   }
 
   .analysis-workflow-artifacts {
@@ -366,7 +334,7 @@
   }
 
   .analysis-workflow-empty {
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
 </style>

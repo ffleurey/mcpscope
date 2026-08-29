@@ -90,7 +90,7 @@
   }
 
   .status-label {
-    font-size: 0.95rem;
+    font-size: var(--font-ui);
     font-weight: 600;
   }
 
@@ -110,14 +110,14 @@
   }
 
   .label {
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
 
   .value {
-    font-size: 0.875rem;
+    font-size: var(--font-ui);
     color: var(--text-bright);
     word-break: break-word;
   }
@@ -140,7 +140,7 @@
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
   }
 
   .detail-key {
@@ -153,7 +153,7 @@
   }
 
   .raw-details {
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
 
@@ -169,7 +169,7 @@
     border-radius: 4px;
     padding: 0.5rem 0.75rem;
     font-family: var(--mono);
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-all;

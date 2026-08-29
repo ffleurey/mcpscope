@@ -25,17 +25,47 @@ export function runStatusDotClass(status: string): string {
 }
 
 /**
- * Status-pill class for a run. Complete → success, error → error, active
- * (running/paused) → soft, everything else → dim.
+ * Pill color variant for a run status (used as `class="pill {…}"`).
+ * Complete → green, error → red, everything else → the dim default.
  */
 export function runStatusPillClass(status: string): string {
-  if (status === 'complete') return 'success'
-  if (status === 'error') return 'error'
-  if (status === 'running' || status === 'paused') return 'soft'
-  return 'dim'
+  if (status === 'complete') return 'green'
+  if (status === 'error') return 'red'
+  return ''
 }
 
 /** Newest-first by updatedAt — shared so list stores sort identically. */
 export function sortByUpdatedAtDesc<T extends { updatedAt: number }>(records: T[]): T[] {
   return [...records].sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/**
+ * Normalize session message text for display: strip leading/trailing blank
+ * lines, return null when nothing remains. Shared by the transcript blocks so
+ * every message body is trimmed identically.
+ */
+export function normalizeMessageText(text: string | null | undefined): string | null {
+  if (!text) return null
+  const normalized = text.replace(/^(?:[ \t]*\n)+/, '').replace(/(?:\n[ \t]*)+$/, '')
+  return normalized.length > 0 ? normalized : null
+}
+
+/** True when a part's token count is estimated rather than provider-reported. */
+export function isEstimatedTokens(
+  part: { tokens: { confidence: string } } | null | undefined,
+): boolean {
+  return (
+    part != null && (part.tokens.confidence === 'estimated' || part.tokens.confidence === 'unknown')
+  )
+}
+
+/** Token-count metadata string: `1,234 tokens`, `~1,234 tk`, '' for null. */
+export function fmtTokens(
+  count: number | null,
+  estimated = false,
+  unit: 'tokens' | 'tk' = 'tokens',
+): string {
+  if (count === null) return ''
+  const n = count.toLocaleString()
+  return estimated ? `~${n} ${unit}` : `${n} ${unit}`
 }

@@ -114,11 +114,11 @@
           <div class="server-head">
             <span class="server-name">{selectedServer.name}</span>
             {#if loading}
-              <span class="status-pill dim">loading…</span>
+              <span class="pill">loading…</span>
             {:else if loadError}
-              <span class="status-pill error" title={loadError}>unreachable</span>
+              <span class="pill red" title={loadError}>unreachable</span>
             {:else}
-              <span class="status-pill dim">{serverTools.length} tools</span>
+              <span class="pill">{serverTools.length} tools</span>
             {/if}
           </div>
 
@@ -181,7 +181,7 @@
 
   .empty-state {
     margin: 0;
-    font-size: 0.85rem;
+    font-size: var(--font-ui);
     color: var(--text-dim);
     line-height: 1.4;
   }
@@ -194,7 +194,7 @@
   }
 
   .server-name {
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     font-weight: 600;
     color: var(--text-dim);
     text-transform: uppercase;
@@ -203,7 +203,7 @@
 
   .server-empty {
     margin: 0;
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
 
@@ -240,7 +240,7 @@
 
   .selected-name {
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     color: var(--text-bright);
   }
 </style>

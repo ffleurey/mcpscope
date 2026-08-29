@@ -95,7 +95,7 @@
 
 <style>
   .target-label {
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     margin: 0;
   }
@@ -107,7 +107,7 @@
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
-    font-size: 0.75rem;
+    font-size: var(--font-label);
   }
   :global(.extract-case-dialog) {
     max-width: min(480px, 95vw);

@@ -4,26 +4,21 @@
   import ContextSnapshotBar from './ContextSnapshotBar.svelte'
   import IdBadge from './IdBadge.svelte'
   import TracePartBlock from './TracePartBlock.svelte'
+  import TokenPill from './TokenPill.svelte'
   import Icon from './Icon.svelte'
   import { iconChevronRight } from '../design/icons'
 
   interface Props {
     parts: PartRecord[]
-    mode?: 'chat' | 'inspect'
     /** Loaded context window size for bar scale. */
     loadedContextLength?: number | null
     /** True while the prelude initialization stream is in progress. */
     isInitializing?: boolean
   }
 
-  const {
-    parts,
-    mode = 'inspect',
-    loadedContextLength = null,
-    isInitializing = false,
-  }: Props = $props()
+  const { parts, loadedContextLength = null, isInitializing = false }: Props = $props()
 
-  /** Chat mode: collapsed after init completes (user can expand to review setup) */
+  /** Collapsed after init completes (user can expand to review setup) */
   let chatCollapsed = $state(false)
   $effect(() => {
     if (!isInitializing) chatCollapsed = true
@@ -32,8 +27,7 @@
   const sortedParts = $derived([...parts].sort((a, b) => a.ordinal - b.ordinal))
   const totalTokens = $derived(parts.reduce((sum, p) => sum + (p.tokens.count ?? 0), 0))
   const contextEntries = $derived(deriveContextEntries(parts))
-  const statusLabel = $derived(isInitializing ? 'initializing' : 'complete')
-  const canCollapse = $derived(mode === 'chat' && !isInitializing)
+  const canCollapse = $derived(!isInitializing)
   const setupId = $derived.by(() => {
     const sid = parts[0]?.sessionId
     return sid ? `${sid}.S` : null
@@ -42,7 +36,7 @@
 
 <!-- Same compact layout for both modes; chat can collapse after init completes -->
 <section class="compact-setup">
-  <div class="compact-setup-meta">
+  <div class="compact-setup-meta has-reveal">
     {#if canCollapse}
       <button
         class="setup-toggle-btn"
@@ -54,30 +48,25 @@
         <span class="disclosure-arrow" class:open={!chatCollapsed}
           ><Icon path={iconChevronRight} /></span
         >
-        <span class="compact-setup-label">Session Setup</span>
-        <span class="compact-setup-status">{statusLabel}</span>
+        <span class="meta-label compact-setup-label">Session Setup</span>
         {#if totalTokens > 0}
-          <span class="compact-setup-tokens">{totalTokens.toLocaleString()} tokens</span>
+          <TokenPill count={totalTokens} />
         {/if}
       </button>
+      {#if setupId}
+        <span class="reveal-item"><IdBadge id={setupId} /></span>
+      {/if}
     {:else}
-      <span class="compact-setup-label">Session Setup</span>
-      <span class="compact-setup-status">{statusLabel}</span>
-      {#if isInitializing}
-        <span class="setup-spinner" aria-label="Setting up">⋯</span>
-      {:else if totalTokens > 0}
-        <span class="compact-setup-tokens">{totalTokens.toLocaleString()} tokens</span>
-      {/if}
-      {#if mode === 'inspect' && setupId}
-        <IdBadge id={setupId} />
-      {/if}
+      <span class="meta-label compact-setup-label">Session Setup</span>
+      <span class="compact-setup-status">initializing</span>
+      <span class="setup-spinner" aria-label="Setting up">⋯</span>
     {/if}
   </div>
 
   {#if !canCollapse || !chatCollapsed}
     <div class="compact-setup-parts">
       {#each sortedParts as part (part.id)}
-        <TracePartBlock {part} mode={mode === 'inspect' ? 'inspect' : 'compact'} />
+        <TracePartBlock {part} />
       {/each}
       {#if isInitializing && sortedParts.length === 0}
         <div class="setup-empty-hint">Setting up session…</div>
@@ -125,36 +114,29 @@
     color: var(--text-bright);
   }
 
-  .compact-setup-label {
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--text-dim);
-  }
-
-  .compact-setup-status,
-  .compact-setup-tokens {
-    font-size: 0.68rem;
+  .compact-setup-status {
+    font-size: var(--font-label);
     color: var(--text-dim);
   }
 
   .compact-setup-parts {
     display: flex;
     flex-direction: column;
-    gap: 0.14rem;
-    margin-left: 0.82rem;
-    padding-left: 0.72rem;
+    gap: var(--chat-stack);
+    margin-left: var(--chat-indent);
+    padding-left: var(--chat-pad);
     border-left: 2px solid var(--border);
   }
 
   .compact-ctx-bar {
     margin-top: 0.28rem;
-    margin-left: 0.82rem;
-    padding-left: 0.72rem;
+    margin-left: var(--chat-indent);
+    padding-left: var(--chat-pad);
     border-left: 2px solid var(--border);
   }
 
   .setup-spinner {
-    font-size: 1.1rem;
+    font-size: var(--font-ui);
     color: var(--text-dim);
     animation: blink 1.2s ease-in-out infinite;
   }
@@ -171,7 +153,7 @@
 
   .setup-empty-hint {
     padding: 0.5rem 0;
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     font-style: italic;
   }

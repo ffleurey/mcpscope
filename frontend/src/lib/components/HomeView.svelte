@@ -207,7 +207,7 @@
   }
   .hero-blurb {
     margin: 0;
-    font-size: 0.85rem;
+    font-size: var(--font-ui);
     color: var(--text-dim);
     line-height: 1.5;
   }
@@ -216,7 +216,7 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 0.5rem;
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
   .hero-version {
@@ -250,12 +250,12 @@
   }
   .card-head h2 {
     margin: 0;
-    font-size: 1rem;
+    font-size: var(--font-ui);
     color: var(--text-bright);
   }
   .card-note {
     margin: 0 0 0.9rem;
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     line-height: 1.5;
   }
@@ -291,7 +291,7 @@
   }
   .bench-id {
     font-family: var(--mono);
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     opacity: 0.6;
   }
 </style>

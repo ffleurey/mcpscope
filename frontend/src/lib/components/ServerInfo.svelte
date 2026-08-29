@@ -72,7 +72,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
 
@@ -88,7 +88,7 @@
     align-items: center;
     gap: 0.35rem;
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: var(--font-meta);
     color: var(--text-bright);
     min-width: 0;
     overflow-wrap: anywhere;
@@ -96,12 +96,12 @@
 
   .server-hint {
     margin: 0.75rem 0 0;
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
 
   .server-hint code {
     font-family: var(--mono);
-    font-size: 0.74rem;
+    font-size: var(--font-label);
   }
 </style>

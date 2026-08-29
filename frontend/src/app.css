@@ -4,10 +4,12 @@
   /* ── Greys ────────────────────────────────────────────────────────── */
   --bg-base: #141414;
   --bg-surface: #1e1e1e;
-  --bg-hover: #282828;
-  --border: #333333;
+  --bg-raised: #292929;
+  --bg-hover: #343434;
+  --border: #414141;
   --text-dim: #a8a8a8;
   --text-bright: #e8e8e8;
+  --text-emphasis: #ffffff;
 
   /* ── Accent colors ────────────────────────────────────────────────── */
   --amber-dim: oklch(55% 0.15 75);
@@ -42,8 +44,36 @@
   --token-tool-response: #93c5fd; /* blue-300   — inbound tool results   */
   --token-diagnostic: #6b7280; /* gray-500   — diagnostic notes       */
 
+  /* ── Typography scale ─────────────────────────────────────────────── */
+  --font-title: 1.4rem; /* view/section headers */
+  --font-body: 1.25rem; /* session content, composer, markdown prose */
+  --font-ui: 1.1rem; /* buttons, inputs, titles, general UI text */
+  --font-meta: 0.95rem; /* hints, previews, secondary text, table cells */
+  --font-label: 0.85rem; /* pills, uppercase labels, table headers */
+
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* ── Session layout metrics ───────────────────────────────────────── */
+  /* Transcript rail: indent + inner pad of the round/answer blocks. */
+  --chat-indent: 0.82rem;
+  --chat-pad: 0.72rem;
+  --chat-gap: 0.42rem;
+  --chat-stack: 0.14rem;
+
+  /* Compact transcript rows (disclosure boxes, bubbles, streaming rows). */
+  --compact-stack-gap: 0.14rem;
+  --compact-meta-gap: 0.14rem;
+  --compact-inline-gap: 0.35rem;
+  --compact-row-gap: 0.3rem;
+  --compact-summary-pad-y: 0.18rem;
+  --compact-summary-pad-x: 0.38rem;
+  --compact-detail-indent: 1.15rem;
+  --compact-detail-bottom-pad: 0.42rem;
+  --compact-message-pad-y: 0.38rem;
+  --compact-message-pad-x: 0.72rem;
+
+  --disclosure-arrow-size: 0.6rem;
 }
 
 *,
@@ -128,7 +158,7 @@ code {
   border: 1px solid color-mix(in srgb, var(--btn-accent) 55%, var(--bg-base));
   background: transparent;
   color: var(--btn-accent);
-  font-size: 0.84rem;
+  font-size: var(--font-ui);
   line-height: 1.4;
   font-family: inherit;
   cursor: pointer;
@@ -177,13 +207,13 @@ code {
 
 .btn-sm {
   padding: 0.28rem 0.65rem;
-  font-size: 0.78rem;
+  font-size: var(--font-meta);
 }
 
 /* Extra-small button for dense inline contexts (e.g. "View JSON" in session rows). */
 .btn-xs {
   padding: 0.15rem 0.45rem;
-  font-size: 0.72rem;
+  font-size: var(--font-label);
 }
 
 /* Icon inside a button — centered vertically, scales with button text */
@@ -248,6 +278,20 @@ code {
   opacity: 1;
 }
 
+/* In-flow hover-reveal: badges/controls inside a flex row that fade in when
+   the enclosing .has-reveal is hovered or focused. Unlike .icon-btn-reveal
+   they keep their layout slot (no absolute positioning, no layout shift).
+   Opacity, never display:none — hidden items must stay focusable. */
+.reveal-item {
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.has-reveal:hover .reveal-item,
+.has-reveal:focus-within .reveal-item,
+.reveal-item:focus-visible {
+  opacity: 1;
+}
+
 .icon-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
@@ -278,7 +322,7 @@ code {
 }
 
 .field-label {
-  font-size: 0.78rem;
+  font-size: var(--font-meta);
   font-weight: 600;
   color: var(--text-dim);
   text-transform: uppercase;
@@ -291,7 +335,7 @@ code {
   border-radius: 4px;
   color: var(--text-bright);
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: var(--font-ui);
   padding: 0.4rem 0.6rem;
   outline: none;
   width: 100%;
@@ -311,12 +355,12 @@ textarea.field-input {
 }
 
 .field-errortext {
-  font-size: 0.75rem;
+  font-size: var(--font-label);
   color: var(--red-bright);
 }
 
 .field-hinttext {
-  font-size: 0.75rem;
+  font-size: var(--font-label);
   color: var(--text-dim);
 }
 
@@ -393,14 +437,14 @@ select {
 .opt-text {
   grid-row: 1;
   grid-column: 2;
-  font-size: 0.875rem;
+  font-size: var(--font-ui);
   color: var(--text-bright);
 }
 
 .opt-hint {
   grid-row: 2;
   grid-column: 2;
-  font-size: 0.75rem;
+  font-size: var(--font-label);
   color: var(--text-dim);
 }
 
@@ -420,7 +464,7 @@ select {
 
 /* Read-only value shown as static text (not a disabled input). */
 .field-static {
-  font-size: 0.875rem;
+  font-size: var(--font-ui);
   color: var(--text-dim);
   padding: 0.4rem 0;
 }
@@ -441,7 +485,7 @@ select {
 }
 
 .config-view-header h2 {
-  font-size: 1.15rem;
+  font-size: var(--font-title);
   font-weight: 600;
 }
 
@@ -453,7 +497,7 @@ select {
 
 .config-empty {
   color: var(--text-dim);
-  font-size: 0.9rem;
+  font-size: var(--font-ui);
 }
 
 /* Horizontal-scroll wrapper so a narrow window scrolls instead of crushing columns. */
@@ -465,7 +509,7 @@ select {
 .data-table {
   width: 100%; /* fill the container; the single auto-width col.col-flex absorbs the slack */
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: var(--font-meta);
   table-layout: fixed; /* fixed widths from <colgroup>; col.col-flex (no width) flexes */
 }
 
@@ -480,7 +524,7 @@ select {
 
 .data-table th {
   text-align: left;
-  font-size: 0.68rem;
+  font-size: var(--font-label);
   font-weight: 600;
   color: var(--text-dim);
   text-transform: uppercase;
@@ -515,7 +559,7 @@ select {
 /* Monospace text cell (IDs, URLs). */
 .data-table td.col-mono {
   font-family: var(--mono);
-  font-size: 0.78rem;
+  font-size: var(--font-meta);
 }
 
 /* Trailing action cell — always-visible icon buttons, right-aligned. */
@@ -586,7 +630,7 @@ select {
   padding: 0;
   margin: 0;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--font-meta);
   color: var(--text-dim);
   cursor: pointer;
 }
@@ -663,48 +707,71 @@ select {
 
 /* ── Token pill ───────────────────────────────────────────────────── */
 
-/* Monochrome metadata count/label — chrome, not session data. */
-.token-pill {
-  font-size: 0.68rem;
+/* ── Pill ─────────────────────────────────────────────────────────── */
+
+/* The one pill: every rounded metadata/status chip in the app. Same size,
+   shape, and layout everywhere; variants recolor the text only. Values
+   (counts, IDs) add .mono. No border — a subtle raised fill. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  font-size: var(--font-label);
+  line-height: 1.4;
   color: var(--text-dim);
-  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  border: none;
   border-radius: 999px;
   padding: 0.1rem 0.45rem;
   white-space: nowrap;
 }
 
-/* ── Status pill ──────────────────────────────────────────────────── */
-
-/* Rounded status/state label. Default is a bordered pill with bright text;
-   modifiers adjust emphasis. (Distinct from .token-pill, which is dim metadata.) */
-.status-pill {
-  font-size: 0.68rem;
-  color: var(--text-bright);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.1rem 0.45rem;
-  white-space: nowrap;
+.pill.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
 }
 
-.status-pill.dim {
-  color: var(--text-dim);
+.pill.amber {
+  color: var(--amber-bright);
 }
-
-/* Soft (filled, borderless) variant. */
-.status-pill.soft {
-  border-color: transparent;
-  background: var(--bg-surface);
-  color: var(--text-dim);
-}
-
-.status-pill.error {
+.pill.red {
   color: var(--red-bright);
-  border-color: color-mix(in srgb, var(--red-bright) 35%, transparent);
+}
+.pill.green {
+  color: var(--green-bright);
 }
 
-.status-pill.success {
-  color: var(--green-bright);
-  border-color: color-mix(in srgb, var(--green-bright) 35%, transparent);
+/* On a --bg-raised parent (user bubble, open disclosure row) the default
+   fill would vanish; step one ramp token up. */
+.pill.on-raised {
+  background: var(--bg-hover);
+}
+
+/* Layout companions for pills/badges in flex or grid rows. */
+.pill-end {
+  margin-left: auto;
+}
+
+/* Bottom-aligned metadata cell beside a message body (pills, ID badges). */
+.message-meta {
+  display: flex;
+  align-items: end;
+  gap: var(--compact-inline-gap);
+}
+
+/* Transcript summary/header row: label + preview left, metadata right. */
+.summary-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Right-aligned metadata cluster (pills, ID badges) inside a summary row. */
+.summary-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--compact-inline-gap);
 }
 
 /* ── Disclosure (details/summary marker + button-toggle arrow) ─────── */
@@ -720,7 +787,7 @@ select {
 .disclosure-summary::before {
   content: '▶';
   display: inline-block;
-  font-size: var(--disclosure-arrow-size, 0.6rem);
+  font-size: var(--disclosure-arrow-size);
   color: var(--text-dim);
   transition: transform 0.15s;
 }
@@ -735,14 +802,19 @@ details[open] > .disclosure-summary::before {
 }
 .disclosure-boxed[open] {
   border-color: var(--border);
-  background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
+  background: var(--bg-raised);
 }
 .disclosure-boxed > .disclosure-summary {
-  padding: var(--compact-summary-pad-y, 0.18rem) var(--compact-summary-pad-x, 0.38rem);
+  padding: var(--compact-summary-pad-y) var(--compact-summary-pad-x);
   border-radius: 6px;
 }
 .disclosure-boxed > .disclosure-summary:hover {
-  background: color-mix(in srgb, var(--bg-surface) 62%, transparent);
+  background: var(--bg-hover);
+}
+
+/* Pills in an open boxed row sit on --bg-raised — bump the fill one step. */
+.disclosure-boxed[open] > .disclosure-summary .pill {
+  background: var(--bg-hover);
 }
 
 /* Button-form disclosure: a rotating arrow span toggled with .open. */
@@ -754,4 +826,238 @@ details[open] > .disclosure-summary::before {
 }
 .disclosure-arrow.open {
   transform: rotate(90deg);
+}
+
+/* ── Session content text ─────────────────────────────────────────── */
+
+/* The one content-text block for transcript data: prompts, answers,
+   reasoning, tool args/results. Modifiers change family/style only. */
+.session-text {
+  margin: 0;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  color: var(--text-bright);
+  font-size: var(--font-body);
+  font-family: inherit;
+}
+
+/* Tool calls / results / names: monospace. */
+.session-text.mono {
+  font-family: var(--mono);
+  font-style: normal;
+}
+
+/* Reasoning: italic. */
+.session-text.italic {
+  font-style: italic;
+}
+
+/* Detail bodies (tool args/results, reasoning) inside expanded rows: one
+   step down from chat prose. Combine with .mono / .italic. */
+.session-text.detail {
+  font-size: var(--font-meta);
+}
+
+/* Markdown emphasis inside highlighted session text (@html output of
+   highlightStructuredText). Monochrome: structure is weight + a brighter white. */
+.session-markdown .hljs-strong,
+.session-markdown .hljs-section,
+.session-markdown .hljs-bullet {
+  font-weight: 700;
+  color: var(--text-emphasis);
+}
+.session-markdown .hljs-code,
+.session-markdown .hljs-link {
+  color: var(--text-emphasis);
+}
+.session-markdown .hljs-emphasis,
+.session-markdown .hljs-quote {
+  font-style: italic;
+}
+
+/* ── Meta label ───────────────────────────────────────────────────── */
+
+/* Uppercase dim label naming a piece of session metadata (part titles,
+   tool sections, context-bar labels, card section titles). */
+.meta-label {
+  font-size: var(--font-label);
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Card ─────────────────────────────────────────────────────────── */
+
+/* Bordered container card for grouped session steps (compaction steps,
+   analysis workflow blocks). */
+.card {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+/* Card header: meta line left, actions (ID badge etc.) right. */
+.card-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
+/* Wrapping inline run of labels/details inside a card header. */
+.card-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+/* ── Prose (rendered markdown) ────────────────────────────────────── */
+
+/* Rendered-markdown session content (renderMarkdown output). Sized as
+   session body text; all inner elements scale in em off that. */
+.prose {
+  color: var(--text-bright);
+  font-size: var(--font-body);
+  line-height: 1.7;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  color: var(--text-bright);
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1.2em 0 0.4em;
+}
+
+.prose h1 {
+  font-size: 1.4em;
+}
+.prose h2 {
+  font-size: 1.2em;
+}
+.prose h3 {
+  font-size: 1.05em;
+}
+.prose h4,
+.prose h5,
+.prose h6 {
+  font-size: 0.95em;
+}
+
+.prose h1:first-child,
+.prose h2:first-child,
+.prose h3:first-child {
+  margin-top: 0;
+}
+
+.prose p {
+  margin: 0.7em 0;
+}
+.prose p:first-child {
+  margin-top: 0;
+}
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.4em;
+  margin: 0.5em 0;
+}
+
+.prose li {
+  margin: 0.25em 0;
+}
+
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+  color: var(--text-bright);
+}
+
+.prose pre {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  margin: 0.7em 0;
+}
+
+.prose pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.82em;
+  color: var(--text-bright);
+  border-radius: 0;
+}
+
+.prose blockquote {
+  border-left: 3px solid var(--border);
+  margin: 0.7em 0;
+  padding: 0.1em 0.9em;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+
+.prose a {
+  color: var(--amber-bright);
+  text-decoration: underline;
+}
+
+.prose a:hover {
+  color: var(--text-bright);
+}
+
+.prose table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.7em 0;
+  font-size: 0.88em;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.65rem;
+  text-align: left;
+}
+
+.prose th {
+  background: var(--bg-base);
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.prose tr:nth-child(even) {
+  background: var(--bg-raised);
+}
+
+.prose strong {
+  font-weight: 700;
+}
+.prose em {
+  font-style: italic;
 }

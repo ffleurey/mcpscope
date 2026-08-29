@@ -224,9 +224,9 @@
     return s.terminalStatus ?? (s.completed ? 'complete' : 'running')
   }
   function outcomePillClass(s: { terminalStatus: string | null }): string {
-    if (s.terminalStatus === 'complete') return 'success'
-    if (s.terminalStatus === 'error' || s.terminalStatus === 'aborted') return 'error'
-    return 'soft'
+    if (s.terminalStatus === 'complete') return 'green'
+    if (s.terminalStatus === 'error' || s.terminalStatus === 'aborted') return 'red'
+    return ''
   }
 
   function openSession(sessionId: string) {
@@ -244,7 +244,7 @@
       <div class="header-line">
         <h2 class="benchmark-name">{run.benchmarkName}</h2>
         <IdBadge id={run.id} />
-        <span class="status-pill {runStatusPillClass(run.status)}">{run.status}</span>
+        <span class="pill {runStatusPillClass(run.status)}">{run.status}</span>
         <span class="header-actions">
           {#if canPauseRun}
             <button
@@ -471,7 +471,7 @@
                 <span class="eval-judge"
                   >Judge: <span class="meta-value">{judgeName(ev.judgeModelConfigId)}</span></span
                 >
-                <span class="status-pill {runStatusPillClass(ev.status)}">{ev.status}</span>
+                <span class="pill {runStatusPillClass(ev.status)}">{ev.status}</span>
                 {#if evalIncomplete(ev)}
                   <span class="eval-incomplete" title="Not all run sessions have been judged">
                     {ev.judgedSessions}/{ev.expectedSessions} judged{ev.skippedNoRubric > 0
@@ -599,7 +599,7 @@
                                         run <IdBadge id={s.runSessionId} /> · judge
                                         <IdBadge id={s.analysisSessionId} />
                                       </span>
-                                      <span class="status-pill {runStatusPillClass(s.status)}"
+                                      <span class="pill {runStatusPillClass(s.status)}"
                                         >{s.status}</span
                                       >
                                     </div>
@@ -672,7 +672,7 @@
                   <td><IdBadge id={s.sessionId} /></td>
                   <td class="col-num">{s.repetition ?? '—'}</td>
                   <td>
-                    <span class="status-pill {outcomePillClass(s)}">{outcomeLabel(s)}</span>
+                    <span class="pill {outcomePillClass(s)}">{outcomeLabel(s)}</span>
                     {#if s.error}
                       <span class="session-error" title={s.error}>{s.error}</span>
                     {/if}
@@ -723,7 +723,7 @@
   .report-loading {
     padding: 2rem;
     color: var(--text-dim);
-    font-size: 0.9rem;
+    font-size: var(--font-ui);
   }
   .run-report {
     padding: 1.5rem 2rem;
@@ -740,7 +740,7 @@
     margin-bottom: 0.5rem;
   }
   .benchmark-name {
-    font-size: 1.15rem;
+    font-size: var(--font-title);
     font-weight: 600;
     margin: 0;
   }
@@ -748,7 +748,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.25rem 1rem;
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
   .meta-value {
@@ -761,7 +761,7 @@
     background: color-mix(in srgb, var(--red-bright) 12%, transparent);
     border-radius: 6px;
     color: var(--red-bright);
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
   }
   .session-error {
     display: inline-block;
@@ -772,21 +772,21 @@
     white-space: nowrap;
     vertical-align: middle;
     color: var(--red-bright);
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
   }
   .running-note {
     display: flex;
     align-items: center;
     gap: 0.45rem;
     margin-top: 0.6rem;
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
   .report-section {
     margin-bottom: 1.5rem;
   }
   .section-title {
-    font-size: 0.95rem;
+    font-size: var(--font-ui);
     font-weight: 600;
     margin: 0 0 0.6rem;
   }
@@ -803,7 +803,7 @@
     margin-top: 0.75rem;
   }
   .subsection-title {
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     font-weight: 600;
     color: var(--text-dim);
     text-transform: uppercase;
@@ -811,7 +811,7 @@
     margin-bottom: 0.4rem;
   }
   .empty-note {
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
   .header-actions {
@@ -832,16 +832,16 @@
     align-items: center;
     gap: 0.6rem;
     margin-bottom: 0.6rem;
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
   .eval-overall {
-    font-size: 0.95rem;
+    font-size: var(--font-ui);
     font-weight: 600;
     color: var(--green-bright);
   }
   .eval-incomplete {
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     color: var(--amber-bright);
   }
   .eval-actions {
@@ -863,7 +863,7 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
   }
   .verdict-score {
     font-weight: 600;
@@ -898,7 +898,7 @@
   .criterion {
     display: flex;
     gap: 0.5rem;
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     align-items: baseline;
   }
   .crit-pts {
@@ -923,7 +923,7 @@
     line-height: 1.4;
   }
   .snapshot-note {
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     margin: 0 0 0.75rem;
   }

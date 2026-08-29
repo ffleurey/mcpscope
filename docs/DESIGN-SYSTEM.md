@@ -13,7 +13,7 @@ instructions and templates to copy.
 
 1. **This document** — the *why* and the *rules* (identity, palette, principles, patterns).
 2. **`frontend/src/app.css`** — the *implementation*: design tokens in `:root` and the shared
-   primitive classes (`.btn`, `.field-*`, `.data-table`, `.status-dot`, `.token-pill`, …).
+   primitive classes (`.btn`, `.field-*`, `.data-table`, `.status-dot`, `.pill`, …).
 3. **The Design System Reference** — the *living visual guide*: the in-app **Design** page,
    rendered by `frontend/src/lib/components/DesignReference.svelte`. It renders **live tokens and
    the real components/classes** (not copies), so it cannot silently drift from `app.css`.
@@ -40,10 +40,10 @@ the rules.
 - **Product:** mcpscope — a test/evaluation tool for MCP servers (chat inspection, trace analysis, benchmarking).
 - **Metaphor:** "scope" = **oscilloscope** (signal inspection, debugging), not weapon scope.
 - **Audience:** developers and engineers.
-- **Aesthetic:** dark background, phosphor-inspired accents (amber, green), restrained color — most UI
+- **Aesthetic:** dark background, a phosphor-inspired amber accent, restrained color — most UI
   is monochrome grey; color is added only where it carries signal. Inspiration is CRT test equipment,
-  not retro computing. The core metaphor: **UI chrome is neutral grey; the session data is a green
-  phosphor trace; amber is the single controlled accent.**
+  not retro computing. The core rule: **chrome is dim grey; session content is bright grey;
+  amber highlights metadata values and the primary action; green and red are status colors.**
 
 ---
 
@@ -57,26 +57,35 @@ The workhorse colors. Forms, dialogs, navigation, sidebar, labels — almost eve
 |---|---|---|
 | `--bg-base` | `#141414` | Main application background; form inputs |
 | `--bg-surface` | `#1e1e1e` | Elevated surfaces: panels, dialogs, sidebar, cards |
-| `--bg-hover` | `#282828` | Hover state for interactive elements |
-| `--border` | `#333333` | Borders, dividers, separators |
+| `--bg-raised` | `#292929` | Boxes nested on a surface: open disclosure rows, message bubbles, the composer |
+| `--bg-hover` | `#343434` | Hover state for interactive elements — must read on `--bg-raised` too |
+| `--border` | `#414141` | Borders, dividers, separators |
 | `--text-dim` | `#a8a8a8` | Labels, metadata, muted/secondary text |
-| `--text-bright` | `#e8e8e8` | Primary body text — near-white |
+| `--text-bright` | `#e8e8e8` | Primary body text and session content — near-white |
+| `--text-emphasis` | `#ffffff` | Markdown emphasis (bold/headers/inline code) inside session text |
 
+- The background ramp is base → surface → raised → hover; every adjacent step is ≥ 10/255 so each
+  layer reads against the one below it. Never fake an elevation with a `color-mix()` toward
+  transparent — over a same-colored parent that composites to a no-op; use the next ramp token.
 - `--bg-base` is the outermost background; `--bg-surface` is one step lighter for any container that
   needs distinction. Inputs sit on `--bg-base` (one step *darker* than the panel they live in).
-- `--text-bright` is the default UI text; `--text-dim` for supporting information.
-- No color-on-color: accents sit on `--bg-base`/`--bg-surface` only, never on another color.
-- **Green is for data, grey is for chrome.**
+  `--bg-raised` is for a box *inside* a surface (a tool-call disclosure inside a card).
+- `--text-bright` is the default text for UI **and** session content; `--text-dim` for supporting
+  information and labels.
+- No color-on-color: accents sit on the grey ramp only, never on another color.
 
-### Amber — primary accent (minimal use)
+### Amber — the accent (metadata + primary action)
 
-Reserved for the logo, the **single primary action** per view/dialog, and **selection/activity state
-markers**. Most of the UI has no amber at all.
+Amber does two jobs: it fills the **single primary action** per view/dialog (plus the logo,
+active-tab underline, links, focus and selection/activity markers), and it **highlights metadata
+values** — token counts (`.pill.amber`, `TokenPill.svelte`), ID badges on hover, round/context
+token totals. **Amber never colors prose**: message text, reasoning, tool output, labels, and
+descriptions stay grey. If a metadata number isn't worth drawing the eye to, use `--text-dim`.
 
 | Token | Value | Usage |
 |---|---|---|
-| `--amber-dim` | `oklch(55% 0.15 75)` | Logo, secondary amber text |
-| `--amber-bright` | `oklch(72% 0.18 75)` | Primary action buttons, active-tab underline, links, input focus |
+| `--amber-dim` | `oklch(55% 0.15 75)` | Logo, secondary amber text, active-surface borders (dialogs, focused composer) |
+| `--amber-bright` | `oklch(72% 0.18 75)` | Primary action buttons, metadata pills/counts, active-tab underline, links, input focus |
 | `--amber-glow` | `oklch(78% 0.20 75)` | Hover/enhanced state; selection/loaded glow on icon toggles |
 
 **Amber state markers — the one sanctioned glow/animation exception.** Icon toggles use amber to signal
@@ -84,21 +93,22 @@ state: `.icon-glow` = selected/loaded (steady amber glow via `drop-shadow`), `.i
 (pulsing amber). Used for the default-config **radio** (single-select), default-MCP **checkbox**
 (multi-select), and model load/eject. Everywhere else stays flat — status *dots* never glow.
 
-### Green — session content (the data color)
+### Green — status semantics only
 
-All text that is part of a session — user prompts, assistant answers, reasoning, tool calls, tool
-results — uses green. This draws an immediate boundary between the tool (grey chrome, amber accents) and
-the session data being inspected, like a green trace on an oscilloscope.
+Green means "running / success / loaded" — nothing else. Session content is **no longer green**
+(it was, in the original phosphor-trace metaphor): prompts, answers, reasoning, tool names,
+arguments, results, previews, and tool schemas are all grey (`.session-text` → `--text-bright`,
+their metadata → `--text-dim`).
 
 | Token | Value | Usage |
 |---|---|---|
-| `--green-dim` | `oklch(50% 0.14 145)` | Dim/offline status |
-| `--green-bright` | `oklch(65% 0.18 145)` | Session content text (prompts, answers, reasoning, tool calls/results) |
+| `--green-dim` | `oklch(50% 0.14 145)` | Idle/offline status dot |
+| `--green-bright` | `oklch(65% 0.18 145)` | Running status dot, `.pill.green` statuses, success metrics, loaded/complete markers |
 | `--green-glow` | `oklch(72% 0.22 145)` | Bright/pulsed status |
 
-**Green:** transcript prompts & answers, reasoning, tool call names/params/results, round & turn labels.
-**Stays grey (it's chrome, not data):** sidebar, nav, buttons, dialogs, form labels, config views, the
-session list, dialog titles, and **token counts / ID badges / timestamps** (tool metadata).
+**Still green:** `.status-dot.running/.idle`, `.pill.green` statuses, "Analysis complete" and other
+completion markers, connection-test success, benchmark expected-tool tags, and `--syntax-string` in
+the JSON viewer (part of the documented syntax-palette exception).
 
 ### Red — destructive actions, errors
 
@@ -133,8 +143,19 @@ The CRT feel comes from color, not fonts — use compact, highly readable system
 | `--sans` | `-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif` | UI text |
 | `--mono` | `ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace` | Data: token counts, IDs, code, table cells |
 
-Standard GitHub system-font stacks — no web-font download. Base **14px**; line-height **1.4** UI / **1.5**
-body; small UI text **12px**; monospace data **13px**.
+Standard GitHub system-font stacks — no web-font download. Base **14px** on `html`/`body` (so
+`1rem = 14px`); line-height **1.4** UI / **1.5** body.
+
+All font sizes go through the five-token scale below — never write a raw `font-size` value for text
+(icon glyph sizes are the exception). Pick by role, not by eye:
+
+| Token | Value | ≈px | Role |
+|---|---|---|---|
+| `--font-title` | `1.4rem` | 19.6 | View/section headers (`.config-view-header h2`, report titles) |
+| `--font-body` | `1.25rem` | 17.5 | Session content (`.session-text`), composer, markdown prose |
+| `--font-ui` | `1.1rem` | 15.4 | Buttons, inputs, dialog/chat titles, menus, general UI text |
+| `--font-meta` | `0.95rem` | 13.3 | Hints, previews, secondary text, table cells, `.btn-sm` |
+| `--font-label` | `0.85rem` | 11.9 | Pills, uppercase labels (`.meta-label`, `.field-label`, table headers), `.btn-xs` |
 
 ---
 
@@ -203,13 +224,15 @@ Active tab: 2px `--amber-bright` underline + `--text-bright`. Inactive: `--text-
 ### Status indicators
 
 `.status-dot` (8px flat circle) + modifier: `.running` (green-bright), `.idle` (green-dim),
-`.warn` (amber), `.error` (red). Flat — no glow. `.status-pill` (+ `.dim/.soft/.error/.success`) for a
-rounded status label.
+`.warn` (amber), `.error` (red). Flat — no glow. Rounded status labels are `.pill` variants (see the
+Pill section) — **render a status word only when it is noteworthy** (error, aborted, streaming,
+waiting); a `complete` label on every row is noise.
 
 For **run status** (benchmark/analysis runs) the dot and pill modifier come from the shared
-`runStatusDotClass` / `runStatusPillClass` helpers in `src/lib/format.ts` — one source of truth so every
-run row renders identically (in particular, `paused` reads as an active dot, not idle). Don't re-derive
-these per component.
+`runStatusDotClass` / `runStatusPillClass` helpers in `src/lib/format.ts` (`runStatusPillClass`
+returns a `.pill` color variant: `green`, `red`, or `''` for the dim default) — one source of truth
+so every run row renders identically (in particular, `paused` reads as an active dot, not idle).
+Don't re-derive these per component.
 
 ### Tables
 
@@ -237,10 +260,63 @@ The shared **`.data-table`** primitive (config admin pages, run reports; live de
 - **Columns holding a single number use `.col-num` and are narrow by default** — give them tight
   `<col>` widths so numeric data doesn't waste horizontal space; let the `col-flex` text column be wide.
 
-### Token pill, disclosure, other primitives
+### Pill
 
-`.token-pill` (grey metadata count, 999px). `.disclosure-summary`/`.disclosure-boxed`/`.disclosure-arrow`
-for `<details>` and button-toggle expand/collapse. See the Reference for the full set.
+**One pill for every rounded chip in the app** — same size, shape, and layout everywhere; variants
+recolor the text only. `.pill`: `--font-label`, 999px radius, `0.1rem 0.45rem` padding, **no
+border**, a subtle `--bg-raised` fill, dim text by default. Modifiers:
+
+- `.mono` — monospace + tabular numerals, for values (counts, IDs).
+- `.amber` — metadata values: token counts, context totals.
+- `.red` / `.green` — status semantics (error/aborted; success/complete runs).
+- `.on-raised` — bumps the fill to `--bg-hover` when the pill sits on a `--bg-raised` parent
+  (user bubble, streaming row); pills inside an open `.disclosure-boxed` summary get this
+  automatically via a global rule.
+- `.pill-end` — layout companion, pushes the pill to the end of a flex row.
+
+Token counts always render through the **`TokenPill.svelte`** component (`count`, `estimated`,
+`end`, `onRaised`, `short` props; formats via `fmtTokens` in `src/lib/format.ts`, hides itself for
+null counts; `short` abbreviates to `tk` for dense rows). Don't hand-roll `~N tokens` strings.
+**`IdBadge.svelte`** is the interactive pill (`.pill.mono.id-pill`): copy/inspect menu, amber on
+hover. `.disclosure-summary`/`.disclosure-boxed`/`.disclosure-arrow` for `<details>` and
+button-toggle expand/collapse (`.disclosure-boxed[open]` sits on `--bg-raised`). See the Reference
+for the full set.
+
+### Session view — chat first, inspect on demand
+
+There is **one session view** (no Chat/Inspect mode split). At first glance it reads as a chat;
+every deeper layer is one gesture away:
+
+1. **Chat layer** (`--font-body`): the user message in a `--bg-raised` bubble; the assistant answer
+   as rendered markdown in a global **`.prose`** block (`renderMarkdown` — `html:false`, so model
+   HTML renders as text; links open in a new tab). JSON answers keep the syntax-highlighted source
+   form. A hover control on the answer toggles the raw markdown source. While a turn is streaming,
+   text renders plain (`.session-text`) — markdown parses only once the part commits.
+2. **Metadata layer** (`--font-label`): one quiet meta row per turn — disclosure arrow, dim
+   `N rounds · M tool calls · <amber>X tokens</amber>` stats (outcome folded in as dim text), a
+   `.pill.red` only for error/aborted. Expanding shows per-round headers
+   (`Round 2 · stop` + a `tk` pill) and the boxed reasoning/tool rows.
+3. **Inspect layer**: every row is `.has-reveal`; its `IdBadge` is a **`.reveal-item`** — visible on
+   hover, on focus-within, and while focused (opacity-based, never `display:none`, so keyboard users
+   reach it by tabbing). The badge's copy/inspect menu is the entry point to the inspect dialog.
+
+Component grammar and rules:
+
+- **`.session-text`** — the one content-text block for transcript data: pre-wrap, `--font-body`,
+  `--text-bright`. Modifiers: `.mono` (tool calls/results, tool/param names), `.italic` (reasoning),
+  **`.detail`** (`--font-meta` — tool args/results and reasoning bodies inside expanded rows are one
+  step smaller than chat prose). Never re-declare this block in a component.
+- **`.session-markdown`** — hljs emphasis styling for raw-source views (`--text-emphasis` + bold).
+- **`.meta-label`** — uppercase dim label, reserved for **static** section labels (REASONING, TOOL,
+  CALL, RESULT, SESSION SETUP). Dynamic values (tool names, statuses, round labels) render in
+  normal case — mono for names (`.summary-value`), dim text for the rest.
+- **`.summary-row`** / **`.summary-meta`** — the transcript row grammar: label + preview left,
+  right-aligned metadata cluster (reveal IdBadge + pill).
+- **`.card`** (+ `.card-meta` header row, `.card-line` label run) — bordered `--bg-surface` container
+  for grouped session steps (compaction steps, analysis workflow blocks).
+- Session layout metrics are `:root` tokens: `--chat-indent/-pad/-gap/-stack` (transcript rail) and
+  the `--compact-*` set (compact row padding/gaps). Use them — no hard-coded copies, and (as with all
+  tokens) no `var(--x, fallback)` defaults.
 
 ### Icons
 

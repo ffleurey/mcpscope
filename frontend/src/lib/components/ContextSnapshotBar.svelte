@@ -163,7 +163,7 @@
   <div class="csb" class:compact>
     {#if !compact}
       <div class="csb-header">
-        <span class="csb-label">{label}</span>
+        <span class="meta-label">{label}</span>
         {#if ctxSize > 0}
           <span class="csb-counts"
             >{fmt(totalUsed)} / {fmt(ctxSize)} tokens ({Math.round(pct)}%)</span
@@ -200,7 +200,7 @@
     </div>
 
     {#if compact}
-      <button class="csb-compact-label" onclick={cycleMode} title="Click to cycle view mode">
+      <button class="meta-label csb-compact-label" onclick={cycleMode} title="Click to cycle view mode">
         {modeCycleLabel()}
       </button>
       {#if displayMode === 'full' && ctxSize > 0}
@@ -239,18 +239,11 @@
     justify-content: space-between;
     align-items: baseline;
     margin-bottom: 0.3rem;
-    font-size: 0.68rem;
-  }
-
-  .csb-label {
-    font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    font-size: var(--font-label);
   }
 
   .csb-counts {
-    color: var(--text-dim);
+    color: var(--amber-bright);
     font-variant-numeric: tabular-nums;
     flex: 1;
     text-align: right;
@@ -262,7 +255,7 @@
     border-radius: 3px;
     color: var(--text-dim);
     cursor: pointer;
-    font-size: 0.7rem;
+    font-size: var(--font-label);
     padding: 0 0.28rem;
     line-height: 1.4;
     margin-left: 0.35rem;
@@ -324,11 +317,6 @@
   }
 
   .csb-compact-label {
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
     white-space: nowrap;
     /* button reset */
     background: none;
@@ -342,8 +330,8 @@
   }
 
   .csb-compact-counts {
-    font-size: 0.65rem;
-    color: var(--text-dim);
+    font-size: var(--font-label);
+    color: var(--amber-bright);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
@@ -360,7 +348,7 @@
     display: flex;
     align-items: center;
     gap: 0.28rem;
-    font-size: 0.64rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
   }
 

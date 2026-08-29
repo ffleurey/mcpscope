@@ -37,12 +37,12 @@
   }
   .config-head h1 {
     margin: 0 0 0.25rem;
-    font-size: 1.4rem;
+    font-size: var(--font-title);
     color: var(--text-bright);
   }
   .config-head p {
     margin: 0;
-    font-size: 0.85rem;
+    font-size: var(--font-ui);
     color: var(--text-dim);
   }
 

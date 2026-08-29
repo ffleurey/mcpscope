@@ -245,7 +245,7 @@
     padding: 0.35rem 1rem;
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border);
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     min-height: 2rem;
     position: relative;
     z-index: 10;
@@ -307,14 +307,14 @@
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border);
     padding: 0.5rem 1rem;
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
   }
 
   .queue-header {
     color: var(--text-dim);
     font-weight: 600;
     margin-bottom: 0.4rem;
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }

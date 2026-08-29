@@ -181,7 +181,7 @@
                   <td><IdBadge id={run.id} /></td>
                   <td
                     ><span class="status-dot {runStatusDotClass(run.status)}"></span>
-                    <span class="status-pill {runStatusPillClass(run.status)}">{run.status}</span
+                    <span class="pill {runStatusPillClass(run.status)}">{run.status}</span
                     ></td
                   >
                   <td class="col-num">{run.repetitions}</td>
@@ -227,7 +227,7 @@
   .detail-loading {
     padding: 2rem;
     color: var(--text-dim);
-    font-size: 0.9rem;
+    font-size: var(--font-ui);
   }
   .config-view {
     overflow-y: auto;
@@ -247,7 +247,7 @@
   }
   .benchmark-description {
     margin: 0.3rem 0 0;
-    font-size: 0.85rem;
+    font-size: var(--font-ui);
     color: var(--text-dim);
   }
   .detail-section {
@@ -266,7 +266,7 @@
     margin-bottom: 0.6rem;
   }
   .section-title {
-    font-size: 0.95rem;
+    font-size: var(--font-ui);
     font-weight: 600;
     margin: 0;
   }

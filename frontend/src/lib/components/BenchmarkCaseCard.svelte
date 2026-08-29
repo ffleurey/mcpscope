@@ -98,7 +98,7 @@
     white-space: nowrap;
     color: var(--text-bright);
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: var(--font-ui);
   }
   .card-actions {
     margin-left: auto;
@@ -114,7 +114,7 @@
     gap: 0.3rem;
   }
   .section-label {
-    font-size: 0.68rem;
+    font-size: var(--font-label);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-dim);
@@ -122,7 +122,7 @@
 
   .prompt-text {
     margin: 0;
-    font-size: 0.85rem;
+    font-size: var(--font-ui);
     line-height: 1.45;
     color: var(--text-bright);
     white-space: pre-wrap;
@@ -137,7 +137,7 @@
   }
   .tool-name {
     font-family: var(--mono);
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
   }
   .tool-name.expect {
     color: var(--green-bright);
@@ -146,7 +146,7 @@
     color: var(--red-bright);
   }
   .tool-empty {
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     opacity: 0.7;
   }
@@ -163,7 +163,7 @@
     display: flex;
     align-items: baseline;
     gap: 0.5rem;
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     line-height: 1.4;
   }
   .rubric-points {

@@ -47,7 +47,7 @@
     color: var(--text-dim);
     cursor: pointer;
     font-family: var(--mono);
-    font-size: 0.74rem;
+    font-size: var(--font-label);
     padding: 0.22rem 0.7rem;
   }
 

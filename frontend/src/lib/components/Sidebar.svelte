@@ -393,7 +393,7 @@
     cursor: pointer;
     padding: 0.6rem 0.75rem;
     font-family: inherit;
-    font-size: 0.85rem;
+    font-size: var(--font-ui);
     color: var(--text-dim);
     transition:
       background 0.1s,
@@ -467,7 +467,7 @@
     flex: 1;
     min-width: 0;
     text-align: left;
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     font-weight: 600;
     color: var(--text-dim);
     text-transform: uppercase;
@@ -492,7 +492,7 @@
 
   .empty {
     padding: 0.4rem 0.75rem 0.6rem;
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
 
@@ -503,7 +503,7 @@
   }
   .bench-item {
     color: var(--text-dim);
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
   }
   .bench-row {
     display: flex;
@@ -539,7 +539,7 @@
   .bench-id {
     flex-shrink: 0;
     font-family: var(--mono);
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     opacity: 0.7;
   }
   .bench-name {
@@ -552,7 +552,7 @@
   .bench-count {
     flex-shrink: 0;
     font-family: var(--mono);
-    font-size: 0.72rem;
+    font-size: var(--font-label);
     opacity: 0.7;
   }
 
@@ -567,7 +567,7 @@
     flex-shrink: 0;
   }
   .design-section .nav-item {
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     opacity: 0.5;
   }
   .design-section .nav-item.active {
@@ -581,7 +581,7 @@
     border: none;
     cursor: pointer;
     padding: 0.4rem 0.75rem;
-    font-size: 0.83rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     font-family: inherit;
     transition:

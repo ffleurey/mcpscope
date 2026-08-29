@@ -474,19 +474,19 @@
     flex: 1;
   }
   .loaded-context-indicator {
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     color: var(--green-bright);
     font-weight: 500;
     white-space: nowrap;
   }
   .loading-hint,
   .no-connections {
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     margin: 0.25rem 0 0;
   }
   .error-hint {
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     color: var(--red-bright);
     margin: 0.25rem 0 0;
   }

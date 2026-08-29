@@ -58,7 +58,6 @@
   let transcriptEl = $state<HTMLElement | null>(null)
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let composerText = $state('')
-  let viewMode = $state<'chat' | 'inspect'>('chat')
   let stickToBottom = $state(true)
   let lastSessionId = $state<string | null>(null)
   let lastTurnCount = $state(0)
@@ -345,28 +344,6 @@
           {session.title}
         </button>
       {/if}
-      <!-- SHORTCUT: hand-rolled segmented control (amber-border active state)
-           predates SegmentedControl.svelte (amber text on amber wash). Paying
-           this back = swap to the shared component and delete .view-mode-btn,
-           checking the header layout visually. -->
-      <div class="view-mode-toggle">
-        <button
-          class="view-mode-btn"
-          class:active={viewMode === 'chat'}
-          onclick={() => {
-            viewMode = 'chat'
-          }}
-          title="Chat view">Chat</button
-        >
-        <button
-          class="view-mode-btn"
-          class:active={viewMode === 'inspect'}
-          onclick={() => {
-            viewMode = 'inspect'
-          }}
-          title="Detailed inspection layout">Inspect</button
-        >
-      </div>
 
       {#if $activeTrace}
         <button
@@ -413,7 +390,6 @@
         {#if sessionPreludeParts.length > 0 || isInitializing}
           <SessionPreludeBlock
             parts={sessionPreludeParts}
-            mode={viewMode}
             loadedContextLength={session.loaded_context_length ?? null}
             {isInitializing}
           />
@@ -444,7 +420,6 @@
               {partsByTurn}
               {roundStreamsByTurn}
               {contextSnapshotsByRound}
-              mode={viewMode}
               loadedContextLength={session.loaded_context_length ?? null}
             />
           {/each}
@@ -455,7 +430,6 @@
               rounds={roundsByTurn.get(turn.id) ?? []}
               parts={partsByTurn.get(turn.id) ?? []}
               roundStreams={roundStreamsByTurn.get(turn.id) ?? []}
-              mode={viewMode}
               {contextSnapshotsByRound}
               loadedContextLength={session.loaded_context_length ?? null}
             />
@@ -468,12 +442,11 @@
                 rounds={roundsByTurn.get(item.turn.id) ?? []}
                 parts={partsByTurn.get(item.turn.id) ?? []}
                 roundStreams={roundStreamsByTurn.get(item.turn.id) ?? []}
-                mode={viewMode}
-                {contextSnapshotsByRound}
+                  {contextSnapshotsByRound}
                 loadedContextLength={session.loaded_context_length ?? null}
               />
             {:else if item.step.stepTypeKey === 'compaction'}
-              <SessionCompactionStepBlock step={item.step} parts={[]} mode={viewMode} />
+              <SessionCompactionStepBlock step={item.step} parts={[]} />
             {/if}
           {/each}
         {/if}
@@ -617,7 +590,7 @@
   }
 
   .chat-title {
-    font-size: 0.875rem;
+    font-size: var(--font-ui);
     font-weight: 500;
     color: var(--text-bright);
     overflow: hidden;
@@ -635,11 +608,11 @@
   }
 
   .chat-title:hover {
-    background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+    background: var(--bg-hover);
   }
 
   .chat-title-input {
-    font-size: 0.875rem;
+    font-size: var(--font-ui);
     font-weight: 500;
     color: var(--text-bright);
     background: var(--bg-surface);
@@ -656,30 +629,8 @@
     border-color: var(--amber-bright);
   }
 
-  .view-mode-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    flex-shrink: 0;
-  }
-
-  .view-mode-btn {
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    color: var(--text-dim);
-    cursor: pointer;
-    font-size: 0.7rem;
-    padding: 0.18rem 0.5rem;
-  }
-
-  .view-mode-btn.active {
-    color: var(--text-bright);
-    border-color: var(--amber-bright);
-  }
-
   .export-btn {
-    font-size: 0.72rem;
+    font-size: var(--font-label);
     padding: 0.2rem 0.55rem;
     opacity: 0.6;
     flex-shrink: 0;
@@ -701,12 +652,12 @@
     align-items: center;
     justify-content: center;
     color: var(--text-dim);
-    font-size: 0.875rem;
+    font-size: var(--font-ui);
   }
 
   .empty-hint {
     color: var(--text-dim);
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
   }
 
   /* ── Init error banner ────────────────────────────────────────────────── */
@@ -716,7 +667,7 @@
     border: 1px solid color-mix(in srgb, var(--red-bright) 35%, transparent);
     border-radius: 6px;
     color: var(--text-bright);
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     padding: 0.75rem 1rem;
     margin: 0.5rem 0;
     display: flex;
@@ -733,7 +684,7 @@
   }
 
   .init-error-detail {
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: color-mix(in srgb, var(--text-bright) 88%, var(--red-bright) 12%);
     overflow-wrap: anywhere;
   }
@@ -752,7 +703,7 @@
     background: color-mix(in srgb, var(--red-bright) 10%, transparent);
     border-top: 1px solid color-mix(in srgb, var(--red-bright) 35%, transparent);
     color: var(--text-bright);
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     padding: 0.5rem 1.25rem;
     text-align: center;
   }
@@ -767,7 +718,7 @@
 
   /* Bubble styled to match the user message in the transcript */
   .composer-bubble {
-    background: var(--bg-hover);
+    background: var(--bg-raised);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 0.38rem 0.72rem;
@@ -775,7 +726,7 @@
   }
 
   .composer-bubble:focus-within {
-    border-color: var(--green-bright);
+    border-color: var(--amber-dim);
   }
 
   .composer-bubble.is-disabled {
@@ -789,16 +740,16 @@
     resize: none;
     background: transparent;
     border: none;
-    color: var(--green-bright);
+    color: var(--text-bright);
     font-family: inherit;
-    font-size: 1rem;
+    font-size: var(--font-body);
     line-height: 1.5;
     outline: none;
     overflow-y: auto;
   }
 
   .composer-bubble textarea::placeholder {
-    color: color-mix(in srgb, var(--green-bright) 40%, transparent);
+    color: color-mix(in srgb, var(--text-dim) 55%, transparent);
   }
 
   .composer-footer {
@@ -817,7 +768,7 @@
   }
 
   .config-label {
-    font-size: 0.68rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
     opacity: 0.75;
     white-space: nowrap;
@@ -826,7 +777,7 @@
   }
 
   .composer-hint {
-    font-size: 0.7rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
     opacity: 0.55;
     flex-shrink: 0;
@@ -851,18 +802,18 @@
   }
 
   .analysis-bar-label {
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     font-weight: 600;
     color: var(--text-dim);
   }
 
   .analysis-bar-phase {
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
 
   .analysis-bar-error {
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: color-mix(in srgb, var(--text-bright) 88%, var(--red-bright) 12%);
   }
 
@@ -872,7 +823,7 @@
   }
 
   .analysis-bar-progress {
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     margin-left: 0.25rem;
   }
@@ -896,7 +847,7 @@
   }
 
   .analysis-bar-done {
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     color: var(--green-bright);
     font-weight: 600;
   }

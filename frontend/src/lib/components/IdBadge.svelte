@@ -37,7 +37,7 @@
 />
 <span class="id-badge">
   <button
-    class="token-pill id-pill"
+    class="pill mono id-pill"
     title={id}
     onclick={(e) => {
       e.stopPropagation()
@@ -82,24 +82,23 @@
     display: inline-block;
   }
 
-  /* Chrome (border/radius/colour/size) comes from .token-pill; this adds the
+  /* Chrome (fill/radius/colour/size) comes from .pill; this adds the
      interactive button behaviour + ellipsis. */
   .id-pill {
-    background: none;
     cursor: pointer;
-    font-family: var(--mono);
-    /* Slightly larger than a plain .token-pill: this is an interactive,
-       copy/inspect target, not dim metadata. */
-    font-size: 0.74rem;
-    padding: 0.16rem 0.55rem;
     max-width: 260px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .id-pill:hover {
-    border-color: var(--text-dim);
-    color: var(--text-bright);
+    background: var(--bg-hover);
+    color: var(--amber-glow);
+  }
+
+  .id-pill:focus-visible {
+    outline: 2px solid var(--amber-bright);
+    outline-offset: 1px;
   }
 
   .id-menu {
@@ -122,7 +121,7 @@
     border: none;
     padding: 0.3rem 0.75rem;
     cursor: pointer;
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     color: var(--text-bright);
     white-space: nowrap;
   }

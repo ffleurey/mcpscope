@@ -392,7 +392,7 @@
 
 <style>
   .target-label {
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     margin: 0;
   }
@@ -438,7 +438,7 @@
     border: 1px solid var(--red-bright);
     border-radius: 4px;
     color: var(--red-bright);
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     padding: 0.5rem 0.75rem;
   }
 

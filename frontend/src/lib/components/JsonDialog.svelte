@@ -28,7 +28,7 @@
     padding: 1rem;
     overflow: auto;
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     line-height: 1.5;
     color: var(--text-bright);
     background: var(--bg-base);

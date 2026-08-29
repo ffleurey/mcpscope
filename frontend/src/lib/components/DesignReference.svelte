@@ -7,6 +7,7 @@
   import Radio from './Radio.svelte'
   import SegmentedControl from './SegmentedControl.svelte'
   import { AppError } from '../errors'
+  import { renderMarkdown } from '../markdownRender'
   import {
     iconPlus,
     iconClose,
@@ -38,6 +39,7 @@
     iconCheckboxBlank,
   } from '../design/icons'
   import Icon from './Icon.svelte'
+  import TokenPill from './TokenPill.svelte'
   import { columnResize } from '../actions/columnResize'
 
   let showDialog = $state(false)
@@ -60,7 +62,8 @@
       items: [
         { token: '--bg-base', use: 'Main app background; inputs' },
         { token: '--bg-surface', use: 'Panels, dialogs, sidebar, cards' },
-        { token: '--bg-hover', use: 'Hover state for interactive elements' },
+        { token: '--bg-raised', use: 'Boxes nested on a surface: open disclosures, bubbles, composer' },
+        { token: '--bg-hover', use: 'Hover state — must read on --bg-raised too' },
         { token: '--border', use: 'Borders, dividers, separators' },
       ],
     },
@@ -68,27 +71,28 @@
       category: 'Grey — Text',
       items: [
         { token: '--text-dim', use: 'Labels, metadata, muted text' },
-        { token: '--text-bright', use: 'Primary body text (near-white)' },
+        { token: '--text-bright', use: 'Primary body text and session content (near-white)' },
+        { token: '--text-emphasis', use: 'Markdown emphasis inside session text (bold/headers/code)' },
       ],
     },
     {
-      category: 'Amber — Primary accent (minimal use)',
+      category: 'Amber — Metadata highlights + primary action',
       items: [
-        { token: '--amber-dim', use: 'Logo, secondary amber text' },
+        { token: '--amber-dim', use: 'Logo, secondary amber text, active-surface borders' },
         {
           token: '--amber-bright',
-          use: 'Primary buttons, active tab underline, links, input focus',
+          use: 'Primary buttons, metadata pills/counts, active tab underline, links, input focus',
         },
         { token: '--amber-glow', use: 'Hover/enhanced state for primary elements' },
       ],
     },
     {
-      category: 'Green — Session content (data color)',
+      category: 'Green — Status semantics only',
       items: [
         { token: '--green-dim', use: 'Dim status, offline/dormant' },
         {
           token: '--green-bright',
-          use: 'Session content: prompts, answers, reasoning, tool calls/results',
+          use: 'Running dots, .pill.green statuses, success metrics, loaded/complete markers',
         },
         { token: '--green-glow', use: 'Bright status, pulsed indicators' },
       ],
@@ -102,25 +106,49 @@
     },
   ]
 
+  // Typography scale — sizes render live via var(); values are read from :root.
+  const fontTokens = [
+    { token: '--font-title', use: 'View/section headers' },
+    { token: '--font-body', use: 'Session content, composer, markdown prose' },
+    { token: '--font-ui', use: 'Buttons, inputs, titles, general UI text' },
+    { token: '--font-meta', use: 'Hints, previews, secondary text, table cells' },
+    { token: '--font-label', use: 'Pills, uppercase labels, table headers' },
+  ]
+
   // Live values read from the document root — single source of truth is app.css.
   let cssValues = $state<Record<string, string>>({})
 
   onMount(() => {
     const root = getComputedStyle(document.documentElement)
-    const tokens = [...colors.flatMap((g) => g.items.map((i) => i.token)), '--sans', '--mono']
+    const tokens = [
+      ...colors.flatMap((g) => g.items.map((i) => i.token)),
+      ...fontTokens.map((f) => f.token),
+      '--sans',
+      '--mono',
+    ]
     cssValues = Object.fromEntries(tokens.map((t) => [t, root.getPropertyValue(t).trim()]))
   })
 
   const rules = [
-    '--bg-base is the outermost background; everything sits on it.',
-    '--bg-surface is one step lighter — used for containers that need distinction from the base.',
-    '--text-bright is the default text color; --text-dim for supporting information.',
-    'No color-on-color: accent colors sit on --bg-base or --bg-surface only (never on another color).',
-    'Amber is reserved for the logo and the single primary action per view/dialog. Most of the UI has no amber at all.',
+    'The background ramp is base → surface → raised → hover; use the next ramp token for elevation, never a color-mix toward transparent (it composites to a no-op on a same-colored parent).',
+    '--text-bright is the default text color — for UI and session content alike; --text-dim for supporting information and labels.',
+    'No color-on-color: accent colors sit on the grey ramp only (never on another color).',
+    'Amber highlights metadata values (token pills, counts, ID badges on hover) and fills the single primary action per view/dialog. Amber never colors prose.',
+    'Green means status — running, success, loaded — and nothing else. Session content is grey.',
     'Most of the UI is monochrome grey. Color is added only where it provides signal.',
     'color-scheme: dark on :root to force neutral system colors on native controls.',
-    'Green is for session data, grey is for chrome — session content text uses --green-bright to create the oscilloscope metaphor.',
   ]
+
+  const proseSampleHtml = renderMarkdown(
+    [
+      'The forecast for **Oslo** over the next days:',
+      '',
+      '- **August 21:** Light drizzle, high of 21.3°C',
+      '- **August 22:** Overcast, high of 19.5°C',
+      '',
+      'Data from `get_forecast` — see [Open-Meteo](https://open-meteo.com) for details.',
+    ].join('\n'),
+  )
 
   // A representative error for the live InlineAppError component.
   const demoError = new AppError('Something went wrong processing your request.', 'upstream', 502, {
@@ -196,6 +224,20 @@
       </div>
     {/each}
 
+    <h3 class="group-title">Elevation ramp</h3>
+    <div class="elevation-demo">
+      <span class="elevation-label">--bg-base</span>
+      <div class="elevation-step" style="background: var(--bg-surface)">
+        <span class="elevation-label">--bg-surface</span>
+        <div class="elevation-step" style="background: var(--bg-raised)">
+          <span class="elevation-label">--bg-raised</span>
+          <div class="elevation-step" style="background: var(--bg-hover)">
+            <span class="elevation-label">--bg-hover</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="rules-callout">
       <strong>Color rules</strong>
       <ul>
@@ -223,29 +265,24 @@
       </div>
     </div>
 
-    <h3 class="group-title">Sizes</h3>
+    <h3 class="group-title">Type scale</h3>
+    <p class="ref-note">
+      Base is <code class="mono">14px</code> on <code class="mono">html</code>/<code class="mono"
+        >body</code
+      >
+      (so 1rem = 14px); line-height 1.5 body / 1.4 compact UI. Every text
+      <code class="mono">font-size</code> goes through one of these five tokens — icon glyph sizes are
+      the only raw values.
+    </p>
     <table class="size-table">
       <tbody>
-        <tr
-          ><td><code>14px</code></td><td class="size-14 sans">Base body text</td><td
-            ><code>line-height: 1.5</code></td
-          ></tr
-        >
-        <tr
-          ><td><code>12px</code></td><td class="size-12 sans"
-            >Small UI text (labels, badges, metadata)</td
-          ><td><code>0.75rem</code></td></tr
-        >
-        <tr
-          ><td><code>13px</code></td><td class="size-13 mono"
-            >Monospace data (token counts, IDs, code)</td
-          ><td><code>0.8125rem</code></td></tr
-        >
-        <tr
-          ><td><code>14px</code></td><td class="size-14 mono">Compact UI line-height</td><td
-            ><code>line-height: 1.4</code></td
-          ></tr
-        >
+        {#each fontTokens as f (f.token)}
+          <tr>
+            <td><code>{f.token}</code></td>
+            <td style="font-size: var({f.token})">{f.use}</td>
+            <td><code>{cssValues[f.token] ?? '…'}</code></td>
+          </tr>
+        {/each}
       </tbody>
     </table>
   </section>
@@ -455,7 +492,7 @@
 
     {#if showDialog}
       <DialogShell title="Demo dialog" onClose={() => (showDialog = false)}>
-        <p style="margin: 0 0 0.75rem; font-size: 0.875rem; color: var(--text-bright);">
+        <p style="margin: 0 0 0.75rem; font-size: var(--font-ui); color: var(--text-bright);">
           DialogShell with header, body, and action buttons.
         </p>
         <div class="dialog-actions">
@@ -662,11 +699,25 @@
   <section class="ref-section" id="utility">
     <h2>Utility patterns</h2>
 
-    <h3 class="group-title">Token pill</h3>
+    <h3 class="group-title">Pill</h3>
     <div class="demo-row">
-      <span class="token-pill">1,234 tokens</span>
-      <span class="token-pill">~500 tokens</span>
+      <span class="pill">waiting</span>
+      <span class="pill red">error</span>
+      <span class="pill green">complete</span>
+      <TokenPill count={1234} />
+      <TokenPill count={5509} short />
+      <TokenPill count={500} estimated />
+      <IdBadge id="AB12.3W.1T" />
     </div>
+    <p class="ref-note">
+      One pill primitive for every rounded chip — same size, shape, and fill everywhere; variants
+      recolor the text only (<code class="mono">.mono/.amber/.red/.green/.on-raised</code>). Token
+      counts always render through the live <code class="mono">TokenPill.svelte</code> component
+      (formats via <code class="mono">fmtTokens</code>, hides itself for null counts,
+      <code class="mono">short</code> abbreviates to <code class="mono">tk</code>);
+      <code class="mono">IdBadge.svelte</code> is the interactive pill. Status words render only
+      when noteworthy — never a <code class="mono">complete</code> pill on every row.
+    </p>
 
     <h3 class="group-title">Details / Summary expand</h3>
     <details class="demo-details">
@@ -705,47 +756,71 @@
   <section class="ref-section" id="session">
     <h2>Session content</h2>
     <p class="ref-note">
-      Green phosphor text distinguishes LLM content from UI labels. All content text at <strong
-        >1rem</strong
-      >. Differentiated by font:
-      <strong>sans</strong> for prompts/answers,
-      <strong>sans italic</strong> for reasoning,
-      <strong>mono</strong> for tool content.
+      One session view, three layers. <strong>Chat layer</strong>: bright-grey content at
+      <code class="mono">--font-body</code> — the user bubble plus the assistant answer rendered as
+      markdown in the global <code class="mono">.prose</code> block. <strong>Metadata layer</strong>:
+      quiet <code class="mono">--font-label</code> rows — dim stats with amber token values, one
+      pill style. <strong>Inspect layer</strong>: ID badges are
+      <code class="mono">.reveal-item</code>s inside <code class="mono">.has-reveal</code> rows —
+      visible on hover or keyboard focus, one click from the inspect dialog. Detail bodies
+      (tool args/results, reasoning) use <code class="mono">.session-text.detail</code> — one step
+      smaller than chat prose. Uppercase is reserved for static section labels; dynamic values (tool
+      names, statuses) stay normal case.
     </p>
 
     <h3 class="group-title">Session text samples</h3>
     <div class="session-demo">
       <div class="session-part">
-        <span class="session-part-label">User prompt (sans)</span>
+        <span class="meta-label">User prompt (sans)</span>
         <p class="session-text">What tools are available for weather data?</p>
       </div>
       <div class="session-part">
-        <span class="session-part-label">Reasoning (sans italic)</span>
-        <p class="session-text reasoning">
-          The user is asking about weather tools. I should list the available MCP tools and their
-          capabilities.
-        </p>
+        <span class="meta-label">Reasoning (sans italic)</span>
+        <!-- Single-line content: .session-text is pre-wrap, so source line breaks would show. -->
+        <p class="session-text italic">The user is asking about weather tools. I should list the available MCP tools and their capabilities.</p>
       </div>
       <div class="session-part">
-        <span class="session-part-label">Tool call (mono)</span>
-        <p class="session-text tool">get_forecast(latitude: 48.85, longitude: 2.35)</p>
+        <span class="meta-label">Tool call (mono)</span>
+        <p class="session-text mono">get_forecast(latitude: 48.85, longitude: 2.35)</p>
       </div>
       <div class="session-part">
-        <span class="session-part-label">Assistant answer (sans)</span>
-        <p class="session-text">
-          The current temperature in Paris is 18°C with partly cloudy skies. The forecast shows a
-          high of 22°C tomorrow.
-        </p>
+        <span class="meta-label">Assistant answer (sans)</span>
+        <p class="session-text">The current temperature in Paris is 18°C with partly cloudy skies. The forecast shows a high of 22°C tomorrow.</p>
       </div>
     </div>
 
-    <h3 class="group-title">Metadata (stays grey)</h3>
-    <div class="demo-row">
-      <span class="token-pill">1,234 tokens</span>
-      <span class="token-pill">~500 tokens</span>
-      <IdBadge id="AB12.4T" />
-      <IdBadge id="AB12.S" />
+    <h3 class="group-title">Rendered answer (.prose)</h3>
+    <div class="session-demo">
+      <div class="prose">{@html proseSampleHtml}</div>
     </div>
+    <p class="ref-note">
+      Assistant answers render through <code class="mono">renderMarkdown</code> (markdown-it,
+      <code class="mono">html:false</code>) into the global <code class="mono">.prose</code> block;
+      a hover control on the real answer block toggles the raw source. JSON answers keep the
+      highlighted source form. Streaming text stays plain until the part commits.
+    </p>
+
+    <h3 class="group-title">Meta row + hover-revealed IDs</h3>
+    <div class="session-demo">
+      <div class="demo-meta-row has-reveal">
+        <span class="disclosure-arrow"><Icon path={iconChevronRight} /></span>
+        <span class="demo-meta-stats"
+          >3 rounds · 2 tool calls · <span class="demo-tokens-value">1,852 tokens</span></span
+        >
+        <span class="reveal-item pill-end"><IdBadge id="AB12.0T" /></span>
+      </div>
+      <div class="demo-meta-row has-reveal">
+        <span class="demo-meta-stats">Round 2 · stop</span>
+        <TokenPill count={5509} short />
+        <span class="reveal-item"><IdBadge id="AB12.0T.2" /></span>
+      </div>
+    </div>
+    <p class="ref-note">
+      Hover (or tab into) a row to reveal its ID badge — <code class="mono">.reveal-item</code>
+      inside a <code class="mono">.has-reveal</code> row, opacity-based so it keeps its layout slot
+      and stays focusable. Status words appear only when noteworthy (error/aborted); token values
+      are the amber accent.
+    </p>
   </section>
 
   <!-- ─── ICON SET ────────────────────────────────────────────────────── -->
@@ -883,14 +958,14 @@
   }
 
   .ref-header h1 {
-    font-size: 1.3rem;
+    font-size: var(--font-title);
     font-weight: 700;
     color: var(--amber-bright);
     margin: 0 0 0.35rem;
   }
 
   .ref-subtitle {
-    font-size: 0.85rem;
+    font-size: var(--font-ui);
     color: var(--text-dim);
     margin: 0;
   }
@@ -900,7 +975,7 @@
   }
 
   .ref-section h2 {
-    font-size: 1rem;
+    font-size: var(--font-ui);
     font-weight: 600;
     color: var(--text-bright);
     border-bottom: 1px solid var(--border);
@@ -909,7 +984,7 @@
   }
 
   .group-title {
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     font-weight: 600;
     color: var(--text-dim);
     text-transform: uppercase;
@@ -918,7 +993,7 @@
   }
 
   .ref-note {
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     margin: 0.5rem 0 0;
     line-height: 1.5;
@@ -948,7 +1023,7 @@
     width: auto;
   }
   .logo-card figcaption {
-    font-size: 0.72rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
   }
 
@@ -982,7 +1057,7 @@
   }
 
   .icon-cell code {
-    font-size: 0.68rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
     word-break: break-all;
   }
@@ -1021,19 +1096,19 @@
 
   .swatch-token {
     font-family: var(--mono);
-    font-size: 0.72rem;
+    font-size: var(--font-label);
     color: var(--text-bright);
     font-weight: 600;
   }
 
   .swatch-value {
     font-family: var(--mono);
-    font-size: 0.68rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
   }
 
   .swatch-use {
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
     line-height: 1.3;
   }
@@ -1043,7 +1118,7 @@
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0.75rem 1rem;
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     color: var(--text-bright);
   }
 
@@ -1075,7 +1150,7 @@
 
   .type-token {
     font-family: var(--mono);
-    font-size: 0.75rem;
+    font-size: var(--font-label);
     font-weight: 600;
     color: var(--text-dim);
     margin-bottom: 0.35rem;
@@ -1089,16 +1164,16 @@
 
   .type-sample.sans {
     font-family: var(--sans);
-    font-size: 14px;
+    font-size: var(--font-ui);
   }
   .type-sample.mono {
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: var(--font-meta);
   }
 
   .type-stack {
     font-family: var(--mono);
-    font-size: 0.68rem;
+    font-size: var(--font-label);
     color: var(--text-dim);
     word-break: break-all;
     margin: 0;
@@ -1107,7 +1182,7 @@
   .size-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.85rem;
+    font-size: var(--font-ui);
   }
 
   .size-table td {
@@ -1117,29 +1192,14 @@
   }
 
   .size-table td:first-child {
-    width: 4rem;
+    width: 9rem;
+    font-family: var(--mono);
+    white-space: nowrap;
   }
   .size-table td:last-child {
     color: var(--text-dim);
     font-family: var(--mono);
-    font-size: 0.75rem;
-  }
-
-  .size-14.sans {
-    font-family: var(--sans);
-    font-size: 14px;
-  }
-  .size-12.sans {
-    font-family: var(--sans);
-    font-size: 12px;
-  }
-  .size-13.mono {
-    font-family: var(--mono);
-    font-size: 13px;
-  }
-  .size-14.mono {
-    font-family: var(--mono);
-    font-size: 14px;
+    font-size: var(--font-label);
   }
 
   /* ── Buttons ──────────────────────────────────────────────────────── */
@@ -1183,7 +1243,7 @@
 
   /* ── Status labels (dots come from the global .status-dot primitive) ── */
   .status-label-demo {
-    font-size: 0.8rem;
+    font-size: var(--font-meta);
     color: var(--text-bright);
     margin-right: 0.75rem;
   }
@@ -1203,7 +1263,7 @@
     padding: 0.4rem 0.6rem;
     cursor: pointer;
     list-style: none;
-    font-size: 0.85rem;
+    font-size: var(--font-ui);
     color: var(--text-bright);
   }
 
@@ -1225,7 +1285,7 @@
   .demo-details-body {
     padding: 0.4rem 0.6rem 0.5rem 1.2rem;
     border-top: 1px solid var(--border);
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
     line-height: 1.45;
   }
@@ -1247,28 +1307,44 @@
     gap: 0.15rem;
   }
 
-  .session-text {
-    margin: 0;
-    color: var(--green-bright);
-    font-size: 1rem;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .session-text.reasoning {
-    font-style: italic;
-  }
-  .session-text.tool {
-    font-family: var(--mono);
-  }
-
-  .session-part-label {
-    font-size: 0.68rem;
-    font-weight: 600;
+  /* ── Session meta-row demo ────────────────────────────────────────── */
+  .demo-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.22rem 0.72rem;
+    border-left: 2px solid var(--border);
+    font-size: var(--font-label);
     color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+  }
+
+  .demo-meta-stats {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .demo-tokens-value {
+    color: var(--amber-bright);
+  }
+
+  /* ── Elevation demo ───────────────────────────────────────────────── */
+  .elevation-demo {
+    padding: 0.75rem;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  .elevation-step {
+    margin-top: 0.4rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  .elevation-label {
+    font-family: var(--mono);
+    font-size: var(--font-label);
+    color: var(--text-dim);
   }
 
   /* ── Principles list ──────────────────────────────────────────────── */
@@ -1282,7 +1358,7 @@
   }
 
   .principle-list li {
-    font-size: 0.85rem;
+    font-size: var(--font-ui);
     color: var(--text-bright);
     line-height: 1.45;
     padding-left: 1rem;
@@ -1291,7 +1367,7 @@
 
   .principle-list code {
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     background: var(--bg-surface);
     padding: 0.05em 0.3em;
     border-radius: 3px;

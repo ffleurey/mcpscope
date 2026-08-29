@@ -50,6 +50,7 @@ import {
   mdiCircle,
   mdiDotsHorizontal,
   mdiRocketLaunchOutline,
+  mdiCodeTags,
   mdiEyeOutline,
   mdiHomeOutline,
 } from '@mdi/js'
@@ -80,6 +81,8 @@ export const iconLoad = mdiDownloadOutline
 export const iconEject = mdiEjectOutline
 export const iconInfo = mdiInformationOutline
 export const iconView = mdiEyeOutline
+/** Raw markdown/source toggle on rendered session answers. */
+export const iconCode = mdiCodeTags
 export const iconPlay = mdiPlay
 export const iconPause = mdiPause
 export const iconStop = mdiStop

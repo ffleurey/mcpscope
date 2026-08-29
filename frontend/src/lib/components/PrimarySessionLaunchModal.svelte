@@ -217,7 +217,7 @@
   }
 
   .error-message {
-    font-size: 0.82rem;
+    font-size: var(--font-meta);
     line-height: 1.35;
     white-space: pre-wrap;
     word-break: break-word;
@@ -225,7 +225,7 @@
 
   .error-details {
     margin-top: 0.45rem;
-    font-size: 0.78rem;
+    font-size: var(--font-meta);
     color: var(--text-dim);
   }
 
@@ -241,7 +241,7 @@
     border-radius: 4px;
     padding: 0.45rem 0.6rem;
     font-family: var(--mono);
-    font-size: 0.76rem;
+    font-size: var(--font-meta);
     overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-all;
@@ -253,7 +253,7 @@
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
-    font-size: 0.75rem;
+    font-size: var(--font-label);
   }
 
   .mcp-checkbox-group {
