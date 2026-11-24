@@ -1,6 +1,6 @@
 {
   "name": "mcpscope",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "A local-first workbench for developing, inspecting, and benchmarking MCP servers against local (LM Studio, Ollama) or remote (OpenRouter) models — Web UI, CLI, and MCP interface over one shared store.",
   "license": "Apache-2.0",
   "author": "Franck Fleurey <756491+ffleurey@users.noreply.github.com>",
@@ -123,7 +123,7 @@
     "@fastify/static": "^10.1.12",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "fastify": "^5.12.8",
-    "mcpscope-engine": "0.1.9",
+    "mcpscope-engine": "0.1.10",
     "zod": "^4.6.7"
   },
   "overrides": {
